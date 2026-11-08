@@ -5245,8 +5245,114 @@ renderSide=function(){_renderSide10.apply(this,arguments);if(!S||!(sel&&sel.a&&!
   if($('cWin'))$('cWin').onclick=()=>corpsWin(a);
   if($('cGuard'))$('cGuard').onclick=()=>{pickGuard(a);const u=a.units.find(x=>x.gd);if(u)log(`${esc(uName(u))} devient la garde de ${genOf(a)?genOf(a).name:a.name}.`);renderAll()}};
 
+/* ================= ÉTAT-MAJOR : conseil de guerre, carrière des seconds, colonne de marche, détachements ================= */
+// b.cons = [{g, f}] : l'avis de chaque second avant la bataille (formation conseillée) ; suivi → confiance, ignoré → rancœur.
+// g.jal (0-100) : jalousie d'un second qu'on ne promeut pas ; g.bat : batailles livrées comme second ; g.promo : déjà promu.
+// a.col = {av:k, ar:k} : corps en avant-garde et en arrière-garde (k = numéro du corps, 0 = celui du chef).
+// a.det = {p:id de l'armée mère} : corps détaché en mission, qui peut rejoindre son armée.
+const mpdW=(a,fn)=>{try{if(S.mpD&&typeof mpdWith==='function'&&typeof mpdArmy==='function')return mpdWith(mpdArmy(a),fn)}catch(e){}return fn()};
+{const w=f=>function(a){const args=arguments;return mpdW(a,()=>f.apply(this,args))};donativum=w(donativum);hireMerc=w(hireMerc);ruseTransfuges=w(ruseTransfuges)}
+const QUOTE={ligne:"Une ligne simple et solide : ne prenons aucun risque.",cannes:"Laissons le centre plier, et refermons la nasse sur eux.",ailes:"Massons la cavalerie aux ailes : je balaierai leurs cavaliers.",
+  prof:"Gardons des lignes en réserve ; on gagne par la profondeur.",tir:"Que les frondeurs ouvrent le bal et usent leurs rangs."};
+function adviceOf(g,a,b,role){const me=role==='att'?b.att:b.def,them=role==='att'?b.def:b.att,c=compOf(me),e=compOf(them),j=subsOf(a).indexOf(g),cu=j>=0?corpsOf(a)[j+1].u.map(i=>a.units[i]):[];
+  const n=cu.length||1,cav=cu.filter(u=>isCavK(UT[u.t].k)).length/n,lt=cu.filter(u=>['skirm','eleph'].includes(UT[u.t].k)).length/n,cOk=c.cav>=.12&&c.cav*c.p>=e.cav*e.p;
+  if(cav>=.5)return hasTr(g,'tact')&&cOk?'cannes':hasTr(g,'prud')?'ligne':'ailes';
+  if(lt>=.5)return 'tir';
+  if(hasTr(g,'tact'))return cOk?'cannes':'prof';
+  if(hasTr(g,'prud')||hasTr(g,'tem'))return 'prof';
+  if(hasTr(g,'fouge'))return 'ligne';
+  return e.el>.03&&c.sk>.1?'tir':aiFm(me,them,a.side)}
+function mainOf(ids,side){return sideArmies(ids).filter(a=>a.side===side).sort((p,q)=>strength(q)-strength(p))[0]}
+function councilOf(b){const attMine=sideOfIds(b.att)==='car',role=attMine?'att':'def',a=mainOf(attMine?b.att:b.def,'car');if(!a)return [];
+  return subsOf(a).map(g=>({g:g.id,f:adviceOf(g,a,b,role),a:a.id}))}
+const _deployUI11=deployUI;
+deployUI=function(){_deployUI11.apply(this,arguments);try{const b=S.cur,card=$('mcard'),dp=card&&card.querySelector('#depl');if(!b||!dp||card.querySelector('#cons'))return;
+  b.cons=councilOf(b);if(!b.cons.length)return;
+  const draw=()=>{const el=$('cons');if(!el)return;el.innerHTML=`<h3 style="margin:10px 0 4px">Conseil de guerre</h3>`+b.cons.map(c=>{const g=S.gens.find(x=>x.id===c.g);if(!g)return '';const ok=b.fm.car===c.f,src=typeof porGenURL==='function'?porGenURL(g):null;
+    return `<div style="display:flex;gap:8px;align-items:center;margin:4px 0">${src?`<img src="${src}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;background:#fff;flex:none">`:''}<div style="flex:1;font-size:13px;line-height:1.3"><b>${esc(g.name)}</b> ${'★'.repeat(stars(g))} <span class="sub">— ${FORM[c.f].n}</span><br><i>« ${QUOTE[c.f]} »</i></div><span style="font-size:12px;color:${ok?'#9fd08a':'#e0a060'};flex:none">${ok?'✓ suivi':'ignoré'}</span></div>`}).join('')+
+    `<p class="sub" style="font-size:12px;margin:2px 0">Suivre l'avis d'un second : +1,5 % et il vous en sait gré. L'ignorer froisse son orgueil (jalousie).</p>`};
+  dp.insertAdjacentHTML('afterend','<div id="cons"></div>');draw();
+  card.querySelectorAll('[data-fm]').forEach(x=>x.addEventListener('click',()=>setTimeout(draw,0)))}catch(e){console.warn(e)}};
+const consFollowed=b=>(b.cons||[]).filter(c=>b.fm&&b.fm.car===c.f).length;
+const _odds11=odds;
+odds=function(b){let p=_odds11(b);try{const n=consFollowed(b);if(n&&b.cons){const carAtt=sideOfIds(b.att)==='car';p=Math.min(.999,Math.max(.001,p));let r=p/(1-p);r*=carAtt?1+.015*n:1/(1+.015*n);p=r/(1+r)}}catch(e){}return p};
+// carrière : batailles, traits gagnés au feu, jalousie, promotion
+const jalTxt=g=>{const j=g.jal||0;return j>=70?'<span style="color:#e07050">jaloux</span>':j>=40?'<span style="color:#e0a060">impatient</span>':'<span style="color:#9fd08a">loyal</span>'};
+const _applyResult11=applyResult;
+applyResult=function(b,res){const cons=b.cons,fm=b.fm&&b.fm.car,attA=sideArmies(b.att),defA=sideArmies(b.def),win=res.attWin?attA:defA;
+  const subsBefore=[...attA,...defA].map(a=>({a,L:subsOf(a)}));
+  _applyResult11.apply(this,arguments);
+  try{for(const c of cons||[]){const g=S.gens.find(x=>x.id===c.g);if(!g||g.dead)continue;if(fm===c.f)g.jal=Math.max(0,(g.jal||0)-6);else{g.jal=Math.min(100,(g.jal||0)+(hasTr(g,'fouge')?12:8));if(g.side==='car'&&(g.jal||0)>=40)log(`${g.name} n'a pas digéré qu'on ignore son avis.`)}}
+    for(const {a,L} of subsBefore)for(const g of L){if(g.dead)continue;g.bat=(g.bat||0)+1;
+      if(win.includes(a)&&g.bat%3===0&&Math.random()<.6){const k=a.units.filter(u=>u.og===g.id&&isCavK(UT[u.t].k)).length*2>a.units.filter(u=>u.og===g.id).length&&!g.tr.includes('cav')?'cav':(()=>{const C=GOOD_TR.filter(t=>!g.tr.includes(t));return C[Math.floor(Math.random()*C.length)]})();
+        if(k&&!g.tr.includes(k)){g.tr.push(k);if(g.side==='car')log(`Au feu, ${g.name} s'est révélé : ${TRAITS[k].n.toLowerCase()}.`)}}}}catch(e){console.warn(e)}};
+function splitCorps(a,k,mode){const g=subsOf(a)[k-1];if(!g)return null;const U=a.units.filter(u=>(u.cp||0)===k);if(!U.length||U.length>=a.units.length)return null;
+  const b={id:S.uid++,side:a.side,name:g.name,x:a.x+1.2,y:a.y+.6,at:a.at,legs:[],units:[],scout:0,cool:0,mor:a.mor,food:0};if(a.dm)b.dm=a.dm;S.armies.push(b);
+  for(const u of U){moveUnit(a,b,u);u.cp=0;u.gd=0}cutSub(a,g);giveGen(b,g);
+  if(mode==='det'){b.det={p:a.id};if(a.side==='car')log(`${g.name} part en mission avec le ${corpsN(k)} (${U.length} rég.) ; il rejoindra ${armyLabel(a)} sur ordre.`)}
+  else{g.promo=1;g.jal=0;g.tr.includes('aime')||(a.mor=Math.min(100,(a.mor||MOR0)+2));if(a.side==='car')log(`${g.name} est promu : il commande désormais sa propre armée (${U.length} rég.).`)}
+  syncGens();return b}
+function rejoin(d){const p=d.det&&S.armies.find(x=>x.id===d.det.p&&!x.dead);const g=genOf(d);if(!p||!g)return false;if(Math.hypot(p.x-d.x,p.y-d.y)>6)return false;
+  if(p.units.length+d.units.length>MAXU||(p.sub||[]).length>=MAXSUB)return false;
+  for(const u of d.units.slice()){u.og=g.id;moveUnit(d,p,u)}g.army=null;d.gen=null;dropArmy(d);addSub(p,g,true);fixCorps(p);
+  if(p.side==='car')log(`${g.name} rejoint ${armyLabel(p)} et reprend le commandement du ${corpsN((p.sub||[]).indexOf(g.id)+1)}.`);syncGens();return true}
+// jalousie : un second de valeur, jamais promu, finit par réclamer son armée ; à bout, il rejoint le parti d'Hannon
+const _daily11=daily;
+daily=function(d){_daily11(d);if(S.cur||S.over)return;try{
+  for(const x of S.armies)if(x.det&&!S.armies.some(p=>p.id===x.det.p&&!p.dead))delete x.det;
+  if(d%10)return;
+  for(const a of S.armies){if(a.dead||a.side!=='car'||!(a.sub||[]).length)continue;const chief=genOf(a);
+    for(const g of subsOf(a)){if(g.promo)continue;let j=g.jal||0;const st=stars(g);if(st>=2)j+=1+(hasTr(g,'fouge')?1:0)+(chief&&st>=stars(chief)?2:0);if(chief&&hasTr(chief,'aime'))j-=.5;g.jal=Math.max(0,Math.min(100,j));
+      if(g.jal>=60&&!g.warn){g.warn=1;log(`${g.name} réclame un commandement à lui. Promouvez-le, ou sa jalousie grandira.`)}
+      if(g.jal>=85&&Math.random()<.35){const node=N.find(n=>n.id==='carthago')||nearestNode(a.x,a.y,n=>!n.col&&ownerN(n.i)==='car');cutSub(a,g);g.at=node?node.i:null;g.jal=50;g.warn=0;
+        a.mor=Math.max(0,(a.mor||MOR0)-5);if(typeof senAdj==='function')senAdj(-4);log(`${g.name}, ulcéré de n'avoir jamais été promu, quitte ${armyLabel(a)} et rentre à Carthage rejoindre le parti d'Hannon.`)}}}}catch(e){console.warn(e)}};
+// colonne de marche : une embuscade ne frappe que le corps exposé si l'armée marche en ordre (avant-garde et arrière-garde)
+const colOk=a=>a&&a.col&&a.col.av!=null&&a.col.ar!=null&&a.col.av!==a.col.ar&&corpsOf(a).length>1;
+const _ambushMul11=ambushMul;
+ambushMul=function(b){let m=_ambushMul11(b);try{const A=sideArmies(b.att);if(m<1&&A.some(x=>x.legs.length&&colOk(x))){const a=A.find(x=>x.legs.length&&colOk(x)),g=subsOf(a)[a.col.ar-1]||(a.col.ar===0?genOf(a):null),sh=g&&(hasTr(g,'prud')||hasTr(g,'tact'))?.45:.6;m=1/(1+(1/m-1)*sh)}}catch(e){}return m};
+function colOrder(a){const C=corpsOf(a).filter(c=>c.u.length);if(!colOk(a))return C.map(c=>c.k);const mid=C.map(c=>c.k).filter(k=>k!==a.col.av&&k!==a.col.ar);return [a.col.av,...mid,a.col.ar]}
+function colDraw(s,x0,y0,x1,y1){if(s<.6)return;const e=7/s;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const a of S.armies){if(a.dead||a.ship||!a.legs.length||corpsOf(a).length<2)continue;if(a.side!=='car'&&visOfArmy(a)<2)continue;if(a.x<x0-40||a.x>x1+40||a.y<y0-40||a.y>y1+40)continue;
+    const L=a.legs[0],dx=L.x-a.x,dy=L.y-a.y,d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d,O=colOrder(a),col=a.side==='car'?'#7d4fb8':'#bf3b31',ph=(S.day*DAY_S*.25)%1;
+    const pts=O.map((k,i)=>({k,x:a.x-ux*(i+1)*e*3.2,y:a.y-uy*(i+1)*e*3.2}));pts.push({k:'b',x:a.x-ux*(O.length+1)*e*3.2,y:a.y-uy*(O.length+1)*e*3.2});
+    ctx.strokeStyle='rgba(60,40,20,.5)';ctx.lineWidth=e*.5;ctx.setLineDash([e*.6,e*.5]);ctx.lineDashOffset=-ph*e*2.2;ctx.beginPath();ctx.moveTo(a.x,a.y);for(const p of pts)ctx.lineTo(p.x,p.y);ctx.stroke();ctx.setLineDash([]);
+    for(const p of pts){const ex=colOk(a)&&(p.k===a.col.av||p.k===a.col.ar);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(uy,ux));
+      if(p.k==='b'){ctx.fillStyle='#8a6a3e';ctx.fillRect(-e*.9,-e*.5,e*1.8,e);ctx.strokeStyle='#3a2a18';ctx.lineWidth=e*.15;ctx.strokeRect(-e*.9,-e*.5,e*1.8,e)}
+      else{ctx.fillStyle=col;ctx.fillRect(-e,-e*.7,e*2,e*1.4);ctx.strokeStyle=ex?'#ffd77a':'#1b1712';ctx.lineWidth=e*(ex?.3:.15);ctx.strokeRect(-e,-e*.7,e*2,e*1.4)}
+      ctx.restore();if(s>=1.5&&p.k!=='b'){ctx.fillStyle='#fff';ctx.font=`bold ${e*1.05}px Georgia,serif`;ctx.fillText(p.k?ROM_N[p.k]:'♛',p.x,p.y+e*.05)}}}
+  ctx.restore()}
+const _drawVillagesDyn11=drawVillagesDyn;
+drawVillagesDyn=function(s,z,x0,y0,x1,y1){_drawVillagesDyn11.apply(this,arguments);try{colDraw(s,x0,y0,x1,y1)}catch(e){}};
+// vers la bataille 3D : avis du conseil et ordre de marche
+const _addBattleMods11=addBattleMods;
+addBattleMods=function(payload){_addBattleMods11(payload);try{const b=S.cur;if(!b||!payload||!payload.b)return;
+  if(b.cons&&b.cons.length)payload.b.conseil=b.cons.map(c=>{const g=S.gens.find(x=>x.id===c.g);return {n:g?g.name:'?',f:c.f,suivi:b.fm&&b.fm.car===c.f?1:0,cp:c.a+':'+((S.armies.find(x=>x.id===c.a)||{sub:[]}).sub||[]).indexOf(c.g)+1}});
+  const col=[...sideArmies(b.att),...sideArmies(b.def)].filter(colOk).map(a=>({armee:a.id,av:a.id+':'+a.col.av,ar:a.id+':'+a.col.ar,embusque:ambushMul(b)<1&&sideArmies(b.att).includes(a)?1:0}));if(col.length)payload.b.colonne=col}catch(e){console.warn(e)}};
+// fenêtre « Organiser les corps » : humeur, promotion, mission, colonne de marche
+const _corpsWin11=corpsWin;
+corpsWin=function(a){_corpsWin11(a);try{const card=$('mcard');if(!card||!a||a.dead)return;const C=corpsOf(a),cols=card.querySelectorAll('[data-cmv]').length?[...card.querySelectorAll('div[style*="grid-template-columns:repeat"] > div')]:[];
+  C.forEach((c,j)=>{const el=cols[j];if(!el||!c.k||!c.g)return;const g=c.g,can=c.u.length&&c.u.length<a.units.length;
+    const sub=el.querySelector('.sub');if(sub)sub.insertAdjacentHTML('beforeend',`<br>Humeur : ${jalTxt(g)} · ${g.bat||0} bataille${(g.bat||0)>1?'s':''}`);
+    el.insertAdjacentHTML('beforeend',`<div class="row" style="margin:8px 0 0;justify-content:center"><button type="button" data-cdet="${c.k}" ${can?'':'disabled'} style="min-height:26px;font-size:12px;padding:0 8px" title="Le ${corpsN(c.k)} part en mission sous ${esc(g.name)} (flanc-garde, poursuite, fourrage, tenir un gué), puis rejoint l'armée">Détacher en mission</button><button type="button" data-cpro="${c.k}" ${can?'':'disabled'} style="min-height:26px;font-size:12px;padding:0 8px" title="${esc(g.name)} reçoit sa propre armée avec son corps ; sa jalousie s'éteint">Promouvoir</button></div>`)});
+  const opt=(w)=>C.filter(c=>c.u.length).map(c=>`<button type="button" data-col="${w}:${c.k}" class="${a.col&&a.col[w]===c.k?'on':''}" style="min-height:26px;font-size:12px;padding:0 8px">${c.k?ROM_N[c.k]:'Chef'}${c.g?' · '+esc(c.g.name):''}</button>`).join('');
+  const row=card.querySelector('[data-cwa]')?card.querySelector('[data-cwa]').parentElement:card.querySelector('#cwOk').parentElement;
+  if(C.length>1)row.insertAdjacentHTML('beforebegin',`<div style="border-top:1px solid rgba(214,184,120,.18);padding-top:8px;margin-top:6px"><div style="font-family:var(--display);font-size:16px">Colonne de marche</div>
+    <p class="sub" style="font-size:12px;margin:2px 0 6px">Qui ouvre et qui ferme la marche ? Avec une avant-garde et une arrière-garde désignées, une embuscade ne frappe que le corps exposé : pénalité réduite de 40 % (55 % si l'arrière-garde est menée par un général prudent ou tacticien). Les bagages suivent derrière.</p>
+    <div class="row" style="align-items:center;margin:4px 0"><span class="sub" style="width:90px">Avant-garde</span>${opt('av')}</div><div class="row" style="align-items:center;margin:4px 0"><span class="sub" style="width:90px">Arrière-garde</span>${opt('ar')}</div>
+    <p class="sub" style="font-size:12px;margin:2px 0">${colOk(a)?'Ordre de marche : '+colOrder(a).map(k=>k?ROM_N[k]:'Chef').join(' → ')+' → bagages':'Pas d\'ordre de marche : l\'armée avance en une seule masse.'}</p></div>`);
+  card.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{const [w,k]=b.dataset.col.split(':');a.col=a.col||{};a.col[w]=a.col[w]===+k?null:+k;corpsWin(a);renderAll()});
+  card.querySelectorAll('[data-cdet]').forEach(b=>b.onclick=()=>{const d=splitCorps(a,+b.dataset.cdet,'det');if(d){closeModal();sel={a:d};renderAll()}});
+  card.querySelectorAll('[data-cpro]').forEach(b=>b.onclick=()=>{const d=splitCorps(a,+b.dataset.cpro,'promo');if(d){closeModal();sel={a:d};renderAll()}})}catch(e){console.warn(e)}};
+// panneau d'un détachement : rejoindre l'armée mère
+const _renderSide11=renderSide;
+renderSide=function(){_renderSide11.apply(this,arguments);try{if(!(sel&&sel.a&&!sel.a.dead&&sel.a.det&&isMine(sel.a)))return;const d=sel.a,p=S.armies.find(x=>x.id===d.det.p&&!x.dead);if(!p)return;
+  const box=$('side').querySelector('.genbox');if(!box)return;const near=Math.hypot(p.x-d.x,p.y-d.y)<=6;
+  box.insertAdjacentHTML('beforeend',`<p class="sub" style="margin:8px 0 2px">Détachement de ${esc(armyLabel(p))}${near?' — à portée':''}</p><div class="row"><button type="button" id="cRej" ${near?'':'disabled'} title="${near?'Les régiments rentrent dans l\'armée et reforment leur corps':'Rapprochez le détachement de son armée'}">Rejoindre l'armée</button><button type="button" id="cGoP" title="Marcher jusqu'à l'armée">Marcher vers l'armée</button></div>`);
+  if($('cRej'))$('cRej').onclick=()=>{if(rejoin(d)){sel={a:p};renderAll()}};
+  if($('cGoP'))$('cGoP').onclick=()=>{try{order(d,p.x+.8,p.y+.4,null)}catch(e){}renderAll()}}catch(e){console.warn(e)}};
+
 function dark2(){return 'rgba(26,18,10,.95)'}
-window.__armees={lineOf,dijkstra,startsOf,sendConvoy,sendScouts,raidsDaily,get S(){return S},T:{get startBattle(){return startBattle},get odds(){return odds},get capture(){return capture},get applyResult(){return applyResult},get autoResolve(){return autoResolve},reliefize,negotiate,refuseTry,hireMerc,mercNode,chev,startMine,insideOf,shutIn,get arrive(){return arrive},canAmb,ambushMul,get openBattle(){return openBattle},fmOf,fmMul,ruseFeux,ruseBoeufs,ruseTransfuges,decimate,donativum,rewardBraves,woundOf,corpsOf,addSub,dropSub,autoCorps,pickGuard,corpsMul,subsOf,hannibalStaff,corpsWin,fallen3D}};
+window.__armees={lineOf,dijkstra,startsOf,sendConvoy,sendScouts,raidsDaily,get S(){return S},T:{get startBattle(){return startBattle},get odds(){return odds},get capture(){return capture},get applyResult(){return applyResult},get autoResolve(){return autoResolve},reliefize,negotiate,refuseTry,hireMerc,mercNode,chev,startMine,insideOf,shutIn,get arrive(){return arrive},canAmb,ambushMul,get openBattle(){return openBattle},fmOf,fmMul,ruseFeux,ruseBoeufs,ruseTransfuges,decimate,donativum,rewardBraves,woundOf,corpsOf,addSub,dropSub,autoCorps,pickGuard,corpsMul,subsOf,hannibalStaff,corpsWin,fallen3D,splitCorps,rejoin,councilOf,colOrder,get ambushMul(){return ambushMul},get daily(){return daily}}};
 /* ================= FIN ARMÉES ================= */
 
 /* ================= MÉCANIQUES DE CAMPAGNE (fil « Mécaniques de campagne ») =================
@@ -8430,7 +8536,7 @@ function raidTargets(f){const p=nearestLand(f.x,f.y,10,.3);if(!p)return [];retur
 function canDescent(f){return f.at==null&&!f.legs.length&&(f.cargo.length||f.ships.quin>=5)&&!(f.rcd>S.day)&&raidTargets(f).length>0}
 function descent(f){const vs=raidTargets(f).slice(0,f.cargo.length?6:3);if(!vs.length)return false;let g=0;
   const p0=nearestLand(f.x,f.y,10,.3);for(const v of vs){g+=(VK[v.k]&&VK[v.k].loot)||5;vBurn(v,f.side);flAnim({k:'burn',x:v.x,y:v.y,t:4,w:1.1})}
-  if(p0)flAnim({k:'raid',x:f.x,y:f.y,tx:p0[0],ty:p0[1],vs:vs.map(v=>[v.x,v.y]),side:f.side,big:f.cargo.length?1:0,t:3});
+  if(p0){const fm=farmsNear(p0[0],p0[1],7).slice(0,f.cargo.length?4:2).map(q=>[q.x,q.y,q.a,q.k]);flAnim({k:'raid',x:f.x,y:f.y,tx:p0[0],ty:p0[1],vs:vs.map(v=>[v.x,v.y]),fm,side:f.side,big:f.cargo.length?1:0,t:3});for(const q of fm)FB[q[3]]=S.day+1.6}
   g=Math.round(g*(f.cargo.length?1.5:1)*(admTr(f)==='cor'?1.5:1));flG(f,()=>{S.gold[f.side]=(S.gold[f.side]||0)+g});f.rcd=S.day+FL.raidCd;f.xp=Math.min(100,(f.xp||0)+3);
   const p=p0;
   const o=ownerN(vs[0].t),foe=S.armies.find(a=>a.side===o&&!a.dead&&!a.ship&&p&&Math.hypot(a.x-p[0],a.y-p[1])<25);let extra='';
@@ -8548,7 +8654,7 @@ function flFlame(x,y,sz,t,k,al){for(let j=0;j<3;j++){const fl=Math.sin(t*12+k*2.
   ctx.beginPath();ctx.moveTo(x+(j-1)*sz*.5-sz*.4,y);ctx.quadraticCurveTo(x+(j-1)*sz*.5,y-sz*(1.2+fl*1.1),x+(j-1)*sz*.5+sz*.4,y);ctx.fill()}
   for(let j=0;j<3;j++){const u=(t*.35+j/3+k*.17)%1,wd=windOf();ctx.fillStyle=`rgba(60,55,50,${.32*(1-u)*(al==null?1:al)})`;ctx.beginPath();ctx.arc(x+Math.cos(wd.a)*u*sz*3,y-sz*1.6-u*sz*4+Math.sin(wd.a)*u*sz,sz*(.5+u*1.2),0,7);ctx.fill()}}
 function blockScene(id,n,b,s,t,SX,SY){const V=S.nav,ax=n.anch[0],ay=n.anch[1],X=SX(ax),Y=SY(ay),c=FAC[b.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,hid=flH(n.i);
-  const Rk=Math.max(34/s,Math.min(200/s,4.5)),R=Rk*s,e=Math.max(3,Math.min(12,R/11));
+  const Rk=Math.max(34/s,Math.min(4.5,260/s)),R=Rk*s,e=Math.max(3,Math.min(14,R/11));
   let base=Math.atan2(ay-n.y,ax-n.x);if(!isFinite(base)||Math.hypot(ay-n.y,ax-n.x)<.01)base=0;
   // le cordon : un arc devant l'entrée du port, sur l'eau seulement
   const P=[];for(let k=0;k<=30;k++){const a=base-1.55+3.1*k/30,wx=ax+Math.cos(a)*Rk,wy=ay+Math.sin(a)*Rk;if(!landFast(wx,wy))P.push(a)}
@@ -8597,37 +8703,58 @@ function blockScene(id,n,b,s,t,SX,SY){const V=S.nav,ax=n.anch[0],ay=n.anch[1],X=
     const tw=Math.max(56,ctx.measureText(txt).width+12);ctx.fillStyle='rgba(22,19,14,.78)';ctx.fillRect(lx-tw/2,ly-14,tw,24);ctx.strokeStyle='rgba(214,184,120,.45)';ctx.lineWidth=1;ctx.strokeRect(lx-tw/2+.5,ly-13.5,tw-1,23);
     ctx.fillStyle='#efe6d2';ctx.fillText(txt,lx,ly-1);ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(lx-tw/2+6,ly+4,tw-12,3);ctx.fillStyle=b.side==='car'?'#b48ae6':'#e2665a';ctx.fillRect(lx-tw/2+6,ly+4,(tw-12)*p,3)}
   ctx.restore()}
-// descente : chaloupes qui accostent, pillards qui courent aux villages, villageois qui fuient, retour chargé de butin
-function raidScene(a,X,Y,age,t,s,SX,SY,loop){const tx=SX(a.tx),ty=SY(a.ty),c=FAC[a.side]?FAC[a.side].c:[200,180,140],col=`rgb(${c[0]},${c[1]},${c[2]})`,e=Math.max(3.5,Math.min(10,s*.2));
+// ---- fermes de la carte (mêmes tirages que les parcelles dessinées de près : cases de 2,5 km) ----
+function farmsNear(x,y,r){const cell=2.5,out=[];for(let i=Math.floor((x-r)/cell);i<=Math.ceil((x+r)/cell);i++)for(let j=Math.floor((y-r)/cell);j<=Math.ceil((y+r)/cell);j++){
+    const h=hash(i,j);if(h>.32||h<.08)continue;const fx=(i+hash(j,i))*cell,fy=(j+hash(i+7,j))*cell;if(Math.hypot(fx-x,fy-y)>r||!landFast(fx,fy))continue;
+    const t=terrFast(fx,fy);if(t==='montagne'||t==='foret'||(t==='desert'&&h>=.12))continue;out.push({x:fx,y:fy,a:h*9,k:i+':'+j,d:Math.hypot(fx-x,fy-y)})}
+  return out.sort((p,q)=>p.d-q.d)}
+// fermes brûlées (simple décor, non sauvegardé) et détachements en route vers elles
+const FB={},FR=[];
+function farmRaid(ox,oy,side,n,r,t0,dur){const used=new Set(FR.map(q=>q.k));for(const fm of farmsNear(ox,oy,r)){if(n<=0)break;if(used.has(fm.k)||(FB[fm.k]&&S.day-FB[fm.k]<60))continue;FR.push({ox,oy,fx:fm.x,fy:fm.y,a:fm.a,k:fm.k,side,t0,dur});n--}}
+// petit détachement : 2 ou 3 carrés aux couleurs du camp ; en revenant, chacun porte son butin (point brun)
+function flSq(x,y,q,c,load){const h=q/2;ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(x-h+1,y-h+1.5,q,q);ctx.fillStyle=c;ctx.fillRect(x-h,y-h,q,q);ctx.strokeStyle='rgba(26,18,10,.95)';ctx.lineWidth=Math.max(1,q/8);ctx.strokeRect(x-h,y-h,q,q);
+  if(load){ctx.fillStyle='#8a6a3e';ctx.beginPath();ctx.arc(x+h,y-h,Math.max(1.4,q*.28),0,7);ctx.fill();ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.stroke()}}
+function flParty(x,y,q,c,n,ang,load,t,seed){const ux=Math.cos(ang),uy=Math.sin(ang);for(let k=0;k<n;k++){const b=Math.sin(t*9+k*1.7+seed)*q*.08,o=(k-(n-1)/2)*q*1.25,bx=x-ux*(k%2)*q*1.1-uy*o,by=y-uy*(k%2)*q*1.1+ux*o+b;flSq(bx,by,q,c,load)}}
+const flQ=s=>Math.max(4,Math.min(11,.16*s));
+// une ferme : à l'aller (0–.4), on la met à sac et on y met le feu (.4–.65), retour chargés (.65–1)
+function farmRaidDraw(R,u,t,s,SX,SY,c){const ox=SX(R.ox),oy=SY(R.oy),fx=SX(R.fx),fy=SY(R.fy),q=flQ(s),col=`rgb(${c[0]},${c[1]},${c[2]})`;
+  if(u<.4){const w=u/.4;flParty(ox+(fx-ox)*w,oy+(fy-oy)*w,q,col,3,Math.atan2(fy-oy,fx-ox),false,t,R.fx)}
+  else if(u<.65){for(let k=0;k<3;k++){const a=t*1.4+k*2.1,r=q*(1.2+.4*Math.sin(t*3+k));flSq(fx+Math.cos(a)*r,fy+Math.sin(a)*r*.6,q,col,false)}
+    // torches portées aux bâtiments
+    const fl=Math.sin(t*14)*.5+.5;ctx.fillStyle=`rgba(255,${150+fl*80|0},50,.95)`;ctx.beginPath();ctx.arc(fx+q*.8,fy-q*.9,Math.max(1.5,q*.25),0,7);ctx.fill()}
+  else{const w=(u-.65)/.35;flParty(fx+(ox-fx)*w,fy+(oy-fy)*w,q,col,3,Math.atan2(oy-fy,ox-fx),true,t,R.fx)}}
+// ferme brûlée : parcelle noircie, bâtiments en cendres, fumée les premiers jours
+function farmBurntDraw(k,x,y,a,day,t,s,SX,SY){if(s<3)return;const X=SX(x),Y=SY(y),co=Math.cos(a),si=Math.sin(a),age=S.day-day;
+  ctx.save();ctx.translate(X,Y);ctx.rotate(a);const w=.9*s,h=.6*s;ctx.fillStyle=`rgba(38,30,24,${age<30?.72:Math.max(0,.72-(age-30)/40)})`;ctx.fillRect(-w/2,-h/2,w,h);
+  ctx.strokeStyle='rgba(20,16,12,.6)';ctx.lineWidth=1;ctx.beginPath();for(let m=1;m<5;m++){const yy=-h/2+h*m/5;ctx.moveTo(-w*.44,yy);ctx.lineTo(w*.44,yy)}ctx.stroke();
+  ctx.fillStyle='rgba(30,22,16,.9)';for(const [hx,hy,hq] of [[.28,-.2,.13],[.42,-.12,.1]])ctx.fillRect((hx-hq/2)*s,(hy-hq/2)*s,hq*s,hq*s);ctx.restore();
+  if(age<6){const hx=X+(.28*co+.2*si)*s,hy=Y+(.28*si-.2*co)*s,al=age<4?1:(6-age)/2;flFlame(hx,hy,Math.max(3,Math.min(12,.08*s)),t,x*7,al*(age<1.5?1:.35))}}
+// descente : chaloupes qui accostent, détachements qui courent aux villages et aux fermes, villageois qui fuient, retour chargés de butin
+function raidScene(a,X,Y,age,t,s,SX,SY,loop){const tx=SX(a.tx),ty=SY(a.ty),c=FAC[a.side]?FAC[a.side].c:[200,180,140],col=`rgb(${c[0]},${c[1]},${c[2]})`,e=Math.max(3.5,Math.min(14,s*.2)),q=flQ(s);
   // flotte collée au rivage : les chaloupes partent un peu plus au large, à l'opposé des villages
-  if(Math.hypot(tx-X,ty-Y)<e*9&&a.vs&&a.vs.length){let mx=0,my=0;for(const q of a.vs){mx+=SX(q[0]);my+=SY(q[1])}mx/=a.vs.length;my/=a.vs.length;const dx=tx-mx,dy=ty-my,l=Math.hypot(dx,dy)||1;X=tx+dx/l*e*10;Y=ty+dy/l*e*10}
-  const d=Math.hypot(tx-X,ty-Y);if(d>400)return;const ux=d>1?(tx-X)/d:1,uy=d>1?(ty-Y)/d:0,nb=a.big?6:4,al=loop?1:age<.04?age/.04:age>.94?(1-age)/.06:1;
+  if(Math.hypot(tx-X,ty-Y)<e*9&&a.vs&&a.vs.length){let mx=0,my=0;for(const p of a.vs){mx+=SX(p[0]);my+=SY(p[1])}mx/=a.vs.length;my/=a.vs.length;const dx=tx-mx,dy=ty-my,l=Math.hypot(dx,dy)||1;X=tx+dx/l*e*10;Y=ty+dy/l*e*10}
+  const d=Math.hypot(tx-X,ty-Y),ux=d>1?(tx-X)/d:1,uy=d>1?(ty-Y)/d:0,nb=a.big?6:4,al=loop?1:age<.04?age/.04:age>.94?(1-age)/.06:1;
   ctx.save();ctx.globalAlpha=al;ctx.lineCap='round';
   // chaloupes : aller (0–.2), tirées sur la plage, retour (.78–1)
   const v=age<.2?age/.2:age<.78?1:1-(age-.78)/.22,back=age>=.78;
   for(let k=0;k<nb;k++){const o=(k-(nb-1)/2)*e*1.6,bx=X+(tx-X)*v*.97-uy*o,by=Y+(ty-Y)*v*.97+ux*o;
-    if(v>0&&v<1){ctx.strokeStyle='rgba(240,248,252,.5)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(bx-ux*e*(back?-1:1),by-uy*e*(back?-1:1));ctx.lineTo(bx-ux*e*2.6*(back?-1:1),by-uy*e*2.6*(back?-1:1));ctx.stroke()}
+    if(v>0&&v<1){ctx.strokeStyle='rgba(240,248,252,.5)';ctx.lineWidth=1;const sg=back?-1:1;ctx.beginPath();ctx.moveTo(bx-ux*e*sg,by-uy*e*sg);ctx.lineTo(bx-ux*e*2.6*sg,by-uy*e*2.6*sg);ctx.stroke()}
     nvShip(bx,by,Math.max(3.5,e*1.15),Math.atan2(uy,ux)+(back?Math.PI:0)+(v===1?Math.sin(t*1.5+k)*.05:0),'#7a5634',null);
     if(v>0&&v<1){ctx.strokeStyle='rgba(70,48,28,.85)';ctx.lineWidth=1;const sw=Math.sin(t*7+k)*e*.35;for(const sg of [-1,1]){ctx.beginPath();ctx.moveTo(bx-uy*sg*e*.3,by+ux*sg*e*.3);ctx.lineTo(bx-uy*sg*e*1.1+ux*sw,by+ux*sg*e*1.1+uy*sw);ctx.stroke()}}}
-  const vs=(a.vs||[]).map(p=>[SX(p[0]),SY(p[1])]).filter(p=>Math.hypot(p[0]-tx,p[1]-ty)<300);
-  if(s>1.2)vs.forEach(([vx,vy],j)=>{
-    const m=a.big?4:3;
-    // pillards : course vers le village (.2–.42), sac du village (.42–.6), retour chargés (.6–.8)
-    for(let q=0;q<m;q++){const lag=q*.015+j*.01,u=age-lag;let x,y,arm=null,stp=0,load=false;
-      const jx=(flH(q+j*5)-.5)*e*2.2,jy=(flH(q*3+j)-.5)*e*1.6;
-      if(u<.2||u>.8)continue;
-      if(u<.42){const w=(u-.2)/.22;x=tx+(vx-tx)*w+jx;y=ty+(vy-ty)*w+jy;stp=t*14+q;arm=-.9}
-      else if(u<.6){x=vx+jx*1.4;y=vy+jy*1.4;const sw=(t*2.2+q*.4)%1;arm=-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5}
-      else{const w=(u-.6)/.2;x=vx+(tx-vx)*w+jx;y=vy+(ty-vy)*w+jy;stp=t*11+q;load=true}
-      flMan(x,y,e,col,arm,stp);
-      if(load){if(q%3===2){const cx=x+e*1.2,cy=y+e*.3;flMan(cx,cy,e*.9,'#d8ccb0',null,t*11+q);ctx.strokeStyle='rgba(40,28,14,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+e*.3,y-e*.6);ctx.lineTo(cx-e*.3,cy-e*.6);ctx.stroke()}
-        else{ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}}
-    // villageois qui fuient à l'opposé de la plage, troupeau dispersé
-    if(age>.36&&age<.75){const w=(age-.36)/.39,fx=vx-tx,fy=vy-ty,fl=Math.hypot(fx,fy)||1;
-      for(let q=0;q<4;q++){const sp=(q-1.5)*.5,dx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),dy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=w*e*(10+q*2);ctx.globalAlpha=al*(1-w);
-        if(q===3){ctx.fillStyle='#e9e1cc';ctx.beginPath();ctx.ellipse(vx+dx*r,vy+dy*r,e*.55,e*.35,0,0,7);ctx.fill()}else flMan(vx+dx*r,vy+dy*r,e*.85,'#cbbf9c',null,t*15+q)}ctx.globalAlpha=al}
-    // le village flambe (sur une scène permanente ; la descente a ses propres incendies)
-    if(loop&&age>.45)flFlame(vx,vy,e*1.1,t,j,Math.min(1,(age-.45)*6)*(age>.9?(1-age)*10:1))});
+  if(s>=1.5){const tg=(a.vs||[]).map(p=>[SX(p[0]),SY(p[1]),0]).concat((a.fm||[]).map(p=>[SX(p[0]),SY(p[1]),1]));
+    tg.forEach(([vx,vy,isF],j)=>{const lag=j*.012,u=age-lag;
+      // détachements : course vers la cible (.2–.42), sac (.42–.6), retour chargés (.6–.8)
+      if(u>=.2&&u<=.8){
+        if(u<.42){const w=(u-.2)/.22;flParty(tx+(vx-tx)*w,ty+(vy-ty)*w,q,col,isF?2:3,Math.atan2(vy-ty,vx-tx),false,t,j)}
+        else if(u<.6){for(let k=0;k<(isF?2:3);k++){const an=t*1.3+k*2.1+j,r=q*(1.3+.4*Math.sin(t*3+k));flSq(vx+Math.cos(an)*r,vy+Math.sin(an)*r*.6,q,col,false)}}
+        else{const w=(u-.6)/.2;flParty(vx+(tx-vx)*w,vy+(ty-vy)*w,q,col,isF?2:3,Math.atan2(ty-vy,tx-vx),true,t,j);
+          // captifs : points clairs tirés derrière le détachement
+          if(!isF){const px=vx+(tx-vx)*Math.max(0,w-.06),py=vy+(ty-vy)*Math.max(0,w-.06);ctx.fillStyle='#e6dcc2';for(let k=0;k<2;k++){ctx.beginPath();ctx.arc(px+(k-.5)*q,py+q*.6,Math.max(1.3,q*.28),0,7);ctx.fill()}}}}
+      // villageois et troupeau qui fuient : points clairs qui s'éparpillent à l'opposé de la plage
+      if(!isF&&age>.36&&age<.75){const w=(age-.36)/.39,fx=vx-tx,fy=vy-ty,fl=Math.hypot(fx,fy)||1;ctx.globalAlpha=al*(1-w);
+        for(let k=0;k<6;k++){const sp=(k-2.5)*.35,dx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),dy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=w*q*(6+k*1.3);ctx.fillStyle=k>3?'#f2eee2':'#d8ccae';ctx.beginPath();ctx.arc(vx+dx*r,vy+dy*r,Math.max(1.3,q*(k>3?.38:.3)),0,7);ctx.fill()}ctx.globalAlpha=al}
+      // en boucle (mission « piller ») : les cibles flambent après le passage
+      if(loop&&age>.45)flFlame(vx,vy,Math.max(3,Math.min(12,e*.8)),t,j,Math.min(1,(age-.45)*6)*(age>.9?(1-age)*10:1))})}
   ctx.restore()}
 function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/1000,now=S.day;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
   const SX=x=>view.ox+x*s,SY=y=>view.oy+y*s,inS=(X,Y,m)=>X>-m&&Y>-m&&X<w+m&&Y<h+m;
@@ -8646,12 +8773,17 @@ function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/10
     const a=t*.8+f.id;const g=ctx.createRadialGradient(X,Y,0,X,Y,R);g.addColorStop(0,'rgba(214,184,120,.18)');g.addColorStop(1,'rgba(214,184,120,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(X,Y);ctx.arc(X,Y,R,a,a+.5);ctx.closePath();ctx.fill();
     if(f.task&&f.task.k==='vline'){ctx.strokeStyle='rgba(214,184,120,.6)';ctx.setLineDash([2,5]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(SX(f.task.a[0]),SY(f.task.a[1]));ctx.lineTo(SX(f.task.b[0]),SY(f.task.b[1]));ctx.stroke();ctx.setLineDash([])}}
   // blocus : chaîne flottante, galères de garde, navire amiral, rondes, forceurs pris ou passés
-  for(const id in S.block){const n=N[NI[id]];if(!n||!n.anch)continue;const b=S.block[id];if(b.side!=='car'&&ownerN(n.i)!=='car'&&visAt(n.x,n.y)<1)continue;if(!inS(SX(n.anch[0]),SY(n.anch[1]),260))continue;try{blockScene(id,n,b,s,t,SX,SY)}catch(e){}}
+  for(const id in S.block){const n=N[NI[id]];if(!n||!n.anch)continue;const b=S.block[id];if(b.side!=='car'&&ownerN(n.i)!=='car'&&visAt(n.x,n.y)<1)continue;if(!inS(SX(n.anch[0]),SY(n.anch[1]),700))continue;try{blockScene(id,n,b,s,t,SX,SY)}catch(e){}}
   // pillage des côtes (mission « piller ») : allers et retours des chaloupes, villages qui brûlent en boucle
-  for(const f of S.fleets){if(f.inG||f.legs.length||!f.task||f.task.k!=='raid'||f.task.n==null)continue;const tn=N[f.task.n];if(!S.raid||!S.raid[tn.id])continue;if(f.side!=='car'&&visAt(f.x,f.y)<1)continue;if(!inS(SX(f.x),SY(f.y),300))continue;
+  for(const f of S.fleets){if(f.inG||f.legs.length||!f.task||f.task.k!=='raid'||f.task.n==null)continue;const tn=N[f.task.n];if(!S.raid||!S.raid[tn.id])continue;if(f.side!=='car'&&visAt(f.x,f.y)<1)continue;if(!inS(SX(f.x),SY(f.y),16*s+300))continue;
     if(!f._rsc||f._rsc.x!==f.x||f._rsc.y!==f.y){const p=nearestLand(f.x,f.y,30,.3);let vs=[];if(p){vs=villagesIn(p[0]-14,p[1]-14,p[0]+14,p[1]+14).filter(v=>Math.hypot(v.x-p[0],v.y-p[1])<14).slice(0,3).map(v=>[v.x,v.y]);
-      if(!vs.length)vs=[[p[0]+(p[0]-f.x)*.4,p[1]+(p[1]-f.y)*.4]]}f._rsc={x:f.x,y:f.y,p,vs}}
-    const R=f._rsc;if(!R.p)continue;try{raidScene({tx:R.p[0],ty:R.p[1],vs:R.vs,side:f.side,big:f.cargo.length?1:0},SX(f.x),SY(f.y),(t/22+f.id*.37)%1,t,s,SX,SY,true)}catch(e){}}
+      if(!vs.length)vs=[[p[0]+(p[0]-f.x)*.4,p[1]+(p[1]-f.y)*.4]]}f._rsc={x:f.x,y:f.y,p,vs,fm:p?farmsNear(p[0],p[1],7).slice(0,3).map(q=>[q.x,q.y]):[]}}
+    const R=f._rsc;if(!R.p)continue;try{raidScene({tx:R.p[0],ty:R.p[1],vs:R.vs,fm:R.fm,side:f.side,big:f.cargo.length?1:0},SX(f.x),SY(f.y),(t/22+f.id*.37)%1,t,s,SX,SY,true)}catch(e){}}
+  // fermes : brûlées (décor) et détachements de fourrageurs qui vont les piller
+  if(S.par)for(const p of S.par){if(p.k!=='raid'||p.state!=='burn'||p._fr)continue;p._fr=1;const v=VIL[p.v];if(v)farmRaid(v.x,v.y,p.side,2,3.5,S.day,.6+.15*Math.random())}
+  for(let i=FR.length-1;i>=0;i--){const R=FR[i],u=(S.day-R.t0)/R.dur;if(u>=1){FB[R.k]=R.t0+R.dur*.55;FR.splice(i,1);continue}if(u>.55&&FB[R.k]==null)FB[R.k]=S.day;
+    if(u<0||(R.side!=='car'&&visAt(R.fx,R.fy)<1)||s<1.5||!inS(SX(R.fx),SY(R.fy),200))continue;try{farmRaidDraw(R,u,t,s,SX,SY,FAC[R.side].c)}catch(e){}}
+  if(s>=3)for(const k in FB){const [i,j]=k.split(':').map(Number),cell=2.5,fx=(i+hash(j,i))*cell,fy=(j+hash(i+7,j))*cell;if(S.day-FB[k]>70||S.day<FB[k]-2){delete FB[k];continue}if(S.day<FB[k]||!inS(SX(fx),SY(fy),60))continue;try{farmBurntDraw(k,fx,fy,hash(i,j)*9,FB[k],t,s,SX,SY)}catch(e){}}
   // chaloupes : aiguade et vivres au mouillage, ravitaillement par convoi
   for(const f of S.fleets){if(f.inG||(f.side!=='car'&&visAt(f.x,f.y)<2))continue;const X=SX(f.x),Y=SY(f.y);if(!inS(X,Y,40)||s<.5)continue;
     let tx=null,ty=null;
@@ -8661,7 +8793,7 @@ function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/10
     for(let k=0;k<3;k++){const u=((t*.18+k/3+f.id*.1)%1),v=u<.5?u*2:2-u*2,px=X+(tx-X)*v,py=Y+(ty-Y)*v;nvShip(px,py,4,Math.atan2(ty-Y,tx-X)+(u<.5?0:Math.PI),'#7a5634',null)}}
   // effets ponctuels : incendies, brûlots, abordages, forceurs de blocus, signaux
   V.anim=(V.anim||[]).filter(a=>now-a.d<a.t+(a.w||0));
-  for(const a of V.anim){if(a.w&&now-a.d<a.w)continue;const X=SX(a.x),Y=SY(a.y);if(!inS(X,Y,160))continue;const age=(now-a.d-(a.w||0))/a.t,fade=1-age;
+  for(const a of V.anim){if(a.w&&now-a.d<a.w)continue;const X=SX(a.x),Y=SY(a.y);if(!inS(X,Y,a.k==='raid'?16*s+300:160))continue;const age=(now-a.d-(a.w||0))/a.t,fade=1-age;
     if(a.k==='raid'){raidScene(a,X,Y,age,t,s,SX,SY);continue}
     if(a.k==='burn'||a.k==='smoke'){const big=a.big?1.8:1,wd=windOf();
       for(let k=0;k<7;k++){const u=((t*.25+k/7)%1),px=X+Math.cos(wd.a)*u*30*big+Math.sin(k*3)*4,py=Y+Math.sin(wd.a)*u*30*big-u*26*big;ctx.fillStyle=`rgba(60,55,50,${.35*(1-u)*fade})`;ctx.beginPath();ctx.arc(px,py,(4+u*10)*big,0,7);ctx.fill()}
@@ -8676,7 +8808,7 @@ function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/10
   FLSH.length=0;ctx.restore()}
 const _drawDynamicF=drawDynamic;
 drawDynamic=function(w,h,s){const r=_drawDynamicF.apply(this,arguments);try{flDraw(s,w,h)}catch(e){console.error(e)}return r};
-window.__flotte={makeVigie,descent,fireShips,fireTarget,raidTargets,canDescent,windOf,windName,windMul,admOf,goodsFix,goodsOf,blockDaily,foodDaily,supplyOf,vigDaily,flAnim,GOODS};
+window.__flotte={makeVigie,descent,fireShips,fireTarget,raidTargets,canDescent,windOf,windName,windMul,admOf,goodsFix,goodsOf,blockDaily,foodDaily,supplyOf,vigDaily,flAnim,GOODS,FB,FR,farmsNear};
 /* ================= FIN NAVAL FLOTTE ================= */
 /* ================= COMMANDES DE LA CARTE (fil « Corriger les commandes de la campagne ») =================
    Source : /mnt/project-files/commandes/commandes.js, injecté avant « BOUCLE » par commandes/patch.py (relançable).
