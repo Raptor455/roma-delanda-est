@@ -670,14 +670,22 @@ PL.push(
 const REGIONS=[
  ['Zeugitane',9.9,36.65],['Byzacène',10.55,35.25],['Emporia',12.3,32.9],['Îles maltaises',14.4,35.9],['Numidie massyle',7.2,36.1],['Masaesylie',2.4,35.9],['Maurétanie',-5.6,34.9],['Cyrénaïque',21,32.6],
  ['Turdétanie',-5.8,37.15],['Bastétanie',-2.9,37.2],['Orétanie',-3.6,38.4],['Contestanie',-0.9,38.2],['Édétanie',-0.5,39.7],['Ilercavonie',0.7,41.0],['Ilergètes',0.6,41.9],
- ['Carpétanie',-3.8,39.7],['Celtibérie',-2.4,41.4],['Vaccéens',-5.0,41.7],['Lusitanie',-7.9,39.4],['Callécie',-8.0,42.9],['Cantabrie',-4.2,43.0],['Vasconie',-1.5,42.8],
+ ['Carpétanie',-3.8,39.7],['Celtibérie',-2.4,41.4],['Vaccéens',-5.0,41.7],['Lusitanie',-7.9,39.4],['Callécie',-8.0,42.9],['Astures et Cantabres',-5.2,42.9],['Vasconie',-1.5,42.8],
  ['Baléares',3.2,39.7],['Pityuses',1.4,38.95],
  ['Volques',3.3,43.4],['Massalie',5.6,43.4],['Ligurie',8.3,44.2],['Allobroges',5.6,45.6],['Arvernes',3.0,45.6],['Aquitaine',-0.5,44.3],['Éduens',4.0,46.9],
  ['Gaule cisalpine',9.8,45.2],['Vénétie',12.0,45.4],['Étrurie',11.3,43.3],['Ombrie',12.6,43.0],['Picénum',13.5,43.0],['Latium',12.7,41.8],['Samnium',14.4,41.5],
- ['Campanie',14.4,40.9],['Apulie',16.0,41.2],['Lucanie',15.8,40.3],['Bruttium',16.3,39.0],['Sicile occidentale',13.0,37.8],['Sicile',14.7,37.5],['Sardaigne',9.0,40.0],['Corse',9.1,42.1],
+ ['Campanie',14.4,40.9],['Apulie',16.0,41.2],['Lucanie',15.8,40.3],['Bruttium',16.3,39.0],['Sicile occidentale',13.0,37.8],['Sicile orientale',14.9,37.4],['Sardaigne',9.0,40.0],['Corse',9.1,42.1],
  ['Liburnie',15.0,44.8],['Dalmatie',17.1,43.4],['Illyrie',19.5,42.0],['Pannonie',17.8,45.3],['Dardanie',21.6,42.6],['Épire',20.6,39.7],['Macédoine',22.6,40.7],
- ['Thessalie',22.4,39.5],['Thrace',25.0,42.0],['Étolie',21.6,38.7],['Grèce centrale',23.4,38.2],['Péloponnèse',22.3,37.4],['Crète',24.8,35.2]
+ ['Thessalie',22.4,39.5],['Thrace',25.0,42.0],['Étolie',21.6,38.7],['Grèce centrale',23.4,38.2],['Péloponnèse',22.3,37.4],['Crète',24.8,35.2],
+ ['Calabre',17.5,40.5],['Indigètes',2.9,42.2],['Alpes',6.8,45.3]
 ];
+// Villes rangées à la main dans leur province historique (sinon : la province dont le centre est le plus proche,
+// ce qui mettait Siga en Hispanie, Rhegium en Sicile ou Élis en Étolie)
+const REG_FIX={siga:'Masaesylie',igilgili:'Masaesylie',saldae:'Masaesylie',sitifis:'Masaesylie',rusaddir:'Maurétanie',
+ rhegium:'Bruttium',thurii:'Lucanie',tarentum:'Calabre',brundisium:'Calabre',beneventum:'Samnium',
+ tarquinii:'Étrurie',clusium:'Étrurie',perusia:'Étrurie',felsina:'Gaule cisalpine',
+ segusio:'Alpes',augusta:'Alpes',darantasia:'Alpes',ebrodunum:'Alpes',emporion:'Indigètes',ruscino:'Volques',taurasia:'Ligurie',metapontum:'Lucanie',lapurdum:'Aquitaine',asturica:'Astures et Cantabres',
+ elis:'Péloponnèse',patrae:'Péloponnèse',corinthus:'Péloponnèse'};
 /* ===== FIN MÉCA-LIEUX ===== */
 /* ================= RELIEF, FLEUVES ================= */
 const MOUNT=[
@@ -5365,7 +5373,7 @@ const isTrib=f=>S.fac[f]&&S.fac[f].st==='tribut_car';
 let REGN=null;
 const o0s=n=>S&&S.mirror?(n.o0==='car'?'rom':n.o0==='rom'?'car':n.o0):n.o0; // propriétaire d'origine, vu du camp interne (miroir « Jouer Rome »)
 function regionsBuild(){REGN=REGIONS.map(([n,lo,la])=>{const [x,y]=prj(lo,la);return {n,x,y,towns:[]}});
-  for(const n of N){if(n.col)continue;let b=null,bd=1e9;for(const r of REGN){const d=Math.hypot(r.x-n.x,r.y-n.y);if(d<bd){bd=d;b=r}}n.reg=b.n;b.towns.push(n.i)}
+  const RB={};for(const r of REGN)RB[r.n]=r;for(const n of N){if(n.col)continue;let b=RB[REG_FIX[n.id]]||null,bd=b?-1:1e9;for(const r of REGN){const d=Math.hypot(r.x-n.x,r.y-n.y);if(d<bd){bd=d;b=r}}n.reg=b.n;b.towns.push(n.i)}
   for(const r of REGN)if(r.towns.length){let sx=0,sy=0;for(const i of r.towns){sx+=N[i].x;sy+=N[i].y}r.lx=(sx/r.towns.length+r.x)/2;r.ly=(sy/r.towns.length+r.y)/2}else{r.lx=r.x;r.ly=r.y}}
 const regOf=n=>{if(!REGN)regionsBuild();return n.reg||null};
 function drawRegionLabels(s){
@@ -5515,7 +5523,7 @@ const SOCII={
   etr:{n:'Étrusques',f0:75,t:{arretium:0,faesulae:0,volaterrae:0,perusia:0,clusium:0,tarquinii:0,pisae:5}},
   umb:{n:'Ombriens et Picéniens',f0:85,t:{asculum:0,ancona:5}}
 };
-const ITALY_REG=new Set(['Gaule cisalpine','Vénétie','Étrurie','Ombrie','Picénum','Latium','Samnium','Campanie','Apulie','Lucanie','Bruttium']);
+const ITALY_REG=new Set(['Gaule cisalpine','Vénétie','Étrurie','Ombrie','Picénum','Latium','Samnium','Campanie','Apulie','Lucanie','Calabre','Bruttium']);
 const inItaly=(x,y)=>{if(!REGN)regionsBuild();const n=townAt(x,y);return !!n&&ITALY_REG.has(n.reg)};
 function socInit(){if(!S.soc){S.soc={};for(const g in SOCII)S.soc[g]={fid:SOCII[g].f0,cd:0}}if(!S.dipl)S.dipl={free:true};}
 const socTowns=g=>Object.keys(SOCII[g].t).filter(id=>NI[id]!=null);
