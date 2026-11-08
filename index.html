@@ -2192,7 +2192,7 @@ function retreat(a){
 /* ================= RENDU ================= */
 const cv=$('map');let ctx=cv.getContext('2d');
 let view={s:.3,ox:0,oy:0},dpr=1,sel=null,preview=null,territoryDirty=true,ownerPaths=null,fogC=document.createElement('canvas'),texPat=null;
-function fit(){const w=cv.clientWidth,h=cv.clientHeight;dpr=perfDpr();/*PERF*/cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);fogC.width=w;fogC.height=h}
+function fit(){const w=cv.clientWidth,h=cv.clientHeight;dpr=perfDpr();/*PERF*/cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);fogC.width=Math.ceil(w*PERF.fk);fogC.height=Math.ceil(h*PERF.fk);PERF.fogKey=''/*PERF*/}
 const minS=()=>Math.min(cv.clientWidth/MW,cv.clientHeight/MH)*.95,MAXS=120;
 function clampView(){const w=cv.clientWidth,h=cv.clientHeight;view.s=Math.max(minS(),Math.min(MAXS,view.s));
   const mw=MW*view.s,mh=MH*view.s;view.ox=mw<w?(w-mw)/2:Math.min(0,Math.max(w-mw,view.ox));view.oy=mh<h?(h-mh)/2:Math.min(0,Math.max(h-mh,view.oy))}
@@ -2351,9 +2351,9 @@ function drawDynamic(w,h,s,z,inV){
   for(const a of S.armies){if(!a._p)continue;const v=visOfArmy(a);if(a.inG){a._sq=null;garToken(view.ox+a._p[0]*s,view.oy+a._p[1]*s,a.side,String(a.units.length),sel&&sel.a===a,false);continue}if(!a.g&&v===2&&s<CARD_S)continue;token(view.ox+a._p[0]*s,view.oy+a._p[1]*s-(a.g?0:18),a.side,v===2?String(a.units.length):'~',sel&&sel.a===a,a)}
   drawFleets(s,z,inV);drawPatrols(s,inV);
   // brouillard
-  const f=fogC.getContext('2d');f.setTransform(1,0,0,1,0,0);f.globalCompositeOperation='source-over';f.clearRect(0,0,w,h);f.fillStyle='rgba(16,20,26,.52)';f.fillRect(0,0,w,h);
+  if(perfFogDirty(w,h,s)){/*PERF*/const f=fogC.getContext('2d');f.setTransform(PERF.fk,0,0,PERF.fk,0,0);f.globalCompositeOperation='source-over';f.clearRect(0,0,w,h);f.fillStyle='rgba(16,20,26,.52)';f.fillRect(0,0,w,h);
   f.globalCompositeOperation='destination-out';
-  f.imageSmoothingEnabled=true;for(const q of SRC){const X=view.ox+q[0]*s,Y=view.oy+q[1]*s,R0=q[2]*VIS.band*s;if(X<-R0||Y<-R0||X>w+R0||Y>h+R0)continue;const v=vsOf(q),R=v.R1*s;f.drawImage(vsMask(v),X-R,Y-R,2*R,2*R)}
+  f.imageSmoothingEnabled=true;for(const q of SRC){const X=view.ox+q[0]*s,Y=view.oy+q[1]*s,R0=q[2]*VIS.band*s;if(X<-R0||Y<-R0||X>w+R0||Y>h+R0)continue;const v=vsOf(q),R=v.R1*s;f.drawImage(vsMask(v),X-R,Y-R,2*R,2*R)}}/*PERF*/
   if(!PERF.skip.fog)ctx.drawImage(fogC,0,0,w,h);/*PERF*/
   // noms des peuples, vue lointaine
   if(s<.75){ctx.textAlign='center';ctx.textBaseline='middle';const fb=[];for(const L of FACLAB.slice().sort((a,b)=>(['car','rom'].includes(b.o)-['car','rom'].includes(a.o))||b.n-a.n)){if(L.n<2&&!['car','rom'].includes(L.o))continue;const X=view.ox+L.x*s,Y=view.oy+L.y*s;const fs=L.o==='car'||L.o==='rom'?17:12;ctx.font=`${fs}px Marcellus, Georgia, serif`;
@@ -2932,7 +2932,7 @@ function formation(a,s){
   if(sel&&sel.a===a){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y],i)=>{if(hid[i])return;ctx.beginPath();ctx.arc(x,y,q*.9,0,7);ctx.fill()})}
   U.forEach((u,i)=>{if(!hid[i])unitSq(pts[i][0],pts[i][1],q,u,c,dark)});
   a._sq=pts.filter((p,i)=>!hid[i]);
-  if(s>1.4){const lx=view.ox+a._p[0]*s+14,ly=view.oy+a._p[1]*s-30;ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';const t=a.name,tw=ctx.measureText(t).width;
+  if(0/*ARMEES:sans-etiquette*/&&s>1.4){const lx=view.ox+a._p[0]*s+14,ly=view.oy+a._p[1]*s-30;ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';const t=a.name,tw=ctx.measureText(t).width;
     ctx.fillStyle='rgba(238,226,196,.92)';ctx.strokeStyle='rgba(60,40,20,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.rect(lx,ly-7,tw+10,14);ctx.fill();ctx.stroke();ctx.fillStyle='#2b2115';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(t,lx+5,ly)}
 }
 // emblème du médaillon : signe de Tanit pour Carthage, couronne de laurier pour Rome, initiale pour les autres
@@ -3108,8 +3108,8 @@ function openBattle(){
   modal(`<h2>${battleTitle(b)}</h2><p>${attMine?`Vos troupes attaquent ${FAC[eSide].a?'une garnison ('+FAC[eSide].n+')':"l'armée romaine"} (terrain : ${ter}).`:`${sideName(eSide)} attaque vos troupes (terrain : ${ter}).`}</p>
     <div class="vs"><div><h4 style="color:#b48ae6">Carthage</h4><p class="sub">${esc(names(attMine?b.att:b.def))}</p><ul>${list(P)}</ul></div><div><h4 style="color:#e2665a">${sideName(eSide)}</h4><p class="sub">${esc(names(attMine?b.def:b.att))}</p><ul>${list(E)}</ul></div></div>
     <p class="odds">Chances estimées : <b>${txt}</b>.</p>
-    <div class="row"><button class="go" id="b3d" type="button">Livrer bataille (3D)</button><button id="bAuto" type="button">Résolution automatique</button><button id="bFlee" class="warn" type="button">${attMine?'Renoncer et se replier':'Battre en retraite'}</button></div>
-    <p class="sub">En bataille 3D, vous commandez toujours Carthage (violet) ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes.</p>`);
+    <div class="row"><button class="go" id="b3d" type="button">Livrer bataille</button><button id="bAuto" type="button">Résolution automatique</button><button id="bFlee" class="warn" type="button">${attMine?'Renoncer et se replier':'Battre en retraite'}</button></div>
+    <p class="sub">Sur le champ de bataille, vous commandez toujours Carthage (violet) ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes.</p>`);
   $('b3d').onclick=()=>go3D(attMine);
   $('bAuto').onclick=()=>{const res=autoResolve(b);finishBattle(res)};
   $('bFlee').onclick=()=>{const mineIds=attMine?b.att:b.def;for(const id of mineIds){const a=S.armies.find(x=>x.id===id);if(!a)continue;a.units.forEach(u=>u.men*=attMine?.97:.85);a.legs=[];retreat(a)}S.cur=null;closeModal();refreshAfterBattle()};
@@ -5241,7 +5241,7 @@ renderSide=function(){_renderSide10.apply(this,arguments);if(!S||!(sel&&sel.a&&!
   if(free.length&&C.length-1<MAXSUB)h+=free.slice(0,3).map(g=>`<button type="button" data-cadd="${g.id}" title="${esc(g.name)} ${'★'.repeat(stars(g))}${g.tr.length?' — '+g.tr.map(t=>TRAITS[t].n).join(', '):''}">Second : ${esc(g.name)}</button>`).join('');
   else if(C.length-1<MAXSUB)h+=`<span class="sub" style="font-size:11px">Pour nommer un second : un général libre dans la ville où se tient l'armée, ou fusionnez deux armées (le général absorbé devient second).</span>`;
   if(C.length>1)h+=`<button type="button" data-cauto="eq" title="Partager les régiments à force égale entre les corps (la cavalerie va au cavalier)">Répartir à force égale</button><button type="button" data-cauto="armes" title="Un corps pour l'infanterie lourde, un pour la cavalerie, un pour les troupes légères et les éléphants">Répartir par armes</button>`;
-  h+=`<button type="button" id="cWin" class="go" title="Déplacer chaque régiment d'un corps à l'autre">Organiser les corps</button>`;h+=`<button type="button" id="cGuard" title="Le meilleur régiment du chef devient sa garde d'élite (+10 % en attaque et en défense, moral +25 % en bataille 3D)">${a.units.some(u=>u.gd)?'Changer la garde':'Former la garde'}</button></div>`;
+  h+=`<button type="button" id="cWin" class="go" title="Déplacer chaque régiment d'un corps à l'autre">Organiser les corps</button>`;h+=`<button type="button" id="cGuard" title="Le meilleur régiment du chef devient sa garde d'élite (+10 % en attaque et en défense, moral +25 % sur le champ de bataille)">${a.units.some(u=>u.gd)?'Changer la garde':'Former la garde'}</button></div>`;
   box.insertAdjacentHTML('beforeend',h);
   box.querySelectorAll('[data-cadd]').forEach(x=>x.onclick=()=>{const g=S.gens.find(y=>y.id===+x.dataset.cadd);if(g&&addSub(a,g)){autoCorps(a,'eq')}renderAll()});
   box.querySelectorAll('[data-csub]').forEach(x=>x.onclick=()=>{dropSub(a,+x.dataset.csub);renderAll()});
@@ -5316,34 +5316,64 @@ const _ambushMul11=ambushMul;
 ambushMul=function(b){let m=_ambushMul11(b);try{const A=sideArmies(b.att);if(m<1&&A.some(x=>x.legs.length&&colOk(x))){const a=A.find(x=>x.legs.length&&colOk(x)),g=subsOf(a)[a.col.ar-1]||(a.col.ar===0?genOf(a):null),sh=g&&(hasTr(g,'prud')||hasTr(g,'tact'))?.45:.6;m=1/(1+(1/m-1)*sh)}}catch(e){}return m};
 function colOrder(a){const C=corpsOf(a).filter(c=>c.u.length);if(!colOk(a))return C.map(c=>c.k);const mid=C.map(c=>c.k).filter(k=>k!==a.col.av&&k!==a.col.ar);return [a.col.av,...mid,a.col.ar]}
 function colDraw(){} // remplacé : la colonne se dessine sur la grande colonne de régiments (formation), voir plus bas
-// colonne de marche dessinée sur la grande colonne de la carte : régiments rangés par corps (ordre de marche), fanion en tête de chaque corps, bagages en queue
+// colonne de marche dessinée sur la grande colonne de la carte : régiments rangés par corps (ordre de marche), fanion au flanc de chaque corps, train des bagages en queue
 const _formation11=formation;
-formation=function(a,s){const C=a&&a.legs&&a.legs.length&&!a.ship&&TRAIL[a.id]&&TRAIL[a.id].length>1?corpsOf(a):null;
-  if(!C||C.length<2||C.filter(c=>c.u.length).length<2)return _formation11.apply(this,arguments);
-  const O=colOrder(a),seq=[],heads=[];for(const k of O){const c=C.find(x=>x.k===k);if(!c||!c.u.length)continue;heads.push({k,g:c.g||(k===0?genOf(a):null),i:seq.length,n:c.u.length,ex:colOk(a)&&(k===a.col.av||k===a.col.ar)});for(const i of c.u)if(a.units[i])seq.push(a.units[i])}
-  if(seq.length!==a.units.length)return _formation11.apply(this,arguments);
-  const keep=a.units,M={...MARCH};for(const k in MARCH)MARCH[k]=0;a.units=seq;let r;
-  try{r=_formation11.apply(this,arguments)}finally{a.units=keep;Object.assign(MARCH,M)}
-  try{const P=a._sq;if(P&&P.length===seq.length)colDeco(a,s,P,heads)}catch(e){}
+formation=function(a,s){const mv=a&&a.legs&&a.legs.length&&!a.ship&&TRAIL[a.id]&&TRAIL[a.id].length>1;if(!mv)return _formation11.apply(this,arguments);
+  const C=corpsOf(a),multi=C.filter(c=>c.u.length).length>=2;let heads=[],r;
+  if(multi){const O=colOrder(a),seq=[];for(const k of O){const c=C.find(x=>x.k===k);if(!c||!c.u.length)continue;heads.push({k,g:c.g||(k===0?genOf(a):null),i:seq.length,n:c.u.length,ex:colOk(a)&&(k===a.col.av||k===a.col.ar)});for(const i of c.u)if(a.units[i])seq.push(a.units[i])}
+    if(seq.length!==a.units.length)return _formation11.apply(this,arguments);
+    const keep=a.units,M={...MARCH};for(const k in MARCH)MARCH[k]=0;a.units=seq;
+    try{r=_formation11.apply(this,arguments)}finally{a.units=keep;Object.assign(MARCH,M)}}
+  else{r=_formation11.apply(this,arguments);const g=genOf(a);if(g)heads=[{k:0,g,i:0,n:a.units.length,ex:false}]}
+  try{const P=a._sq;if(P&&P.length===a.units.length&&P.length)colDeco(a,s,P,heads)}catch(e){}
   return r};
+// chemin de l'armée à l'écran (tête puis trace en arrière) : point à la distance d, et direction de marche
+function trailAt(a,s,d){const T=TRAIL[a.id]||[],P=[[view.ox+a._p[0]*s,view.oy+a._p[1]*s]];for(let k=T.length-1;k>=0;k--)P.push([view.ox+T[k][0]*s,view.oy+T[k][1]*s]);
+  let acc=0;for(let i=0;i<P.length-1;i++){const dx=P[i+1][0]-P[i][0],dy=P[i+1][1]-P[i][1],l=Math.hypot(dx,dy);if(l<.01)continue;if(acc+l>=d){const f=(d-acc)/l;return {x:P[i][0]+dx*f,y:P[i][1]+dy*f,ux:-dx/l,uy:-dy/l}}acc+=l}
+  const n=P.length;let ux=0,uy=-1;for(let i=n-1;i>0;i--){const dx=P[i][0]-P[i-1][0],dy=P[i][1]-P[i-1][1],l=Math.hypot(dx,dy);if(l>1){ux=-dx/l;uy=-dy/l;break}}return {x:P[n-1][0]-ux*(d-acc),y:P[n-1][1]-uy*(d-acc),ux,uy}}
+// un chariot bâché tiré par deux bœufs (ou une file de mulets), orienté dans le sens de la marche
+function wagon(x,y,ux,uy,w,kind,load){const dark='rgba(26,18,10,.95)';ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(uy,ux));
+  if(kind==='mule'){for(let i=0;i<3;i++){const ox=-i*w*.62;ctx.fillStyle='#7b6248';ctx.beginPath();ctx.ellipse(ox,0,w*.26,w*.13,0,0,7);ctx.fill();ctx.strokeStyle=dark;ctx.lineWidth=Math.max(.8,w*.05);ctx.stroke();
+      ctx.fillStyle=load>.15?'#c9b48a':'#8a7a62';ctx.fillRect(ox-w*.14,-w*.2,w*.28,w*.4);ctx.strokeRect(ox-w*.14,-w*.2,w*.28,w*.4);ctx.fillStyle='#5e4836';ctx.beginPath();ctx.ellipse(ox+w*.3,0,w*.09,w*.06,0,0,7);ctx.fill()}
+    ctx.restore();return}
+  // bœufs, joug, timon
+  ctx.strokeStyle='#4a3424';ctx.lineWidth=Math.max(1,w*.07);ctx.beginPath();ctx.moveTo(w*.45,0);ctx.lineTo(w*.95,0);ctx.stroke();
+  for(const sy of [-1,1]){ctx.fillStyle='#9a7a56';ctx.beginPath();ctx.ellipse(w*1.12,sy*w*.17,w*.24,w*.12,0,0,7);ctx.fill();ctx.strokeStyle=dark;ctx.lineWidth=Math.max(.8,w*.05);ctx.stroke();
+    ctx.fillStyle='#6e5238';ctx.beginPath();ctx.ellipse(w*1.38,sy*w*.17,w*.08,w*.07,0,0,7);ctx.fill()}
+  ctx.strokeStyle='#3a2a18';ctx.lineWidth=Math.max(1,w*.08);ctx.beginPath();ctx.moveTo(w*.98,-w*.32);ctx.lineTo(w*.98,w*.32);ctx.stroke();
+  // roues, caisse, bâche (pleine, à moitié ou vide selon les vivres)
+  ctx.fillStyle=dark;for(const ox of [-w*.28,w*.28])for(const sy of [-1,1]){ctx.fillRect(ox-w*.12,sy*w*.36-w*.04,w*.24,w*.08)}
+  ctx.fillStyle='#8a6a3e';ctx.fillRect(-w*.5,-w*.32,w,w*.64);ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1,w*.07);ctx.strokeRect(-w*.5,-w*.32,w,w*.64);
+  if(load>.15){const L=Math.min(1,load);ctx.fillStyle='#e6d9b6';ctx.beginPath();ctx.moveTo(-w*.46,-w*.27);ctx.lineTo(-w*.46+w*.92*L,-w*.27);ctx.lineTo(-w*.46+w*.92*L,w*.27);ctx.lineTo(-w*.46,w*.27);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#b7a77f';ctx.lineWidth=Math.max(.6,w*.04);for(let i=1;i<4;i++){const xx=-w*.46+w*.92*L*i/4;ctx.beginPath();ctx.moveTo(xx,-w*.27);ctx.lineTo(xx,w*.27);ctx.stroke()}}
+  ctx.restore()}
 function colDeco(a,s,P,heads){const q=UNIT_KM*s,car=a.side==='car',fc=car?'#6b3f9f':'#9b2a22',dark='rgba(26,18,10,.95)';ctx.save();ctx.textBaseline='middle';
   // liseré doré de l'avant-garde et de l'arrière-garde
   for(const h of heads)if(h.ex){ctx.strokeStyle='#ffd77a';ctx.lineWidth=Math.max(1.5,q*.12);for(let j=h.i;j<h.i+h.n;j++){const [x,y]=P[j];ctx.strokeRect(x-q/2-1.5,y-q/2-1.5,q+3,q+3)}}
-  // bagages : chariots derrière le dernier régiment
-  const n=P.length,L=P[n-1],B=n>1?P[n-2]:[L[0],L[1]-1],dl=Math.hypot(L[0]-B[0],L[1]-B[1])||1,ux=(L[0]-B[0])/dl,uy=(L[1]-B[1])/dl,cw=Math.max(7,q*.9),ang=Math.atan2(uy,ux);
-  for(let j=1;j<=2;j++){const x=L[0]+ux*(q*.9+cw*1.15*j),y=L[1]+uy*(q*.9+cw*1.15*j);ctx.save();ctx.translate(x,y);ctx.rotate(ang);
-    ctx.fillStyle='#8a6a3e';ctx.fillRect(-cw*.5,-cw*.32,cw,cw*.64);ctx.fillStyle='#d9c9a0';ctx.fillRect(-cw*.42,-cw*.26,cw*.84,cw*.3);ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1,cw*.08);ctx.strokeRect(-cw*.5,-cw*.32,cw,cw*.64);
-    ctx.fillStyle=dark;ctx.beginPath();ctx.arc(-cw*.3,cw*.36,cw*.13,0,7);ctx.arc(cw*.3,cw*.36,cw*.13,0,7);ctx.fill();ctx.restore()}
-  // fanion en tête de chaque corps ; de près, bannière au nom du commandant
-  const big=s>1.4,ph=Math.max(10,q*1.5);
-  for(const h of heads){const [x,y]=P[h.i],px=x+q*.5,py=y-q*.5,top=py-ph,col=h.k===0?'#e0b84f':fc;
+  // train des bagages : un chariot pour 4 régiments (un de plus avec les bagages), mulets pour les petites armées ; la bâche montre les vivres restants
+  const n=a.units.length,need=Math.max(11,q*.9),sp=q*1.22,w=Math.max(9,q*.95),fd=typeof foodDays==='function'?foodDays(a):20,load=Math.max(0,Math.min(1,fd/20));
+  const nw=Math.min(6,Math.max(1,Math.ceil(n/4)+(a.bag?1:0))),kind=n<=3&&!a.bag?'mule':'char',gap=w*(kind==='mule'?2.2:1.8);
+  let d=need+(n-1)*sp+q*.8+w*1.2;for(let j=0;j<nw;j++){const p=trailAt(a,s,d);wagon(p.x,p.y,p.ux,p.uy,w,kind,load);d+=gap}
+  // fanion au flanc de chaque corps ; de près, bannière au nom du commandant
+  const big=s>1.4;
+  for(const h of heads){const [x,y]=P[h.i],px=x+q*.5+2,py=y+q*.5,top=y-q*.5-Math.max(5,q*.35),col=h.k===0?'#e0b84f':fc;
     ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1.2,q*.08);ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,top);ctx.stroke();
-    const fw=Math.max(7,q*.6);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px+fw,top+fw*.3);ctx.lineTo(px,top+fw*.6);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke();
-    if(big&&h.g){const nm=h.g.name.split(' ').slice(-1)[0],fz=11;ctx.font=`600 ${fz}px "Barlow Semi Condensed",Arial,sans-serif`;const w=ctx.measureText(nm).width+fz*.9,bh=fz*1.4,bx=px,by=top-bh-1;
-      ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1.2,q*.08);ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,by);ctx.stroke();
-      ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+w,by);ctx.lineTo(bx+w-fz*.35,by+bh/2);ctx.lineTo(bx+w,by+bh);ctx.lineTo(bx,by+bh);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke();
-      ctx.fillStyle=h.k===0?'#1b1712':'#f4ead2';ctx.textAlign='left';ctx.fillText(nm,bx+fz*.3,by+bh/2+.5)}}
+    if(big&&h.g){const nm=h.g.name.split(' ').slice(-1)[0],fz=11;ctx.font=`600 ${fz}px "Barlow Semi Condensed",Arial,sans-serif`;const w2=ctx.measureText(nm).width+fz*.9,bh=fz*1.4,bx=px,by=top;
+      ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+w2,by);ctx.lineTo(bx+w2-fz*.35,by+bh/2);ctx.lineTo(bx+w2,by+bh);ctx.lineTo(bx,by+bh);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke();
+      ctx.fillStyle=h.k===0?'#1b1712':'#f4ead2';ctx.textAlign='left';ctx.fillText(nm,bx+fz*.3,by+bh/2+.5)}
+    else{const fw=Math.max(7,q*.6);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px+fw,top+fw*.3);ctx.lineTo(px,top+fw*.6);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke()}}
   ctx.restore()}
+// emblème de l'armée : remplace le nombre de régiments dans le médaillon ; choisi dans le panneau de l'armée
+EMB_P.aigle='M0 -9 L1.6 -6.6 L1.2 -3.4 L9.5 -6.5 L7.6 -2.4 L10 -1.2 L5 1 L2.2 1.2 L3.2 6 L5.4 9 L0 7.2 L-5.4 9 L-3.2 6 L-2.2 1.2 L-5 1 L-10 -1.2 L-7.6 -2.4 L-9.5 -6.5 L-1.2 -3.4 L-1.6 -6.6Z';
+const ARMY_EMB={tanit:'Signe de Tanit',elephant:'Éléphant',cheval:'Tête de cheval',palmier:'Palmier',moon:'Disque et croissant',soleil:'Soleil',etoile:'Étoile',rings:'Rosace',
+  aigle:'Aigle',foudre:'Foudre ailé',loup:'Louve',sanglier:'Sanglier',triskel:'Triskèle'};
+const embOf=a=>a.emb&&ARMY_EMB[a.emb]?a.emb:a.side==='car'?'tanit':a.side==='rom'?'aigle':'soleil';
+const EMB_IMG={};
+function embImg(k,col){const key=k+col;if(EMB_IMG[key])return EMB_IMG[key];const im=new Image();EMB_IMG[key]=im;
+  im.onload=()=>{im._ok=1;try{renderAll()}catch(e){}};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-11 -11 22 22">${embSVG(k,0,0,10,col)}</svg>`);return im}
+const _token11=token;
+token=function(x,y,side,txt,selected,a){if(!(a&&!a.g&&a.units&&/^\d+$/.test(txt||'')))return _token11.apply(this,arguments);
+  _token11.call(this,x,y,side,'',selected,a);const im=embImg(embOf(a),'#fff');if(im._ok){const r=FAC[side].a?8.5:11;ctx.drawImage(im,x-r*.78,y-r*.82,r*1.56,r*1.56)}};
 // vers la bataille 3D : avis du conseil et ordre de marche
 const _addBattleMods11=addBattleMods;
 addBattleMods=function(payload){_addBattleMods11(payload);try{const b=S.cur;if(!b||!payload||!payload.b)return;
@@ -5371,6 +5401,12 @@ renderSide=function(){_renderSide11.apply(this,arguments);try{if(!(sel&&sel.a&&!
   box.insertAdjacentHTML('beforeend',`<p class="sub" style="margin:8px 0 2px">Détachement de ${esc(armyLabel(p))}${near?' — à portée':''}</p><div class="row"><button type="button" id="cRej" ${near?'':'disabled'} title="${near?'Les régiments rentrent dans l\'armée et reforment leur corps':'Rapprochez le détachement de son armée'}">Rejoindre l'armée</button><button type="button" id="cGoP" title="Marcher jusqu'à l'armée">Marcher vers l'armée</button></div>`);
   if($('cRej'))$('cRej').onclick=()=>{if(rejoin(d)){sel={a:p};renderAll()}};
   if($('cGoP'))$('cGoP').onclick=()=>{try{order(d,p.x+.8,p.y+.4,null)}catch(e){}renderAll()}}catch(e){console.warn(e)}};
+// panneau d'une de vos armées : choix de l'emblème
+const _renderSide12=renderSide;
+renderSide=function(){_renderSide12.apply(this,arguments);try{const a=sel&&sel.a;if(!a||a.dead||a.g||!isMine(a))return;const h=$('side').querySelector('h2');if(!h||$('aEmb'))return;
+  const c=FAC[a.side].c,cur=embOf(a),src=k=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 24 24"><rect x="-12" y="-12" width="24" height="24" rx="4" fill="rgb(${c[0]},${c[1]},${c[2]})"/>${embSVG(k,0,0,10,'#fff')}</svg>`);
+  h.insertAdjacentHTML('afterend',`<div class="row" style="align-items:center;margin:4px 0 6px"><img id="aEmbI" src="${src(cur)}" alt="" style="width:26px;height:26px"><label class="sub" style="display:flex;gap:6px;align-items:center">Emblème <select id="aEmb" style="font:inherit;color:var(--ink);background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;padding:3px 6px">${Object.entries(ARMY_EMB).map(([k,n])=>`<option value="${k}"${k===cur?' selected':''}>${n}</option>`).join('')}</select></label></div>`);
+  $('aEmb').onchange=e=>{a.emb=e.target.value;$('aEmbI').src=src(a.emb);renderAll()}}catch(e){console.warn(e)}};
 
 function dark2(){return 'rgba(26,18,10,.95)'}
 window.__armees={lineOf,dijkstra,startsOf,sendConvoy,sendScouts,raidsDaily,get S(){return S},T:{get startBattle(){return startBattle},get odds(){return odds},get capture(){return capture},get applyResult(){return applyResult},get autoResolve(){return autoResolve},reliefize,negotiate,refuseTry,hireMerc,mercNode,chev,startMine,insideOf,shutIn,get arrive(){return arrive},canAmb,ambushMul,get openBattle(){return openBattle},fmOf,fmMul,ruseFeux,ruseBoeufs,ruseTransfuges,decimate,donativum,rewardBraves,woundOf,corpsOf,addSub,dropSub,autoCorps,pickGuard,corpsMul,subsOf,hannibalStaff,corpsWin,fallen3D,splitCorps,rejoin,councilOf,colOrder,get ambushMul(){return ambushMul},get daily(){return daily}}};
@@ -6596,7 +6632,7 @@ function mirObserve(){if(_mirObs||typeof MutationObserver==='undefined')return;_
   ['side','top','mcard'].forEach(id=>{const e=$(id);if(e)_mirObs.observe(e,{childList:true,subtree:true})})}
 try{mirObserve()}catch(e){}
 // bataille 3D : couleurs et noms du peuple joué
-{const _diveM=dive;dive=function(payload){try{if(payload&&payload.b)payload.b.pk=S&&S.peo==='mac'?['mac','rom']:S&&S.peo==='syr'?['syr','rom']:S&&S.peo==='ath'?['ath','mac']:S&&S.mirror?['rom','car']:['car','rom']}catch(e){}return _diveM.apply(this,arguments)}}
+{const _diveM=dive;dive=function(payload){try{if(payload&&payload.b)payload.b.pk=S&&S.peo==='mac'?['mac','rom']:S&&S.peo==='syr'?['syr','rom']:S&&S.peo==='ath'?['ath','mac']:S&&PX&&PX[S.peo]?[PX[S.peo].pal,PX[S.peo].foePal]:S&&S.mirror?['rom','car']:['car','rom']}catch(e){}return _diveM.apply(this,arguments)}}
 function mirrorStatic(){if(typeof mpSwapStatic==='function')mpSwapStatic();const t=AUX.car;AUX.car=AUX.rom;AUX.rom=t;document.title='Bellum · Rome'}
 const _afterLoadR=afterLoad;afterLoad=function(){if(S&&S.mirror&&!(typeof MP!=='undefined'&&MP.swapped))mirrorStatic();if(S&&S.mirror)mirObserve();return _afterLoadR.apply(this,arguments)};
 // la politique romaine : Sénat, consuls, prorogation, levées, jeux
@@ -6677,7 +6713,7 @@ const ROM_EVENTS=[
   {w:1,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+6);evCard('La Mère des dieux',"La pierre noire de Cybèle arrive de Pessinonte : présage de victoire (moral +6).")}}];
 {const _em=eventsMonthly;eventsMonthly=function(d){if(!S.mirror)return _em.apply(this,arguments);if(Math.random()<.14){let t=ROM_EVENTS.reduce((s,e)=>s+e.w,0),r=Math.random()*t;for(const e of ROM_EVENTS){r-=e.w;if(r<=0){try{e.f()}catch(x){console.error(x)}break}}}}}
 {const _ob=openBattle;openBattle=function(){const r=_ob.apply(this,arguments);if(S.mirror){const h=document.querySelector('#mcard .vs h4');if(h){h.textContent=sideName('car');h.style.color='#e2665a'}const h2=document.querySelectorAll('#mcard .vs h4')[1];if(h2)h2.style.color='#b48ae6';
-  const p=[...document.querySelectorAll('#mcard p.sub')].find(x=>/vous commandez toujours/.test(x.textContent));if(p)p.textContent="En bataille 3D, vos régiments romains sont de votre côté de la carte ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes."}return r}}
+  const p=[...document.querySelectorAll('#mcard p.sub')].find(x=>/vous commandez toujours/.test(x.textContent));if(p)p.textContent="Sur le champ de bataille, vos régiments romains sont de votre côté de la carte ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes."}return r}}
 
 /* ---------- 8. JOUER LA MACÉDOINE : Philippe V, allié d'Hannibal (215) ---------- */
 // Le joueur garde le camp interne 'car' ; Carthage devient un peuple allié de fait ('pun') qui mène sa propre guerre contre Rome avec l'IA générale.
@@ -6687,7 +6723,7 @@ Object.assign(SHORT,{phalange:'Phalange',hypasp:'Hypaspistes',peltaste:'Peltaste
 const POOL_MAC={mac:['phalange','hypasp','compagnons','thessal'],thr:['peltaste','thessal'],gre:['hypasp','cretois','peltaste'],cre:['cretois','peltaste'],ill:['peltaste','thessal'],
   afr:['peltaste'],num:['peltaste'],ibe:['peltaste'],bal:['cretois'],gau:['peltaste'],ita:['peltaste','thessal']};
 const GEN_MAC=['Philippe V','Démétrios de Pharos','Héracleidès de Tarente','Taurion','Alexandros','Ménippe','Polyphantas','Philoclès','Nicanor','Androsthène'];
-const isMac=()=>!!(S&&(S.peo==='mac'||S.peo==='syr'||S.peo==='ath'));let peoDone=null;
+const isMac=()=>!!(S&&(S.peo==='mac'||S.peo==='syr'||S.peo==='ath'||!!(PX&&PX[S.peo])));let peoDone=null;
 const MAC_ILL=['apollonia','epidamnus','lissus'];
 const MAC_TXT="Vous êtes Philippe V, roi de Macédoine. Après Cannes, vous avez juré alliance à Hannibal : l'Italie pour lui, l'Illyrie et l'Adriatique pour vous. Chassez Rome de la côte illyrienne (Apollonia, Épidamne, Lissos) ; tenez la Grèce face aux Étoliens. Carthage mène sa guerre en Italie : vos armées et les siennes ne se combattent pas. Perdre Pella met fin au règne.";
 let macDone=false;
@@ -6698,7 +6734,7 @@ function macStatic(){if(macDone)return;macDone=true;peoDone='mac';
 function startMac(df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit();applyScen(216)}catch(e){console.error(e)}
   scenSetup=true;try{macSetup()}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();
-  modal(`<h2>215 : Philippe V et Hannibal</h2><p>${MAC_TXT}</p><p class="sub">Vos troupes : phalange, hypaspistes, Compagnons, cavalerie thessalienne, peltastes thraces et archers crétois. Les batailles 3D se jouent aux couleurs de la Macédoine.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
+  modal(`<h2>215 : Philippe V et Hannibal</h2><p>${MAC_TXT}</p><p class="sub">Vos troupes : phalange, hypaspistes, Compagnons, cavalerie thessalienne, peltastes thraces et archers crétois. Les batailles se jouent aux couleurs de la Macédoine.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
   $('mGo').onclick=()=>{closeModal();const h=S.armies.find(a=>a.side==='car'&&!a.g)||S.armies[0];centerOn(h.x,h.y,1.1)};$('mHelp').onclick=openHelp}
 function macSetup(){macStatic();S.peo='mac';S.day=3*360+120;S.gold.pun=Math.max(300,S.gold.car||0);S.gold.car=520;punConvert();
   // la Macédoine : ses villes, ses garnisons, l'armée royale
@@ -6729,13 +6765,13 @@ function macSetup2(){
   log("Philippe V scelle son alliance avec Hannibal. La Macédoine entre en guerre contre Rome.")}
 // économie : domaine royal et mines du Pangée ; Rome saignée par Cannes ; Carthage aidée par ses alliés
 {const _incM=income;income=function(side){const r=_incM.apply(this,arguments);if(!isMac())return r;
-  if(side==='car')return {inc:r.inc+(S.peace?30:S.peo==='syr'?95:S.peo==='ath'?75:80),up:r.up};if(side==='rom')return {inc:Math.round(r.inc*(S.day>=840?.7:1)),up:r.up};if(side==='pun')return {inc:Math.round(r.inc*1.35)+40,up:Math.round(r.up*.7)};return r}}
+  if(side==='car')return {inc:r.inc+(PX&&PX[S.peo]?PX[S.peo].bonus:S.peace?30:S.peo==='syr'?95:S.peo==='ath'?75:80),up:r.up};if(side==='rom')return {inc:Math.round(r.inc*(S.day>=840?.7:1)),up:r.up};if(side==='pun')return {inc:Math.round(r.inc*1.35)+40,up:Math.round(r.up*.7)};return r}}
 // statiques rétablis au chargement
-{const _alM=afterLoad;afterLoad=function(){if(S&&S.peo==='mac')macStatic();else if(S&&S.peo==='syr')syrStatic();else if(S&&S.peo==='ath')athStatic();return _alM.apply(this,arguments)}}
+{const _alM=afterLoad;afterLoad=function(){if(S&&S.peo==='mac')macStatic();else if(S&&S.peo==='syr')syrStatic();else if(S&&S.peo==='ath')athStatic();else if(S&&PX&&PX[S.peo])pxStatic(S.peo);return _alM.apply(this,arguments)}}
 // Carthage alliée : son trésor et son IA (l'IA générale, en Italie et en Hispanie)
 {const _dM=daily;daily=function(d){const r=_dM.apply(this,arguments);if(isMac()){try{
     if(d%30===0){const {inc,up}=income('pun');S.gold.pun=Math.max(0,(S.gold.pun||0)+inc-up)}
-    if(d%2===0){aiSide('pun');macStrike()}if(d%30===0){if(S.peo==='syr')syrMonthly(d);else if(S.peo==='ath')athMonthly(d);else macMonthly(d)}if(S.peo==='syr')syrDaily(d);if(S.peo==='ath')athDaily(d)}catch(e){console.error(e)}}return r}}
+    if(d%2===0){aiSide('pun');macStrike()}if(d%30===0){if(S.peo==='syr')syrMonthly(d);else if(S.peo==='ath')athMonthly(d);else if(!(PX&&PX[S.peo]))macMonthly(d)}if(S.peo==='syr')syrDaily(d);if(S.peo==='ath')athDaily(d)}catch(e){console.error(e)}}return r}}
 // victoire : l'Illyrie ; défaite : Pella ; fin en 205 (paix de Phoinikè)
 function macMonthly(d){if(S.over)return;const ill=MAC_ILL.filter(id=>NI[id]!=null&&S.own[id]==='car').length;
   if(S.own.pella!=='car'){finish('lose','Pella est tombée',"Les légions sont entrées dans la capitale. La maison des Antigonides a perdu son royaume.");return}
@@ -6757,7 +6793,7 @@ function macStrike(){const C=N[capOf('pun')];if(!C)return;for(const a of S.armie
 {const _odM=openDip;openDip=function(){const r=_odM.apply(this,arguments);try{if(isMac()){const C=$('mcard'),h=[...C.querySelectorAll('h3')].find(x=>/alliés italiens/.test(x.textContent));
   if(h){let e=h.nextElementSibling;while(e&&e.tagName!=='H3'){const n=e.nextElementSibling;e.remove();e=n}h.remove()}}}catch(e){}return r}}
 {const _pmM=polMonthly;polMonthly=function(){if(isMac())return;return _pmM.apply(this,arguments)}}
-{const _opM=openPol;openPol=function(){if(!isMac())return _opM.apply(this,arguments);if(S.peo==='syr')return syrPol();if(S.peo==='ath')return athPol();const ill=MAC_ILL.map(id=>NI[id]!=null?`${N[NI[id]].n} : ${S.own[id]==='car'?'<b style="color:var(--good)">à vous</b>':sideName(S.own[id])}`:'').filter(Boolean).join(' · ');
+{const _opM=openPol;openPol=function(){if(!isMac())return _opM.apply(this,arguments);if(S.peo==='syr')return syrPol();if(S.peo==='ath')return athPol();if(PX&&PX[S.peo])return pxPol();const ill=MAC_ILL.map(id=>NI[id]!=null?`${N[NI[id]].n} : ${S.own[id]==='car'?'<b style="color:var(--good)">à vous</b>':sideName(S.own[id])}`:'').filter(Boolean).join(' · ');
   modal(`<h2>La cour de Pella</h2><p>Philippe V gouverne seul : pas de Sénat ici, mais des alliés à tenir et une guerre à gagner sur deux fronts.</p><h3>Objectif</h3><p class="sub">${ill}</p><p class="sub">Prenez les trois ports pour gagner tout de suite. En 205, la paix de Phoinikè vous laisse ceux que vous tenez. Perdre Pella, c'est perdre le royaume.</p><h3>Carthage</h3><p class="sub">Trésor punique : ${Math.round(S.gold.pun||0)} or · ${S.armies.filter(a=>a.side==='pun'&&!a.g).length} armées en campagne.</p><div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);$('mClose').onclick=closeModal}}
 {const _bAM=bigActors;bigActors=function(){if(isMac())return;return _bAM.apply(this,arguments)}}
 {const _sMM=socMonthly;socMonthly=function(){if(isMac())return;return _sMM.apply(this,arguments)}}
@@ -6768,12 +6804,12 @@ const MAC_EVENTS=[
   {w:2,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+6);evCard('Les Antigonides',"Vous rappelez à vos phalangites qu'ils sont les héritiers d'Alexandre : moral +6.")}},
   {w:1,f:()=>{if(S.fac.ach){S.fac.ach.car=Math.max(-100,S.fac.ach.car-10)}evCard('Aratos de Sicyone',"Le vieux stratège achéen vous reproche le sac de Messène : la Ligue achéenne doute (attitude −10).")}},
   {w:1,f:()=>{const g=Math.min(S.gold.car,30+Math.round(Math.random()*30));S.gold.car-=g;evCard('Les Dardaniens',`Les Dardaniens descendent du nord et pillent la Péonie : −${g} or.`)}}];
-{const _emM=eventsMonthly;eventsMonthly=function(d){if(!isMac())return _emM.apply(this,arguments);const EV=S.peo==='syr'?SYR_EVENTS:S.peo==='ath'?ATH_EVENTS:MAC_EVENTS;if(Math.random()<.14){let t=EV.reduce((s,e)=>s+e.w,0),r=Math.random()*t;for(const e of EV){r-=e.w;if(r<=0){try{e.f()}catch(x){console.error(x)}break}}}}}
+{const _emM=eventsMonthly;eventsMonthly=function(d){if(!isMac())return _emM.apply(this,arguments);const EV=S.peo==='syr'?SYR_EVENTS:S.peo==='ath'?ATH_EVENTS:PX&&PX[S.peo]?PX[S.peo].EV:MAC_EVENTS;if(Math.random()<.14){let t=EV.reduce((s,e)=>s+e.w,0),r=Math.random()*t;for(const e of EV){r-=e.w;if(r<=0){try{e.f()}catch(x){console.error(x)}break}}}}}
 // textes : bandeau, panneau, aide
 const MAC_PH=[[" Prendre Rome. Vous perdez si Carthage tombe."," Chasser Rome d'Illyrie (Apollonia, Épidamne, Lissos). Vous perdez si Pella tombe."],["écu violet","écu doré"],
   ["Au-delà de 50 (et nettement plus que pour Rome)","Au-delà de 50 (et nettement plus que pour Rome)"],["Alliance : ils rejoignent Carthage avec","Alliance : ils rejoignent la Macédoine avec"],[" Les tributaires (soumis par les Barcides) paient"," Les tributaires de Carthage (soumis par les Barcides) paient"],["quand une armée punique est proche et tant que vous gardez leurs otages","quand une armée punique est proche et tant que Carthage garde leurs otages"]];
 function macApply(){if(!isMac())return;try{
-  const P=S.peo==='syr'?{n:'Syracuse',sub:'Hippocrate et Épicyde',PH:SYR_PH}:S.peo==='ath'?{n:'Athènes',sub:'Le peuple athénien',PH:ATH_PH}:{n:'Macédoine',sub:'Philippe V, roi',PH:MAC_PH};
+  const P=PX&&PX[S.peo]?{n:PX[S.peo].n,sub:PX[S.peo].sub,PH:PX[S.peo].PH}:S.peo==='syr'?{n:'Syracuse',sub:'Hippocrate et Épicyde',PH:SYR_PH}:S.peo==='ath'?{n:'Athènes',sub:'Le peuple athénien',PH:ATH_PH}:{n:'Macédoine',sub:'Philippe V, roi',PH:MAC_PH};
   const f=document.querySelector('.ui-fac b');if(f&&f.textContent!==P.n){f.textContent=P.n;const sm=f.nextElementSibling;if(sm)sm.textContent=P.sub}
   for(const id of ['mcard','side']){const el=$(id);if(!el)continue;const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),L=[];while(w.nextNode())L.push(w.currentNode);
     for(const t of L){let v=t.nodeValue;const o=v;for(const [a,b] of P.PH)if(v.indexOf(a)>=0)v=v.split(a).join(b);if(v!==o)t.nodeValue=v}
@@ -6797,7 +6833,7 @@ function syrStatic(){if(peoDone==='syr')return;peoDone='syr';macDone=true;
 function startSyr(df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit();applyScen(216)}catch(e){console.error(e)}
   scenSetup=true;try{syrSetup()}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();
-  modal(`<h2>214 : Syracuse rompt avec Rome</h2><p>${SYR_TXT}</p><p class="sub">Vos troupes : hoplites, mercenaires thuréophores, peltastes, archers crétois et cavalerie syracusaine. Les remparts d'Archimède font durer trois fois plus longtemps un siège de Syracuse. Les batailles 3D se jouent aux couleurs de Syracuse.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
+  modal(`<h2>214 : Syracuse rompt avec Rome</h2><p>${SYR_TXT}</p><p class="sub">Vos troupes : hoplites, mercenaires thuréophores, peltastes, archers crétois et cavalerie syracusaine. Les remparts d'Archimède font durer trois fois plus longtemps un siège de Syracuse. Les batailles se jouent aux couleurs de Syracuse.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
   $('mGo').onclick=()=>{closeModal();const h=S.armies.find(a=>a.side==='car'&&!a.g)||S.armies[0];centerOn(h.x,h.y,1.3)};$('mHelp').onclick=openHelp}
 function syrSetup(){syrStatic();S.peo='syr';S.day=4*360;S.gold.pun=Math.max(300,S.gold.car||0);S.gold.car=380;punConvert();
   for(const n of N)if(S.own[n.id]==='syr')S.own[n.id]='car';for(const a of S.armies)if(a.side==='syr')a.side='car';
@@ -6846,7 +6882,7 @@ function athStatic(){if(peoDone==='ath')return;peoDone='ath';macDone=true;
 function startAth(df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit();applyScen(211)}catch(e){console.error(e)}
   scenSetup=true;try{athSetup()}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();
-  modal(`<h2>209 : Athènes contre Philippe V</h2><p>${ATH_TXT}</p><p class="sub">Vos troupes : hoplites, thuréophores, peltastes, archers scythes et cavaliers athéniens. En 208, Attale de Pergame débarque pour vous aider. Les batailles 3D se jouent aux couleurs d'Athènes.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
+  modal(`<h2>209 : Athènes contre Philippe V</h2><p>${ATH_TXT}</p><p class="sub">Vos troupes : hoplites, thuréophores, peltastes, archers scythes et cavaliers athéniens. En 208, Attale de Pergame débarque pour vous aider. Les batailles se jouent aux couleurs d'Athènes.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
   $('mGo').onclick=()=>{closeModal();const h=S.armies.find(a=>a.side==='car'&&!a.g)||S.armies[0];centerOn(h.x,h.y,1.3)};$('mHelp').onclick=openHelp}
 function athSetup(){S.gi=S.gi||{};S.gi.mac=S.gi.mac||0;athStatic();S.peo='ath';S.day=3330;S.gold.pun=Math.max(300,S.gold.car||0);S.gold.car=320;S.gold.mac=400;punConvert();
   for(const n of N)if(S.own[n.id]==='ath')S.own[n.id]='car';for(const a of S.armies)if(a.side==='ath')a.side='car';delete S.fac.ath;
@@ -6918,14 +6954,14 @@ const P218={
     war:"Déclarer la guerre à Philippe V",wt:"La Macédoine deviendra votre ennemie ; les Étoliens seront vos alliés."}};
 // unités d'origine (Carthage) remplacées par celles du peuple joué
 const P218_UT={mac:{inf:'phalange',cav:'thessal',sk:'peltaste'},syr:{inf:'athoplites',cav:'hippeis',sk:'athpelt'},ath:{inf:'athoplites',cav:'hippeis',sk:'athpelt'}};
-function p218Units(a,k){const M=P218_UT[k],ok=new Set(Object.values(POOL_CAR).flat());for(const u of a.units){if(ok.has(u.t)||!UT[u.t])continue;const K=UT[u.t].k;const t=K==='cav'||/cav/.test(u.t)?M.cav:K==='skirm'?M.sk:M.inf;u.t=t;u.men=UT[t].men}}
+function p218Units(a,k){const M=P218_UT[k];if(!M)return;const ok=new Set(Object.values(POOL_CAR).flat());for(const u of a.units){if(ok.has(u.t)||!UT[u.t])continue;const K=UT[u.t].k;const t=K==='cav'||/cav/.test(u.t)?M.cav:K==='skirm'?M.sk:M.inf;u.t=t;u.men=UT[t].men}}
 function startPeo218(k,df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit()}catch(e){console.error(e)}
   scenSetup=true;try{peo218Setup(k)}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();const P=P218[k];
-  modal(`<h2>${P.n}</h2><p>${P.t}</p><p class="sub">La guerre commence d'elle-même à la date historique ; la fenêtre Politique permet de la déclarer plus tôt. Les batailles 3D se jouent aux couleurs de votre peuple.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
+  modal(`<h2>${P.n}</h2><p>${P.t}</p><p class="sub">La guerre commence d'elle-même à la date historique ; la fenêtre Politique permet de la déclarer plus tôt. Les batailles se jouent aux couleurs de votre peuple.</p><div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
   $('mGo').onclick=()=>{closeModal();const h=S.armies.find(a=>a.side==='car'&&!a.g)||S.armies[0];centerOn(h.x,h.y,1.2)};$('mHelp').onclick=openHelp}
 function peo218Setup(k){const P=P218[k];
-  if(k==='mac')macStatic();else if(k==='syr')syrStatic();else athStatic();
+  peoStatic(k);
   S.peo=k;S.gold.pun=Math.max(300,S.gold.car||0);S.gold.car=P.gold;S.gi=S.gi||{};if(S.gi.mac==null)S.gi.mac=0;
   // Carthage passe à l'IA ('pun') ; Hannibal garde son armée
   for(const n of N)if(S.own[n.id]==='car')S.own[n.id]='pun';
@@ -6945,13 +6981,14 @@ function peo218Setup(k){const P=P218[k];
   else if(k==='syr'){
     scenArmy('car','syracusae',[['athoplites',3],['thureo',1],['cretois',1],['hippeis',1]],'Hiéron II');
     S.trade=(S.trade||[]).filter(r=>r.side!=='car');for(const [a,b] of [['syracusae','catana'],['syracusae','carthago']]){const r=mkRoute('car',a,b);if(r)S.trade.push(r)}}
-  else{
+  else if(k==='ath'){
     for(const a of S.armies)if(a.side==='mac')p218Units(a,'mac');
     if(S.fac.mac){S.fac.mac.st='neutre';S.fac.mac.car=-10}
     scenArmy('car','athenae',[['athoplites',2],['athpelt',1],['scythes',1],['hippeis',1]],'Eurycléidès');S.trade=(S.trade||[]).filter(r=>r.side!=='car')}
+  else if(PX[k])pxSetup(k);
   S.log=[];S.peace={foe:P.foe,d:P.d};S.ev=S.ev||{};S.ev.p218=1;S.pol=null;S.mirror=false;
   for(const a of S.armies){if(a.food==null||!isFinite(a.food))a.food=armyFoodMax(a)}
-  log(k==='mac'?"Printemps 218 : Philippe V marche contre les Étoliens. Hannibal a quitté Carthagène.":k==='syr'?"Printemps 218 : Hiéron II envoie du blé à Rome. Hannibal a quitté Carthagène.":"Printemps 218 : Athènes reste neutre. Hannibal a quitté Carthagène.")}
+  log(k==='mac'?"Printemps 218 : Philippe V marche contre les Étoliens. Hannibal a quitté Carthagène.":k==='syr'?"Printemps 218 : Hiéron II envoie du blé à Rome. Hannibal a quitté Carthagène.":k==='ath'?"Printemps 218 : Athènes reste neutre. Hannibal a quitté Carthagène.":k==='num'?"Printemps 218 : Gaïa règne à Cirta. Hannibal a quitté Carthagène.":"Printemps 218 : les Boïens chassent les colons romains. Hannibal a quitté Carthagène.")}
 // la guerre éclate : à la date historique ou quand le joueur la déclare
 function peoWar(early){if(!S||!S.peace)return;const k=S.peo;S.peace=null;
   if(k==='mac'){scenArmy('rom','brundisium',[['legion',2],['velites',1],['acav',1]],'M. Valerius Laevinus');scenGar('rom',MAC_ILL.filter(id=>NI[id]!=null&&S.own[id]==='rom'),[['legion',1],['velites',1]]);
@@ -6960,6 +6997,7 @@ function peoWar(early){if(!S||!S.peace)return;const k=S.peo;S.peace=null;
   else if(k==='syr'){scenArmy('rom','messana',[['legion',4],['velites',1],['rcav',1]],'M. Claudius Marcellus');scenArmy('rom','agrigentum',[['legion',2],['velites',1]],'Ap. Claudius Pulcher');
     scenGar('rom',SYR_KEY.filter(id=>NI[id]!=null&&S.own[id]==='rom'),[['legion',1]]);S.ev.syrRev=1;if(S.fac.pun){S.fac.pun.car=60}
     evCard('Syracuse rompt avec Rome',early?"Syracuse renie l'alliance de Hiéron et s'allie à Carthage. Marcellus débarque en Sicile.":"Hiéron est mort, Hiéronymos assassiné ; Hippocrate et Épicyde tiennent la ville et rompent avec Rome. Marcellus débarque en Sicile ; Archimède arme les remparts.")}
+  else if(PX[k])pxWar(k,early);
   else{if(S.fac.mac){S.fac.mac.st='guerre_car';S.fac.mac.car=-100;S.fac.mac.cd=0}S.ev.athWar=1;
     scenArmy('mac','pella',[['phalange',5],['hypasp',2],['peltaste',2],['compagnons',2],['thessal',1],['cretois',1]],'Philippe V');
     scenArmy('mac','chalcis',[['phalange',2],['peltaste',1],['thessal',1]],'Philoclès');
@@ -6979,6 +7017,135 @@ function peoWar(early){if(!S||!S.peace)return;const k=S.peo;S.peace=null;
     const el=document.createElement('div');el.className='rec';el.innerHTML=`<span><b>${P.war}</b><br><span class="sub">${P.wt} Sinon, la guerre commence en ${cal(P.d).year} av. J.-C.</span></span><button class="go" id="pwGo" type="button">Déclarer</button>`;
     const h2=C.querySelectorAll('h3')[1]||row;if(h2)h2.parentNode.insertBefore(el,h2);else C.appendChild(el);$('pwGo').onclick=()=>{peoWar(true);closeModal()}}}catch(e){console.error(e)}return r}}
 
+/* ---------- 11. MACHINES DE SIÈGE ET DÉFENSE DES VILLES ---------- */
+// Complète le bloc SIÈGE du fil Armées (sorties, assaut, lignes, mine, reddition) sans le modifier.
+// sg.eng={rams|tow|cat:{t}} : machines prêtes au jour t. Béliers et tours affaiblissent les murs à l'assaut ; les catapultes usent la garnison et pressent le siège.
+// Défense : rationner les vivres (siège plus long, moral en baisse), réparer la brèche, sortie de nuit pour brûler les machines.
+const ENG={rams:{n:'Béliers',d:4,c:20,w:.88,t:"Des béliers sous leurs tortues contre les portes : à l'assaut, les murs comptent 12 % de moins."},
+  tow:{n:'Tours',d:8,c:45,w:.8,min:1,t:"Des tours roulantes plus hautes que les murs : à l'assaut, les murs comptent 20 % de moins. Pas contre une simple bourgade."},
+  cat:{n:'Catapultes',d:6,c:30,t:"Pierres et traits sur les remparts : la garnison perd des hommes chaque jour et le siège avance 15 % plus vite."}};
+const engOk=(sg,k)=>!!(sg&&sg.eng&&sg.eng[k]&&S.day>=sg.eng[k].t);
+function engW(i){const sg=S.siege[N[i].id];let m=1;for(const k of ['rams','tow'])if(engOk(sg,k))m*=ENG[k].w;return m}
+const engPay=(a,fn)=>{try{if(typeof mpdWith==='function'&&typeof mpdArmy==='function')return mpdWith(mpdArmy(a),fn)}catch(e){}return fn()};
+function buildEng(a,i,k){const sg=S.siege[N[i].id],E=ENG[k];if(!sg||sg.side!==a.side)return false;sg.eng=sg.eng||{};if(sg.eng[k])return false;if(E.min&&N[i].size<E.min)return false;
+  const side=a.side;if((S.gold[side]||0)<E.c)return false;
+  return engPay(a,()=>{S.gold[side]-=E.c;sg.eng[k]={t:Math.floor(S.day)+lineDays(a,E.d)};if(side==='car')log(`${a.name} fait construire des ${E.n.toLowerCase()} devant ${N[i].n} (${lineDays(a,E.d)} jours, ${E.c} or).`);return true})}
+function rationGar(i){const sg=S.siege[N[i].id];if(!sg||sg.rat)return false;sg.rat=1;sg.need=Math.round(sg.need*1.3);
+  for(const x of shutIn(i))x.mor=Math.max(5,(x.mor==null?MOR0:x.mor)-10);if(ownerN(i)==='car')log(`On rationne les vivres à ${N[i].n} : la garnison tiendra plus longtemps, mais le moral baisse.`);return true}
+function repairWall(i){const sg=S.siege[N[i].id];if(!sg||!sg.breach||sg.rep)return false;sg.rep={t:Math.floor(S.day)+6};if(ownerN(i)==='car')log(`Les habitants de ${N[i].n} murent la brèche (6 jours).`);return true}
+function burnEng(a,i){const sg=S.siege[N[i].id];if(!sg||!sg.eng||(sg.burnT&&S.day<sg.burnT))return false;sg.burnT=Math.floor(S.day)+20;
+  const K=Object.keys(sg.eng);for(const u of a.units)u.men*=.97;cleanArmy(a);
+  if(K.length&&Math.random()<.5){const k=K[Math.floor(Math.random()*K.length)];delete sg.eng[k];log(`${a.side==='car'?a.name:'La garnison de '+N[i].n} sort de nuit et incendie les ${ENG[k].n.toLowerCase()} des assiégeants !`)}
+  else if(a.side==='car'||sg.side==='car')log(`La sortie de nuit contre les machines de ${N[i].n} est repoussée.`);return true}
+// assaut : les machines abaissent les murs (résolution automatique et bataille 3D)
+{const _odE=odds;odds=function(b){const p=_odE.apply(this,arguments);try{if(b&&b.assault!=null){const m=engW(b.assault);if(m<1){const q=Math.min(.999,Math.max(.001,p)),r=q/(1-q)/(m*m);return r/(1+r)}}}catch(e){}return p}}
+{const _dvE=dive;dive=function(payload){try{const b=S.cur;if(b&&b.assault!=null&&payload&&payload.b&&payload.b.walls){const m=engW(b.assault);if(m<1){payload.b.walls.k=Math.round(payload.b.walls.k*m*100)/100;payload.b.desc=(payload.b.desc||'')+` Les machines de siège abaissent les murs (×${Math.round(m*100)/100}).`}}}catch(e){}return _dvE.apply(this,arguments)}}
+{const _dE=daily;daily=function(d){const r=_dE.apply(this,arguments);try{
+  for(const id in S.siege){const sg=S.siege[id],i=NI[id];if(i==null)continue;const o=ownerN(i);
+    if(sg.rep&&S.day>=sg.rep.t){delete sg.breach;delete sg.rep;if(o==='car')log(`La brèche de ${N[i].n} est murée.`)}
+    if(engOk(sg,'cat')){sg.d=Math.min(sg.need,sg.d+.15);for(const x of shutIn(i)){for(const u of x.units)u.men*=.995;cleanArmy(x)}}
+    // l'IA assiégeante construit ses machines ; l'IA assiégée rationne, mure la brèche, brûle les machines
+    const B=besiegers(i,sg.side);if(B.length&&sg.side!=='car'&&!(typeof MPRH==='function'&&MPRH(sg.side))&&sg.d>=3&&d%3===0){
+      for(const k of N[i].size>=2?['cat','tow','rams']:['rams','cat'])if(!(sg.eng&&sg.eng[k])&&(S.gold[sg.side]||0)>=ENG[k].c+60){buildEng(B[0],i,k);break}}
+    if(o!=='car'&&!(typeof MPRH==='function'&&MPRH(o))&&sg.side!==o){const G=shutIn(i);if(!sg.rat&&sg.d>sg.need*.5)rationGar(i);if(sg.breach&&!sg.rep)repairWall(i);
+      if(G.length&&sg.eng&&Object.keys(sg.eng).length&&d%5===0&&Math.random()<.15)burnEng(G[0],i)}}}catch(e){console.error(e)}return r}}
+// boutons dans le panneau de l'armée
+{const _rsE=renderSide;renderSide=function(){const r=_rsE.apply(this,arguments);try{if(!S||!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return r;const a=sel.a,box=$('side')&&$('side').querySelector('.genbox');if(!box||a.at==null||a.legs.length)return r;
+  const n=N[a.at],sg=S.siege[n.id];if(!sg||n.col)return r;const B=(id,t,tt,on,dis)=>`<button id="${id}" type="button" class="${on?'on':''}" title="${tt}" ${dis?'disabled':''}>${t}</button>`;let h='';
+  if(sg.side===a.side){const st=k=>{const e=sg.eng&&sg.eng[k];return !e?` (${ENG[k].c} or)`:S.day>=e.t?' ✓':` (${Math.max(0,Math.ceil(e.t-S.day))} j)`};
+    h=`<p class="sub" style="margin:8px 0 2px">Machines de siège</p><div class="row">${Object.keys(ENG).map(k=>B('aEng_'+k,ENG[k].n+st(k),ENG[k].t+` Construction : ${lineDays(a,ENG[k].d)} jours.`,engOk(sg,k),!!(sg.eng&&sg.eng[k])||(ENG[k].min&&n.size<ENG[k].min)||(S.gold[a.side]||0)<ENG[k].c)).join('')}</div>`}
+  else if(insideOf(a)){h=`<p class="sub" style="margin:8px 0 2px">Défense de ${esc(n.n)}</p><div class="row">${B('aRat','Rationner'+(sg.rat?' ✓':''),"Demi-rations : la garnison tient 30 % plus longtemps avant de se rendre, mais le moral baisse (−10).",!!sg.rat,!!sg.rat)}${B('aRep',sg.rep?`Brèche (${Math.max(0,Math.ceil(sg.rep.t-S.day))} j)`:'Murer la brèche',"Les habitants murent la brèche ouverte par la mine (6 jours) : les murs retrouvent toute leur force.",false,!sg.breach||!!sg.rep)}${B('aBurn','Brûler les machines',"Sortie de nuit : une chance sur deux d'incendier une machine des assiégeants ; quelques pertes. Une fois tous les 20 jours.",false,!(sg.eng&&Object.keys(sg.eng).length)||(sg.burnT&&S.day<sg.burnT))}</div>`}
+  if(!h)return r;box.insertAdjacentHTML('beforeend',h);
+  for(const k of Object.keys(ENG)){const e=$('aEng_'+k);if(e)e.onclick=()=>{buildEng(a,a.at,k);renderAll()}}
+  const on=(id,f)=>{const e=$(id);if(e)e.onclick=()=>{f();renderAll()}};on('aRat',()=>rationGar(a.at));on('aRep',()=>repairWall(a.at));on('aBurn',()=>burnEng(a,a.at))}catch(e){console.error(e)}return r}}
+
+/* ---------- 12. NOUVEAUX PEUPLES : NUMIDIE ET GAULOIS CISALPINS (départ 218) ---------- */
+// Même mécanique que les autres peuples alliés : le joueur est 'car', Carthage 'pun' sous IA. PX décrit chaque peuple.
+// « var » : isMac() et d'autres fonctions plus haut le lisent, peut-être avant que ce bloc ne s'exécute.
+var PX={
+  num:{n:'Numidie',sub:'Les rois massyles',c:[176,122,58],css:'#b07a3a',l:'Ν',adj:'ocre',
+    t:"Gaïa et Massinissa, cavaliers d'Afrique. Battez Syphax et unifiez la Numidie.",
+    p218:{n:'218 : Gaïa, roi des Massyles',foe:'mae',d:1800,gold:300,
+      t:"Gaïa règne à Cirta, allié de Carthage ; son fils Massinissa a dix-huit ans et monte déjà comme personne. À l'ouest, Syphax et ses Masaesyles convoitent toute la Numidie. En 213, Syphax s'alliera aux Scipions et vous fera la guerre. Rome ne débarquera en Afrique qu'avec Scipion (204).",
+      war:"Attaquer Syphax",wt:"Les Masaesyles deviendront vos ennemis ; Syphax et Vermina lèveront leurs cavaliers."},
+    bonus:75,cap:'cirta',keys:['siga','auzia'],front:true,pal:'num',foePal:'mae',
+    gens:['Gaïa','Massinissa','Oezalcès','Capussa','Lacumazès','Mazaetullus','Masgaba','Gulussa','Micipsa','Naravas'],
+    units:['ncav','ncav','sling','lib'],
+    mine:[['cirta',[['ncav',4],['sling',2],['lib',1]],'Gaïa'],['thagaste',[['ncav',3],['sling',1]],'Massinissa']],
+    foeA:[['siga',[['ncav',5],['lib',3],['sling',2]],'Syphax'],['auzia',[['ncav',3],['sling',2]],'Vermina']],foeGens:['Syphax','Vermina','Bocchar','Mazaetullus','Arcobarzane'],foeUnits:['ncav','ncav','lib','sling'],foeCap:'siga',
+    goal:"Prenez Siga et Auzia, les villes de Syphax, pour unifier la Numidie. Tenez Cirta : sa chute met fin au royaume.",
+    winT:["La Numidie unifiée","Siga et Auzia sont à vous : Syphax a perdu son royaume. De Cirta à l'océan, une seule Numidie, et ses cavaliers sont les meilleurs du monde."],
+    endT:["Les rois de Cirta","La guerre s'achève : Cirta est toujours à vous, et la cavalerie massyle compte pour Rome comme pour Carthage."],
+    loseT:["Cirta est tombée","La capitale des Massyles est prise. Les princes s'enfuient dans les montagnes ; la Numidie a un autre maître."],
+    EV:[{w:2,f:()=>{const g=30+Math.round(Math.random()*30);S.gold.car+=g;evCard('Les marchés de Cirta',`Les caravanes du sud paient bien : +${g} or.`)}},
+      {w:2,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+5);evCard('Les cavaliers sans mors',"Les tribus envoient leurs meilleurs cavaliers ; vos escadrons sont fiers (moral +5).")}},
+      {w:1,f:()=>{const g=Math.min(S.gold.car,20+Math.round(Math.random()*20));S.gold.car-=g;evCard('La sécheresse',`Les pâturages brûlent : il faut acheter du grain (−${g} or).`)}}]},
+  ins:{n:'Gaulois cisalpins',sub:'Insubres et Boïens',c:[47,138,122],css:'#2f8a7a',l:'G',adj:'turquoise',
+    t:"Insubres et Boïens contre les colonies romaines. Chassez Rome de la plaine du Pô.",
+    p218:{n:'218 : la révolte des Boïens',foe:'rom',d:1,gold:250,
+      t:"Rome vient de fonder Placentia et Crémone sur vos terres. Les Boïens se soulèvent, chassent les colons et assiègent Mutina ; les Insubres suivent. Hannibal descend des Alpes : il sera votre allié. Prenez les deux colonies et tenez Mediolanum.",
+      war:"Se soulever",wt:"La guerre contre Rome commence."},
+    bonus:85,cap:'mediolanum',keys:['placentia','cremona'],front:false,pal:'ins',foePal:'rom',
+    gens:['Boiorix','Ducarios','Dorulatos','Comontorios','Ateporix','Litavicos','Cingetorix','Segovesos','Bellovesos','Ambiorix'],
+    units:['gaul','gaul','hcav','sling'],
+    mine:[['felsina',[['gaul',5],['hcav',2],['sling',1]],'Boiorix'],['mediolanum',[['gaul',4],['hcav',2]],'Ducarios']],
+    goal:"Prenez Placentia et Crémone, les colonies romaines de la plaine du Pô. Tenez Mediolanum : sa chute met fin à la révolte.",
+    winT:["Le Pô est libre","Placentia et Crémone sont tombées : Rome a perdu la Cisalpine. Les tribus partagent les terres des colons."],
+    endT:["Les tribus tiennent","La guerre s'achève : Rome n'a pas soumis la plaine du Pô, et Mediolanum reste gauloise."],
+    loseT:["Mediolanum est tombée","Les légions sont dans la ville des Insubres. La Cisalpine sera romaine."],
+    EV:[{w:2,f:()=>{const g=30+Math.round(Math.random()*30);S.gold.car+=g;evCard('Le butin des colons',`On revend le bétail et le grain pris aux colons romains : +${g} or.`)}},
+      {w:2,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+6);evCard('Les bardes',"Les bardes chantent les ancêtres qui ont pris Rome : vos guerriers brûlent d'en découdre (moral +6).")}},
+      {w:1,f:()=>{const g=Math.min(S.gold.car,20+Math.round(Math.random()*30));S.gold.car-=g;evCard('Querelles de chefs',`Deux chefs se disputent le butin ; il faut apaiser l'un d'eux (−${g} or).`)}}]}};
+const pxOn=()=>!!(S&&PX[S.peo]);
+for(const k in PX){const X=PX[k];P218[k]=Object.assign({},X.p218);
+  X.PH=[[" Prendre Rome. Vous perdez si Carthage tombe."," "+X.goal],["écu violet","écu "+X.adj],["Alliance : ils rejoignent Carthage avec","Alliance : ils rejoignent "+X.n+" avec"],[" Les tributaires (soumis par les Barcides) paient"," Les tributaires de Carthage (soumis par les Barcides) paient"],["quand une armée punique est proche et tant que vous gardez leurs otages","quand une armée punique est proche et tant que Carthage garde leurs otages"]]}
+function pxStatic(k){if(peoDone===k)return;peoDone=k;macDone=true;const X=PX[k];
+  FAC.pun={n:'Carthage',c:FAC.car.c.slice(),a:[40,-100],cul:'afr'};FAC.car={n:X.n,c:X.c.slice()};
+  GEN.pun=GEN.car.slice();GEN.car=X.gens.slice();if(X.foeGens&&X.p218.foe)GEN[X.p218.foe]=X.foeGens.slice();
+  const cul=new Set(Object.keys(POOL_CAR));for(const f in FAC)if(FAC[f].cul)cul.add(FAC[f].cul);['afr','ibe','gau','ita','gre','num','bal','lig','cel'].forEach(c=>cul.add(c));
+  for(const c in POOL_CAR)delete POOL_CAR[c];for(const c of cul)POOL_CAR[c]=[...new Set(X.units)];
+  try{document.documentElement.style.setProperty('--punic',X.css)}catch(e){}document.title='Bellum · '+X.n}
+// tous les peuples : rétablir les tables du peuple joué (aussi appelé par le multijoueur)
+function peoStatic(k){if(k==='mac')macStatic();else if(k==='syr')syrStatic();else if(k==='ath')athStatic();else if(PX[k])pxStatic(k)}
+function pxSetup(k){const X=PX[k];
+  for(const [id,L,g] of X.mine)if(NI[id]!=null&&S.own[id]==='car')scenArmy('car',id,L,g);
+  if(X.p218.foe!=='rom'&&S.fac[X.p218.foe]){S.fac[X.p218.foe].st='neutre';S.fac[X.p218.foe].car=-20}
+  S.trade=(S.trade||[]).filter(r=>r.side!=='car');S.gi=S.gi||{};const f=X.p218.foe;if(S.gi[f]==null)S.gi[f]=0}
+function pxWar(k,early){const X=PX[k],f=X.p218.foe;
+  if(f==='rom'){evCard(X.p218.n.replace(/^218 : /,'').replace(/^./,m=>m.toUpperCase()),"Les colons romains sont chassés de leurs terres ; Mutina est assiégée. Rome envoie ses légions vers le Pô.");return}
+  if(S.fac[f]){S.fac[f].st='guerre_car';S.fac[f].car=-100;S.fac[f].cd=0}
+  for(const [id,L,g] of X.foeA||[])if(NI[id]!=null&&S.own[id]===f)scenArmy(f,id,L,g);
+  evCard('Syphax entre en guerre',early?"Vos cavaliers franchissent l'Ampsaga : la guerre contre Syphax commence.":"Syphax s'est allié aux Scipions ; des centurions romains dressent son infanterie. Il marche sur Cirta.")}
+// IA de l'ennemi mineur (Syphax) : renforts à sa capitale, attaques des armées et des villes du joueur
+function pxDaily(d){const X=PX[S.peo],f=X.p218.foe;if(f==='rom'||S.peace||d%2)return;
+  for(const a of S.armies.filter(a=>a.side===f&&!a.dead&&!a.g&&!a.ship)){if(a.legs.length||a.units.length<5||(a.cool||0)>0)continue;const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id)continue;
+    if(a.qh&&season()==='Hiver')continue;const my=strength(a);
+    const foe=S.armies.filter(o=>o.side==='car'&&!o.dead&&!o.ship&&!o.g&&strength(o)<my*.9&&Math.hypot(o.x-a.x,o.y-a.y)<160).sort((x,y)=>Math.hypot(x.x-a.x,x.y-a.y)-Math.hypot(y.x-a.x,y.y-a.y))[0];
+    if(foe){order(a,foe.x,foe.y,null);continue}
+    const t=N.filter(n=>!n.col&&S.own[n.id]==='car').map(n=>{const def=S.armies.filter(x=>x.side==='car'&&!x.dead&&Math.hypot(x.x-n.x,x.y-n.y)<6).reduce((s,x)=>s+strength(x),0);return {n,def,dd:Math.hypot(n.x-a.x,n.y-a.y)}}).filter(o=>o.def<my*.8&&o.dd<700).sort((x,y)=>x.dd-y.dd)[0];
+    if(t&&t.dd>3)order(a,0,0,t.n.i)}}
+function pxMonthly(d){if(S.over)return;const X=PX[S.peo],f=X.p218.foe;
+  if(f!=='rom'&&!S.peace){const own=N.filter(n=>!n.col&&S.own[n.id]===f),inc=own.reduce((s,n)=>s+(n.inc||4),0)+25;S.gold[f]=(S.gold[f]||0)+inc*dif().ai;
+    const C=X.foeCap;for(let k=0;k<1&&S.gold[f]>=60&&NI[C]!=null&&S.own[C]===f;k++){const t=X.foeUnits[Math.floor(Math.random()*X.foeUnits.length)];S.gold[f]-=UT[t].cost;
+      const g=S.armies.find(a=>a.side===f&&!a.dead&&!a.g&&a.at===NI[C]&&!a.legs.length);if(g&&g.units.length<MAXU)g.units.push({t,men:UT[t].men});else scenArmy(f,C,[[t,1]],X.foeGens[Math.floor(Math.random()*X.foeGens.length)])}
+    for(const a of S.armies){if(a.side!==f||a.dead||a.g||a.legs.length||a.units.length>=5)continue;const o=S.armies.find(b=>b!==a&&b.side===f&&!b.dead&&!b.g&&b.units.length+a.units.length<=MAXU&&Math.hypot(b.x-a.x,b.y-a.y)<4);if(o){o.units.push(...a.units);a.units=[];a.dead=true}}
+    S.armies=S.armies.filter(a=>!a.dead)}
+  const key=X.keys.filter(id=>NI[id]!=null&&S.own[id]==='car').length;
+  if(S.own[X.cap]!=='car'){finish('lose',X.loseT[0],X.loseT[1]);return}
+  if(key===X.keys.length&&!S.ev.pxWin){S.ev.pxWin=d;finish('win',X.winT[0],X.winT[1]);return}
+  if(d>=17*360+60)finish('win',X.endT[0],X.endT[1])}
+function pxPol(){const X=PX[S.peo],f=X.p218.foe;const key=X.keys.map(id=>NI[id]!=null?`${N[NI[id]].n} : ${S.own[id]==='car'?'<b style="color:var(--good)">à vous</b>':sideName(S.own[id])}`:'').filter(Boolean).join(' · ');
+  const foeTxt=f==='rom'?`Rome : ${S.armies.filter(a=>a.side==='rom'&&!a.g&&!a.dead).length} armées en campagne.`:`${FAC[f]?FAC[f].n:f} : trésor ${Math.round(S.gold[f]||0)} or · ${N.filter(n=>!n.col&&S.own[n.id]===f).length} villes · ${S.armies.filter(a=>a.side===f&&!a.g&&!a.dead).reduce((s,a)=>s+a.units.length,0)} régiments.`;
+  modal(`<h2>${X.n}</h2><p>${X.t}</p><h3>Objectif</h3><p class="sub">${key}</p><p class="sub">${X.goal} En 201, la guerre s'achève.</p><h3>L'ennemi</h3><p class="sub">${foeTxt}</p><p class="sub">Carthage : ${Math.round(S.gold.pun||0)} or · ${S.armies.filter(a=>a.side==='pun'&&!a.g).length} armées.</p><div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);$('mClose').onclick=closeModal}
+// Numidie : Rome ne vient en Afrique qu'avec Scipion (même calendrier que pour Carthage)
+{const _chX=cityHostile;cityHostile=function(i,side){const r=_chX.apply(this,arguments);try{if(r&&pxOn()&&PX[S.peo].front&&side==='rom'&&ownerN(i)==='car'&&!macFront(N[i]))return false}catch(e){}return r}}
+// Carthage alliée ne prend pas les villes du joueur, ni lui les siennes (tous les peuples alliés)
+{const _chY=cityHostile;cityHostile=function(i,side){const r=_chY.apply(this,arguments);try{if(r&&isMac()){const o=ownerN(i);if(side==='pun'&&o==='car'||side==='car'&&o==='pun')return false}}catch(e){}return r}}
+{const _hoY=hostile;hostile=function(a,b){if(S&&isMac()){const p=[a.side,b.side].sort().join();if(p==='car,pun')return false}return _hoY.apply(this,arguments)}}
+// textes écrits pour Carthage : l'ennemi mineur (Syphax) assiège et pille à la place des Romains
+{const _logX=log;log=function(t){try{if(pxOn()&&typeof t==='string'){const f=PX[S.peo].p218.foe;if(f!=='rom'&&FAC[f])t=t.replace(/Les Romains (pillent|coupent|assiègent)/g,`Les ${FAC[f].n} $1`)}}catch(e){}return _logX.apply(this,[t].concat([].slice.call(arguments,1)))}}
+{const _dX=daily;daily=function(d){const r=_dX.apply(this,arguments);try{if(pxOn()){pxDaily(d);if(d%30===0)pxMonthly(d)}}catch(e){console.error(e)}return r}}
+
 /* ---------- 10. ÉCRAN DE DÉPART : le pays, la date, la difficulté ---------- */
 const BOOT_SKIP=(()=>{try{return location.hash.startsWith('#r=')||!!sessionStorage.getItem('bellum.scenPend')}catch(e){return false}})();
 const START_PEO=[
@@ -6986,10 +7153,12 @@ const START_PEO=[
   {k:'rom',n:'Rome',c:'#bf3b31',l:'R',t:"Le Sénat face à Hannibal. Tenez l'Italie, puis frappez Carthage."},
   {k:'mac',n:'Macédoine',c:'#c8962e',l:'Μ',t:"Philippe V, allié d'Hannibal. Chassez Rome d'Illyrie."},
   {k:'syr',n:'Syracuse',c:'#3f78c0',l:'Σ',t:"Hippocrate et Épicyde contre Marcellus, avec Archimède."},
-  {k:'ath',n:'Athènes',c:'#6f9a4a',l:'Α',t:"Avec les Étoliens et Attale, contre Philippe V. Libérez la Grèce."}];
+  {k:'ath',n:'Athènes',c:'#6f9a4a',l:'Α',t:"Avec les Étoliens et Attale, contre Philippe V. Libérez la Grèce."},
+  {k:'num',n:'Numidie',c:'#b07a3a',l:'Ν',t:"Gaïa et Massinissa, cavaliers d'Afrique. Battez Syphax."},
+  {k:'ins',n:'Gaulois cisalpins',c:'#2f8a7a',l:'G',t:"Insubres et Boïens. Chassez Rome de la plaine du Pô."}];
 const startDates=k=>P218[k]?[{k:'218',n:P218[k].n,d:P218[k].t}].concat(startDates0(k)):startDates0(k);
-const startDates0=k=>k==='mac'?[{k:'mac',n:'215 : Philippe V et Hannibal',d:MAC_TXT}]:k==='syr'?[{k:'syr',n:'214 : Syracuse rompt avec Rome',d:SYR_TXT}]:k==='ath'?[{k:'ath',n:'209 : Athènes contre Philippe V',d:ATH_TXT}]:Object.keys(SCEN).sort((a,b)=>b-a).map(x=>({k:x,n:SCEN[x].n,d:SCEN[x].d}));
-function startCamp(){if(!S)return '';return S.peo==='mac'?'Macédoine':S.peo==='syr'?'Syracuse':S.peo==='ath'?'Athènes':S.mirror?'Rome':'Carthage'}
+const startDates0=k=>PX&&PX[k]?[]:k==='mac'?[{k:'mac',n:'215 : Philippe V et Hannibal',d:MAC_TXT}]:k==='syr'?[{k:'syr',n:'214 : Syracuse rompt avec Rome',d:SYR_TXT}]:k==='ath'?[{k:'ath',n:'209 : Athènes contre Philippe V',d:ATH_TXT}]:Object.keys(SCEN).sort((a,b)=>b-a).map(x=>({k:x,n:SCEN[x].n,d:SCEN[x].d}));
+function startCamp(){if(!S)return '';return S.peo==='mac'?'Macédoine':S.peo==='syr'?'Syracuse':S.peo==='ath'?'Athènes':PX&&PX[S.peo]?PX[S.peo].n:S.mirror?'Rome':'Carthage'}
 function openStart(){let peo=S&&(S.peo||(S.mirror?'rom':'car'))||'car',date='218',df=(S&&S.diff)||'normal';const canGo=S&&(S.started||S.day>0)&&!S.over;
   const draw=()=>{const D=startDates(peo);if(!D.some(x=>x.k===date))date=D[0].k;const c=cal(S.day);
     modal(`<h2 style="margin-bottom:2px">Bellum</h2><p class="sub" style="margin-top:0">La deuxième guerre punique, 218 à 201 av. J.-C.</p>
@@ -7035,7 +7204,7 @@ const _afterLoadG=afterLoad;afterLoad=function(){const r=_afterLoadG.apply(this,
     const I={bGen:['<circle cx="12" cy="7" r="4"/><path d="M4 21c0-5 4-8 8-8s8 3 8 8z"/><path d="M9 3l3-2 3 2" fill="none" stroke-width="1.6"/>','Généraux'],
       bSea:['<path d="M3 15h18l-3 5H6z"/><path d="M11 3h2v11h-2z"/><path d="M13 4c3 1 5 4 5 8h-5z"/><path d="M11 6c-2 1-4 3-4 6h4z"/>','Commerce']};
     for(const id in I){const b=$(id);if(b&&!b.querySelector('.ui-i'))b.innerHTML=svg(I[id][0],I[id][1])}}catch(e){}},0)}
-window.__meca2={openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
+window.__meca2={PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
   aiSide,applyScen,startScen,openScen,autoRun,autoTxt,openAutoTest,showAuto,mirrorGame,openPolRome,romElectPlayer,warScore:()=>warScore(),victoryCheck:d=>victoryCheck(d),SCEN,realSide,routeState,get S(){return S}};
 /* ================= FIN MÉCANIQUES II ================= */
 /* ================= INTERFACE BRONZE (fil « Refaire l'interface ») =================
@@ -7502,7 +7671,7 @@ function mpSendPos(){MP.lastPos=performance.now();const r=v=>Math.round(v*100)/1
   if(JSON.stringify(d).length>3800){MP.kfDue=performance.now();return}
   mpSend(d)}
 const mpKfSoon=(ms)=>{if(MP.role==='host'&&mpAnyOn()){const t=performance.now()+(ms==null?150:ms);if(!MP.kfDue||t<MP.kfDue)MP.kfDue=t}};
-const MP_PEO={mac:'Macédoine',syr:'Syracuse',ath:'Athènes'};
+const MP_PEO={mac:'Macédoine',syr:'Syracuse',ath:'Athènes',num:'Numidie',ins:'Gaulois cisalpins'};
 const mpSideTxt=s=>s==='rom'?'Rome':(S&&MP_PEO[S.peo]&&!(MP.role==='guest'&&MP.rs==='rom')?MP_PEO[S.peo]:'Carthage');
 function mpOnHost(d,m){
   let g=MP.gs[d.f];
@@ -7521,7 +7690,7 @@ function mpOnHost(d,m){
     if(o.cmd){if(o.cmd.k==='dom'){mpdDo(d.f,g.side==='rom'?mpSwap(o.cmd.c):o.cmd.c);mpdSync()}else mpHostCmd(o.cmd)}mpTerrCheck();computeVis();renderAll();mpKfSoon()});
   else if(d.t==='ch'){const b=S.cur,sd=g.side;if(b&&b.mp&&b.mp[sd]===0&&!b.mp.state&&b.mp.o&&b.mp.o[sd]===d.f&&mpBKey(b)===d.k){b.mp[sd]=d.c;mpResolve()}}
   else if(d.t==='bres'){const b=S.cur,sd=g.side;if(b&&b.mp&&b.mp.state==='3d:'+sd&&b.mp.o&&b.mp.o[sd]===d.f&&mpBKey(b)===d.k){const r=d.res;S.cur=null;closeModal();
-      log(`${battleTitle(b)} : ${esc(mpName(d.f))} a livré la bataille en 3D.`);applyResult(b,{attWin:r.attWin,A:r.A,D:r.D});refreshAfterBattle();mpKfSoon(0)}}
+      log(`${battleTitle(b)} : ${esc(mpName(d.f))} a livré la bataille sur le terrain.`);applyResult(b,{attWin:r.attWin,A:r.A,D:r.D});refreshAfterBattle();mpKfSoon(0)}}
   else if(d.t==='bye'){delete MP.gs[d.f];if(S.mpP&&S.mpP[d.f])S.mpP[d.f].on=0;S.paused=true;log(`${esc(mpName(d.f))} a quitté la partie.`);mpStatus();renderAll();mpKfSoon(0)}
 }
 function mpHostCmd(c){
@@ -7553,7 +7722,7 @@ function mpGuestKf(o){
   const peo=MP_PEO[ns.peo]?ns.peo:null;
   if(first&&typeof peoDone!=='undefined'&&peoDone&&peoDone!==(peo||(VR?'rom':null))){mpSS('bellum.mp.autoJoin',JSON.stringify({code:MP.code,side:MP.rs}));try{if(typeof SAVE!=='undefined')localStorage.removeItem(SAVE)}catch(e){}const tr=MP.tr;MP.tr=null;MP.role=null;try{tr.leave()}catch(e){}location.reload();return}
   if(peo&&R)delete ns.peo;
-  if(first){if(peo==='syr'&&typeof syrStatic==='function')syrStatic();else if(peo==='ath'&&typeof athStatic==='function')athStatic();else if(peo&&typeof macStatic==='function')macStatic();if(VR){if(typeof mirrorStatic==='function')mirrorStatic();else mpSwapStatic()}S=ns}else mpMerge(S,ns);
+  if(first){if(peo&&typeof peoStatic==='function')peoStatic(peo);else if(peo==='syr'&&typeof syrStatic==='function')syrStatic();else if(peo==='ath'&&typeof athStatic==='function')athStatic();else if(peo&&typeof macStatic==='function')macStatic();if(VR){if(typeof mirrorStatic==='function')mirrorStatic();else mpSwapStatic()}S=ns}else mpMerge(S,ns);
   MP.ready=true;
   if(old&&R)mpGuestLog(old,S);
   if(first){MP.terr=null}mpTerrCheck();computeVis();
@@ -7628,14 +7797,14 @@ function mpBattleUI(){
   if(inv&&!mp[me]&&!st){
     _openBattleMP();
     const card=$('mcard'),pvp=mp.car!==undefined&&mp.rom!==undefined;
-    card.insertAdjacentHTML('beforeend',`<i data-mpb hidden></i><p class="sub"><b>À plusieurs :</b> ${pvp?`vous choisissez pour votre camp, ${esc(mpName(O.rom))} pour le sien. Si un seul veut livrer bataille en 3D, il la joue contre l'IA qui commande l'autre camp ; si les deux la veulent, résolution automatique pour l'instant (la bataille 3D à deux arrive bientôt). Une retraite l'emporte sur tout le reste.`:"vous commandez cette armée : c'est à vous de choisir. Le jeu reste en pause pour tous."}</p>`);
+    card.insertAdjacentHTML('beforeend',`<i data-mpb hidden></i><p class="sub"><b>À plusieurs :</b> ${pvp?`vous choisissez pour votre camp, ${esc(mpName(O.rom))} pour le sien. Si un seul veut livrer bataille sur le terrain, il la joue contre l'IA qui commande l'autre camp ; si les deux la veulent, résolution automatique pour l'instant (la bataille à deux arrive bientôt). Une retraite l'emporte sur tout le reste.`:"vous commandez cette armée : c'est à vous de choisir. Le jeu reste en pause pour tous."}</p>`);
     const send=c=>{if(MP.role==='host'){S.cur.mp.car=c;mpResolve()}else{mp.car=c;mpSend({t:'ch',c,k:mpBKey(b)});MP.bmod=null;mpBattleUI()}};
     $('b3d').onclick=()=>send('3d');$('bAuto').onclick=()=>send('auto');$('bFlee').onclick=()=>send('flee');
     mpFixText();return}
   // en attente
   const nm=ids=>ids.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean).map(a=>esc(a.name)).join(', ')||'?';
   const who=s=>esc(mpName(O[s]));
-  const other=st.startsWith('3d:')?`${who(st.slice(3))} livre la bataille en 3D.`:inv?`Votre choix : <b>${{'3d':'bataille 3D',auto:'résolution automatique',flee:'retraite'}[mp[me]]||'—'}</b>. En attente des autres…`
+  const other=st.startsWith('3d:')?`${who(st.slice(3))} livre la bataille sur le terrain.`:inv?`Votre choix : <b>${{'3d':'bataille sur le terrain',auto:'résolution automatique',flee:'retraite'}[mp[me]]||'—'}</b>. En attente des autres…`
     :`${['car','rom'].filter(s=>mp[s]===0).map(who).join(' et ')||'Les joueurs concernés'} ${['car','rom'].filter(s=>mp[s]===0).length>1?'choisissent':'choisit'} comment livrer la bataille.`;
   const off=MP.role==='host'&&!st&&['car','rom'].some(s=>mp[s]===0&&O[s]&&O[s]!==MP.me&&!(MP.gs[O[s]]&&MP.gs[O[s]].on));
   modal(`<i data-mpb hidden></i><h2>${battleTitle(b)}</h2><p>${nm(b.att)} contre ${nm(b.def)}.</p><p>${other}</p><p class="sub">Le jeu est en pause pour tous les joueurs.</p>${off?'<div class="row"><button id="mpForce" type="button">Un joueur est déconnecté : résolution automatique</button></div>':''}`);
@@ -7651,7 +7820,7 @@ function mpResolve(){
     S.cur=null;closeModal();refreshAfterBattle();mpKfSoon(0);return}
   const want=['car','rom'].filter(s=>mp[s]==='3d');
   if(want.length===1){const s=want[0];mp.state='3d:'+s;if(O[s]===MP.me){closeModal();go3D(aS===s)}else{MP.bmod=null;mpBattleUI()}mpKfSoon(0);return}
-  if(want.length===2)log('Les deux camps voulaient la bataille 3D : en attendant la bataille à plusieurs, elle est résolue automatiquement.');
+  if(want.length===2)log('Les deux camps voulaient livrer la bataille : en attendant la bataille à plusieurs, elle est résolue automatiquement.');
   finishBattle(autoResolve(b));mpKfSoon(0);
 }
 // nouvelle armée de recrues : elle obéit au joueur qui a levé les régiments
@@ -7685,7 +7854,7 @@ function mpFixText(){if(MP.role!=='guest')return;
   const swapTxt=(root,max)=>{if(!root)return;const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n,k=0;while((n=w.nextNode())&&k++<max){const t=n.nodeValue.trim();
     if(t==='Carthage')n.nodeValue=n.nodeValue.replace('Carthage','Rome');else if(/^famille barca$/i.test(t))n.nodeValue=n.nodeValue.replace(t,t===t.toUpperCase()?'SÉNAT ROMAIN':'Sénat romain')}};
   swapTxt($('top'),400);if(!sel)swapTxt($('side'),12);
-  document.querySelectorAll('#mcard p.sub').forEach(e=>{if(e.textContent.includes('vous commandez toujours Carthage'))e.textContent="En bataille 3D, vous commandez Rome ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes."})}
+  document.querySelectorAll('#mcard p.sub').forEach(e=>{if(e.textContent.includes('vous commandez toujours Carthage'))e.textContent="Sur le champ de bataille, vous commandez Rome ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes."})}
 {const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{mpArmyBox()}catch(e){console.error('[MP]',e)}mpFixText();return r};
   const _m=modal;modal=function(){const r=_m.apply(this,arguments);mpFixText();return r};
   const _om=openMenu;openMenu=function(){if(MP.role==='guest')return openMP();return _om.apply(this,arguments)};
@@ -7758,7 +7927,7 @@ function openMP(){
   const inp=(id,ph,w,extra)=>`<input id="${id}" placeholder="${ph}" ${extra||''} style="font:inherit;font-size:16px;width:${w}px;background:rgba(0,0,0,.25);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 8px;-webkit-user-select:text;user-select:text">`;
   const plist=()=>`<table class="dip"><tr><th>Joueur</th><th>Camp</th><th></th></tr>${mpPlayers().map(p=>`<tr><td><b>${esc(p.n||'Joueur')}</b>${p.id===MP.me?' (vous)':''}</td><td>${p.rn||mpSideTxt(p.side)}${S.mpD&&p.dm&&S.mpD[p.dm]?' · '+mpdName(p.dm):''}</td><td>${p.on?'<span style="color:var(--good)">en ligne</span>':'<span class="sub">absent</span>'}</td></tr>`).join('')}</table>`;
   if(!MP.role){
-    modal(`<i data-mpw hidden></i><h2>Jouer à plusieurs</h2><p>Une campagne en temps réel jusqu'à ${MP_MAX} joueurs, dans le camp de Carthage ou de Rome. Dans un même camp, chacun commande ses armées ; le trésor, les villes et la diplomatie sont communs. Chacun ne voit que ce que voit son camp. La pause et la vitesse sont communes. Quand une bataille éclate, tout se met en pause et le chef de chaque armée concernée choisit : bataille 3D, résolution automatique ou retraite.</p>${err}
+    modal(`<i data-mpw hidden></i><h2>Jouer à plusieurs</h2><p>Une campagne en temps réel jusqu'à ${MP_MAX} joueurs, dans le camp de Carthage ou de Rome. Dans un même camp, chacun commande ses armées ; le trésor, les villes et la diplomatie sont communs. Chacun ne voit que ce que voit son camp. La pause et la vitesse sont communes. Quand une bataille éclate, tout se met en pause et le chef de chaque armée concernée choisit : bataille sur le terrain, résolution automatique ou retraite.</p>${err}
       <div class="row"><label class="sub" style="align-self:center">Votre nom</label>${inp('mpN','Votre nom',180,`maxlength="20" value="${esc(MP.nick)}"`)}</div>
       <h3>Héberger (vous gardez votre camp${S&&S.mirror?' : Rome':' : Carthage'})</h3><div class="row"><button class="go" id="mpH" type="button">Héberger la partie en cours</button><button id="mpHN" type="button">Héberger une nouvelle campagne (scénario, camp)</button></div>
       <h3>Rejoindre</h3><div class="row">${inp('mpC','Code',100,'maxlength="6"')}<button class="go" id="mpJC" type="button">Rejoindre Carthage (ou Macédoine, Syracuse)</button><button class="go" id="mpJR" type="button">Rejoindre Rome</button></div>
@@ -8081,7 +8250,7 @@ function perfHud(on){
   el.style.cssText='position:fixed;left:10px;top:90px;z-index:60;background:rgba(22,19,14,.94);border:1px solid rgba(214,184,120,.4);border-radius:6px;padding:8px 10px;font:13px/1.35 var(--ui,sans-serif);color:#efe6d2;min-width:250px;pointer-events:auto';
   document.body.appendChild(el);const H=PERFHUD={el,fr:[],last:performance.now(),raf:0,res:null,test:null};
   (function f(t){H.fr.push(t-H.last);H.last=t;H.raf=requestAnimationFrame(f)})(H.last);
-  const snap=()=>{const fr=H.fr.splice(0);const T=PERF.t,n=Math.max(1,T.n);const r={ips:fr.length,ms:fr.length?fr.reduce((a,b)=>a+b,0)/fr.length:0,lent:fr.filter(x=>x>50).length,sim:T.sim/n,draw:T.draw/n,dyn:T.dyn/n};PERF.t={sim:0,draw:0,dyn:0,n:0};return r};
+  const snap=()=>{const fr=H.fr.splice(0);const T=PERF.t,n=Math.max(1,T.n);const sm=fr.reduce((a,b)=>a+b,0),r={ips:sm?Math.round(fr.length*1000/sm):0,ms:fr.length?fr.reduce((a,b)=>a+b,0)/fr.length:0,lent:fr.filter(x=>x>50).length,sim:T.sim/n,draw:T.draw/n,dyn:T.dyn/n};PERF.t={sim:0,draw:0,dyn:0,n:0};return r};
   const row=(k,v)=>`<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#b5a98f">${k}</span><b style="font-weight:500">${v}</b></div>`;
   const render=r=>{const autre=Math.max(0,r.ms-r.sim-r.draw);
     el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b style="font-family:var(--display,serif);font-weight:400;font-size:15px">Performances</b><span><button type="button" data-p="test" style="min-height:24px;padding:1px 8px;font-size:12px">Test 12 s</button> <button type="button" data-p="x" style="min-height:24px;padding:1px 8px;font-size:12px">×</button></span></div>`+
@@ -8106,6 +8275,11 @@ function perfTest(){const H=PERFHUD;if(!H||H.test)return;H.res=null;PERF.skip={}
   if(T&&!PERF.nobmp&&window.createImageBitmap){const g=T.gen,d=T.dpr;
     createImageBitmap(T.c).then(b=>{if(TILES.get(key)!==T||T.gen!==g||T.dpr!==d||T.bmp){b.close();return}T.bmp=b;T.c.width=T.c.height=1}).catch(()=>{PERF.nobmp=true})}
   return r}}
+/* Brouillard : calculé à demi-résolution (le masque est déjà flou) et seulement quand la vue ou les sources de vision changent */
+PERF.fk=.5;PERF.fogKey='';PERF.vid=0;
+function perfFogDirty(w,h,s){let k=w+'|'+h+'|'+s+'|'+view.ox+'|'+view.oy+'|'+PERF.fk;
+  for(const q of SRC){const X=view.ox+q[0]*s,Y=view.oy+q[1]*s,R0=q[2]*VIS.band*s;if(X<-R0||Y<-R0||X>w+R0||Y>h+R0)continue;const v=vsOf(q);if(!v._pid)v._pid=++PERF.vid;k+='|'+v._pid+','+q[0]+','+q[1]}
+  if(k===PERF.fogKey)return false;PERF.fogKey=k;return true}
 window.__perf=PERF;
 /* ================= FIN PERFORMANCE ================= */
 /* ================= NAVAL VIVANT (fil « Rendre le naval de campagne vivant ») =================
