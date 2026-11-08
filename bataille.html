@@ -2106,16 +2106,22 @@ function layoutMain(list,y0,fw){
 const _dcE=deployCamp;
 deployCamp=function(){
   _dcE();RESv.length=0;if(!CAMP||!CAMP.b)return;
+  document.querySelectorAll('#start .ech-p').forEach(x=>x.remove());
   [[CAMP.b.p,0,1470,-1],[CAMP.b.e,1,560,1]].forEach(([L,side,y0,fw])=>{
     const main=[],grp={};
+    // colonne prise en embuscade (CAMP.b.colonne du fil Armées) : l'arrière-garde est surprise, isolée derrière la ligne
+    const amb=new Set((Array.isArray(CAMP.b.colonne)?CAMP.b.colonne:[]).filter(q=>q&&q.embusque&&q.ar&&q.ar!==q.av).map(q=>q.ar)),rear=[];
     for(const u of units){if(u.side!==side||u.ci===undefined)continue;const c=L[u.ci];
-      if(c&&c.arr>0&&c.ent){const k=c.ag==null?'?':c.ag;(grp[k]=grp[k]||{arr:c.arr,ent:c.ent,an:c.an,side,us:[]}).us.push(u)}else main.push(u)}
+      if(c&&c.arr>0&&c.ent){const k=c.ag==null?'?':c.ag;(grp[k]=grp[k]||{arr:c.arr,ent:c.ent,an:c.an,side,us:[]}).us.push(u)}else if(c&&amb.has(c.cp)&&!c.gd)rear.push(u);else main.push(u)}
+    if(rear.length&&rear.length>=main.length){main.push(...rear);rear.length=0}
     layoutMain(main,y0,fw);
+    rear.forEach((u,i)=>{const col=i%2,row=Math.floor(i/2);u.x=(1700+side*0-650+(col-.5)*70)*G;u.y=Math.max(60,Math.min(H0-60,y0-fw*(260+row*65)))*G;u.morale*=.8;u.ambush=1});
+    if(rear.length)try{const ps=document.querySelectorAll('#start .card > p');const p=document.createElement('p');p.className='ech-p';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45';
+      p.innerHTML=`<b>Embuscade</b> : ${side?"l'arrière-garde ennemie":'votre arrière-garde'} (${rear.length} régiments) est surprise en colonne, à l'écart derrière la ligne (moral −20 %).`;if(ps[0])ps[0].after(p)}catch(e){}
     for(const k in grp){const r=grp[k];r.e=edgeIn(r.ent[0],r.ent[1]);
       for(const u of r.us){u.pend=r;u.dead=true;u.x=r.e.x*G;u.y=r.e.y*G}RESv.push(r)}
   });
   RESv.sort((a,b)=>a.arr-b.arr);
-  document.querySelectorAll('#start .ech-p').forEach(x=>x.remove());
   if(RESv.length)try{const ps=document.querySelectorAll('#start .card > p');const p=document.createElement('p');p.className='ech-p';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45';
     p.innerHTML='<b>Renforts en route</b> : '+RESv.map(r=>`${r.side?'ennemis':'vôtres'}, ${String(r.an||'une armée').replace(/[&<>]/g,'')} (${r.us.length} régiments) ${sideWord(r.e.dx,r.e.dy,0)} vers ${fmt(r.arr)}`).join(' ; ')+'.';
     if(ps[0])ps[0].after(p)}catch(e){}

@@ -903,7 +903,7 @@ function buildGeo(){
   for(const [a,b] of STRAIT)add(NI[a],NI[b],'detroit');
   ADJ=N.map(()=>[]);EDGES.forEach((e,k)=>{ADJ[e.a].push(k);ADJ[e.b].push(k)});
   // territoires : cellules de Voronoï autour des villes, frontières ondulées
-  delaunay=d3.Delaunay.from(towns,n=>n.x,n=>n.y);voronoi=delaunay.voronoi([-200,-200,MW+200,MH+200]);
+  delaunay=d3.Delaunay.from(towns,n=>n.x,n=>n.y);voronoi=(()=>{/*CELLS-BORNEES*/const pts=towns.map(n=>[n.x,n.y]),G=30,R=80;for(let x=-180;x<MW+180;x+=G)for(let y=-180;y<MH+180;y+=G){const jx=x+(vnoise(x*.13,y*.13)-.5)*G*.6,jy=y+(vnoise(y*.13+3,x*.13)-.5)*G*.6,k=delaunay.find(jx,jy);if(Math.hypot(towns[k].x-jx,towns[k].y-jy)>R)pts.push([jx,jy])}return d3.Delaunay.from(pts).voronoi([-200,-200,MW+200,MH+200])})();
   CELL=N.map(()=>null);
   const jit=new Map();
   const wavy=(p,q)=>{const k1=p[0].toFixed(2)+','+p[1].toFixed(2),k2=q[0].toFixed(2)+','+q[1].toFixed(2),key=k1<k2?k1+'|'+k2:k2+'|'+k1;
@@ -917,7 +917,7 @@ function buildGeo(){
     for(let k=0;k<poly.length-1;k++){const p=poly[k],q=poly[k+1];pts.push(p);for(const w of wavy(p,q))pts.push(w)}
     pts.forEach(([x,y],k)=>k?path.lineTo(x,y):path.moveTo(x,y));path.closePath();
     CELL[n.i]={path,pts};
-    for(const tj of voronoi.neighbors(ti)){if(tj<=ti)continue;const m=towns[tj];
+    for(const tj of voronoi.neighbors(ti)){if(tj<=ti)continue;const m=towns[tj];if(!m)continue;
       // arête commune
       const pa=voronoi.cellPolygon(tj);if(!pa)continue;const shared=[];
       for(let k=0;k<poly.length-1;k++)for(let l=0;l<pa.length-1;l++){const p=poly[k];const q=pa[l];if(Math.abs(p[0]-q[0])<1e-6&&Math.abs(p[1]-q[1])<1e-6)shared.push(p)}
