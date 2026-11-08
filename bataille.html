@@ -2200,6 +2200,184 @@ window.__echelleGF=()=>{const gf=[],gw=[];for(const s of [0,1])for(const o of CO
 window.__echelle={get res(){return RESv},arrive,get corps(){return CORPS3}};
 }
 /* ================= FIN ÉCHELLE ================= */
+/* ================= BATAILLE 2D ================= */
+// Vue de carte façon atlas : sol peint (image de la campagne quand elle est envoyée), régiments en carrés symboliques
+// (X infanterie, diagonale cavalerie, trois ronds tirailleurs), étendards des généraux. La simulation ne change pas :
+// seules la caméra, le rendu et la conversion écran ↔ terrain sont remplacés. « Vue 3D » dans les options rend l'ancienne vue.
+const V3D=(()=>{try{const q=new URLSearchParams(location.search).get('vue');if(q)return q==='3d';return localStorage.getItem('bellum.vue')==='3d'}catch(e){return false}})();
+if(!V3D){
+  const cv2=document.createElement('canvas');cv2.id='map2d';cv2.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block';
+  host.appendChild(cv2);const g2=cv2.getContext('2d');
+  renderer.domElement.style.display='none';
+  {const st=document.createElement('style');st.textContent='#fps{display:none}';document.head.appendChild(st)}
+  const TAN=Math.tan(21*Math.PI/180);
+  let SW=1,SH=1,DPR=1,s2=1,M=[1,0,0,1,0,0];
+  // repère écran : haut de l'écran = direction (-sin yaw, -cos yaw) du terrain, comme la caméra 3D vue d'en haut
+  function view(){
+    SW=host.clientWidth||innerWidth;SH=host.clientHeight||innerHeight;DPR=Math.min(2,devicePixelRatio||1);
+    if(cv2.width!==Math.round(SW*DPR)||cv2.height!==Math.round(SH*DPR)){cv2.width=Math.round(SW*DPR);cv2.height=Math.round(SH*DPR)}
+    s2=SH/(2*cam.dist*TAN);
+    const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),Rx=cy,Ry=-sy,Fx=-sy,Fy=-cy;
+    const a=s2*Rx,b=-s2*Fx,c=s2*Ry,d=-s2*Fy;
+    M=[a,b,c,d,SW/2-(a*cam.tx+c*cam.ty),SH/2-(b*cam.tx+d*cam.ty)];
+  }
+  const scr=(x,y)=>[M[0]*x+M[2]*y+M[4],M[1]*x+M[3]*y+M[5]];
+  function unscr(px,py){const det=M[0]*M[3]-M[1]*M[2],X=px-M[4],Y=py-M[5];return {x:(M[3]*X-M[2]*Y)/det,y:(-M[1]*X+M[0]*Y)/det}}
+  // conversions utilisées par la sélection, les ordres, la minicarte et les étiquettes
+  updateCamera=function(){
+    cam.tx=Math.max(-300*G,Math.min(W+500*G,cam.tx));cam.ty=Math.max(-500*G,Math.min(H+500*G,cam.ty));
+    cam.dist=Math.max(60,Math.min(3800*G,cam.dist));strat=1;view();
+  };
+  groundAtNdc=function(nx,ny){return unscr((nx+1)/2*SW,(1-ny)/2*SH)};
+  groundAt=function(cx,cy){const r=host.getBoundingClientRect();return unscr(cx-r.left,cy-r.top)};
+  toScreen=function(sx,sy,off){const [x,y]=scr(sx,sy);return {x,y:y-(off?Math.min(26,off*s2*.6+8):0),ok:true}};
+  panScreen=function(dx,dy){const p=unscr(SW/2-dx,SH/2-dy);cam.tx=p.x;cam.ty=p.y};
+  resize=function(){view()};
+
+  /* -- sol : image de la carte de campagne si elle arrive, sinon terrain peint d'après le relief -- */
+  let GBG=null,GBOX=null;
+  const PAPER=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');
+    g.strokeStyle='rgba(40,30,15,.07)';g.lineWidth=1;for(let i=-128;i<256;i+=4){g.beginPath();g.moveTo(i,0);g.lineTo(i+128,128);g.stroke()}
+    const im=g.getImageData(0,0,128,128);for(let i=0;i<im.data.length;i+=4){const n=(Math.random()-.5)*26;im.data[i]+=n;im.data[i+1]+=n;im.data[i+2]+=n;im.data[i+3]=Math.max(im.data[i+3],Math.random()*18)}
+    g.putImageData(im,0,0);return c})();
+  function buildGround(){
+    const X0=-1200,Y0=-1200,X1=W0+1200,Y1=H0+1200,K=5,nx=Math.round((X1-X0)/K),ny=Math.round((Y1-Y0)/K);
+    const c=document.createElement('canvas');c.width=nx;c.height=ny;const g=c.getContext('2d'),img=g.createImageData(nx,ny),col=new THREE.Color();
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+      const sx=X0+i*K,sy=Y0+j*K,h=heightM(sx,sy);
+      const hx=(heightM(sx+8,sy)-heightM(sx-8,sy))/16,hz=(heightM(sx,sy+8)-heightM(sx,sy-8))/16,nyv=1/Math.hypot(hx,hz,1);
+      terrainColor(sx,sy,h,nyv,col);
+      if(sx<riverX(sy)+30&&RIVER0>-1000)col.setHex(0x4f7c86);
+      const sh=1+(-hx*.6+hz*.5)*1.2,o=(j*nx+i)*4;
+      img.data[o]=Math.min(255,col.r*255*sh);img.data[o+1]=Math.min(255,col.g*255*sh);img.data[o+2]=Math.min(255,col.b*255*sh);img.data[o+3]=255;
+    }
+    g.putImageData(img,0,0);
+    // forêts en bouquets d'arbres, comme sur une carte d'état-major
+    let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+    for(const f of FORESTSg){const fx=f.x/G,fy=f.y/G,r=f.r/G,n=Math.min(900,Math.round(r*r/90));
+      for(let i=0;i<n;i++){const a=rnd()*6.283,d=Math.sqrt(rnd())*r,x=(fx+Math.cos(a)*d-X0)/K,y=(fy+Math.sin(a)*d-Y0)/K,rr=(2.2+rnd()*2.2)/K*4;
+        g.fillStyle='rgba(20,32,14,.35)';g.beginPath();g.arc(x+1,y+1.2,rr,0,6.283);g.fill();
+        g.fillStyle=`rgb(${40+rnd()*20|0},${62+rnd()*24|0},${30+rnd()*14|0})`;g.beginPath();g.arc(x,y,rr,0,6.283);g.fill()}}
+    GBG=c;GBOX=[X0,Y0,K];
+  }
+  let GM=null; // repère image de la carte de campagne → terrain
+  function groundFromCampaign(){
+    if(!GROUND||!CT||!CT.f)return;const f=CT.f,[x0,y0,sz]=GROUND.box,iw=GROUND.img.width,ih=GROUND.img.height;
+    // terrain (sx,sy en m, carte d'origine) → image : u=(cx-x0+((sx-1700)ex0+(sy-1000)ey0)/1000)/sz*iw
+    const A=f.ex[0]/1000/sz*iw,B=f.ey[0]/1000/sz*iw,C=f.ex[1]/1000/sz*ih,D=f.ey[1]/1000/sz*ih;
+    const E=(f.cx-x0-(1700*f.ex[0]+1000*f.ey[0])/1000)/sz*iw,F=(f.cy-y0-(1700*f.ex[1]+1000*f.ey[1])/1000)/sz*ih;
+    // inverse (image → terrain), puis ×G pour le monde de jeu
+    const det=A*D-B*C;GM=[D/det*G,-C/det*G,-B/det*G,A/det*G,(B*F-D*E)/det*G,(C*E-A*F)/det*G];
+  }
+  function drawGround(){
+    g2.fillStyle='#8a9a5c';g2.fillRect(0,0,SW,SH);
+    g2.save();g2.setTransform(M[0]*DPR,M[1]*DPR,M[2]*DPR,M[3]*DPR,M[4]*DPR,M[5]*DPR);
+    g2.imageSmoothingEnabled=true;g2.imageSmoothingQuality='high';
+    if(GBG){g2.save();g2.translate(GBOX[0]*G,GBOX[1]*G);g2.scale(GBOX[2]*G,GBOX[2]*G);g2.drawImage(GBG,0,0);g2.restore()}
+    if(GM){g2.save();g2.transform(GM[0],GM[1],GM[2],GM[3],GM[4],GM[5]);g2.drawImage(GROUND.img,0,0);g2.restore()}
+    g2.restore();
+    g2.save();g2.scale(DPR,DPR);
+    g2.fillStyle=g2.createPattern(PAPER,'repeat');g2.globalAlpha=.9;g2.fillRect(0,0,SW,SH);g2.globalAlpha=1;
+    const vg=g2.createRadialGradient(SW/2,SH/2,Math.min(SW,SH)*.35,SW/2,SH/2,Math.max(SW,SH)*.75);vg.addColorStop(0,'rgba(30,22,10,0)');vg.addColorStop(1,'rgba(30,22,10,.35)');
+    g2.fillStyle=vg;g2.fillRect(0,0,SW,SH);g2.restore();
+  }
+
+  /* -- régiments -- */
+  const INK='#1d150c';
+  function shade(hex,k){const n=parseInt(hex.slice(1),16),f=v=>Math.max(0,Math.min(255,Math.round(v*k)));return `rgb(${f(n>>16)},${f(n>>8&255)},${f(n&255)})`}
+  function unitAngle(u){const fx=Math.cos(u.ang),fy=Math.sin(u.ang);return Math.atan2(M[1]*fx+M[3]*fy,M[0]*fx+M[2]*fy)}
+  function drawUnit(u){
+    const [px,py]=scr(u.x,u.y);if(px<-80||py<-80||px>SW+80||py>SH+80)return;
+    const k=u.T.kind,P=PAL[u.side],a=unitAngle(u),sel=selected.has(u),hov=u===hover;
+    // symbole de taille bornée (lisible de loin, compact de près) ; l'emprise réelle est tracée en dessous quand elle le dépasse
+    const RW=u.w*s2,RD=u.dd*s2,rw=Math.max(18,Math.min(44,RW)),rd=Math.max(16,Math.min(rw*.62,RD)),fr=frac(u);
+    if(RW>rw+6){g2.save();g2.translate(px,py);g2.rotate(a);g2.fillStyle=PAL[u.side].blk;g2.globalAlpha=.16;g2.fillRect(-RD/2,-RW/2,RD,RW);
+      g2.globalAlpha=.55;g2.lineWidth=1.2;g2.setLineDash([4,3]);g2.strokeStyle=INK;g2.strokeRect(-RD/2,-RW/2,RD,RW);g2.restore()}
+    g2.save();g2.translate(px,py);g2.rotate(a); // repère : +x = front du régiment, y = largeur
+    g2.globalAlpha=u.routing?.45+.2*Math.sin(rt*9):1;
+    if(k==='skirm'){
+      const r=Math.max(5,Math.min(rw,rd*2)/5);
+      for(const [ox,oy] of [[0,-r*1.1],[0,r*1.1],[r*1.6,0]]){g2.beginPath();g2.arc(ox-r*.5,oy,r,0,6.283);g2.fillStyle=P.blk;g2.fill();g2.lineWidth=1.6;g2.strokeStyle=INK;g2.stroke();
+        g2.beginPath();g2.arc(ox-r*.5-r*.3,oy-r*.3,r*.45,0,6.283);g2.fillStyle='rgba(255,255,255,.18)';g2.fill()}
+      if(sel||hov){g2.beginPath();g2.arc(r*.3,0,r*3,0,6.283);g2.lineWidth=sel?2.4:1.4;g2.strokeStyle=sel?'#fff2c0':'rgba(255,250,230,.7)';g2.stroke()}
+    }else{
+      const x0=-rd/2,y0=-rw/2;
+      g2.fillStyle='rgba(15,10,4,.35)';g2.fillRect(x0+2,y0+2.5,rd,rw); // ombre portée
+      const gr=g2.createLinearGradient(x0,y0,x0+rd,y0+rw);gr.addColorStop(0,shade(P.blk,1.18));gr.addColorStop(1,shade(P.blk,.82));
+      g2.fillStyle=gr;g2.fillRect(x0,y0,rd,rw);
+      if(k==='cav'||k==='lcav'){g2.beginPath();g2.moveTo(x0,y0);g2.lineTo(x0+rd,y0);g2.lineTo(x0,y0+rw);g2.closePath();g2.fillStyle=k==='lcav'?'rgba(255,255,255,.55)':'rgba(255,255,255,.3)';g2.fill()}
+      // effectif restant : la part perdue s'assombrit depuis l'arrière
+      if(fr<.98){g2.fillStyle='rgba(10,6,2,.38)';g2.fillRect(x0,y0,rd*(1-fr),rw)}
+      g2.lineWidth=Math.max(1.6,Math.min(3,rd/10));g2.strokeStyle=INK;g2.strokeRect(x0,y0,rd,rw);
+      g2.lineWidth=1;g2.strokeStyle='rgba(255,245,220,.35)';g2.strokeRect(x0+2.5,y0+2.5,rd-5,rw-5);
+      const m=Math.min(rd,rw)*.16,lw=Math.max(1.6,Math.min(3.2,Math.min(rd,rw)/9));g2.lineWidth=lw;g2.strokeStyle=INK;g2.beginPath();
+      if(k==='inf'){g2.moveTo(x0+m,y0+m);g2.lineTo(x0+rd-m,y0+rw-m);g2.moveTo(x0+rd-m,y0+m);g2.lineTo(x0+m,y0+rw-m)}
+      else if(k==='cav'||k==='lcav'){g2.moveTo(x0+rd,y0);g2.lineTo(x0,y0+rw)}
+      else if(k==='eleph'){g2.moveTo(x0+m,y0+m);g2.lineTo(x0+rd-m,y0+rw-m);g2.moveTo(x0+rd-m,y0+m);g2.lineTo(x0+m,y0+rw-m)}
+      g2.stroke();
+      if(k==='eleph'){g2.beginPath();g2.arc(0,0,Math.min(rd,rw)*.24,0,6.283);g2.fillStyle=P.str;g2.fill();g2.lineWidth=1.5;g2.stroke()}
+      if(k==='lcav'){g2.beginPath();g2.arc(x0+rd*.72,y0+rw*.72,Math.min(rd,rw)*.09,0,6.283);g2.fillStyle=INK;g2.fill()}
+      // front du régiment : un liseré clair du côté de l'ennemi
+      g2.fillStyle=P.str;g2.fillRect(x0+rd-Math.max(2,rd*.08),y0,Math.max(2,rd*.08),rw);
+      if(sel||hov){g2.lineWidth=sel?2.6:1.4;g2.strokeStyle=sel?'#fff2c0':'rgba(255,250,230,.75)';g2.strokeRect(x0-3,y0-3,rd+6,rw+6)}
+    }
+    g2.restore();
+    // mêlée : éclairs sur le front
+    if(u.contacts.length&&u.side===0)for(const e of u.contacts){const [ex,ey]=scr((u.x+e.x)/2,(u.y+e.y)/2),t=rt*7+u.id;
+      g2.save();g2.translate(ex,ey);g2.rotate(t*.3);g2.strokeStyle=`rgba(255,${200+40*Math.sin(t)|0},140,.9)`;g2.lineWidth=2;g2.beginPath();
+      for(let i=0;i<4;i++){const r=6+4*Math.abs(Math.sin(t+i));g2.moveTo(0,0);g2.lineTo(Math.cos(i*1.57)*r,Math.sin(i*1.57)*r)}g2.stroke();g2.restore()}
+  }
+  function drawOrders(){
+    for(const u of units){
+      if(u.dead)continue;
+      if(u.preview){const p=u.preview,[px,py]=scr(p.x,p.y),fx=Math.cos(p.face),fy=Math.sin(p.face),a=Math.atan2(M[1]*fx+M[3]*fy,M[0]*fx+M[2]*fy);
+        g2.save();g2.translate(px,py);g2.rotate(a);g2.setLineDash([5,4]);g2.lineWidth=1.6;g2.strokeStyle='rgba(255,242,192,.9)';const rw=Math.max(14,p.w*s2),rd=Math.max(10,p.d*s2);g2.strokeRect(-rd/2,-rw/2,rd,rw);g2.restore()}
+      if(u.side!==0||!selected.has(u)||!u.order)continue;
+      const o=u.order,att=o.type==='attack',tx=att?o.target.x:o.x,ty=att?o.target.y:o.y,[ax,ay]=scr(u.x,u.y),[bx,by]=scr(tx,ty);
+      g2.save();g2.setLineDash(att?[]:[7,5]);g2.lineWidth=2;g2.strokeStyle=att?'rgba(232,90,70,.9)':'rgba(255,242,192,.85)';
+      g2.beginPath();g2.moveTo(ax,ay);g2.lineTo(bx,by);g2.stroke();g2.setLineDash([]);
+      const an=Math.atan2(by-ay,bx-ax);g2.beginPath();g2.moveTo(bx,by);g2.lineTo(bx-10*Math.cos(an-.45),by-10*Math.sin(an-.45));g2.lineTo(bx-10*Math.cos(an+.45),by-10*Math.sin(an+.45));g2.closePath();g2.fillStyle=g2.strokeStyle;g2.fill();g2.restore();
+    }
+  }
+  function drawProjs(){
+    g2.save();g2.strokeStyle='rgba(30,22,12,.85)';g2.lineWidth=1.3;g2.beginPath();
+    for(const p of projs){const k=Math.min(1,p.t/p.dur),x=p.x0+(p.tx-p.x0)*k,y=p.y0+(p.ty-p.y0)*k,[sx,sy]=scr(x,y),[qx,qy]=scr(p.x0+(p.tx-p.x0)*Math.max(0,k-.05),p.y0+(p.ty-p.y0)*Math.max(0,k-.05));
+      const dx=sx-qx,dy=sy-qy,l=Math.hypot(dx,dy)||1;g2.moveTo(sx,sy);g2.lineTo(sx-dx/l*7,sy-dy/l*7)}
+    g2.stroke();g2.restore();
+  }
+  // étendards des généraux : hampe, bannière aux couleurs du camp, nom dans un cartouche
+  function drawBanners(){
+    const L=(window.__echelle&&window.__echelle.corps)||[[],[]];
+    for(const s of [0,1])for(const o of L[s]){const u=o.gu;if(!u||u.dead||u.pend)continue;
+      const [px,py]=scr(u.x,u.y),P=PAL[s],bw=30,bh=36,top=py-62;
+      g2.save();g2.globalAlpha=u.routing?.5:1;
+      g2.strokeStyle=INK;g2.lineWidth=2.5;g2.beginPath();g2.moveTo(px,py);g2.lineTo(px,top-6);g2.stroke();
+      g2.beginPath();g2.moveTo(px-bw/2-4,top);g2.lineTo(px+bw/2+4,top);g2.stroke();
+      g2.beginPath();g2.moveTo(px-bw/2,top);g2.lineTo(px+bw/2,top);g2.lineTo(px+bw/2,top+bh);g2.lineTo(px,top+bh+8);g2.lineTo(px-bw/2,top+bh);g2.closePath();
+      g2.fillStyle=P.flag;g2.fill();g2.lineWidth=2;g2.strokeStyle=P.str;g2.stroke();
+      g2.fillStyle=P.str;g2.font='bold 15px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';g2.fillText(o.chef?'★':'✦',px,top+bh/2);
+      // le nom du général est déjà affiché par l'étiquette du corps
+      g2.restore()}
+  }
+  function draw2d(){
+    view();g2.setTransform(1,0,0,1,0,0);drawGround();
+    g2.save();g2.scale(DPR,DPR);
+    drawOrders();
+    const order=units.filter(u=>!u.dead&&!u.pend).sort((a,b)=>(a.routing?0:1)-(b.routing?0:1));
+    for(const u of order)drawUnit(u);
+    drawProjs();drawBanners();
+    g2.restore();
+  }
+  renderer.render=function(){draw2d()};
+  // hors campagne, la vue de départ montre tout le front
+  let zoomed=false;const _su=setup;setup=function(){const r=_su.apply(this,arguments);if(!INTRO&&!zoomed){zoomed=true;cam.dist*=1.7}return r};
+  // le sol se prépare au premier affichage (après l'arrivée éventuelle de l'image de la campagne)
+  const _bt=buildTerrain;buildTerrain=function(){_bt();try{if(GROUND)groundFromCampaign();if(!GM)buildGround()}catch(e){console.warn('sol 2D',e);buildGround()}};
+}
+// option « Vue 3D » (ancienne vue) sur l'écran d'accueil
+try{const sF=$('sFig'),lb=document.createElement('label');lb.innerHTML='<input type="checkbox" id="c3d"> Vue 3D (ancienne)';sF.parentElement.after(lb);
+  const c=$('c3d');c.checked=V3D;c.onchange=()=>{try{localStorage.setItem('bellum.vue',c.checked?'3d':'2d')}catch(e){}const u=new URL(location.href);u.searchParams.delete('vue');location.href=u.href}}catch(e){}
+/* ================= FIN BATAILLE 2D ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   GROUND=await groundP;

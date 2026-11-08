@@ -2241,7 +2241,7 @@ function renderTileAt(L,i,j){const key=L+'/'+i+'/'+j;let T=TILES.get(key);
 function drawLevel(L,w,h){const sL=2**L,k=view.s/sL,sz=TS*k,[i0,i1,j0,j1]=tileRange(L,w,h,0);let missing=0;
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const T=TILES.get(L+'/'+i+'/'+j);if(!T){missing++;continue}if(!tileOK(T))missing++;
     const x0=Math.floor(dpr*(view.ox+i*sz)),x1=Math.floor(dpr*(view.ox+(i+1)*sz)),y0=Math.floor(dpr*(view.oy+j*sz)),y1=Math.floor(dpr*(view.oy+(j+1)*sz));
-    ctx.drawImage(T.c,x0,y0,x1-x0,y1-y0)}
+    ctx.drawImage(T.bmp||T.c/*PERF*/,x0,y0,x1-x0,y1-y0)}
   return missing}
 let lastV='',lastVT=0;
 function draw(){
@@ -8096,6 +8096,16 @@ function perfHud(on){
     render(r)},1500);render(snap())}
 function perfTest(){const H=PERFHUD;if(!H||H.test)return;H.res=null;PERF.skip={};H.test={k:0,out:[],skipFirst:true};}
 {const _om=openMenu;openMenu=function(){const r=_om.apply(this,arguments);try{const d=$('perfRes');if(d&&!$('perfHudB')){const b=document.createElement('button');b.type='button';b.id='perfHudB';b.textContent=PERFHUD?'Masquer le compteur de performances':'Afficher le compteur de performances';b.style.marginTop='8px';b.onclick=()=>{perfHud(!PERFHUD);closeModal()};d.appendChild(b)}}catch(e){}return r}}
+// ---- tuiles en ImageBitmap : une tuile finie part une fois pour toutes dans la carte graphique ----
+// (mesure de Baptiste, v111 : sans fond 4 ms par image, avec 17 ms — chaque tuile, simple canevas en mémoire,
+//  était renvoyée à la carte graphique à chaque image). Le canevas de travail est ensuite réduit à 1 px pour la mémoire.
+{const _rt=renderTileAt;renderTileAt=function(L,i,j){const key=L+'/'+i+'/'+j,T0=TILES.get(key);
+  if(T0&&T0.dpr===dpr&&T0.c.width<4){T0.c.width=T0.c.height=Math.round(TS*dpr);T0.g=T0.c.getContext('2d')}
+  if(T0&&T0.bmp){try{T0.bmp.close()}catch(e){}T0.bmp=null}
+  const r=_rt.apply(this,arguments);const T=TILES.get(key);
+  if(T&&!PERF.nobmp&&window.createImageBitmap){const g=T.gen,d=T.dpr;
+    createImageBitmap(T.c).then(b=>{if(TILES.get(key)!==T||T.gen!==g||T.dpr!==d||T.bmp){b.close();return}T.bmp=b;T.c.width=T.c.height=1}).catch(()=>{PERF.nobmp=true})}
+  return r}}
 window.__perf=PERF;
 /* ================= FIN PERFORMANCE ================= */
 /* ================= NAVAL VIVANT (fil « Rendre le naval de campagne vivant ») =================
