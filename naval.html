@@ -1,0 +1,1267 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bellum Bataille navale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Marcellus&display=swap">
+<style>
+:root{
+  --sea:#2c5a68;
+  --panel:rgba(20,18,14,.86);
+  --line:rgba(214,184,120,.30);
+  --ink:#efe6d2;
+  --muted:#b5a98f;
+  --gold:#d6b878;
+  --display:"Marcellus",Georgia,"Times New Roman",serif;
+  --ui:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0}
+body{background:var(--sea);color:var(--ink);font-family:var(--ui);font-size:15px;overflow:hidden;-webkit-user-select:none;user-select:none}
+#app{position:relative;height:100%;overflow:hidden}
+#gl{position:absolute;inset:0;touch-action:none;cursor:crosshair}
+#gl canvas{display:block;width:100%;height:100%}
+#vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(10,20,26,.38) 100%)}
+.hud{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:6px;backdrop-filter:blur(4px)}
+#top{top:max(10px,env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:8px 12px}
+.brand{display:flex;flex-direction:column;min-width:0}
+.brand h1{margin:0;font-family:var(--display);font-weight:400;font-size:20px;letter-spacing:.03em;line-height:1.1}
+.brand span{font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+#forces{flex:1;min-width:220px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;font-variant-numeric:tabular-nums;font-size:13px}
+#forces .bar{height:8px;border-radius:4px;background:var(--c1,#bf3b31);overflow:hidden;position:relative}
+#forces .bar i{position:absolute;inset:0 auto 0 0;background:var(--c0,#7d4fb8);transition:width .3s}
+.ctrl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#clock{font-variant-numeric:tabular-nums;color:var(--muted);min-width:44px;text-align:right}
+button{font:inherit;font-size:14px;color:var(--ink);background:rgba(214,184,120,.10);border:1px solid var(--line);border-radius:4px;padding:5px 10px;cursor:pointer}
+button:hover{background:rgba(214,184,120,.22)}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+button.on{background:var(--gold);color:#1d1a12;border-color:var(--gold)}
+button:disabled{opacity:.4;cursor:default}
+#sel{left:max(12px,env(safe-area-inset-left,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));width:min(310px,calc(100% - 24px));padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+#sel h2{margin:0;font-family:var(--display);font-weight:400;font-size:17px}
+#sel .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.row{display:flex;justify-content:space-between;gap:10px;font-variant-numeric:tabular-nums}
+.meter{height:6px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--gold)}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.seg{display:flex}.seg button{border-radius:0}.seg button:first-child{border-radius:4px 0 0 4px}.seg button:last-child{border-radius:0 4px 4px 0;border-left:none}
+#mmWrap{right:max(12px,env(safe-area-inset-right,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));padding:6px}
+#mm{display:block;width:240px;height:160px;border-radius:3px;cursor:pointer}
+#help{right:max(12px,env(safe-area-inset-right,0px));bottom:calc(max(12px,env(safe-area-inset-bottom,0px)) + 186px);padding:10px 12px;max-width:330px;font-size:13px;line-height:1.45;color:var(--muted)}
+#help b{color:var(--ink);font-weight:600}
+#camBtns{right:max(12px,env(safe-area-inset-right,0px));top:96px;padding:6px;display:flex;flex-direction:column;gap:4px}
+#camBtns button{width:36px;padding:4px 0}
+@media (max-width:760px){#help{display:none}.brand span{display:none}#mm{width:160px;height:107px}#camBtns{top:auto;bottom:calc(max(12px,env(safe-area-inset-bottom,0px)) + 132px)}}
+[hidden]{display:none!important}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(8,14,18,.42);padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px 24px;max-width:500px;display:flex;flex-direction:column;gap:12px;text-align:left}
+.card h2{margin:0;font-family:var(--display);font-weight:400;font-size:28px;text-wrap:balance}
+.card p{margin:0;line-height:1.5;color:var(--muted)}
+.card .go{align-self:flex-start;font-size:16px;padding:8px 18px;background:var(--gold);color:#1d1a12;border-color:var(--gold)}
+.stats{display:grid;grid-template-columns:1fr auto auto;gap:4px 16px;font-variant-numeric:tabular-nums}
+.stats .h{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+#tags{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:2px}
+.tag b{font-weight:600;font-size:12px;background:rgba(20,18,14,.78);color:var(--ink);padding:1px 6px;border-radius:3px;white-space:nowrap}
+.tag .flag{width:14px;height:10px;border:1px solid rgba(0,0,0,.5)}
+.tag .bars{width:40px;background:rgba(0,0,0,.55);padding:1px;border-radius:2px;display:flex;flex-direction:column;gap:1px}
+.tag .bars i{display:block;height:3px}
+.tag.rout b{background:rgba(120,30,20,.85)}
+#box{position:absolute;border:1px solid rgba(255,244,200,.9);background:rgba(255,244,200,.08);pointer-events:none}
+#toasts{position:absolute;left:50%;transform:translateX(-50%);top:84px;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none}
+#toasts div{background:rgba(20,18,14,.8);border:1px solid var(--line);border-radius:4px;padding:3px 10px;font-size:13px;transition:opacity .6s}
+#toasts .bad{color:#f1a097}#toasts .good{color:#c9e6a8}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gl"></div>
+  <div id="vignette"></div>
+  <div id="tags"></div>
+  <div id="box" hidden></div>
+  <div id="toasts"></div>
+
+  <div id="top" class="hud">
+    <div class="brand"><h1>Bataille navale</h1><span id="place">Au large de Lilybée</span></div>
+    <div id="forces"><span id="f0"></span><div class="bar"><i id="fBar"></i></div><span id="f1"></span></div>
+    <div class="ctrl">
+      <span id="clock">0:00</span>
+      <button id="bPause" type="button" title="Espace">Lancer</button>
+      <button class="spd on" data-s="1" type="button">×1</button>
+      <button class="spd" data-s="2" type="button">×2</button>
+      <button class="spd" data-s="4" type="button">×4</button>
+      <button id="bReset" type="button">Recommencer</button>
+      <button id="bHelp" type="button" title="Commandes">?</button>
+    </div>
+  </div>
+
+  <div id="camBtns" class="hud" aria-label="Caméra">
+    <button id="cZin" type="button" title="Zoomer">+</button>
+    <button id="cZout" type="button" title="Dézoomer">−</button>
+    <button id="cRl" type="button" title="Tourner la caméra">⟲</button>
+    <button id="cRr" type="button" title="Tourner la caméra">⟳</button>
+    <button id="cTac" type="button" title="Vue d'ensemble (V)">▦</button>
+  </div>
+
+  <div id="sel" class="hud">
+    <div class="k">Sélection</div>
+    <div id="selBody"></div>
+    <div class="btns" id="selBtns">
+      <div class="seg"><button id="bRam" type="button" title="Éperonner (B pour basculer)">Éperon</button><button id="bBoard" type="button" title="Aborder (B pour basculer)">Abordage</button></div>
+      <div class="seg"><button id="bLine" type="button" title="Ligne de front (L pour basculer)">Ligne</button><button id="bCol" type="button" title="En file (L pour basculer)">File</button></div>
+      <button id="bHalt" type="button" title="Retour arrière">Halte</button>
+      <button id="bFlee" type="button" title="Rompre le combat et fuir (X)">Retraite</button>
+      <button id="bAll" type="button" title="Ctrl+A">Toute la flotte</button>
+    </div>
+  </div>
+
+  <div id="mmWrap" class="hud"><canvas id="mm" width="480" height="320"></canvas></div>
+
+  <div id="help" class="hud" hidden>
+    <b>Clic gauche</b> sur un navire : choisir son escadre (Ctrl ou Maj : ajouter) · <b>double-clic</b> : toutes les escadres du même type · <b>glisser</b> : cadre<br>
+    <b>Clic droit</b> sur la mer : ramer jusque-là · sur un navire ennemi : attaquer son escadre · <b>double clic droit</b> : à la cadence de charge<br>
+    <b>Clic droit glissé</b> : tracer la ligne de bataille<br>
+    <b>B</b> : éperon ou abordage · <b>L</b> : ligne ou file · <b>X</b> : retraite · <b>Retour</b> : halte<br>
+    <b>ZQSD / flèches</b> : déplacer · <b>A / E</b> ou <b>clic molette glissé</b> : tourner · <b>Molette</b> : zoom · <b>F</b> : centrer · <b>V</b> : vue d'ensemble · <b>Espace</b> : pause<br>
+    <b>Éperon</b> : de flanc et à pleine cadence, une quinquérème coule. De face, les deux navires souffrent. Passer en rasant un flanc brise ses rames.<br>
+    <b>Abordage</b> : les navires s'accrochent et les soldats à bord se battent. Le navire vaincu est pris.<br>
+    Les rameurs s'épuisent à la cadence de combat et de charge : laissez-les souffler.
+  </div>
+
+  <div id="start" class="overlay">
+    <div class="card">
+      <h2 id="startT">Au large de Lilybée</h2>
+      <p id="startP"></p>
+      <p style="font-size:13px">Commandes comme sur terre : clic droit pour ramer, double clic droit pour charger, clic droit glissé pour tracer la ligne. Le bouton « ? » détaille tout.</p>
+      <button class="go" id="bGo" type="button">Lancer la bataille</button>
+      <button id="bPrep" type="button" style="align-self:flex-start">Placer mes escadres d'abord</button>
+    </div>
+  </div>
+
+  <div id="end" class="overlay" hidden>
+    <div class="card">
+      <h2 id="endT">Victoire</h2>
+      <p id="endP"></p>
+      <div class="stats" id="endS"></div>
+      <div class="btns"><button class="go" id="bAgain" type="button">Rejouer</button><button id="bBack" type="button" hidden>Retour à la campagne</button><button id="bWatch" type="button">Regarder la fin</button></div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/curves/NURBSUtils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/curves/NURBSCurve.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   BELLUM — BATAILLE NAVALE (prototype, 8 novembre 2026)
+   Repère : mètres. x vers l'est, y vers le sud (= z de three.js).
+   Cap h : avant du navire = (cos h, sin h). Camp 0 = joueur.
+   ===================================================================== */
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const TAU=Math.PI*2;
+const angDiff=(a,b)=>{let d=(a-b)%TAU;if(d>Math.PI)d-=TAU;if(d<-Math.PI)d+=TAU;return d};
+let seed=11;const srand=()=>(seed=(seed*16807)%2147483647,(seed-1)/2147483646);
+function hash2(x,y){let h=(x*374761393+y*668265263)|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967295}
+function vnoise(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash2(xi,yi),b=hash2(xi+1,yi),c=hash2(xi,yi+1),d=hash2(xi+1,yi+1);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v}
+const fbm=(x,y)=>vnoise(x,y)*.55+vnoise(x*2.1,y*2.1)*.3+vnoise(x*4.3,y*4.3)*.15;
+
+/* ---------------- Nations et navires ---------------- */
+// Carthage : meilleurs rameurs (vitesse, virage, endurance, rames rentrées à temps). Rome : plus de soldats à bord, meilleurs à l'abordage.
+const NAT={
+  car:{key:'car',name:'Carthage',adj:'carthaginoise',col:0x7d4fb8,css:'#7d4fb8',light:'#cbb1ee',row:1.06,turn:1.12,stam:.85,mar:.8,bq:1,oarSkill:.75,mode:'eperon'},
+  rom:{key:'rom',name:'Rome',adj:'romaine',col:0xbf3b31,css:'#bf3b31',light:'#f1a097',row:1,turn:1,stam:1,mar:1,bq:1.05,oarSkill:.4,mode:'abordage'},
+};
+// sp = cadences [croisière, combat, charge] en m/s ; turn en rad/s ; mar = soldats de marine (Rome ; ×NAT.mar)
+const TYP={
+  quin:{key:'quin',name:'Quinquérème',pl:'quinquérèmes',L:42,B:6.6,D:2.4,K:-1.6,hp:100,sp:[4,5.3,7.1],turn:.15,acc:.85,mar:120,arch:10,oars:16,oarL:11,ram:true,mass:1,crew:20,f:1},
+  tri:{key:'tri',name:'Trière',pl:'trières',L:36,B:5.2,D:1.9,K:-1.2,hp:60,sp:[4.5,6,8.2],turn:.22,acc:1.15,mar:30,arch:6,oars:14,oarL:8.5,ram:true,mass:.55,crew:8,f:1},
+  trans:{key:'trans',name:'Transport',pl:'transports',L:26,B:7.6,D:2.2,K:-1.8,hp:55,sp:[2.9,3.3,3.5],turn:.09,acc:.4,mar:15,arch:4,oars:0,oarL:0,ram:false,mass:.7,sail:true,crew:10},
+};
+const spacing=T=>T.oars?T.B+T.oarL*1.7+6:T.B+12;
+
+/* ---------------- Configuration (venue de la campagne par #n=, sinon scénario d'essai) ---------------- */
+const W=6000,H=4000; // champ de bataille en mètres
+function defaultCfg(){
+  return {place:'Au large de Lilybée',year:'217 av. J.-C.',
+    sides:[
+      {nat:'car',name:'Flotte d\'Himilcon',sq:[
+        {n:'Escadre de Bomilcar',t:'quin',k:10},{n:'Escadre d\'Himilcon',t:'quin',k:10},{n:'Escadre d\'Adherbal',t:'quin',k:10},
+        {n:'Trières de Magon',t:'tri',k:8},{n:'Convoi d\'Hannon',t:'trans',k:10,troops:120}]},
+      {nat:'rom',name:'Flotte de Sempronius',sq:[
+        {n:'Escadre de Sempronius',t:'quin',k:10},{n:'Escadre de Fulvius',t:'quin',k:10},{n:'Escadre d\'Otacilius',t:'quin',k:10},
+        {n:'Escadre d\'Atilius',t:'quin',k:10},{n:'Trières de Cornelius',t:'tri',k:6}]}],
+    land:null};
+}
+let CFG=defaultCfg(),FROM_CAMP=false;
+try{
+  const m=location.hash.match(/[#&]n=([^&]+)/);
+  if(m){const j=JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/')))));if(j&&j.sides&&j.sides.length===2){CFG=Object.assign(defaultCfg(),j);FROM_CAMP=true}}
+}catch(e){console.warn('config navale illisible',e)}
+/*NAV3D*/for(const sd of CFG.sides)if(!NAT[sd.nat]){const d=sd.natDef||{},base=NAT[d.base||'rom'],css=d.css||base.css;NAT[sd.nat]=Object.assign({},base,d,{key:sd.nat,css,col:parseInt(css.slice(1),16),light:d.light||base.light})}
+
+/* ---------------- Côtes : masque terre/mer et distances ---------------- */
+// Région du masque, plus large que le champ de bataille pour que la côte continue à l'horizon
+const MX0=-4000,MY0=-4000,MC=20,MW=700,MH=600; // cellules de 20 m
+function defaultLand(){
+  const polys=[];
+  // côte occidentale sinueuse avec un cap au sud-ouest
+  const c=[];
+  for(let y=MY0-200;y<=MY0+MH*MC+200;y+=50){
+    let x=380+240*Math.sin(y/900+1.3)+110*Math.sin(y/330+2)+45*Math.sin(y/97+.4);
+    if(y>2600)x+=Math.pow((y-2600)/1000,2)*520; // cap
+    c.push([x,y]);
+  }
+  c.push([MX0-200,MY0+MH*MC+200],[MX0-200,MY0-200]);polys.push(c);
+  // îlot rocheux
+  const isl=(cx,cy,r,k)=>{const p=[];for(let i=0;i<36;i++){const a=i/36*TAU,rr=r*(1+.28*Math.sin(a*3+k)+.15*Math.sin(a*7+2*k));p.push([cx+Math.cos(a)*rr*1.3,cy+Math.sin(a)*rr])}return p};
+  polys.push(isl(4750,650,210,1.7));polys.push(isl(5350,330,90,3.1));polys.push(isl(-1500,-2600,900,.5));
+  return polys;
+}
+const LAND=CFG.land||defaultLand();
+const SD=new Float32Array(MW*MH); // distance signée : >0 en mer (distance à la terre), <0 à terre
+(function buildMask(){
+  const cv=document.createElement('canvas');cv.width=MW;cv.height=MH;const g=cv.getContext('2d');
+  g.fillStyle='#000';g.fillRect(0,0,MW,MH);g.fillStyle='#fff';
+  for(const p of LAND){g.beginPath();p.forEach(([x,y],i)=>{const px=(x-MX0)/MC,py=(y-MY0)/MC;i?g.lineTo(px,py):g.moveTo(px,py)});g.closePath();g.fill()}
+  const d=g.getImageData(0,0,MW,MH).data,land=new Uint8Array(MW*MH);
+  for(let i=0;i<MW*MH;i++)land[i]=d[i*4]>127?1:0;
+  const INF=1e9;
+  const chamfer=(isSrc)=>{const D=new Float32Array(MW*MH);
+    for(let i=0;i<MW*MH;i++)D[i]=isSrc(i)?0:INF;
+    const a=1,b=1.414;
+    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const i=y*MW+x;let v=D[i];if(!v)continue;
+      if(x>0)v=Math.min(v,D[i-1]+a);if(y>0){v=Math.min(v,D[i-MW]+a);if(x>0)v=Math.min(v,D[i-MW-1]+b);if(x<MW-1)v=Math.min(v,D[i-MW+1]+b)}D[i]=v}
+    for(let y=MH-1;y>=0;y--)for(let x=MW-1;x>=0;x--){const i=y*MW+x;let v=D[i];if(!v)continue;
+      if(x<MW-1)v=Math.min(v,D[i+1]+a);if(y<MH-1){v=Math.min(v,D[i+MW]+a);if(x<MW-1)v=Math.min(v,D[i+MW+1]+b);if(x>0)v=Math.min(v,D[i+MW-1]+b)}D[i]=v}
+    return D};
+  const toLand=chamfer(i=>land[i]),toSea=chamfer(i=>!land[i]);
+  for(let i=0;i<MW*MH;i++)SD[i]=land[i]?-(toSea[i]-.5)*MC:(toLand[i]-.5)*MC;
+})();
+function sdist(x,y){ // interpolation bilinéaire
+  const fx=(x-MX0)/MC-.5,fy=(y-MY0)/MC-.5;
+  if(fx<0||fy<0||fx>=MW-1||fy>=MH-1)return 2000;
+  const xi=fx|0,yi=fy|0,u=fx-xi,v=fy-yi,i=yi*MW+xi;
+  return SD[i]*(1-u)*(1-v)+SD[i+1]*u*(1-v)+SD[i+MW]*(1-u)*v+SD[i+MW+1]*u*v;
+}
+function sgrad(x,y){const e=30;return [sdist(x+e,y)-sdist(x-e,y),sdist(x,y+e)-sdist(x,y-e)]}
+function landH(x,y){
+  const sd=sdist(x,y);
+  if(sd>0)return -3-Math.min(sd,60)*.12;
+  const inl=-sd,n=fbm(x/700,y/700);
+  if(inl<40)return inl*.055;
+  return 2.2+Math.pow(inl-40,.8)*.16*(.6+.8*n)+Math.min(1,inl/900)*55*fbm(x/1300+7,y/1300+3);
+}
+
+/* ---------------- Fabrication des galères (géométrie fusionnée, couleurs par sommet) ---------------- */
+class GB{
+  constructor(){this.p=[];this.c=[]}
+  tri(a,b,c,col){this.p.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],c[2]);for(let i=0;i<3;i++)this.c.push(col.r,col.g,col.b)}
+  quad(a,b,c,d,col){this.tri(a,b,c,col);this.tri(a,c,d,col)}
+  box(x,y,z,sx,sy,sz,col,ry=0,rz=0,rx=0){
+    const m=new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz,'YZX')),new THREE.Vector3(sx,sy,sz));
+    const c=(a,b,d)=>{const v=new THREE.Vector3(a*.5,b*.5,d*.5).applyMatrix4(m);return [v.x,v.y,v.z]};
+    const F=[[[1,-1,-1],[1,1,-1],[1,1,1],[1,-1,1]],[[-1,-1,-1],[-1,-1,1],[-1,1,1],[-1,1,-1]],[[-1,1,-1],[-1,1,1],[1,1,1],[1,1,-1]],
+      [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]],[[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]],[[-1,-1,-1],[-1,1,-1],[1,1,-1],[1,-1,-1]]];
+    for(const f of F)this.quad(c(...f[0]),c(...f[1]),c(...f[2]),c(...f[3]),col);
+  }
+  seg(a,b,th,col){ // poutre de a à b (dans le plan x,y)
+    const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);this.box((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2,L+th*.6,th,th,col,0,Math.atan2(dy,dx));
+  }
+  geo(){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3));g.setAttribute('color',new THREE.Float32BufferAttribute(this.c,3));g.computeVertexNormals();return g}
+}
+const C=h=>new THREE.Color(h);
+function hullW(T,t){
+  t=clamp(t,0,1);
+  if(T.sail)return T.B/2*Math.pow(Math.sin(Math.PI*clamp(t,.03,.97)),.55);
+  const s=Math.sin(Math.PI*clamp(t*.95+.025,0,1));return T.B/2*Math.pow(s,t>.5?.8:.5);
+}
+function sheer(T,t){const e=Math.abs(t-.5)*2;return T.D+(T.sail?1.3:.9)*e*e*e}
+function shipGeo(T,nat){
+  const g=new GB(),L=T.L,N=22;
+  const band=C(nat.col).multiplyScalar(.85),tar=C(T.sail?0x5e4029:0x2d2219),under=C(0x4a2e22),deck=C(0x86673f),wood=C(0x6b4a2c),bronze=C(0xb0813e),linen=C(0xe8dfc8),white=C(0xf2efe6),black=C(0x111111);
+  const ring=i=>{const t=i/N,x=-L/2+t*L,w=Math.max(.12,hullW(T,t)),sh=sheer(T,t),k=T.K*(.35+.65*Math.sin(Math.PI*clamp(t,.05,.95)));
+    return [[x,sh,-w],[x,sh-.55,-w*1.0],[x,.25,-w*.97],[x,k*.6,-w*.74],[x,k,0],[x,k*.6,w*.74],[x,.25,w*.97],[x,sh-.55,w],[x,sh,w]]};
+  const cols=[band,tar,under,under,under,under,tar,band];
+  let prev=ring(0);
+  for(let i=1;i<=N;i++){const cur=ring(i);
+    for(let j=0;j<8;j++)g.quad(prev[j],cur[j],cur[j+1],prev[j+1],cols[j]);
+    g.quad(prev[0],prev[8],cur[8],cur[0],deck);
+    prev=cur;}
+  // fermer les extrémités
+  for(const i of [0,N]){const r=ring(i),cx=r[0][0],cy=(r[0][1]+r[4][1])/2;for(let j=0;j<8;j++)g.tri(r[j],r[j+1],[cx,cy,0],tar)}
+  const D=T.D;
+  if(T.ram){
+    // éperon de bronze à trois lames
+    const bx=L/2-.6,tip=[L/2+2.8,0,0];
+    const p=[[bx,.5,-.55],[bx,.5,.55],[bx,-.6,.55],[bx,-.6,-.55]];
+    for(let j=0;j<4;j++)g.tri(p[j],p[(j+1)%4],tip,bronze);
+    g.box(L/2+1.1,.25,0,3.2,.12,1.3,bronze);g.box(L/2+1.1,-.3,0,3.2,.12,1.1,bronze);
+    // étrave relevée
+    let a=[L/2-.1,sheer(T,1),0];for(let i=1;i<=4;i++){const b=[L/2+.2+Math.sin(i*.45)*1.1,sheer(T,1)+i*.65,0];g.seg(a,b,.38,wood);a=b}
+    // caisse de nage (apostis) des deux bords
+    for(const s of [-1,1]){g.box(0,D-.35,s*(T.B/2+.45),L*.6,.7,.95,band.clone().multiplyScalar(.7));
+      for(let i=0;i<12;i++){const x=-L*.27+i*L*.54/11;g.box(x,D+.45,s*(T.B/2+.92),.95,.95,.12,i%2?bronze:C(nat.col))}}
+    // mât court et voile ferlée
+    g.box(L*.05,D+4.2,0,.35,8.4,.35,wood);g.box(L*.05,D+8.2,0,.28,.28,T.B*1.9,wood);g.box(L*.05+.1,D+7.85,0,.55,.55,T.B*1.7,linen);
+    // œil peint
+    const te=(L-2.6)/L,we=hullW(T,te);
+    for(const s of [-1,1]){g.box(L/2-2.6,D-.55,s*(we+.05),1.2,.55,.06,white);g.box(L/2-2.5,D-.55,s*(we+.1),.45,.45,.06,black)}
+  }else{
+    // transport : étrave simple, grande voile carrée bordée aux couleurs du camp
+    let a=[L/2-.2,sheer(T,1),0];for(let i=1;i<=3;i++){const b=[L/2+.1+Math.sin(i*.6)*.7,sheer(T,1)+i*.5,0];g.seg(a,b,.34,wood);a=b}
+    g.box(0,D+5.5,0,.4,11,.4,wood);g.box(.3,D+10.6,0,.3,.3,T.B*2.2,wood);
+    g.box(.5,D+6.6,0,.16,7.2,T.B*2.05,linen);g.box(.56,D+8.6,0,.17,1.1,T.B*2.06,C(nat.col));
+    g.box(L*.15,D+.6,0,L*.4,.9,T.B*.7,wood); // cargaison
+  }
+  // aphlaston (poupe recourbée)
+  {let a=[-L/2+.6,sheer(T,0)-.2,0];const r=T.sail?1.6:2.6,c0=sheer(T,0);
+   for(let i=1;i<=7;i++){const u=i/7*(T.sail?2.0:2.5),b=[-L/2+.6-r*Math.sin(u),c0+r*(1-Math.cos(u)),0];g.seg(a,b,T.sail?.32:.4,i===7?bronze:wood);a=b}}
+  // abri du pilote et rames-gouvernails
+  g.box(-L/2+4.5,D+.65,0,3.2,1.3,T.B*.55,wood);
+  for(const s of [-1,1])g.box(-L/2+3,D-1.2,s*(hullW(T,.07)+.35),.3,4.8,.3,wood,0,.55);
+  return g.geo();
+}
+function oarGeo(){const g=new THREE.BoxGeometry(.16,.16,1);g.translate(0,0,.5);
+  // pelle plus large au bout
+  const b=new THREE.BoxGeometry(.06,.5,.18);b.translate(0,0,.92);
+  const m=new THREE.BufferGeometry();const a=g.toNonIndexed(),c=b.toNonIndexed();
+  const p=new Float32Array(a.attributes.position.array.length+c.attributes.position.array.length);p.set(a.attributes.position.array);p.set(c.attributes.position.array,a.attributes.position.array.length);
+  m.setAttribute('position',new THREE.BufferAttribute(p,3));m.computeVertexNormals();return m}
+
+/* ================= SCÈNE ================= */
+const host=$('gl');
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));host.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+const SKY=new THREE.Color(0xb4cdd8);scene.background=SKY;scene.fog=new THREE.Fog(SKY,3000,14000);
+const camera=new THREE.PerspectiveCamera(45,1,2,40000);
+scene.add(new THREE.HemisphereLight(0xd8e8f2,0x5a6b4a,.75));
+const sun=new THREE.DirectionalLight(0xfff1d6,1.0);const SUN=new THREE.Vector3(-.35,.5,-.8).normalize();sun.position.copy(SUN);scene.add(sun);
+function resize(){const r=host.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/Math.max(1,r.height);camera.updateProjectionMatrix()}
+window.addEventListener('resize',resize);
+
+/* --- mer --- */
+const distTex=(()=>{const d=new Uint8Array(MW*MH);for(let i=0;i<MW*MH;i++)d[i]=clamp(Math.round(SD[i]/120*255),0,255);
+  const t=new THREE.DataTexture(d,MW,MH,THREE.LuminanceFormat);t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearFilter;t.needsUpdate=true;return t})();
+const seaMat=new THREE.ShaderMaterial({
+  uniforms:{uT:{value:0},uDist:{value:distTex},uMin:{value:new THREE.Vector2(MX0,MY0)},uSize:{value:new THREE.Vector2(MW*MC,MH*MC)},uSun:{value:SUN},
+    fogColor:{value:SKY},fogNear:{value:3000},fogFar:{value:14000}},
+  vertexShader:`varying vec3 vW;varying float vD;void main(){vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;vec4 mv=viewMatrix*w;vD=-mv.z;gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`uniform float uT;uniform sampler2D uDist;uniform vec2 uMin,uSize;uniform vec3 uSun,fogColor;uniform float fogNear,fogFar;varying vec3 vW;varying float vD;
+  float gD;vec2 wv(vec2 p,vec2 d,float k,float a,float s){float ph=dot(p,d)*k+uT*s;return d*k*a*cos(ph)*clamp(1.-gD*k/220.,0.,1.);}
+  float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+  float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
+  void main(){
+    vec2 p=vW.xz;gD=vD;
+    vec2 g=wv(p,normalize(vec2(1.,.35)),.045,.9,1.1)+wv(p,normalize(vec2(.6,-1.)),.07,.55,1.4)+wv(p,normalize(vec2(-1.,.2)),.13,.3,2.1)
+          +wv(p,normalize(vec2(.2,1.)),.23,.16,2.9)+wv(p,normalize(vec2(-.7,-.7)),.41,.08,3.7)+wv(p,normalize(vec2(.9,-.4)),.83,.035,5.1);
+    
+    g*=.5;
+    vec3 n=normalize(vec3(-g.x,1.,-g.y));
+    vec2 uv=(p-uMin)/uSize;float d=(uv.x<0.||uv.y<0.||uv.x>1.||uv.y>1.)?120.:texture2D(uDist,uv).r*120.;
+    vec3 deep=vec3(.075,.24,.32),shal=vec3(.19,.50,.50),col=mix(shal,deep,smoothstep(2.,80.,d));
+    vec3 V=normalize(cameraPosition-vW);
+    float fr=pow(1.-max(dot(n,V),0.),4.);
+    col=mix(col,vec3(.70,.80,.85),fr*.55);
+    col*=.82+.25*max(dot(n,uSun),0.);
+    vec3 Hh=normalize(uSun+V);col+=vec3(1.,.95,.85)*pow(max(dot(n,Hh),0.),90.)*.07;
+    float fo=n2(p*.08+uT*.2)*.6+n2(p*.31-uT*.3)*.4;
+    float foam=smoothstep(16.,1.,d+10.*fo-4.*sin(uT*1.1+p.x*.02));
+    col=mix(col,vec3(.93,.95,.94),foam*.75);
+    float f=smoothstep(fogNear,fogFar,vD);gl_FragColor=vec4(mix(col,fogColor,f),1.);
+  }`});
+const sea=new THREE.Mesh(new THREE.PlaneGeometry(60000,60000),seaMat);sea.rotation.x=-Math.PI/2;sea.position.set(W/2,0,H/2);scene.add(sea);
+
+/* --- terre --- */
+(function buildLand(){
+  const step=40,nx=Math.floor(MW*MC/step)+1,ny=Math.floor(MH*MC/step)+1;
+  const pos=new Float32Array(nx*ny*3),col=new Float32Array(nx*ny*3),idx=[];
+  const sand=C(0xd6c59a),grass=C(0x8a9a58),dry=C(0xa7a06a),rock=C(0x978b74),tmp=new THREE.Color();
+  let any=false;const hasLand=new Uint8Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x=MX0+i*step,y=MY0+j*step,h=landH(x,y),k=j*nx+i,sd=sdist(x,y);
+    pos[k*3]=x;pos[k*3+1]=h;pos[k*3+2]=y;if(sd<20){hasLand[k]=1;any=true}
+    const n=fbm(x/500+3,y/500);
+    if(sd>-35)tmp.copy(sand);else{tmp.copy(grass).lerp(dry,n);if(h>55)tmp.lerp(rock,clamp((h-55)/40,0,1))}
+    tmp.multiplyScalar(.9+.2*vnoise(x/90,y/90));col[k*3]=tmp.r;col[k*3+1]=tmp.g;col[k*3+2]=tmp.b}
+  if(!any)return;
+  for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=j*nx+i,b=a+1,c=a+nx,d=c+1;if(!(hasLand[a]||hasLand[b]||hasLand[c]||hasLand[d]))continue;idx.push(a,c,b,b,c,d)}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();
+  scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true})));
+  // arbres et maquis
+  const pts=[];for(let n=0;n<40000&&pts.length<3500;n++){const x=MX0+srand()*MW*MC,y=MY0+srand()*MH*MC;const sd=sdist(x,y);if(sd>-70||sd<-3000)continue;if(fbm(x/400,y/400)<.48)continue;pts.push([x,y])}
+  const tg=new THREE.ConeGeometry(3.2,9,6);tg.translate(0,4.5,0);
+  const tm=new THREE.InstancedMesh(tg,new THREE.MeshLambertMaterial({color:0x4a6232}),pts.length),m=new THREE.Matrix4();
+  pts.forEach(([x,y],i)=>{const s=.7+srand()*.9;m.makeScale(s,s*(.8+srand()*.6),s);m.setPosition(x,landH(x,y)-.5,y);tm.setMatrixAt(i,m)});scene.add(tm);
+})();
+
+/* ================= FLOTTES ================= */
+const GEO={};
+function geoFor(t,nk){const k=t+nk;return GEO[k]||(GEO[k]=shipGeo(TYP[t],NAT[nk]))}
+const shipMat=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide});
+const MAXO=7000,oarMesh=new THREE.InstancedMesh(oarGeo(),new THREE.MeshLambertMaterial({color:0x5e4630,side:THREE.DoubleSide}),MAXO);
+oarMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);oarMesh.frustumCulled=false;scene.add(oarMesh);
+const MAXC=2600,crewMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(.55,1.7,.45),new THREE.MeshLambertMaterial({color:0xffffff}),MAXC);
+crewMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);crewMesh.frustumCulled=false;crewMesh.setColorAt(0,new THREE.Color());scene.add(crewMesh);
+const ringGeo=new THREE.RingGeometry(.86,1,40);ringGeo.rotateX(-Math.PI/2);
+const MAXR=400,ringMesh=new THREE.InstancedMesh(ringGeo,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.85,depthWrite:false}),MAXR);
+ringMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);ringMesh.frustumCulled=false;ringMesh.setColorAt(0,new THREE.Color());ringMesh.renderOrder=2;scene.add(ringMesh);
+
+let S=null; // état de la bataille
+let ships=[],squads=[],pairs=[];
+const sides=[0,1];
+const isAlive=s=>s.state==='ok'||s.state==='grap'||s.state==='ground';
+const enemyOf=(a,b)=>a.side!==b.side;
+const sqLive=q=>q.ships.filter(isAlive);
+function centroid(arr){let x=0,y=0;for(const s of arr){x+=s.x;y+=s.y}return {x:x/arr.length,y:y/arr.length}}
+
+function clearBattle(){
+  for(const s of ships)scene.remove(s.mesh);
+  ships=[];squads=[];pairs=[];pending.length=0;arrows.length=0;parts.length=0;debris.length=0;
+}
+function setup(){
+  clearBattle();
+  S={cnt:{imp:0,dmg:0,rake:0,grap:0,arrowK:0},time:0,ended:false,stat:[mkStat(),mkStat()],aiT:0,vicT:0,result:null};
+  CFG.sides.forEach((sd,side)=>{
+    const nat=NAT[sd.nat],war=sd.sq.filter(q=>q.t!=='trans'),tr=sd.sq.filter(q=>q.t==='trans');
+    const h=side===0?-Math.PI/2:Math.PI/2,y0=side===0?2650:1350;
+    const wid=q=>(q.k-1)*spacing(TYP[q.t]);
+    const gap=90,total=war.reduce((a,q)=>a+wid(q),0)+gap*(war.length-1);
+    let x=W/2+250-total/2*(side===0?1:-1);
+    // le camp 0 est rangé d'ouest en est vu de son côté ; le camp 1 aussi (de son point de vue)
+    for(const q of war){const w=wid(q);const cx=x+(side===0?w/2:-w/2);addSquad(side,nat,q,cx,y0,h);x+=(side===0?1:-1)*(w+gap)}
+    tr.forEach((q,i)=>addSquad(side,nat,q,W/2+250+(i-(tr.length-1)/2)*400,side===0?3200:800,h));
+    S.stat[side].nat=nat;S.stat[side].name=sd.name||nat.name;
+  });
+  for(const s of ships)S.stat[s.side].start[s.T.key]++;
+  selected.clear();hover=null;buildTags();renderSel();
+  started=false;paused=true;updatePauseBtn();
+  $('end').hidden=true;
+  const p=squads.filter(q=>q.side===0),e=squads.filter(q=>q.side===1);
+  cam.tx=W/2+250;cam.ty=2500;cam.dist=1300;cam.yaw=0;cam.pitch=.62;
+}
+function mkStat(){const z=()=>({quin:0,tri:0,trans:0});return {start:z(),sunk:z(),capt:z(),prize:z(),fled:z(),ground:z(),marLost:0,troopsLost:0}}
+let sqId=0;
+function addSquad(side,nat,def,x,y,h){
+  const T=TYP[def.t];
+  const q={id:sqId++,side,nat,T,t:def.t,name:def.n,ships:[],form:'ligne',mode:T.ram?nat.mode:'abordage',order:null,
+    anc:{x,y,h,v:0},morale:1,routing:false,engaged:false,tq:null,lost:0,troops:def.troops||0};
+  if(side===0&&T.ram)q.mode='eperon'; // le joueur commence à l'éperon ; libre à lui de changer
+  for(let i=0;i<def.k;i++){
+    const mar0=Math.round(T.mar*nat.mar)+(def.troops||0);
+    const s={id:ships.length,sq:q,side,nat,T,x,y,h,v:0,hp:T.hp,mar:mar0,mar0,troops:def.troops||0,stam:1,oarsB:[false,false],state:'ok',slot:{f:0,r:0},
+      tgt:null,back:0,lodged:0,ramCd:0,rakeT:-99,fireT:rnd(1,3),sink:0,oarPh:rnd(0,TAU),bob:rnd(0,TAU),trail:[],trailT:0,grap:[],capBy:-1,
+      crewLocal:[]};
+    {const l=shipLook(def.t,nat.key);s.mesh=new THREE.Mesh(l.geo,l.mat)}scene.add(s.mesh);
+    const nc=Math.min(T.crew,Math.ceil(mar0/6));
+    const DD=MOD[def.t]?MOD[def.t].D:T.D;for(let k=0;k<nc;k++)s.crewLocal.push([rnd(-T.L*.3,T.L*.25),DD+.85,rnd(-T.B*.3,T.B*.3)]);
+    q.ships.push(s);ships.push(s);
+  }
+  setSlots(q,true);
+  for(const s of q.ships){const p=slotPos(q,s);s.x=p.x;s.y=p.y}
+  squads.push(q);return q;
+}
+function setSlots(q,init){
+  const act=q.ships.filter(s=>s.state==='ok'||(init&&isAlive(s)));const n=act.length;if(!n)return;
+  const A=q.anc,fx=Math.cos(A.h),fy=Math.sin(A.h);
+  if(q.form==='ligne'){
+    if(!init)act.sort((a,b)=>((a.x-A.x)*-fy+(a.y-A.y)*fx)-((b.x-A.x)*-fy+(b.y-A.y)*fx));
+    const sp=spacing(q.T);act.forEach((s,i)=>s.slot={f:0,r:(i-(n-1)/2)*sp});
+  }else{
+    if(!init)act.sort((a,b)=>((b.x-A.x)*fx+(b.y-A.y)*fy)-((a.x-A.x)*fx+(a.y-A.y)*fy));
+    const sp=q.T.L+18;act.forEach((s,i)=>s.slot={f:((n-1)/2-i)*sp,r:0});
+  }
+}
+function slotPos(q,s){const A=q.anc,c=Math.cos(A.h),n=Math.sin(A.h);return {x:A.x+c*s.slot.f-n*s.slot.r,y:A.y+n*s.slot.f+c*s.slot.r}}
+function resetAnchor(q){
+  const act=q.ships.filter(s=>s.state==='ok');if(!act.length)return;
+  const c=centroid(act);let sx=0,sy=0;for(const s of act){sx+=Math.cos(s.h);sy+=Math.sin(s.h)}
+  q.anc.x=c.x;q.anc.y=c.y;q.anc.h=Math.atan2(sy,sx);q.anc.v=0;setSlots(q);
+}
+
+/* ---------------- vitesse et endurance ---------------- */
+function vmax(s,gear){
+  let v=s.T.sp[gear]*s.nat.row;
+  if(gear===2&&s.stam<.12)v=s.T.sp[1]*s.nat.row;
+  if(s.stam<.04)v=Math.min(v,s.T.sp[0]*.7);
+  const ob=(s.oarsB[0]?1:0)+(s.oarsB[1]?1:0);if(ob)v*=ob===2?.12:.35;
+  return v*(.5+.5*clamp(s.hp/s.T.hp,0,1));
+}
+function avoid(s,wantH,ign){
+  // s'écarter des navires qui barrent la route (sauf la cible)
+  const fx=Math.cos(s.h),fy=Math.sin(s.h);let push=0;
+  for(const o of ships){if(o===s||o===ign||o.state==='gone'||o.state==='fled'||o.state==='sink')continue;
+    const dx=o.x-s.x,dy=o.y-s.y;if(Math.abs(dx)>60||Math.abs(dy)>60)continue;
+    const ah=dx*fx+dy*fy;if(ah<0)continue;const lat=-dx*fy+dy*fx,d=Math.hypot(dx,dy);
+    const need=(s.T.B+o.T.B)/2+(s.T.oarL+o.T.oarL)*.35+4;if(Math.abs(lat)>need||d>55)continue;
+    push+=(lat>0?-1:1)*(1-d/60)*(o.side===s.side?1:.5)}
+  return wantH+clamp(push,-1,1)*.9}
+function drive(s,wantH,wantV,dt,ign){
+  const T=s.T;
+  if(s.state==='ok'&&wantV>0)wantH=avoid(s,wantH,ign);
+  // éviter la côte : regarder devant
+  const look=Math.max(70,Math.abs(s.v)*16),lx=s.x+Math.cos(wantH)*look,ly=s.y+Math.sin(wantH)*look;
+  if(sdist(lx,ly)<40){const g=sgrad(lx,ly);const ah=Math.atan2(g[1],g[0]);const d=angDiff(ah,wantH);wantH+=clamp(d,-1.2,1.2)*.8;if(sdist(s.x+Math.cos(s.h)*look*.5,s.y+Math.sin(s.h)*look*.5)<20)wantV=Math.min(wantV,1)}
+  const ob=s.oarsB[0]||s.oarsB[1];
+  const turn=T.turn*s.nat.turn*(ob?.4:1)*(.45+.55*clamp(Math.abs(s.v)/2,0,1));
+  s.h+=clamp(angDiff(wantH,s.h),-turn*dt,turn*dt);
+  wantV=clamp(wantV,-1,vmax(s,2));
+  if(wantV>1.5&&s.v<.7&&s.state==='ok'&&S.time-(s.touchT||-9)<.3){s.stuckT=(s.stuckT||0)+dt;if(s.stuckT>3&&s.back<=0){s.back=2.5;s.tgt=null;s.stuckT=0}}else s.stuckT=0;
+  const dv=wantV-s.v;s.v+=clamp(dv,-T.acc*2*dt,T.acc*s.nat.row*dt);
+  // endurance des rameurs
+  if(T.oars){
+    if(s.v>T.sp[1]*1.03)s.stam-=dt/38*s.nat.stam;
+    else if(s.v>T.sp[0]*1.08)s.stam-=dt/300*s.nat.stam;
+    else s.stam+=dt/(Math.abs(s.v)<.5?55:130);
+    s.stam=clamp(s.stam,0,1);
+  }
+}
+function moveShip(s,dt){
+  s.x+=Math.cos(s.h)*s.v*dt;s.y+=Math.sin(s.h)*s.v*dt;
+  if(s.state==='ok'&&sdist(s.x,s.y)<5){s.state='ground';s.v=0;s.hp-=8;toastShip(s,'s\'échoue sur la côte');S.stat[s.side].ground[s.T.key]++;onLoss(s,.6)}
+}
+
+/* ---------------- escadres ---------------- */
+function nearestEnemySquad(q,maxD){
+  const c=centroid(sqLive(q).length?sqLive(q):q.ships);let best=null,bd=maxD;
+  for(const o of squads){if(o.side===q.side)continue;const l=sqLive(o).filter(s=>s.state!=='ground');if(!l.length)continue;
+    for(const s of l){const d=Math.hypot(s.x-c.x,s.y-c.y)+(o.routing?250:0);if(d<bd){bd=d;best=o}}}
+  return best;
+}
+function minDistSq(a,b){let d=1e9;for(const s of a)for(const t of b){const e=Math.hypot(s.x-t.x,s.y-t.y);if(e<d)d=e}return d}
+function rout(q){
+  if(q.routing)return;q.routing=true;q.order=null;q.engaged=false;
+  toast((q.side===0?'':'')+q.name+' rompt le combat et fuit',q.side===0?'bad':'good');
+}
+function updSquad(q,dt){
+  const live=sqLive(q);q.live=live;
+  if(!live.length){q.dead=true;q.engaged=false;return}
+  q.lost=1-live.length/q.ships.length;
+  const cap=1-q.lost*.55;
+  q.morale=Math.min(cap,q.morale+dt*(q.routing?.004:.006));
+  if(q.T.oars){const st=live.reduce((a,s)=>a+s.stam,0)/live.length;if(st<.2)q.morale-=dt*.004}
+  if(q.T.key==='trans'){ // un convoi attaqué sans escorte proche s'affole
+    const near=ships.some(o=>enemyOf(o,live[0])&&o.state==='ok'&&Math.hypot(o.x-live[0].x,o.y-live[0].y)<260);if(near)q.morale-=dt*.01}
+  if(!q.routing&&(q.morale<.18||q.lost>.7))rout(q);
+  else if(q.routing&&!q.forceFlee&&q.morale>.5&&q.lost<.5){q.routing=false;toast(q.name+' se reforme',q.side===0?'good':'bad');resetAnchor(q)}
+  if(q.routing){q.engaged=false;return}
+  // cible
+  let tq=null;
+  if(q.order&&q.order.type==='attack'){tq=q.order.target;
+    if(tq.dead||!sqLive(tq).some(s=>s.state!=='ground')||(tq.routing&&!sqLive(tq).some(s=>s.state!=='ground'&&s.y>-150&&s.y<H+150))){tq=nearestEnemySquad(q,800);q.order=tq?{type:'attack',target:tq,run:q.order.run}:null;if(!tq)resetAnchor(q)}}
+  else if(!q.order&&q.T.ram){const o=nearestEnemySquad(q,330);if(o)tq=o}
+  q.tq=tq;
+  const wasEng=q.engaged;
+  if(tq){const d=minDistSq(live,sqLive(tq));q.engaged=d<(wasEng?900:450)}else q.engaged=false;
+  if(wasEng&&!q.engaged)resetAnchor(q);
+  if(!q.engaged)moveAnchor(q,dt);
+}
+function moveAnchor(q,dt){
+  const A=q.anc,act=q.ships.filter(s=>s.state==='ok');if(!act.length)return;
+  let gx=null,gy,gh=null,run=false;
+  if(q.order&&q.order.type==='move'){gx=q.order.x;gy=q.order.y;gh=q.order.face;run=q.order.run}
+  else if(q.tq){const c=centroid(sqLive(q.tq));gx=c.x;gy=c.y;run=q.order&&q.order.run}
+  if(gx==null){A.v=Math.max(0,A.v-dt*.6);A.x+=Math.cos(A.h)*A.v*dt;A.y+=Math.sin(A.h)*A.v*dt;return}
+  const gear=run?1:0;
+  let minSp=1e9,minTurn=1e9;for(const s of act){minSp=Math.min(minSp,vmax(s,gear));minTurn=Math.min(minTurn,s.T.turn*s.nat.turn)}
+  const dx=gx-A.x,dy=gy-A.y,d=Math.hypot(dx,dy);
+  const wantH=d>25?Math.atan2(dy,dx):(gh!=null?gh:A.h);
+  A.h+=clamp(angDiff(wantH,A.h),-minTurn*.55*dt,minTurn*.55*dt);
+  const al=Math.abs(angDiff(wantH,A.h));
+  let v=d>25?minSp*.92*clamp(d/150,.3,1)*(al>1.2?.15:al>.5?.5:1):0;
+  let lag=0;for(const s of act){const p=slotPos(q,s);lag+=Math.hypot(p.x-s.x,p.y-s.y)}lag/=act.length;
+  if(lag>50)v*=clamp(1-(lag-50)/220,.15,1);
+  if(d<=25&&sdist(A.x,A.y)>0){A.v=0}else A.v=v;
+  // ne pas pousser le point de ralliement sur la côte
+  const nx=A.x+Math.cos(A.h)*A.v*dt,ny=A.y+Math.sin(A.h)*A.v*dt;
+  if(sdist(nx,ny)>45){A.x=nx;A.y=ny}else{A.v=0;A.h+=clamp(angDiff((g=>Math.atan2(g[1],g[0]))(sgrad(nx,ny)),A.h),-.3*dt,.3*dt)}
+  if(q.order&&q.order.type==='move'&&d<=25&&Math.abs(angDiff(wantH,A.h))<.04&&lag<25)q.order=null;
+}
+
+/* ---------------- comportement des navires ---------------- */
+function pickTarget(s,tq){
+  const pool=(tq?sqLive(tq):[]).filter(t=>t.state!=='ground');
+  const cand=pool.length?pool:ships.filter(t=>enemyOf(t,s)&&isAlive(t)&&t.state!=='ground'&&Math.hypot(t.x-s.x,t.y-s.y)<700);
+  let best=null,bs=1e9;
+  for(const t of cand){let n=0;for(const o of s.sq.ships)if(o!==s&&o.tgt===t)n++;
+    const d=Math.hypot(t.x-s.x,t.y-s.y),sc=d+n*120+(t.state==='grap'&&s.sq.mode==='eperon'?-60:0);if(sc<bs){bs=sc;best=t}}
+  return best;
+}
+function shipAI(s,dt){
+  const q=s.sq,T=s.T;
+  if(s.state!=='ok'){s.v*=Math.pow(.2,dt);return}
+  if(s.lodged>0){s.lodged-=dt;s.v=0;return}
+  if(s.back>0){s.back-=dt;drive(s,s.h,-.9,dt);return}
+  if(q.routing){
+    const fh=q.side===0?Math.PI/2:-Math.PI/2;drive(s,fh,vmax(s,s.stam>.3?2:1),dt);return;
+  }
+  if(q.engaged){
+    if(!s.tgt||!isAlive(s.tgt)||s.tgt.state==='ground'||Math.hypot(s.tgt.x-s.x,s.tgt.y-s.y)>1000||(s.retarget-=dt)<0){s.tgt=pickTarget(s,q.tq);s.retarget=6}
+    const t=s.tgt;if(!t){formation(s,dt);return}
+    const dx=t.x-s.x,dy=t.y-s.y,d=Math.hypot(dx,dy);
+    const lead=d/Math.max(2,s.v+1.5)*.75;
+    let px=t.x+Math.cos(t.h)*t.v*lead,py=t.y+Math.sin(t.h)*t.v*lead;
+    const rx=-Math.sin(t.h),ry=Math.cos(t.h),side=Math.sign((s.x-t.x)*rx+(s.y-t.y)*ry)||1;
+    if(q.mode==='eperon'&&T.ram){
+      // de face contre un éperon : passer le long de son flanc pour briser ses rames
+      const app=angDiff(Math.atan2(py-s.y,px-s.x),t.h),flank=Math.abs(Math.sin(app))>.5||t.v<1.5;
+      if(Math.cos(app)<-.72&&d>45&&t.T.oars){const off=(s.T.B+t.T.B)/2+2+t.T.oarL*.45;px+=rx*side*off;py+=ry*side*off}
+      else if(!flank&&d<260&&d>30){px+=rx*side*70-Math.cos(t.h)*15;py+=ry*side*70-Math.sin(t.h)*15} // tourner pour prendre le flanc
+      const wantH=Math.atan2(py-s.y,px-s.x),aligned=Math.abs(angDiff(wantH,s.h))<.3;
+      const gear=d>230?1:(aligned&&flank&&s.stam>.12?2:1);
+      drive(s,wantH,vmax(s,gear)*(aligned||d>230?1:.6),dt,t);
+    }else{
+      // abordage : venir bord à bord, lentement
+      const off=(s.T.B+t.T.B)/2+1.2;px+=rx*side*off*(d<120?1:0);py+=ry*side*off*(d<120?1:0);
+      const wantH=Math.atan2(py-s.y,px-s.x);
+      drive(s,wantH,d<90?Math.min(1.8,vmax(s,1)):d<180?Math.min(2.6,vmax(s,1)):vmax(s,1),dt,t);
+    }
+    return;
+  }
+  formation(s,dt);
+}
+function formation(s,dt){
+  const q=s.sq,A=q.anc,p=slotPos(q,s),ex=p.x-s.x,ey=p.y-s.y,d=Math.hypot(ex,ey);
+  const run=q.order&&q.order.run;
+  if(d>45){let wantH=Math.atan2(ey,ex);let v=Math.min(vmax(s,1),A.v+d*.03);if(!run)v=Math.min(v,Math.max(vmax(s,0)*1.15,A.v+.6));if(Math.abs(angDiff(wantH,s.h))>1.2)v*=.35;drive(s,wantH,v,dt)}
+  else{const fx=Math.cos(A.h),fy=Math.sin(A.h),along=ex*fx+ey*fy,lat=-ex*fy+ey*fx;
+    let wantH=A.h+clamp(lat*.035,-.6,.6),v=A.v+clamp(along*.07,-1.1,1.5);
+    if(d<4&&A.v<.1){v=0;wantH=A.h}
+    drive(s,wantH,v,dt)}
+}
+
+/* ---------------- chocs : éperon, rames, collisions, accrochage ---------------- */
+function local(x,y,t){const dx=x-t.x,dy=y-t.y,c=Math.cos(t.h),n=Math.sin(t.h);return [dx*c+dy*n,-dx*n+dy*c]}
+function ramCheck(a){
+  if(a.state!=='ok'||!a.T.ram||a.ramCd>0||a.v<1.2)return;
+  const bx=a.x+Math.cos(a.h)*(a.T.L/2+2),by=a.y+Math.sin(a.h)*(a.T.L/2+2);
+  for(const b of ships){
+    if(b===a||b.state==='sink'||b.state==='gone'||b.state==='fled'||b.state==='capt')continue;
+    if(Math.abs(b.x-bx)>b.T.L||Math.abs(b.y-by)>b.T.L)continue;
+    const [lx,ly]=local(bx,by,b);
+    if(Math.abs(lx)>b.T.L/2+.5||Math.abs(ly)>b.T.B/2+.4)continue;
+    if(!enemyOf(a,b)){a.v*=.4;a.ramCd=2;return}
+    const fa=[Math.cos(a.h),Math.sin(a.h)],vr=(a.v*fa[0]-b.v*Math.cos(b.h))*fa[0]+(a.v*fa[1]-b.v*Math.sin(b.h))*fa[1];
+    if(vr<1.2)return;
+    if(a.sq.mode==='abordage'&&vr<2.6){grapple(a,b);a.v=0;return}
+    impact(a,b,vr,lx,ly);return;
+  }
+}
+function impact(a,b,vr,lx,ly){S.cnt.imp++;S.cnt.dmg+=0;
+  const ang=Math.abs(Math.sin(a.h-b.h)),headOn=Math.cos(a.h-b.h)<-.75&&lx>b.T.L/2-8&&b.T.ram;
+  let dmg=1.9*vr*vr*(.2+.8*ang)*Math.sqrt(a.T.mass/b.T.mass)*(1.15-.45*Math.abs(lx)/(b.T.L/2));
+  if(headOn)dmg*=.55;
+  if(a.sq.mode==='abordage')dmg*=.5;
+  S.cnt['r'+a.side]=(S.cnt['r'+a.side]||0)+1;if(headOn)S.cnt.head=(S.cnt.head||0)+1;
+  S.cnt.dmg+=dmg;b.hp-=dmg;a.hp-=headOn?dmg*.85:dmg*.06+1.5;
+  if(ang>.5&&b.T.oars&&Math.random()<.45)b.oarsB[ly>0?1:0]=true;
+  b.mar-=Math.min(b.mar,Math.round(dmg*.08));
+  const bx=a.x+Math.cos(a.h)*(a.T.L/2+1),by=a.y+Math.sin(a.h)*(a.T.L/2+1);
+  splash(bx,by,Math.min(90,20+dmg));
+  a.v=.15;b.v*=.4;b.x+=Math.cos(a.h)*vr*.25;b.y+=Math.sin(a.h)*vr*.25;
+  a.lodged=1.2;a.back=a.lodged+4.5;a.ramCd=9;
+  b.sq.morale-=.02;
+  if(a.side===0||b.side===0)S.lastHit=S.time;
+  if(b.hp<=0){sinkShip(b,'éperonné',a);S.cnt['k'+a.side]=(S.cnt['k'+a.side]||0)+1}
+  if(a.hp<=0)sinkShip(a,'brisé par le choc',b);
+  if(isAlive(a)&&isAlive(b)){
+    if(b.sq.mode==='abordage'&&b.mar>a.mar*1.1&&b.state==='ok'&&b.hp>b.T.hp*.3&&Math.random()<.2)grapple(b,a);
+  }
+}
+function rakeCheck(a,b){
+  // a passe le long de b à bonne vitesse, presque parallèle : les rames de b se brisent
+  if(a.state!=='ok'||!b.T.oars||S.time-a.rakeT<5)return;
+  const dh=Math.cos(a.h-b.h);if(Math.abs(dh)<.82)return;
+  const rv=Math.hypot(a.v*Math.cos(a.h)-b.v*Math.cos(b.h),a.v*Math.sin(a.h)-b.v*Math.sin(b.h));if(rv<2.4||a.v<2)return;
+  const [lx,ly]=local(a.x,a.y,b),hw=(a.T.B+b.T.B)/2;
+  if(Math.abs(lx)>(a.T.L+b.T.L)*.4||Math.abs(ly)<hw-.5||Math.abs(ly)>hw+b.T.oarL*.8)return;
+  const bs=ly>0?1:0;if(b.oarsB[bs])return;
+  S.cnt.rake++;a.rakeT=S.time;b.oarsB[bs]=true;b.stam*=.6;
+  if(a.T.oars&&Math.random()>a.nat.oarSkill)a.oarsB[ly>0?0:1]=true;
+  b.sq.morale-=.03;
+  if(b.side===0)toastShip(b,'a les rames brisées');else if(a.side===0)toast('Rames brisées sur '+(b.T.f?'une ':'un ')+b.T.name.toLowerCase()+' '+(b.T.f?b.nat.adj:b.nat.adj.replace(/e$/,'')),'good');
+}
+function collide(a,b,dt){
+  const dx=b.x-a.x,dy=b.y-a.y;if(dx*dx+dy*dy>Math.pow((a.T.L+b.T.L)/2+6,2))return;
+  const ca=Math.cos(a.h),sa=Math.sin(a.h),cb=Math.cos(b.h),sb=Math.sin(b.h),ra=a.T.B/2+.5,rb=b.T.B/2+.5;
+  const wa=(a.state==='ok'?1:.25)/a.T.mass,wb=(b.state==='ok'?1:.25)/b.T.mass,ws=wa+wb;
+  let touch=false;
+  for(const i of [-2,-1,0,1,2])for(const j of [-2,-1,0,1,2]){
+    const ax=a.x+ca*i*a.T.L/5.2,ay=a.y+sa*i*a.T.L/5.2,bx=b.x+cb*j*b.T.L/5.2,by=b.y+sb*j*b.T.L/5.2;
+    let ex=bx-ax,ey=by-ay,d=Math.hypot(ex,ey);const o=ra+rb-d;
+    if(o>-.3)touch=true;
+    if(o>0){if(d<.01){ex=1;ey=0;d=1}ex/=d;ey/=d;const k=o/ws/3;a.x-=ex*k*wa;a.y-=ey*k*wa;b.x+=ex*k*wb;b.y+=ey*k*wb;}
+  }
+  if(touch){a.touchT=b.touchT=S.time;
+    if(enemyOf(a,b)){if(a.state==='ok')a.v*=Math.pow(.7,dt);if(b.state==='ok')b.v*=Math.pow(.7,dt)}
+    if(enemyOf(a,b)&&isAlive(a)&&isAlive(b)){
+      if(a.mar<1&&b.mar>=5){capture(a,b);return}if(b.mar<1&&a.mar>=5){capture(b,a);return}
+      const want=(a.sq.mode==='abordage'&&a.back<=0)||(b.sq.mode==='abordage'&&b.back<=0)||a.state==='ground'||b.state==='ground';
+      const rv=Math.hypot(a.v*ca-b.v*cb,a.v*sa-b.v*sb);
+      if(want&&rv<2&&Math.random()<dt*.5)grapple(a.sq.mode==='abordage'?a:b,a.sq.mode==='abordage'?b:a);
+    }
+  }
+}
+function grapple(a,b){
+  if(a.grap.includes(b)||!isAlive(a)||!isAlive(b))return;S.cnt.grap++;
+  a.grap.push(b);b.grap.push(a);pairs.push({a,b});
+  if(a.state==='ok')a.state='grap';if(b.state==='ok')b.state='grap';a.v=0;b.v=0;
+  if(a.side===0||b.side===0)S.lastHit=S.time;
+}
+function unpair(a,b){a.grap=a.grap.filter(o=>o!==b);b.grap=b.grap.filter(o=>o!==a);pairs=pairs.filter(p=>!((p.a===a&&p.b===b)||(p.a===b&&p.b===a)));for(const s of [a,b])if(s.state==='grap'&&!s.grap.length)s.state='ok'}
+function release(s){
+  for(const o of s.grap){o.grap=o.grap.filter(x=>x!==s);if(o.state==='grap'&&!o.grap.length){o.state='ok';o.back=3}}
+  s.grap=[];pairs=pairs.filter(p=>p.a!==s&&p.b!==s);
+}
+function boarding(dt){
+  for(const p of pairs){
+    const {a,b}=p;
+    const fa=Math.min(a.mar,70)*a.nat.bq*(a.troops?1.1:1),fb=Math.min(b.mar,70)*b.nat.bq*(b.troops?1.1:1);
+    const la=Math.min(a.mar,fb*.02*dt*rnd(.6,1.4)),lb=Math.min(b.mar,fa*.02*dt*rnd(.6,1.4));
+    a.mar-=la;b.mar-=lb;S.stat[a.side].marLost+=la;S.stat[b.side].marLost+=lb;
+  }
+  for(const p of pairs.slice()){
+    const {a,b}=p;if(!pairs.includes(p))continue;
+    // un navire à l'éperon, moins fourni en soldats, tente de couper les grappins et de se dégager
+    for(const [x,y] of [[a,b],[b,a]])if(x.sq.mode==='eperon'&&x.mar<y.mar&&x.state==='grap'&&x.grap.length===1&&Math.random()<dt*.14*x.nat.oarSkill){
+      unpair(x,y);x.back=3.5;if(x.side===0)S.cnt.cut=(S.cnt.cut||0)+1;break}
+    if(!pairs.includes(p))continue;
+    if(b.mar<Math.max(2,b.mar0*.06))capture(b,a);
+    else if(a.mar<Math.max(2,a.mar0*.06))capture(a,b);
+  }
+}
+function capture(s,by){
+  release(s);s.state='capt';s.capBy=by.side;s.v=0;
+  S.stat[s.side].capt[s.T.key]++;S.stat[by.side].prize[s.T.key]++;
+  {const l=shipLook(s.T.key,by.nat.key);s.mesh.geometry=l.geo;s.mesh.material=l.mat}
+  const crew=Math.min(by.mar*.15,12);by.mar-=crew;s.mar=crew;s.prizeNat=by.nat;
+  onLoss(s,1);
+  toastShip(s,'est pris à l\'abordage');
+}
+function sinkShip(s,why,by){
+  if(s.state==='sink'||s.state==='gone')return;
+  release(s);s.state='sink';s.sink=0;s.v=0;s.sinkRoll=Math.random()<.5?-1:1;
+  S.stat[s.side].sunk[s.T.key]++;S.stat[s.side].marLost+=s.mar;if(s.troops)S.stat[s.side].troopsLost+=Math.min(s.troops,s.mar);s.mar=0;
+  onLoss(s,1);splash(s.x,s.y,70);spawnDebris(s);
+  toastShip(s,'coule'+(why?' ('+why+')':''));
+}
+function onLoss(s,w){
+  s.sq.morale-=.13*w;
+  for(const q of squads){if(q===s.sq||q.dead)continue;const c=q.live&&q.live.length?centroid(q.live):null;if(!c)continue;
+    const d=Math.hypot(c.x-s.x,c.y-s.y);if(d>600)continue;q.morale+=(q.side===s.side?-.04:.025)*w}
+}
+
+/* ---------------- traits (archers et frondeurs sur le pont) ---------------- */
+const arrows=[];
+function missiles(s,dt){
+  if(!(s.state==='ok'||s.state==='grap'||s.state==='ground')||s.mar<=0)return;
+  if((s.fireT-=dt)>0)return;s.fireT=rnd(2.2,3.2);
+  let best=null,bd=170;
+  for(const t of ships){if(!enemyOf(s,t)||!isAlive(t)||t.mar<=0)continue;const d=Math.hypot(t.x-s.x,t.y-s.y);if(d<bd){bd=d;best=t}}
+  if(!best)return;
+  const n=s.T.arch*clamp(s.mar/s.mar0,0,1);if(n<.5)return;
+  const fl=.6+bd/120;
+  for(let i=0;i<3;i++)arrows.push({x0:s.x+rnd(-8,8),y0:s.y+rnd(-3,3),z0:s.T.D+2,x1:best.x+rnd(-12,12),y1:best.y+rnd(-4,4),z1:best.T.D,t:-i*.12,T:fl});
+  const t=best;setTimeout0(fl,()=>{if(isAlive(t)){const k=Math.min(t.mar,n*.006*rnd(.5,1.5));t.mar-=k;S.cnt.arrowK+=k;S.stat[t.side].marLost+=k}});
+}
+const pending=[];function setTimeout0(d,f){pending.push({t:S.time+d,f})}
+
+/* ---------------- IA ---------------- */
+function aiThink(){
+  if(S.time<6)return;
+  for(const q of squads){
+    if(q.side!==1||q.dead||q.routing)continue;
+    const live=sqLive(q);if(!live.length)continue;
+    if(q.T.key==='trans'){ // rester derrière la flotte
+      const war=squads.filter(o=>o.side===q.side&&o.T.ram&&!o.dead&&sqLive(o).length);
+      if(war.length&&!q.order){const c=centroid(war.flatMap(sqLive));q.order={type:'move',x:c.x,y:c.y+(q.side===0?500:-500),face:q.anc.h}}
+      continue;
+    }
+    const cur=q.order&&q.order.type==='attack'?q.order.target:null;
+    if(cur&&!cur.dead&&sqLive(cur).length&&q.engaged)continue;
+    const c=centroid(live);let best=null,bs=1e9;
+    for(const o of squads){if(o.side===q.side||o.dead)continue;const l=sqLive(o).filter(s=>s.state!=='ground');if(!l.length)continue;
+      const oc=centroid(l);let sc=Math.hypot(oc.x-c.x,oc.y-c.y);
+      if(o.T.key==='trans')sc-=350;if(o.routing)sc+=300;else if(o.morale<.4)sc-=250;
+      sc+=squads.filter(z=>z!==q&&z.side===q.side&&z.order&&z.order.target===o).length*350;
+      if(sc<bs){bs=sc;best=o}}
+    if(best&&best!==cur){q.order={type:'attack',target:best,run:false}}
+  }
+}
+
+/* ---------------- boucle de simulation ---------------- */
+const DT=1/20;
+function step(){
+  S.time+=DT;
+  for(let i=pending.length-1;i>=0;i--)if(pending[i].t<=S.time){const p=pending.splice(i,1)[0];p.f()}
+  if((S.aiT-=DT)<=0){S.aiT=1.5;aiThink()}
+  for(const q of squads)if(!q.dead)updSquad(q,DT);
+  for(const s of ships){
+    if(s.ramCd>0)s.ramCd-=DT;
+    if(s.state==='ok'||s.state==='grap'||s.state==='ground'||s.state==='capt'){shipAI(s,DT);moveShip(s,DT)}
+    if(s.state==='ground'&&s.hp>0)s.hp-=DT*.15;
+    if(isAlive(s)&&s.hp<s.T.hp*.4)s.hp-=DT*.45; // voie d'eau
+    if(isAlive(s)&&s.hp<=0)sinkShip(s,'voie d\'eau');
+    if(s.state==='sink'){s.sink+=DT/22;if(s.sink>=1)s.state='gone'}
+    if(s.sq.routing&&s.state==='ok'&&(s.y<-200||s.y>H+200||s.x<-200||s.x>W+200)){s.state='fled';S.stat[s.side].fled[s.T.key]++;s.mesh.visible=false}
+  }
+  for(const s of ships)ramCheck(s);
+  for(let i=0;i<ships.length;i++){const a=ships[i];if(a.state==='gone'||a.state==='sink'||a.state==='fled')continue;
+    for(let j=i+1;j<ships.length;j++){const b=ships[j];if(b.state==='gone'||b.state==='sink'||b.state==='fled')continue;
+      collide(a,b,DT);if(enemyOf(a,b)&&Math.abs(a.x-b.x)<80&&Math.abs(a.y-b.y)<80){rakeCheck(a,b);rakeCheck(b,a)}}}
+  boarding(DT);
+  for(const s of ships)missiles(s,DT);
+  for(const s of ships){const sd=sdist(s.x,s.y);if(sd<3&&isAlive(s)){const g=sgrad(s.x,s.y),n=Math.hypot(g[0],g[1])||1;s.x+=g[0]/n*(3-sd);s.y+=g[1]/n*(3-sd)}}
+  if((S.vicT-=DT)<=0){S.vicT=1;checkVictory()}
+}
+function sideBeaten(side){const war=ships.filter(s=>s.side===side&&s.T.ram);const ok=war.filter(s=>(s.state==='ok'||s.state==='grap')&&!s.sq.routing).length;return ok===0||ok<war.length*.12}
+function checkVictory(){
+  if(S.ended)return;
+  const b0=sideBeaten(0),b1=sideBeaten(1);
+  if(!b0&&!b1&&S.time<45*60)return;
+  S.ended=true;S.winner=b0&&b1?-1:b1?0:b0?1:-1;
+  for(const q of squads)if(q.side!==S.winner&&!q.dead){q.routing=true;q.forceFlee=true}
+  setTimeout(showEnd,2500);
+}
+
+/* ================= MODÈLES DU PACK « ANCIENT GREECE » (aitordsgn, version du PC seulement) =================
+   Fichiers dans jeu/navires/ (FBX + TexturaLowPoly.png). Absents (artefact en ligne) : galères dessinées en code.
+   Les rames du modèle sont retirées et remplacées par les rames animées, aux mêmes emplacements. */
+const MODELS={quin:'Trireme con double Height',tri:'Trireme basic',trans:'Sailboat basic'};
+const MOD={},MODMAT={};
+function natTexture(img,nat){
+  const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const g=c.getContext('2d');g.drawImage(img,0,0);
+  const d=g.getImageData(0,0,c.width,c.height),col=new THREE.Color(nat.col);
+  for(let i=0;i<d.data.length;i+=4){const r=d.data[i],gg=d.data[i+1],b=d.data[i+2];
+    if(nat.key!=='rom'&&r>gg*1.5&&r>b*1.4&&r>70){const l=(r+gg+b)/3/150;d.data[i]=clamp(col.r*255*l*1.25,0,255);d.data[i+1]=clamp(col.g*255*l*1.25,0,255);d.data[i+2]=clamp(col.b*255*l*1.25,0,255)}}
+  g.putImageData(d,0,0);const t=new THREE.CanvasTexture(c);t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestFilter;t.generateMipmaps=false;return t;
+}
+function prepModel(o,T,keepOars){
+  let mesh=null;o.updateMatrixWorld(true);o.traverse(m=>{if(m.isMesh&&!mesh)mesh=m});if(!mesh)return null;
+  const g=mesh.geometry.clone().applyMatrix4(mesh.matrixWorld).toNonIndexed(),p=g.attributes.position,uv=g.attributes.uv,n=p.count,NT=n/3;
+  // pièces séparées (union des triangles qui partagent un sommet)
+  const id=new Map(),vid=new Int32Array(n);
+  for(let i=0;i<n;i++){const k=Math.round(p.getX(i)*10)+','+Math.round(p.getY(i)*10)+','+Math.round(p.getZ(i)*10);if(!id.has(k))id.set(k,id.size);vid[i]=id.get(k)}
+  const par=new Int32Array(id.size);for(let i=0;i<par.length;i++)par[i]=i;const f=x=>{while(par[x]!==x){par[x]=par[par[x]];x=par[x]}return x};
+  for(let t=0;t<NT;t++){const a=f(vid[t*3]);par[f(vid[t*3+1])]=a;par[f(vid[t*3+2])]=a}
+  const comp=new Map();
+  for(let t=0;t<NT;t++){const r=f(vid[t*3]);let c=comp.get(r);if(!c)comp.set(r,c={tris:[],mn:[1e9,1e9,1e9],mx:[-1e9,-1e9,-1e9]});c.tris.push(t);
+    for(let k=0;k<3;k++){const i=t*3+k,v=[p.getX(i),p.getY(i),p.getZ(i)];for(let a=0;a<3;a++){if(v[a]<c.mn[a])c.mn[a]=v[a];if(v[a]>c.mx[a])c.mx[a]=v[a]}}}
+  const cs=[...comp.values()],hull=cs.reduce((a,c)=>c.tris.length>a.tris.length?c:a);
+  const cx=(hull.mn[0]+hull.mx[0])/2,cz=(hull.mn[2]+hull.mx[2])/2,len=hull.mx[2]-hull.mn[2],k=T.L/len,wl=hull.mn[1]+(hull.mx[1]-hull.mn[1])*.05;
+  const isOar=c=>c.tris.length===80&&(c.mx[0]-c.mn[0])>250&&Math.min(Math.abs(c.mn[0]-cx),Math.abs(c.mx[0]-cx))>150;
+  const X=i=>(p.getZ(i)-cz)*k,Y=i=>(p.getY(i)-wl)*k,Z=i=>-(p.getX(i)-cx)*k;
+  const pos=[],uvs=[],oars=[];
+  for(const c of cs){
+    if(!keepOars&&isOar(c)){
+      let inn=-1,out=-1,di=1e9,dout=-1;
+      for(const t of c.tris)for(let q=0;q<3;q++){const i=t*3+q,d=Math.abs(p.getX(i)-cx);if(d<di){di=d;inn=i}if(d>dout){dout=d;out=i}}
+      const dx=X(out)-X(inn),dy=Y(out)-Y(inn),dz=Z(out)-Z(inn);
+      oars.push({x:X(inn),y:Y(inn),z:Z(inn),side:Z(out)>Z(inn)?1:-1,len:Math.hypot(dx,dy,dz)*1.05});continue;
+    }
+    for(const t of c.tris)for(let q=0;q<3;q++){const i=t*3+q;pos.push(X(i),Y(i),Z(i));uvs.push(uv?uv.getX(i):0,uv?uv.getY(i):0)}
+  }
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geo.computeVertexNormals();
+  oars.sort((a,b)=>a.side-b.side||a.x-b.x);
+  const D=oars.length?oars.reduce((a,o)=>a+o.y,0)/oars.length+.35:T.D;
+  const B=(hull.mx[0]-hull.mn[0])*k;
+  return {geo,oars,D,B};
+}
+function shipLook(t,nk){const m=MOD[t];return m&&MODMAT[nk]?{geo:m.geo,mat:MODMAT[nk]}:{geo:geoFor(t,nk),mat:shipMat}}
+function applyModel(t){
+  for(const s of ships){if(s.T.key!==t)continue;const nk=s.state==='capt'?s.prizeNat.key:s.nat.key,l=shipLook(t,nk);s.mesh.geometry=l.geo;s.mesh.material=l.mat;
+    const D=MOD[t].D;for(const c of s.crewLocal)c[1]=D+.85}
+}
+function loadModels(){
+  if(!THREE.FBXLoader||location.protocol==='file:')return;
+  new THREE.TextureLoader().load('navires/TexturaLowPoly.png',tex=>{
+    for(const k in NAT)MODMAT[k]=new THREE.MeshLambertMaterial({map:natTexture(tex.image,NAT[k]),side:THREE.DoubleSide});
+    const L=new THREE.FBXLoader();
+    for(const t in MODELS)L.load('navires/'+encodeURIComponent(MODELS[t])+'.fbx',o=>{
+      try{const m=prepModel(o,TYP[t],!TYP[t].oars);if(!m)return;MOD[t]=m;applyModel(t);console.log('navire',t,m.oars.length,'rames')}catch(e){console.warn('modèle',t,e)}
+    },undefined,()=>{});
+  },undefined,()=>{});
+}
+
+/* ================= EFFETS ================= */
+const parts=[],MAXP=1500;
+const partGeo=new THREE.BufferGeometry();partGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(MAXP*3),3));
+const partPts=new THREE.Points(partGeo,new THREE.PointsMaterial({color:0xf4f8f8,size:1.6,sizeAttenuation:true,transparent:true,opacity:.85,depthWrite:false}));partPts.frustumCulled=false;scene.add(partPts);
+function splash(x,y,n){for(let i=0;i<n&&parts.length<MAXP;i++){const a=rnd(0,TAU),sp=rnd(1,6);parts.push({x,y,z:rnd(0,1),vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,vz:rnd(3,11),life:rnd(1,2.2)})}}
+const debris=[],MAXD=600;
+const debMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(3.5,.3,.6),new THREE.MeshLambertMaterial({color:0x5a4130}),MAXD);debMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);debMesh.frustumCulled=false;debMesh.count=0;scene.add(debMesh);
+function spawnDebris(s){for(let i=0;i<10&&debris.length<MAXD;i++)debris.push({x:s.x+rnd(-s.T.L/2,s.T.L/2),y:s.y+rnd(-5,5),r:rnd(0,TAU),vx:rnd(-.3,.3),vy:rnd(-.3,.3),ph:rnd(0,TAU),sc:rnd(.6,1.6)})}
+const MAXA=600,arrGeo=new THREE.BufferGeometry();arrGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(MAXA*6),3));
+const arrLines=new THREE.LineSegments(arrGeo,new THREE.LineBasicMaterial({color:0x2a2218}));arrLines.frustumCulled=false;scene.add(arrLines);
+// sillages
+const MAXW=ships.length?0:0,WK=26;
+const wakeGeo=new THREE.BufferGeometry();const WMAX=200*WK*2;
+wakeGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(WMAX*3),3));wakeGeo.setAttribute('a',new THREE.BufferAttribute(new Float32Array(WMAX),1));
+{const idx=[];for(let s=0;s<200;s++)for(let k=0;k<WK-1;k++){const b=(s*WK+k)*2;idx.push(b,b+1,b+2,b+1,b+3,b+2)}wakeGeo.setIndex(idx)}
+const wakeMesh=new THREE.Mesh(wakeGeo,new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  vertexShader:'attribute float a;varying float vA;void main(){vA=a;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:'varying float vA;void main(){gl_FragColor=vec4(.93,.96,.96,vA*.55);}'}));wakeMesh.frustumCulled=false;wakeMesh.renderOrder=1;scene.add(wakeMesh);
+
+/* ================= CAMÉRA ================= */
+const cam={tx:W/2,ty:H/2,dist:1500,yaw:0,pitch:.62};
+function updCamera(){
+  cam.dist=clamp(cam.dist,35,6500);cam.pitch=clamp(cam.pitch,.1,1.45);cam.tx=clamp(cam.tx,-1500,W+1500);cam.ty=clamp(cam.ty,-1500,H+1500);
+  const cp=Math.cos(cam.pitch);
+  camera.position.set(cam.tx+Math.sin(cam.yaw)*cp*cam.dist,Math.sin(cam.pitch)*cam.dist+4,cam.ty+Math.cos(cam.yaw)*cp*cam.dist);
+  camera.lookAt(cam.tx,0,cam.ty);
+  const fn=1500+cam.dist*1.5,ff=8000+cam.dist*3;scene.fog.near=fn;scene.fog.far=ff;seaMat.uniforms.fogNear.value=fn;seaMat.uniforms.fogFar.value=ff;
+}
+const ray=new THREE.Raycaster(),plane=new THREE.Plane(new THREE.Vector3(0,1,0),0),v3=new THREE.Vector3();
+function groundAt(cx,cy){const r=host.getBoundingClientRect();ray.setFromCamera({x:(cx-r.left)/r.width*2-1,y:-(cy-r.top)/r.height*2+1},camera);
+  return ray.ray.intersectPlane(plane,v3)?{x:v3.x,y:v3.z}:null}
+function toScreen(x,y,h){const r=host.getBoundingClientRect();v3.set(x,h,y).project(camera);return {x:(v3.x+1)/2*r.width,y:(1-v3.y)/2*r.height,ok:v3.z<1&&v3.z>-1}}
+
+/* ================= RENDU ================= */
+const M4=new THREE.Matrix4(),M5=new THREE.Matrix4(),Q=new THREE.Quaternion(),E=new THREE.Euler(),V=new THREE.Vector3(),SC=new THREE.Vector3(1,1,1),COL=new THREE.Color();
+let rtime=0;const TINT=new THREE.Color(0xd8c8a8);
+function render(dt){
+  rtime+=dt;seaMat.uniforms.uT.value=rtime;
+  let oi=0,ci=0,ri=0;
+  for(const s of ships){
+    const m=s.mesh;
+    if(s.state==='gone'||s.state==='fled'){m.visible=false;continue}
+    m.visible=true;
+    const roll=Math.sin(rtime*.8+s.bob)*.018,pitch=Math.sin(rtime*.6+s.bob*1.3)*.012;
+    let y=Math.sin(rtime*.9+s.bob)*.12,rz=pitch,rx=roll;
+    if(s.state==='sink'){const k=s.sink;y-=k*k*9;rx+=s.sinkRoll*k*.7;rz+=k*.25}
+    else if(s.hp<s.T.hp*.4)y-=(1-s.hp/(s.T.hp*.4))*.8;
+    if(s.state==='capt'||s.state==='ground')rx+=.05;
+    m.position.set(s.x,y,s.y);E.set(rx,-s.h,rz,'YXZ');m.rotation.copy(E);m.updateMatrix();m.matrixAutoUpdate=false;
+    m.updateMatrixWorld(true);
+    // rames
+    if(s.T.oars&&s.state!=='sink'){
+      const rowing=s.state==='ok'&&Math.abs(s.v)>.15;
+      if(rowing)s.oarPh+=dt*(1.3+Math.abs(s.v)*.55)*(s.v<0?-1:1);
+      const sw=rowing?.34*Math.sin(s.oarPh):0,dip=rowing?.33+.13*Math.cos(s.oarPh):(s.state==='ok'?.18:.05);
+      for(const side of [1,-1]){
+        const broken=s.oarsB[side>0?1:0];
+        const MO=MOD[s.T.key],list=MO?MO.oars:null,no=list?list.length:s.T.oars;
+        for(let i=0;i<no&&oi<MAXO;i++){
+          const o=list?list[i]:null;if(o&&o.side!==side)continue;
+          const x=o?o.x:-s.T.L*.26+i*s.T.L*.53/(s.T.oars-1),L0=o?o.len:s.T.oarL;
+          const len=broken?(i%3?L0*.3:L0*.55):L0;
+          const a=broken?.5+.2*Math.sin(i*1.7):dip,b=broken?(i%2?.4:-.2):sw;
+          E.set(side*a,side*b,0,'YXZ');Q.setFromEuler(E);if(o)V.set(o.x,o.y,o.z);else V.set(x,s.T.D-.2,side*(s.T.B/2+.9));SC.set(1,1,side*len);
+          M5.compose(V,Q,SC);M4.multiplyMatrices(m.matrixWorld,M5);oarMesh.setMatrixAt(oi++,M4);
+        }
+      }
+    }
+    // équipage
+    if(s.state!=='sink'){
+      const nVis=Math.ceil(s.crewLocal.length*clamp(s.mar/s.mar0,0,1));
+      COL.set(s.state==='capt'?s.prizeNat.col:s.nat.col).lerp(TINT,.25);
+      for(let i=0;i<nVis&&ci<MAXC;i++){const p=s.crewLocal[i];V.set(p[0],p[1],p[2]);M5.makeTranslation(V.x,V.y,V.z);M4.multiplyMatrices(m.matrixWorld,M5);crewMesh.setMatrixAt(ci,M4);crewMesh.setColorAt(ci,COL);ci++}
+    }
+    // anneaux de sélection
+    let rc=null;
+    if(selected.has(s.sq)&&isAlive(s))rc=0xf3dc9a;else if(hover&&hover===s.sq&&isAlive(s))rc=s.side===0?0xf3dc9a:0xff6a50;
+    if(rc&&ri<MAXR){E.set(0,-s.h,0);Q.setFromEuler(E);V.set(s.x,.25,s.y);SC.set(s.T.L*.62,1,s.T.B/2+(s.T.oarL?s.T.oarL*.75:2));M4.compose(V,Q,SC);ringMesh.setMatrixAt(ri,M4);ringMesh.setColorAt(ri,COL.set(rc));ri++}
+  }
+  // aperçu de ligne / ordres
+  for(const g of ghosts){if(ri>=MAXR)break;E.set(0,-g.h,0);Q.setFromEuler(E);V.set(g.x,.3,g.y);SC.set(g.L*.62,1,g.B);M4.compose(V,Q,SC);ringMesh.setMatrixAt(ri,M4);ringMesh.setColorAt(ri,COL.set(0xffffff));ri++}
+  oarMesh.count=oi;oarMesh.instanceMatrix.needsUpdate=true;
+  crewMesh.count=ci;crewMesh.instanceMatrix.needsUpdate=true;if(crewMesh.instanceColor)crewMesh.instanceColor.needsUpdate=true;
+  ringMesh.count=ri;ringMesh.instanceMatrix.needsUpdate=true;if(ringMesh.instanceColor)ringMesh.instanceColor.needsUpdate=true;
+  // particules
+  const pa=partGeo.attributes.position.array;let pi=0;
+  for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.life-=dt;if(p.life<=0||p.z<-.5){parts.splice(i,1);continue}p.vz-=9.8*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt}
+  for(const p of parts){pa[pi++]=p.x;pa[pi++]=p.z;pa[pi++]=p.y}
+  partGeo.setDrawRange(0,parts.length);partGeo.attributes.position.needsUpdate=true;
+  // débris
+  debris.forEach((d,i)=>{d.x+=d.vx*dt;d.y+=d.vy*dt;E.set(Math.sin(rtime+d.ph)*.1,d.r,0);Q.setFromEuler(E);V.set(d.x,.1+Math.sin(rtime*.9+d.ph)*.1,d.y);SC.set(d.sc,1,1);M4.compose(V,Q,SC);debMesh.setMatrixAt(i,M4)});
+  debMesh.count=debris.length;debMesh.instanceMatrix.needsUpdate=true;
+  // flèches
+  const aa=arrGeo.attributes.position.array;let ai=0;
+  for(let i=arrows.length-1;i>=0;i--){const a=arrows[i];a.t+=dt*simSpeed();if(a.t>a.T){arrows.splice(i,1)}}
+  for(const a of arrows){if(a.t<0||ai>=MAXA)continue;const f=a.t/a.T,g=Math.max(0,f-.05),P=(u)=>[a.x0+(a.x1-a.x0)*u,a.z0+(a.z1-a.z0)*u+Math.sin(Math.PI*u)*a.T*9,a.y0+(a.y1-a.y0)*u];
+    const p=P(f),q=P(g);aa.set(p,ai*6);aa.set(q,ai*6+3);ai++}
+  arrGeo.setDrawRange(0,ai*2);arrGeo.attributes.position.needsUpdate=true;
+  // sillages
+  const wp=wakeGeo.attributes.position.array,wa=wakeGeo.attributes.a.array;let wi=0;
+  for(const s of ships){if(wi>=200)break;
+    if(s.state==='gone'||s.state==='fled'){s.trail.length=0;continue}
+    const base=wi*WK*2;
+    const tr=s.trail;const n=tr.length;
+    for(let k=0;k<WK;k++){
+      let p,age,w;
+      if(k===0){p={x:s.x-Math.cos(s.h)*s.T.L*.45,y:s.y-Math.sin(s.h)*s.T.L*.45,v:Math.abs(s.v)};age=0}
+      else{const t=tr[n-k]||tr[0]||{x:s.x,y:s.y,v:0,age:0};p=t;age=S.time-t.age}
+      const nx=k===0?-Math.sin(s.h):(()=>{const q=tr[n-k-1]||p,o=k===1?{x:s.x,y:s.y}:tr[n-k+1]||p;const dx=o.x-q.x,dy=o.y-q.y,l=Math.hypot(dx,dy)||1;return -dy/l})();
+      const ny=k===0?Math.cos(s.h):(()=>{const q=tr[n-k-1]||p,o=k===1?{x:s.x,y:s.y}:tr[n-k+1]||p;const dx=o.x-q.x,dy=o.y-q.y,l=Math.hypot(dx,dy)||1;return dx/l})();
+      w=s.T.B*.45+age*.9;
+      const al=k>=n+1?0:clamp(p.v/3,0,1)*clamp(1-age/10,0,1)*(k===0?.6:1);
+      const i0=(base+k*2)*3;wp[i0]=p.x+nx*w;wp[i0+1]=.08;wp[i0+2]=p.y+ny*w;wp[i0+3]=p.x-nx*w;wp[i0+4]=.08;wp[i0+5]=p.y-ny*w;
+      wa[base+k*2]=al;wa[base+k*2+1]=al;
+    }
+    if(Math.abs(S.time-s.trailT)>.45&&s.state!=='sink'){s.trailT=S.time;const np={x:s.x-Math.cos(s.h)*s.T.L*.45,y:s.y-Math.sin(s.h)*s.T.L*.45,v:Math.abs(s.v),age:S.time};const lt=tr[tr.length-1];if(lt&&Math.hypot(lt.x-np.x,lt.y-np.y)>25)tr.length=0;tr.push(np);if(tr.length>WK)tr.shift()}
+    wi++;
+  }
+  wakeGeo.setDrawRange(0,wi*(WK-1)*6);wakeGeo.attributes.position.needsUpdate=true;wakeGeo.attributes.a.needsUpdate=true;
+  renderer.render(scene,camera);
+}
+
+/* ================= INTERFACE ================= */
+let started=false,paused=true,speed=1,hover=null,ghosts=[];
+const selected=new Set();
+const simSpeed=()=>paused||!started?0:speed;
+function fmt(t){const m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+(s<10?'0':'')+s}
+function toast(msg,cls){const d=document.createElement('div');d.textContent=msg;if(cls)d.className=cls;const box=$('toasts');box.prepend(d);while(box.children.length>4)box.lastChild.remove();setTimeout(()=>{d.style.opacity=0;setTimeout(()=>d.remove(),700)},4200)}
+function toastShip(s,what){
+  if(s.side!==0&&!(s.state==='sink'||s.state==='capt'))return;
+  const mine=s.side===0,f=s.T.f;what=what.replace('pris',f?'prise':'pris');toast((mine?(f?'Une de vos ':'Un de vos ')+s.T.pl:(f?'Une ':'Un ')+s.T.name.toLowerCase()+' '+(f?s.nat.adj:s.nat.adj.replace(/e$/,'')))+' ('+s.sq.name+') '+what,mine?'bad':'good');
+}
+function buildTags(){
+  const box=$('tags');box.innerHTML='';
+  for(const q of squads){const d=document.createElement('div');d.className='tag';d.innerHTML=`<b></b><div class="flag" style="background:${q.nat.css}"></div><div class="bars"><i></i><i></i></div>`;box.appendChild(d);q.tag=d;q.tagB=d.querySelector('b');q.tagI=d.querySelectorAll('i');q.tagB.textContent=q.name}
+}
+function updateTags(){
+  for(const q of squads){
+    const live=(q.live||sqLive(q)).filter(s=>s.state!=='ground');
+    if(!live.length||q.ships.every(s=>s.state==='fled')){q.tag.hidden=true;continue}
+    const c=centroid(live),p=toScreen(c.x,c.y,cam.dist>2500?60:28);
+    if(!p.ok){q.tag.hidden=true;continue}
+    q.tag.hidden=false;q.tag.style.left=p.x+'px';q.tag.style.top=p.y+'px';
+    q.tagB.hidden=!(q===hover||selected.has(q)||cam.dist>2200);
+    q.tag.classList.toggle('rout',q.routing);
+    const f=live.length/q.ships.length,m=clamp(q.morale,0,1);
+    q.tagI[0].style.cssText=`width:${f*100}%;background:#e6dcc3`;
+    q.tagI[1].style.cssText=`width:${m*100}%;background:${m>.5?'#d6b878':m>.25?'#e0883c':'#d24a3a'}`;
+  }
+}
+const mine=()=>[...selected].filter(q=>q.side===0&&!q.dead&&!q.routing);
+function renderSel(){
+  const arr=[...selected].filter(q=>!q.dead),body=$('selBody');
+  $('selBtns').hidden=!arr.length;
+  if(!arr.length){body.innerHTML='<p style="margin:0;color:var(--muted)">Aucune escadre. Cliquez sur un de vos navires '+(NAT[CFG.sides[0].nat].key==='car'?'violets':'rouges')+'.</p>';return}
+  const all=arr.flatMap(q=>q.ships),live=all.filter(isAlive),act=live.filter(s=>s.state!=='ground');
+  const avg=f=>live.length?live.reduce((a,s)=>a+f(s),0)/live.length:0;
+  const hull=avg(s=>clamp(s.hp/s.T.hp,0,1)),stam=avg(s=>s.stam),mar=live.reduce((a,s)=>a+s.mar,0),mor=arr.reduce((a,q)=>a+clamp(q.morale,0,1),0)/arr.length;
+  const lost=n=>all.filter(n).length;
+  const title=arr.length===1?arr[0].name:arr.length+' escadres';
+  const sub=arr.length===1?`${arr[0].ships.length} ${arr[0].T.pl}${arr[0].troops?' · '+arr[0].troops+' soldats par navire':''}${arr[0].routing?' · en déroute':''}`:[...new Set(arr.map(q=>q.T.pl))].join(', ');
+  const m=(v,c)=>`<div class="meter"><i style="width:${v*100}%;background:${c||'var(--gold)'}"></i></div>`;
+  body.innerHTML=`<h2>${title}</h2><div style="color:var(--muted);font-size:13px">${sub}</div>
+    <div class="row"><span>Navires en état</span><span>${act.length} / ${all.length}${lost(s=>s.state==='sink'||s.state==='gone')?' · '+lost(s=>s.state==='sink'||s.state==='gone')+' coulés':''}${lost(s=>s.state==='capt')?' · '+lost(s=>s.state==='capt')+' pris':''}</span></div>
+    <div class="row"><span>Coques</span><span>${Math.round(hull*100)} %</span></div>${m(hull,'#e6dcc3')}
+    ${arr.some(q=>q.T.oars)?`<div class="row"><span>Rameurs</span><span>${stam>.6?'frais':stam>.3?'fatigués':stam>.1?'épuisés':'à bout'}</span></div>${m(stam,stam>.3?'#8fbf7a':'#e0883c')}`:''}
+    <div class="row"><span>Soldats à bord</span><span>${Math.round(mar).toLocaleString('fr-FR')}</span></div>
+    <div class="row"><span>Moral</span><span>${Math.round(mor*100)} %</span></div>${m(mor,mor>.5?'#d6b878':mor>.25?'#e0883c':'#d24a3a')}`;
+  const own=mine();
+  const allMode=own.length&&own.every(q=>q.mode===own[0].mode)?own[0].mode:null,allForm=own.length&&own.every(q=>q.form===own[0].form)?own[0].form:null;
+  $('bRam').classList.toggle('on',allMode==='eperon');$('bBoard').classList.toggle('on',allMode==='abordage');
+  $('bLine').classList.toggle('on',allForm==='ligne');$('bCol').classList.toggle('on',allForm==='colonne');
+  $('bRam').disabled=!own.some(q=>q.T.ram);
+  for(const id of ['bRam','bBoard','bLine','bCol','bHalt','bFlee'])if(id!=='bRam')$(id).disabled=!own.length;
+}
+function hudTick(){
+  $('clock').textContent=fmt(S.time);
+  const cnt=side=>ships.filter(s=>s.side===side&&(s.state==='ok'||s.state==='grap')&&!s.sq.routing).length;
+  const a=cnt(0),b=cnt(1),n0=NAT[CFG.sides[0].nat],n1=NAT[CFG.sides[1].nat];
+  $('f0').textContent=n0.name+' '+a;$('f0').style.color=n0.light;$('f1').textContent=b+' '+n1.name;$('f1').style.color=n1.light;
+  $('forces').style.setProperty('--c0',n0.css);$('forces').style.setProperty('--c1',n1.css);
+  $('fBar').style.width=(a+b?a/(a+b)*100:50)+'%';
+  renderSel();
+}
+function updatePauseBtn(){$('bPause').textContent=!started?'Lancer':paused?'Reprendre':'Pause';$('bPause').classList.toggle('on',started&&paused)}
+function begin(){$('start').hidden=true;started=true;paused=false;updatePauseBtn()}
+function togglePause(){if(!started){begin();return}paused=!paused;updatePauseBtn()}
+
+/* ---------------- ordres ---------------- */
+function pickShip(p,cx,cy){
+  if(p)for(const s of ships){if(!(isAlive(s)||s.state==='capt'))continue;const [lx,ly]=local(p.x,p.y,s);if(Math.abs(lx)<s.T.L/2+3&&Math.abs(ly)<s.T.B/2+(s.T.oarL||2)*.7)return s}
+  let best=null,bd=20;
+  for(const s of ships){if(!isAlive(s))continue;const q=toScreen(s.x,s.y,3);const d=Math.hypot(q.x-cx,q.y-cy);if(q.ok&&d<bd){bd=d;best=s}}
+  return best;
+}
+function clampMap(x,y){return {x:clamp(x,60,W-60),y:clamp(y,60,H-60)}}
+function orderMove(p,run){
+  const arr=mine();if(!arr.length||!p)return;
+  for(const q of arr)resetAnchor(q);
+  const cs=arr.map(q=>({x:q.anc.x,y:q.anc.y})),cx=cs.reduce((a,c)=>a+c.x,0)/arr.length,cy=cs.reduce((a,c)=>a+c.y,0)/arr.length;
+  const far=Math.hypot(p.x-cx,p.y-cy)>60,face=Math.atan2(p.y-cy,p.x-cx);
+  arr.forEach((q,i)=>{const t=clampMap(p.x+(arr.length>1?cs[i].x-cx:0),p.y+(arr.length>1?cs[i].y-cy:0));q.order={type:'move',x:t.x,y:t.y,face:far?face:q.anc.h,run:!!run}});
+  markOrder(p);
+}
+function orderAttack(tq,run){for(const q of mine()){if(!q.T.ram&&q.mode!=='abordage')continue;resetAnchor(q);q.order={type:'attack',target:tq,run:!!run}}}
+function halt(){for(const q of mine()){resetAnchor(q);q.order={type:'move',x:q.anc.x,y:q.anc.y,face:q.anc.h}}}
+function retreat(){for(const q of mine()){rout(q);q.forceFlee=true;q.morale=Math.min(q.morale,.45)}renderSel()}
+function setMode(m){for(const q of mine())if(q.T.ram)q.mode=m;renderSel()}
+function setForm(f){for(const q of mine()){q.form=f;setSlots(q)}renderSel()}
+function markOrder(p){splash(p.x,p.y,0)}
+function planLine(arr,p0,p1){
+  const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<40)return null;
+  const ux=dx/L,uy=dy/L;
+  let fx=-uy,fy=ux;const cfx=-Math.sin(cam.yaw),cfy=-Math.cos(cam.yaw);if(fx*cfx+fy*cfy<0){fx=-fx;fy=-fy}
+  const face=Math.atan2(fy,fx);
+  const sorted=[...arr].sort((a,b)=>(a.anc.x*ux+a.anc.y*uy)-(b.anc.x*ux+b.anc.y*uy));
+  const wid=q=>(q.ships.filter(s=>s.state==='ok').length-1)*spacing(q.T)+q.T.B+20;
+  const sum=sorted.reduce((a,q)=>a+wid(q),0),gap=sorted.length>1?Math.max(25,(L-sum)/(sorted.length-1)):0;
+  let off=sorted.length>1?0:(L-sum)/2;const out=[];
+  for(const q of sorted){const w=wid(q);const c=clampMap(p0.x+ux*(off+w/2),p0.y+uy*(off+w/2));out.push({q,x:c.x,y:c.y,face});off+=w+gap}
+  return out;
+}
+function previewPlan(plan){ghosts=[];if(!plan)return;for(const o of plan){const q=o.q,n=q.ships.filter(s=>s.state==='ok').length,sp=spacing(q.T);
+  for(let i=0;i<n;i++){const r=(i-(n-1)/2)*sp;ghosts.push({x:o.x-Math.sin(o.face)*r,y:o.y+Math.cos(o.face)*r,h:o.face,L:q.T.L,B:q.T.B/2+(q.T.oarL?q.T.oarL*.75:2)})}}}
+function applyPlan(plan,run){for(const o of plan){const q=o.q;resetAnchor(q);q.form='ligne';setSlots(q);q.order={type:'move',x:o.x,y:o.y,face:o.face,run:!!run}}ghosts=[];renderSel()}
+function selectSet(list,add){if(!add)selected.clear();for(const q of list)if(q.side===0&&!q.dead)selected.add(q);renderSel()}
+function centerOn(list){const l=list.flatMap(q=>sqLive(q));if(!l.length)return;const c=centroid(l);cam.tx=c.x;cam.ty=c.y}
+const lastClick={t:0,btn:-1,x:0,y:0};
+function isDouble(btn,x,y){const now=performance.now(),d=now-lastClick.t<380&&lastClick.btn===btn&&Math.hypot(x-lastClick.x,y-lastClick.y)<10;lastClick.t=now;lastClick.btn=btn;lastClick.x=x;lastClick.y=y;return d}
+function click(cx,cy,btn,add){
+  const p=groundAt(cx,cy),s=pickShip(p,cx,cy),dbl=isDouble(btn,cx,cy);
+  if(btn===2){if(!selected.size)return;if(s&&s.side!==0&&isAlive(s))orderAttack(s.sq,dbl);else orderMove(p,dbl);return}
+  if(btn!==0)return;
+  if(s&&s.side===0&&!s.sq.dead){const q=s.sq;
+    if(dbl)selectSet(squads.filter(o=>o.T===q.T),add);
+    else if(add){selected.has(q)?selected.delete(q):selected.add(q)}
+    else{selected.clear();selected.add(q)}
+  }else if(!add)selected.clear();
+  renderSel();
+}
+const ptrs=new Map();let drag=null,pinch=null;const boxEl=$('box');const mouse={x:0,y:0,inside:false};
+host.addEventListener('contextmenu',e=>e.preventDefault());
+host.addEventListener('pointerdown',e=>{
+  host.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),mx:(a.x+b.x)/2,my:(a.y+b.y)/2};drag=null;boxEl.hidden=true;ghosts=[];return}
+  drag={sx:e.clientX,sy:e.clientY,lx:e.clientX,ly:e.clientY,btn:e.button,add:e.shiftKey||e.ctrlKey,moved:false,mode:null,p0:null};
+});
+host.addEventListener('pointermove',e=>{
+  mouse.x=e.clientX;mouse.y=e.clientY;mouse.inside=true;
+  if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&ptrs.size===2){const [a,b]=[...ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;cam.dist*=pinch.d/d;panScreen(mx-pinch.mx,my-pinch.my);pinch={d,mx,my};return}
+  if(e.pointerType==='mouse'&&!drag){const s=pickShip(groundAt(e.clientX,e.clientY),e.clientX,e.clientY);hover=s&&isAlive(s)?s.sq:null}
+  if(!drag)return;
+  const dx=e.clientX-drag.lx,dy=e.clientY-drag.ly;drag.lx=e.clientX;drag.ly=e.clientY;
+  if(Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)>7)drag.moved=true;
+  if(!drag.moved)return;
+  if(drag.btn===1){cam.yaw-=dx*.006;cam.pitch+=dy*.004;return}
+  if(drag.btn===2){if(!mine().length){panScreen(dx,dy);return}
+    if(!drag.p0)drag.p0=groundAt(drag.sx,drag.sy);const p1=groundAt(e.clientX,e.clientY);if(!drag.p0||!p1)return;
+    const plan=planLine(mine(),drag.p0,p1);previewPlan(plan);if(plan)drag.mode='line';return}
+  if(drag.btn===0){
+    if(!drag.mode){const s=pickShip(groundAt(drag.sx,drag.sy),drag.sx,drag.sy);drag.mode=(s&&s.side!==0)?'pan':'box'}
+    if(drag.mode==='box'){const r=host.getBoundingClientRect(),x0=Math.min(drag.sx,e.clientX)-r.left,y0=Math.min(drag.sy,e.clientY)-r.top;
+      boxEl.hidden=false;Object.assign(boxEl.style,{left:x0+'px',top:y0+'px',width:Math.abs(e.clientX-drag.sx)+'px',height:Math.abs(e.clientY-drag.sy)+'px'})}
+    else panScreen(dx,dy);
+  }
+});
+function endPtr(e){
+  ptrs.delete(e.pointerId);
+  if(pinch){if(ptrs.size<2)pinch=null;drag=null;return}
+  if(!drag)return;
+  if(drag.mode==='box'){
+    const r=host.getBoundingClientRect(),x0=Math.min(drag.sx,e.clientX)-r.left,x1=Math.max(drag.sx,e.clientX)-r.left,y0=Math.min(drag.sy,e.clientY)-r.top,y1=Math.max(drag.sy,e.clientY)-r.top;
+    if(!drag.add)selected.clear();
+    for(const s of ships){if(s.side!==0||!isAlive(s)||s.sq.dead)continue;const p=toScreen(s.x,s.y,2);if(p.ok&&p.x>=x0&&p.x<=x1&&p.y>=y0&&p.y<=y1)selected.add(s.sq)}
+    boxEl.hidden=true;renderSel();
+  }else if(drag.mode==='line'){const p1=groundAt(e.clientX,e.clientY),plan=drag.p0&&p1?planLine(mine(),drag.p0,p1):null;ghosts=[];if(plan)applyPlan(plan,e.shiftKey)}
+  else if(!drag.moved)click(e.clientX,e.clientY,drag.btn,drag.add);
+  drag=null;
+}
+host.addEventListener('pointerup',endPtr);host.addEventListener('pointercancel',endPtr);
+host.addEventListener('pointerleave',()=>{mouse.inside=false;if(!drag)hover=null});
+host.addEventListener('wheel',e=>{e.preventDefault();const k=Math.exp(e.deltaY*.0012),p=k<1?groundAt(e.clientX,e.clientY):null;cam.dist*=k;if(p){cam.tx+=(p.x-cam.tx)*(1-k);cam.ty+=(p.y-cam.ty)*(1-k)}},{passive:false});
+function panScreen(dx,dy){const k=cam.dist*.0016,fx=-Math.sin(cam.yaw),fy=-Math.cos(cam.yaw),rx=Math.cos(cam.yaw),ry=-Math.sin(cam.yaw);cam.tx-=(dx*rx-dy*fx)*k;cam.ty-=(dx*ry-dy*fy)*k}
+function panDir(f,r,dt){const sp=cam.dist*.9*dt;cam.tx+=(-Math.sin(cam.yaw)*f+Math.cos(cam.yaw)*r)*sp;cam.ty+=(-Math.cos(cam.yaw)*f-Math.sin(cam.yaw)*r)*sp}
+const keys=new Set();let prevDist=1500;
+function toggleTac(){if(cam.dist<3500){prevDist=cam.dist;cam.dist=5200;cam.pitch=Math.max(cam.pitch,1.0)}else cam.dist=prevDist}
+const groups={};
+window.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();if(e.target&&e.target.tagName==='INPUT')return;
+  if(e.code==='Space'){e.preventDefault();togglePause();return}
+  if(k==='escape'){selected.clear();ghosts=[];renderSel();return}
+  if(k==='backspace'){e.preventDefault();halt();return}
+  if(k==='v'){toggleTac();return}
+  if(k==='f'||k==='home'){centerOn(mine());return}
+  if(k==='b'){const own=mine().filter(q=>q.T.ram);if(own.length)setMode(own[0].mode==='eperon'?'abordage':'eperon');return}
+  if(k==='l'){const own=mine();if(own.length)setForm(own[0].form==='ligne'?'colonne':'ligne');return}
+  if(k==='x'){retreat();return}
+  if((e.ctrlKey||e.metaKey)&&k==='a'){e.preventDefault();selectSet(squads,false);return}
+  if(/^[1-9]$/.test(k)){if(e.ctrlKey||e.metaKey){e.preventDefault();groups[k]=new Set(mine())}else if(groups[k])selectSet([...groups[k]],e.shiftKey);return}
+  keys.add(k);if(k.startsWith('arrow'))e.preventDefault();
+});
+window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',()=>keys.clear());
+function keyPan(dt){
+  let f=0,r=0,rot=0;
+  if(keys.has('arrowup')||keys.has('z')||keys.has('w'))f+=1;if(keys.has('arrowdown')||keys.has('s'))f-=1;
+  if(keys.has('arrowleft')||keys.has('q'))r-=1;if(keys.has('arrowright')||keys.has('d'))r+=1;
+  if(keys.has('a'))rot+=1;if(keys.has('e'))rot-=1;
+  if(f||r)panDir(f,r,dt);if(rot)cam.yaw+=rot*1.6*dt;
+  if(mouse.inside&&!drag&&!pinch&&document.hasFocus()){const r2=host.getBoundingClientRect(),m=14;let ef=0,er=0;
+    if(mouse.x-r2.left<m)er=-1;else if(r2.right-mouse.x<m)er=1;if(mouse.y-r2.top<m)ef=1;else if(r2.bottom-mouse.y<m)ef=-1;if(ef||er)panDir(ef,er,dt*.8)}
+}
+$('bPause').onclick=togglePause;$('bGo').onclick=begin;$('bPrep').onclick=()=>{$('start').hidden=true};
+$('bReset').onclick=()=>setup();$('bAgain').onclick=()=>setup();$('bWatch').onclick=()=>{$('end').hidden=true};
+$('bAll').onclick=()=>selectSet(squads,false);$('bHalt').onclick=halt;$('bFlee').onclick=retreat;
+$('bRam').onclick=()=>setMode('eperon');$('bBoard').onclick=()=>setMode('abordage');$('bLine').onclick=()=>setForm('ligne');$('bCol').onclick=()=>setForm('colonne');
+$('cZin').onclick=()=>{cam.dist*=.78};$('cZout').onclick=()=>{cam.dist*=1.28};$('cTac').onclick=toggleTac;$('cRl').onclick=()=>{cam.yaw+=.4};$('cRr').onclick=()=>{cam.yaw-=.4};
+$('bHelp').onclick=()=>{$('help').hidden=!$('help').hidden};
+document.querySelectorAll('.spd').forEach(b=>b.onclick=()=>{speed=+b.dataset.s;document.querySelectorAll('.spd').forEach(x=>x.classList.toggle('on',x===b))});
+
+/* ---------------- mini-carte ---------------- */
+const mm=$('mm'),mg=mm.getContext('2d'),MMX0=-600,MMY0=-500,MMW=W+1200,MMH=H+1000;
+const mmBg=(()=>{const c=document.createElement('canvas');c.width=mm.width;c.height=mm.height;const g=c.getContext('2d'),im=g.createImageData(c.width,c.height);
+  for(let j=0;j<c.height;j++)for(let i=0;i<c.width;i++){const x=MMX0+i/c.width*MMW,y=MMY0+j/c.height*MMH,sd=sdist(x,y),k=(j*c.width+i)*4;
+    const col=sd<0?[150,150,100]:sd<25?[70,130,130]:[34,74,90];im.data[k]=col[0];im.data[k+1]=col[1];im.data[k+2]=col[2];im.data[k+3]=255}
+  g.putImageData(im,0,0);g.strokeStyle='rgba(255,255,255,.25)';g.strokeRect((0-MMX0)/MMW*c.width,(0-MMY0)/MMH*c.height,W/MMW*c.width,H/MMH*c.height);return c})();
+function drawMini(){
+  mg.drawImage(mmBg,0,0);const sx=mm.width/MMW,sy=mm.height/MMH;
+  for(const s of ships){if(!(isAlive(s)||s.state==='capt'))continue;const x=(s.x-MMX0)*sx,y=(s.y-MMY0)*sy;
+    mg.strokeStyle=s.state==='capt'?'#999':selected.has(s.sq)?'#f3dc9a':s.nat.light;mg.lineWidth=2.4;mg.beginPath();mg.moveTo(x-Math.cos(s.h)*3,y-Math.sin(s.h)*3);mg.lineTo(x+Math.cos(s.h)*3,y+Math.sin(s.h)*3);mg.stroke()}
+  mg.strokeStyle='rgba(255,255,255,.8)';mg.lineWidth=1.5;const w=cam.dist*.9*sx;mg.strokeRect((cam.tx-MMX0)*sx-w/2,(cam.ty-MMY0)*sy-w/3,w,w*.66);
+}
+mm.addEventListener('pointerdown',e=>{const r=mm.getBoundingClientRect();cam.tx=MMX0+(e.clientX-r.left)/r.width*MMW;cam.ty=MMY0+(e.clientY-r.top)/r.height*MMH});
+
+/* ---------------- fin ---------------- */
+function results(){
+  const st=S.stat;return {winner:S.winner,time:Math.round(S.time),sides:st.map(s=>({start:s.start,sunk:s.sunk,capt:s.capt,prize:s.prize,fled:s.fled,ground:s.ground,marLost:Math.round(s.marLost),troopsLost:Math.round(s.troopsLost)}))};
+}
+function showEnd(){
+  const r=S.result=results(),w=S.winner,n=[0,1].map(i=>NAT[CFG.sides[i].nat]);
+  $('endT').textContent=w===0?'Victoire navale':w===1?'Défaite navale':'Les flottes se séparent';
+  const tot=o=>o.quin+o.tri+o.trans;
+  $('endP').textContent=w===0?`La flotte ${n[1].adj} est rompue. Les navires pris rejoignent votre flotte.`:w===1?`Votre flotte est rompue. Les navires qui ont pu fuir rallient le port le plus proche.`:'Aucun camp ne l\'emporte.';
+  const row=(lab,f)=>`<span>${lab}</span><span>${f(r.sides[0])}</span><span>${f(r.sides[1])}</span>`;
+  $('endS').innerHTML=`<span class="h"></span><span class="h">${n[0].name}</span><span class="h">${n[1].name}</span>`+
+    row('Navires engagés',s=>tot(s.start))+row('Coulés',s=>tot(s.sunk))+row('Pris par l\'ennemi',s=>tot(s.capt))+row('Échoués',s=>tot(s.ground))+row('Navires capturés',s=>tot(s.prize))+row('Soldats perdus',s=>s.marLost.toLocaleString('fr-FR'));
+  $('bBack').hidden=!FROM_CAMP;$('end').hidden=false;
+  if(window.parent!==window)try{window.parent.postMessage({bellum:'retour-naval',res:r},'*')}catch(e){}
+}
+$('bBack').onclick=()=>{if(window.parent!==window)window.parent.postMessage({bellum:'fermer-naval',res:S.result},'*')};
+
+/* ---------------- boucle ---------------- */
+let last=performance.now(),acc=0,hudT=0,mmT=0;
+function frame(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  keyPan(dt);updCamera();
+  acc+=dt*simSpeed();let n=0;while(acc>=DT&&n<12){step();acc-=DT;n++}if(n>=12)acc=0;
+  render(dt);updateTags();
+  if((hudT-=dt)<=0){hudT=.25;hudTick()}
+  if((mmT-=dt)<=0){mmT=.2;drawMini()}
+  requestAnimationFrame(frame);
+}
+function intro(){
+  const a=CFG.sides[0],b=CFG.sides[1],na=NAT[a.nat],nb=NAT[b.nat];
+  const desc=sd=>{const c={};for(const q of sd.sq)c[q.t]=(c[q.t]||0)+q.k;return Object.entries(c).map(([t,k])=>k+' '+TYP[t].pl).join(', ')};
+  $('place').textContent=CFG.place+(CFG.year?' · '+CFG.year:'');$('startT').textContent=CFG.place;
+  $('startP').innerHTML=`Vous commandez ${na.name} (${desc(a)}) contre ${nb.name} (${desc(b)}).<br><br>`+
+    (na.key==='car'?'Vos rameurs sont meilleurs : éperonnez de flanc à pleine cadence et rasez les flancs pour briser les rames. Les Romains embarquent bien plus de soldats : évitez de vous laisser accrocher. Protégez le convoi.':
+     'Vos navires portent beaucoup de soldats : accrochez les galères puniques et prenez-les à l\'abordage. Leurs rameurs sont meilleurs, ne leur offrez pas vos flancs.');
+}
+window.__naval={step:(n=1)=>{for(let i=0;i<n;i++)step()},get S(){return S},get ships(){return ships},get squads(){return squads},cam,begin,orderMove:(i,x,y)=>{selected.clear();selected.add(squads[i]);orderMove({x,y})},orderAttack:(i,j)=>{selected.clear();selected.add(squads[i]);orderAttack(squads[j])},render:()=>{updCamera();render(.016);updateTags();hudTick();drawMini()},results};
+resize();setup();intro();updCamera();requestAnimationFrame(frame);
+loadModels();
+</script>
+</body>
+</html>
