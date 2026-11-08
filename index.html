@@ -2192,7 +2192,7 @@ function retreat(a){
 /* ================= RENDU ================= */
 const cv=$('map');let ctx=cv.getContext('2d');
 let view={s:.3,ox:0,oy:0},dpr=1,sel=null,preview=null,territoryDirty=true,ownerPaths=null,fogC=document.createElement('canvas'),texPat=null;
-function fit(){const w=cv.clientWidth,h=cv.clientHeight;dpr=Math.min(2,window.devicePixelRatio||1);cv.width=w*dpr;cv.height=h*dpr;fogC.width=w;fogC.height=h}
+function fit(){const w=cv.clientWidth,h=cv.clientHeight;dpr=perfDpr();/*PERF*/cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);fogC.width=w;fogC.height=h}
 const minS=()=>Math.min(cv.clientWidth/MW,cv.clientHeight/MH)*.95,MAXS=120;
 function clampView(){const w=cv.clientWidth,h=cv.clientHeight;view.s=Math.max(minS(),Math.min(MAXS,view.s));
   const mw=MW*view.s,mh=MH*view.s;view.ox=mw<w?(w-mw)/2:Math.min(0,Math.max(w-mw,view.ox));view.oy=mh<h?(h-mh)/2:Math.min(0,Math.max(h-mh,view.oy))}
@@ -7982,6 +7982,18 @@ function perfEdgeIn(e){
     for(const n of [N[e.a],N[e.b]]){if(n.x<a)a=n.x;if(n.y<b)b=n.y;if(n.x>c)c=n.x;if(n.y>d)d=n.y}e._bb=[a,b,c,d]}
   const s=view.s,m=10/s+.3,x0=-view.ox/s-m,y0=-view.oy/s-m,x1=x0+ctx.canvas.width/dpr/s+2*m,y1=y0+ctx.canvas.height/dpr/s+2*m,B=e._bb;
   return B[2]>=x0&&B[0]<=x1&&B[3]>=y0&&B[1]<=y1}
+// ---- résolution de la carte : moins de pixels = plus fluide (grands écrans, Windows à 125-150 %) ----
+const PERF_RES_K='bellum.res',PERF_RES=[['auto','Auto'],['natif','Native'],['100','100 %'],['75','75 %'],['50','50 %']];
+function perfResGet(){try{return localStorage.getItem(PERF_RES_K)||'auto'}catch(e){return 'auto'}}
+function perfDpr(){const d=Math.min(2,window.devicePixelRatio||1),r=perfResGet(),w=Math.max(1,cv.clientWidth),h=Math.max(1,cv.clientHeight);
+  if(r==='natif')return d;if(r==='100')return 1;if(r==='75')return .75;if(r==='50')return .5;
+  // auto : au plus ~2 millions de pixels dessinés, sans descendre sous 1 pixel par pixel CSS
+  return Math.max(Math.min(1,d),Math.min(d,Math.sqrt(2e6/(w*h))))}
+function perfResSet(v){try{localStorage.setItem(PERF_RES_K,v)}catch(e){}window.dispatchEvent(new Event('resize'));perfResRow(true)}
+function perfResRow(again){const c=$('mcard');if(!c)return;let d=$('perfRes');if(d&&!again)return;if(!d){d=document.createElement('div');d.id='perfRes';c.appendChild(d)}
+  const r=perfResGet();d.innerHTML=`<h3 style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;font-weight:500">Résolution de la carte</h3><div class="chips">${PERF_RES.map(([k,n])=>`<button type="button" data-res="${k}" class="${k===r?'on':''}">${n}</button>`).join('')}</div><p class="sub">Actuellement ${Math.round(dpr*100)} % (${Math.round(cv.width)} × ${Math.round(cv.height)} pixels). Plus bas, la carte est un peu moins nette mais plus fluide, surtout en plein écran ou avec l'affichage Windows réglé à 125-150 %.</p>`;
+  d.querySelectorAll('[data-res]').forEach(b=>b.onclick=()=>perfResSet(b.dataset.res))}
+{const _om=openMenu;openMenu=function(){const r=_om.apply(this,arguments);try{perfResRow()}catch(e){}return r}}
 window.__perf=PERF;
 /* ================= FIN PERFORMANCE ================= */
 /* ================= NAVAL VIVANT (fil « Rendre le naval de campagne vivant ») =================
@@ -8776,6 +8788,25 @@ shipSq=function(x,y,q,sq,c,dark,ang,tile){const f=FLCUR;
       const k=(t*.35+f.id*.13+x*.003)%1;ctx.strokeStyle=`rgba(235,245,250,${.35*(1-k)})`;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(x,y,q*(.5+k*.6),q*(.3+k*.4),ang,0,7);ctx.stroke()}
     ctx.restore();FLSH.push({f,x,y,q,ang})}
   return _shipSqF.apply(this,arguments)};
+/* ---- blocus : cordon de taille fixe sur la carte (km), escadres dispersées le long du cordon comme les régiments d'un siège ---- */
+const BLK_R=2.4,BLKC={};
+// centré sur la ville (comme l'anneau d'un siège), rayon = murs + BLK_R, seulement la partie sur l'eau, du côté du mouillage
+function blkArc(n){let A=BLKC[n.i];if(A)return A;const ax=n.x,ay=n.y,R=wallKm(n)+BLK_R;let base=Math.atan2(n.anch[1]-n.y,n.anch[0]-n.x);if(!isFinite(base)||Math.hypot(n.anch[1]-n.y,n.anch[0]-n.x)<.01)base=0;
+  const P=[];for(let k=0;k<=40;k++){const a=base-2.2+4.4*k/40;if(!landFast(ax+Math.cos(a)*R,ay+Math.sin(a)*R))P.push(a)}
+  A=BLKC[n.i]={ax,ay,base,R,arc:P.length>=4?P:[...Array(31)].map((_,k)=>base-1.55+3.1*k/30)};return A}
+function blkAt(A,u){const arc=A.arc,f=Math.max(0,Math.min(arc.length-1.001,u*(arc.length-1))),j=Math.floor(f);return arc[j]+(arc[j+1]-arc[j])*(f-j)}
+function blkFleet(f){if(!f||f.inG||f.legs.length||!f.task||f.task.k!=='block')return null;const n=N[f.task.n];if(!n||!n.anch||Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)>=20)return null;return n}
+function blkFormation(f,s,n){const A=blkArc(n),c=FAC[f.side].c,dark='rgba(26,18,10,.95)',q=UNIT_KM*s,U=squadrons(f),t=performance.now()/1000;
+  const mates=S.fleets.filter(g=>g.side===f.side&&blkFleet(g)===n),mi=Math.max(0,mates.indexOf(f)),rr=A.R+.6+mi*.55,pts=[],angs=[];
+  U.forEach((u,i)=>{const ph=t*.16+i*2.3+f.id,uu=(i+.5)/U.length+Math.sin(ph)*.3/U.length,a=blkAt(A,uu);
+    pts.push([view.ox+(A.ax+Math.cos(a)*rr)*s,view.oy+(A.ay+Math.sin(a)*rr)*s]);angs.push(a+(Math.cos(ph)>0?1:-1)*1.5708)});
+  if(sel&&sel.f===f){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,q*.85,0,7);ctx.fill()})}
+  U.forEach((u,i)=>shipSq(pts[i][0],pts[i][1],q,u,c,dark,angs[i]));f._sq=pts;
+  if(s>1.4||f.side==='car'){const a=blkAt(A,.18+mi*.12),lx=view.ox+(A.ax+Math.cos(a)*(rr+1.1))*s,ly=view.oy+(A.ay+Math.sin(a)*(rr+1.1))*s;
+    ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';const tx=f.name+' · blocus',tw=ctx.measureText(tx).width;
+    ctx.fillStyle='rgba(238,226,196,.92)';ctx.strokeStyle='rgba(60,40,20,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.rect(lx-tw/2-5,ly-7,tw+10,14);ctx.fill();ctx.stroke();ctx.fillStyle='#2b2115';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(tx,lx,ly)}}
+{const _ffB=fleetFormation;fleetFormation=function(f,s){const n=blkFleet(f);if(!n)return _ffB.apply(this,arguments);FLCUR=f;
+  try{ctx.save();blkFormation(f,s,n);ctx.restore()}catch(e){console.error(e);ctx.restore();FLCUR=null;return _ffB.apply(this,arguments)}finally{FLCUR=null}}}
 /* ---- scènes animées : blocus d'un port, descente et pillage des côtes ---- */
 const flH=k=>{const x=Math.sin(k*127.1+311.7)*43758.5453;return x-Math.floor(x)};
 // petit personnage (même facture que les sièges) : corps aux couleurs du camp, tête, bras qui tient quelque chose
@@ -8786,37 +8817,24 @@ function flMan(x,y,e,c,arm,step){const b=step?Math.abs(Math.sin(step))*e*.18:0;y
 function flFlame(x,y,sz,t,k,al){for(let j=0;j<3;j++){const fl=Math.sin(t*12+k*2.3+j*1.9)*.5+.5;ctx.fillStyle=`rgba(${235+fl*20|0},${100+fl*90|0},30,${(al==null?.9:al)})`;
   ctx.beginPath();ctx.moveTo(x+(j-1)*sz*.5-sz*.4,y);ctx.quadraticCurveTo(x+(j-1)*sz*.5,y-sz*(1.2+fl*1.1),x+(j-1)*sz*.5+sz*.4,y);ctx.fill()}
   for(let j=0;j<3;j++){const u=(t*.35+j/3+k*.17)%1,wd=windOf();ctx.fillStyle=`rgba(60,55,50,${.32*(1-u)*(al==null?1:al)})`;ctx.beginPath();ctx.arc(x+Math.cos(wd.a)*u*sz*3,y-sz*1.6-u*sz*4+Math.sin(wd.a)*u*sz,sz*(.5+u*1.2),0,7);ctx.fill()}}
-function blockScene(id,n,b,s,t,SX,SY){const V=S.nav,ax=n.anch[0],ay=n.anch[1],X=SX(ax),Y=SY(ay),c=FAC[b.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,hid=flH(n.i);
-  const Rk=Math.max(34/s,Math.min(4.5,260/s)),R=Rk*s,e=Math.max(3,Math.min(14,R/11));
-  let base=Math.atan2(ay-n.y,ax-n.x);if(!isFinite(base)||Math.hypot(ay-n.y,ax-n.x)<.01)base=0;
-  // le cordon : un arc devant l'entrée du port, sur l'eau seulement
-  const P=[];for(let k=0;k<=30;k++){const a=base-1.55+3.1*k/30,wx=ax+Math.cos(a)*Rk,wy=ay+Math.sin(a)*Rk;if(!landFast(wx,wy))P.push(a)}
-  const arc=P.length>=4?P:[...Array(31)].map((_,k)=>base-1.55+3.1*k/30);
+function blockScene(id,n,b,s,t,SX,SY){const V=S.nav,ax=n.x,ay=n.y,X=SX(ax),Y=SY(ay),c=FAC[b.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,hid=flH(n.i);
+  // taille fixe sur la carte : le cordon grandit et rapetisse avec le zoom, comme la ville
+  const A=blkArc(n),R=A.R*s,e=.22*s,base=A.base,arc=A.arc,full=e>=1.5;
   const at=(u,rr)=>{const f=Math.max(0,Math.min(arc.length-1.001,u*(arc.length-1))),j=Math.floor(f),a=arc[j]+(arc[j+1]-arc[j])*(f-j);return [X+Math.cos(a)*rr,Y+Math.sin(a)*rr,a]};
   ctx.save();ctx.lineCap='round';
   // chaîne de troncs flottants qui ondulent, reliés par une chaîne
   ctx.strokeStyle='rgba(30,22,14,.8)';ctx.lineWidth=Math.max(1,e*.14);ctx.beginPath();
   for(let k=0;k<=40;k++){const [x,y]=at(k/40,R+Math.sin(t*1.6+k*.8)*e*.12);k?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
-  for(let k=0;k<20;k++){const [x,y,a]=at((k+.5)/20,R+Math.sin(t*1.6+k*1.6)*e*.12);ctx.save();ctx.translate(x,y);ctx.rotate(a+1.5708+Math.sin(t*1.3+k)*.08);
+  for(let k=0;k<20&&full;k++){const [x,y,a]=at((k+.5)/20,R+Math.sin(t*1.6+k*1.6)*e*.12);ctx.save();ctx.translate(x,y);ctx.rotate(a+1.5708+Math.sin(t*1.3+k)*.08);
     ctx.fillStyle='#6b4a2a';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(0,0,e*.75,e*.22,0,0,7);ctx.fill();ctx.stroke();ctx.restore();
     if(k%2&&Math.sin(t*1.6+k*1.6)>.85){ctx.fillStyle='rgba(240,248,252,.5)';ctx.beginPath();ctx.arc(x,y,e*.3,0,7);ctx.fill()}}
   // dans le port : les navires enfermés, voiles carguées, qui se balancent
-  for(let k=0;k<3;k++){const a=base+Math.PI+(k-1)*.6,rr=R*.42,wx=ax+Math.cos(a)*rr/s,wy=ay+Math.sin(a)*rr/s;if(landFast(wx,wy))continue;nvShip(X+Math.cos(a)*rr,Y+Math.sin(a)*rr,e*.95,base+1.5708+Math.sin(t*.7+k)*.06,'#3a2a1a',null)}
-  // galères de garde : chacune fait les cent pas devant son morceau de chaîne
-  const nb=Math.min(6,2+Math.floor(b.w/12));
-  for(let k=0;k<nb;k++){const sw=Math.sin(t*.22+k*2.1),u=(k+.5+.42*sw)/nb,[x,y,a]=at(u,R+e*2.2),dir=Math.cos(t*.22+k*2.1)>0?1:-1,hd=a+dir*1.5708;
-    ctx.strokeStyle='rgba(240,248,252,.45)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-Math.cos(hd)*e*1.2,y-Math.sin(hd)*e*1.2);ctx.lineTo(x-Math.cos(hd)*e*3,y-Math.sin(hd)*e*3);ctx.stroke();
-    nvShip(x,y,e*1.35,hd,'#5a3d22',col)}
-  // navire amiral au large de la chaîne : fanion qui claque, fanal
-  {const [x,y]=at(.5,R+e*5.5);nvShip(x,y,e*1.8,base+1.5708,'#4a3018',col);const mx=x,my=y-e*.4,wv=Math.sin(t*6);
-    ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(mx,my-e*2.6);ctx.stroke();
-    ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(mx,my-e*2.6);ctx.quadraticCurveTo(mx+e*.8,my-e*(2.4+.15*wv),mx+e*1.5,my-e*(2.3+.3*wv));ctx.lineTo(mx,my-e*2);ctx.fill();
-    const fl=.6+.4*Math.sin(t*9+hid*7)*Math.sin(t*5.3);const g=ctx.createRadialGradient(mx,my-e*.2,0,mx,my-e*.2,e*1.6);g.addColorStop(0,`rgba(255,190,80,${.7*fl})`);g.addColorStop(1,'rgba(255,120,40,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(mx,my-e*.2,e*1.6,0,7);ctx.fill()}
+  for(let k=0;k<3&&full;k++){const a=base+(k-1)*.35,rr=(wallKm(n)+.45)*s,wx=ax+Math.cos(a)*rr/s,wy=ay+Math.sin(a)*rr/s;if(landFast(wx,wy))continue;nvShip(X+Math.cos(a)*rr,Y+Math.sin(a)*rr,e*.95,base+1.5708+Math.sin(t*.7+k)*.06,'#3a2a1a',null)}
   // chaloupes de ronde, fanal à la proue
-  for(let k=0;k<3;k++){const u=(k+.5)/3+Math.sin(t*.09+k)*.12,[x,y,a]=at(u,R+e*8+Math.sin(t*.3+k)*e);nvShip(x,y,e*.7,a+1.5708,'#7a5634',null);
+  for(let k=0;k<3&&full;k++){const u=(k+.5)/3+Math.sin(t*.09+k)*.12,[x,y,a]=at(u,R+e*8+Math.sin(t*.3+k)*e);nvShip(x,y,e*.7,a+1.5708,'#7a5634',null);
     const p=.5+.5*Math.sin(t*3+k*2);ctx.fillStyle=`rgba(255,215,130,${.4+.5*p})`;ctx.beginPath();ctx.arc(x,y-e*.5,Math.max(1.2,e*.22),0,7);ctx.fill()}
   // un forceur de blocus tente sa chance : pris et remorqué, ou il passe
-  {const Tc=16,ph=(t/Tc+hid)%1,ci=Math.floor(t/Tc+hid),esc=flH(ci*7.3+n.i)<.25||(V.brun&&V.brun[id]===Math.floor(S.day)),ua=.15+.7*flH(ci*3.1+n.i);
+  if(full){const Tc=16,ph=(t/Tc+hid)%1,ci=Math.floor(t/Tc+hid),esc=flH(ci*7.3+n.i)<.25||(V.brun&&V.brun[id]===Math.floor(S.day)),ua=.15+.7*flH(ci*3.1+n.i);
     const [sx,sy,sa]=at(ua,R+e*18),[mx,my]=at(ua,R+e*6.5),[gx,gy]=at(ua,R+e*2.2),al=ph<.08?ph/.08:ph>.9?(1-ph)/.1:1;ctx.globalAlpha=al;
     let px,py,ph2,qx=gx,qy=gy,ang=sa+Math.PI;
     if(ph<.45){const v=ph/.45;px=sx+(mx-sx)*v;py=sy+(my-sy)*v;if(ph>.2){const w=(ph-.2)/.25;qx=gx+(mx-gx)*w*.85;qy=gy+(my-gy)*w*.85}}
@@ -8906,10 +8924,10 @@ function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/10
     const a=t*.8+f.id;const g=ctx.createRadialGradient(X,Y,0,X,Y,R);g.addColorStop(0,'rgba(214,184,120,.18)');g.addColorStop(1,'rgba(214,184,120,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(X,Y);ctx.arc(X,Y,R,a,a+.5);ctx.closePath();ctx.fill();
     if(f.task&&f.task.k==='vline'){ctx.strokeStyle='rgba(214,184,120,.6)';ctx.setLineDash([2,5]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(SX(f.task.a[0]),SY(f.task.a[1]));ctx.lineTo(SX(f.task.b[0]),SY(f.task.b[1]));ctx.stroke();ctx.setLineDash([])}}
   // blocus : chaîne flottante, galères de garde, navire amiral, rondes, forceurs pris ou passés
-  for(const id in S.block){const n=N[NI[id]];if(!n||!n.anch)continue;const b=S.block[id];if(b.side!=='car'&&ownerN(n.i)!=='car'&&visAt(n.x,n.y)<1)continue;if(!inS(SX(n.anch[0]),SY(n.anch[1]),700))continue;try{blockScene(id,n,b,s,t,SX,SY)}catch(e){}}
+  for(const id in S.block){const n=N[NI[id]];if(!n||!n.anch)continue;const b=S.block[id];if(b.side!=='car'&&ownerN(n.i)!=='car'&&visAt(n.x,n.y)<1)continue;if(!inS(SX(n.anch[0]),SY(n.anch[1]),BLK_R*s*6+300))continue;try{blockScene(id,n,b,s,t,SX,SY)}catch(e){}}
   // blocus ordonné mais pas encore compté (il l'est au changement de jour) : on montre déjà le cordon qui se met en place
   for(const f of S.fleets){if(f.side!=='car'||f.inG||!f.task||f.task.k!=='block')continue;const n=N[f.task.n];if(!n||!n.anch||S.block[n.id])continue;
-    if(Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)>=20||!inS(SX(n.anch[0]),SY(n.anch[1]),700))continue;
+    if(Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)>=20||!inS(SX(n.anch[0]),SY(n.anch[1]),BLK_R*s*6+300))continue;
     const w=warN(f),why=w<5?'il faut 5 navires de guerre':!cityHostile(n.i,f.side)?"le port n'est pas ennemi":'';
     try{blockScene(n.id,n,{side:f.side,w,pend:why||1},s,t,SX,SY)}catch(e){}}
   // pillage des côtes (mission « piller ») : allers et retours des chaloupes, villages qui brûlent en boucle
