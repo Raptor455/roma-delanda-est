@@ -2260,10 +2260,7 @@ function draw(){
     if(!done){drawLevel(LMIN,w,h);for(const l of [L-2,L-1])if(l>LMIN)drawLevel(l,w,h)}}
   drawLevel(L,w,h);
   // tuiles à dessiner : celles qui manquent à l'écran (du centre vers les bords), puis une couronne autour
-  if(miss0||now-lastVT>150){const [i0,i1,j0,j1]=tileRange(L,w,h,miss0?0:1),cx=(i0+i1)/2,cy=(j0+j1)/2,todo=[];
-    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)if(!tileOK(TILES.get(L+'/'+i+'/'+j)))todo.push([Math.hypot(i-cx,j-cy),i,j]);
-    todo.sort((p,q)=>p[0]-q[0]);const t0=performance.now();for(const [,i,j] of todo){renderTileAt(L,i,j);if(performance.now()-t0>6)break}
-    if(!todo.length)for(const [k2,T2] of TILES){if(T2.L===LMIN&&!tileOK(T2)){const [,i,j]=k2.split('/').map(Number);renderTileAt(LMIN,i,j);break}}}
+  perfTiles(L,w,h,miss0,now,lastVT);/*PERF*/
   ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);
   const [x0,y0]=toWorld(0,0),[x1,y1]=toWorld(w,h),inV=(x,y,m)=>x>x0-m&&x<x1+m&&y>y0-m&&y<y1+m;
   if(sel&&sel.n!=null&&CELL[sel.n]){ctx.save();ctx.clip(s<5?landPath:landSmooth);ctx.fillStyle='rgba(255,245,210,.22)';ctx.fill(CELL[sel.n].path);ctx.restore()}
@@ -2374,7 +2371,7 @@ function drawRoads(s,z,inV){
   ctx.lineCap='round';ctx.lineJoin='round';const se=season();
   const stroke=e=>{ctx.beginPath();if(e.cv){e.cv.forEach(([x,y],q)=>q?ctx.lineTo(x,y):ctx.moveTo(x,y))}else{ctx.moveTo(N[e.a].x,N[e.a].y);ctx.lineTo(N[e.b].x,N[e.b].y)}ctx.stroke()};
   const shut=[];
-  for(const e of EDGES){const A=N[e.a],B=N[e.b];if(!inV(A.x,A.y,300)&&!inV(B.x,B.y,300))continue;
+  for(const e of EDGES){const A=N[e.a],B=N[e.b];if(!inV(A.x,A.y,300)&&!inV(B.x,B.y,300))continue;if(!perfEdgeIn(e))continue;/*PERF*/
     if(e.type==='mer')continue;
     if(e.type==='detroit'){if(s<.35)continue;ctx.setLineDash([3*z,5*z]);ctx.strokeStyle='rgba(225,240,240,.55)';ctx.lineWidth=1.2*z;ctx.beginPath();if(e.sv)e.sv.forEach(([x,y],q)=>q?ctx.lineTo(x,y):ctx.moveTo(x,y));else{ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y)}ctx.stroke();continue}
     if(edgeSnow(e,se))shut.push(e);
@@ -8818,6 +8815,117 @@ const _drawDynamicF=drawDynamic;
 drawDynamic=function(w,h,s){const r=_drawDynamicF.apply(this,arguments);try{flDraw(s,w,h)}catch(e){console.error(e)}return r};
 window.__flotte={makeVigie,descent,fireShips,fireTarget,raidTargets,canDescent,windOf,windName,windMul,admOf,goodsFix,goodsOf,blockDaily,foodDaily,supplyOf,vigDaily,flAnim,GOODS,FB,FR,farmsNear};
 /* ================= FIN NAVAL FLOTTE ================= */
+/* ================= PERFORMANCE DE LA CARTE (fil « Accélérer la carte de campagne au zoom ») =================
+   1. Relief des tuiles calculé hors du fil principal (2 à 3 « workers ») et gardé en mémoire : un changement de
+      territoire, un pont coupé ou une nouvelle saison ne refont plus le relief, seulement les traits par-dessus.
+   2. Pendant un zoom ou un glissement, on ne dessine plus de tuiles lourdes : on étire celles qu'on a et on prépare
+      le relief du niveau visé ; le détail arrive dès que la vue se pose, par petits lots qui ne bloquent pas l'image.
+   3. Les routes hors de la tuile ne sont plus tracées (avant : toutes les routes à moins de 300 km).
+   Sans workers (navigateur qui les refuse), tout se calcule comme avant, avec seulement le cache et l'ordonnancement. */
+const PERF={cache:new Map(),CMAX:480,est:{},estF:{},pend:new Map(),queue:[],W:[],ok:false,fail:false,stats:{tiles:0,ms:0,wk:0}};
+// paramètres du relief d'une vue (mêmes calculs que l'ancien paintRelief)
+function perfRP(s,ox,oy,w,h){
+  const q=w*dpr>1100?Math.ceil(w*dpr/520):Math.max(1.5,dpr*1.2),W=Math.ceil(w*dpr/q)+1,H=Math.ceil(h*dpr/q)+1,pk=q/(dpr*s);
+  const wx0=-ox/s,wy0=-oy/s,lvl=pk>9?3:pk>4.5?2:pk>2.2?1:0,minL=Math.max(pk*2.2,.006);
+  const se=S?season():'',SNV=S?SNOW[se]+(se==='Été'?0:200):2800,WIN=!!S&&se==='Hiver';
+  return {wx0,wy0,W,H,pk,lvl,minL,SNV,WIN,key:s+'/'+ox+'/'+oy+'/'+w+'x'+h+'/'+dpr+'/'+se}}
+// le calcul lui-même, sans rien toucher au document : sert ici et dans les workers (copié par toString)
+function perfReliefPx(P){
+  const {wx0,wy0,W,H,pk,lvl,minL,SNV,WIN}=P;
+  {let land=false;for(let j=0;j<=4&&!land;j++)for(let i=0;i<=4;i++)if(landFast(wx0+W*pk*i/4,wy0+H*pk*j/4)){land=true;break}if(!land&&!landFast(wx0+W*pk/2,wy0+H*pk/2)){let any=false;for(let j=0;j<12&&!any;j++)for(let i=0;i<12;i++)if(landFast(wx0+W*pk*(i+.5)/12,wy0+H*pk*(j+.5)/12)){any=true;break}if(!any)return null}}
+  const G=new Float32Array((W+2)*(H+2));
+  for(let j=0;j<H+2;j++){const y=wy0+(j-.5)*pk;for(let i=0;i<W+2;i++)G[j*(W+2)+i]=relH(wx0+(i-.5)*pk,y,minL,lvl)}
+  const D=new Uint8ClampedArray(W*H*4),LD=LANDD;
+  const ve=Math.max(1.8,Math.min(10,3.2*Math.pow(pk,.36))),inv=1/(2*pk*1000),lx=-.6,ly=-.6,lz=.53,flat=lz;
+  for(let j=0;j<H;j++){const y=wy0+(j+.5)*pk;for(let i=0;i<W;i++){const x=wx0+(i+.5)*pk,o=(j+1)*(W+2)+i+1,hc=G[o];
+    const dx=(G[o+1]-G[o-1])*inv,dy=(G[o+W+2]-G[o-W-2])*inv,sl=Math.hypot(dx,dy);
+    const nx=-dx*ve,ny=-dy*ve,nl=1/Math.hypot(nx,ny,1),sh=(nx*lx+ny*ly+lz)*nl/flat;
+    let u=Math.max(0,Math.min(LD.w-1.001,x*LD.R-.5)),v=Math.max(0,Math.min(LD.h-1.001,y*LD.R-.5)),ii=u|0,jj=v|0,fx=u-ii,fy=v-jj,b=(jj*LD.w+ii)*4,b2=b+LD.w*4;
+    const L=c=>(LD.d[b+c]*(1-fx)+LD.d[b+4+c]*fx)*(1-fy)+(LD.d[b2+c]*(1-fx)+LD.d[b2+4+c]*fx)*fy;
+    let r=L(0),gg=L(1),bb=L(2);
+    const t1=ss(500,1600,hc)*.35,t2=Math.max(ss(1700,2500,hc),ss(.55,1.1,sl)*ss(300,900,hc))*.75,nz=vnoise(x*1.3,y*1.3)*500-250,t3=ss(SNV-300,SNV+300,hc+nz*.6-sl*600)*.9;
+    if(t1){r+=(150-r)*t1;gg+=(140-gg)*t1;bb+=(98-bb)*t1}
+    if(t2){r+=(150-r)*t2;gg+=(142-gg)*t2;bb+=(130-bb)*t2}
+    if(WIN){const fr=ss(800,1400,hc+nz*.4)*.3;if(fr){r+=(236-r)*fr;gg+=(238-gg)*fr;bb+=(240-bb)*fr}}
+    if(t3){r+=(246-r)*t3;gg+=(246-gg)*t3;bb+=(244-bb)*t3}
+    let k=sh-1;if(k<0){k=Math.max(-.75,k)*(1-.45*t3);r*=1+k*.8;gg*=1+k*.76;bb*=1+k*.55}else{k=Math.min(.6,k*.8);r+=(255-r)*k*.5;gg+=(248-gg)*k*.46;bb+=(225-bb)*k*.36}
+    const p=(j*W+i)*4;D[p]=r;D[p+1]=gg;D[p+2]=bb;D[p+3]=255}}
+  return D}
+function perfLandD(){if(!LANDD){const c=relief.land;LANDD={d:c.getContext('2d').getImageData(0,0,c.width,c.height).data,w:c.width,h:c.height,R:c.width/MW}}return LANDD}
+function perfStore(key,P,D){let c=0;
+  if(D){c=document.createElement('canvas');c.width=P.W;c.height=P.H;c.getContext('2d').putImageData(new ImageData(D,P.W,P.H),0,0)}
+  PERF.cache.delete(key);PERF.cache.set(key,{c,W:P.W,H:P.H});
+  if(PERF.cache.size>PERF.CMAX)for(const k of PERF.cache.keys()){PERF.cache.delete(k);if(PERF.cache.size<=PERF.CMAX)break}}
+// remplace paintRelief : même image, mais tirée du cache (ou calculée puis rangée)
+paintRelief=function(w,h){
+  if(!DEM)return;const P=perfRP(view.s,view.ox,view.oy,w,h);let E=PERF.cache.get(P.key);
+  if(!E){perfLandD();const t=performance.now();perfStore(P.key,P,perfReliefPx(P));E=PERF.cache.get(P.key);PERF.stats.ms+=performance.now()-t}
+  else{PERF.cache.delete(P.key);PERF.cache.set(P.key,E)}
+  if(!E.c)return;
+  ctx.save();ctx.clip(landSmooth);ctx.imageSmoothingEnabled=true;ctx.drawImage(E.c,0,0,E.W,E.H,P.wx0,P.wy0,E.W*P.pk,E.H*P.pk);ctx.restore()};
+// ---- workers ----
+function perfStartWorkers(){
+  if(PERF.ok||PERF.fail||!DEM||!relief)return;
+  try{
+    const fns=[hash,vnoise,demS,demC,relH,perfReliefPx].map(f=>f.toString()).join('\n');
+    const src=`'use strict';${fns}
+const ss=${ss.toString()};const demH=${demH.toString()};const demRug=${demRug.toString()};const ROT=${JSON.stringify(ROT)};
+let DEM=null,LANDD=null,MK=null;const landFast=(x,y)=>{const X=Math.round(x*MK.R),Y=Math.round(y*MK.R);return X>=0&&Y>=0&&X<MK.w&&Y<MK.h&&MK.m[Y*MK.w+X]===1};
+onmessage=e=>{const d=e.data;if(d.init){DEM=d.DEM;LANDD=d.LANDD;MK=d.MK;postMessage({ready:1});return}
+  let D=null;try{D=perfReliefPx(d.P)}catch(err){postMessage({key:d.key,err:String(err)});return}
+  postMessage({key:d.key,D},D?[D.buffer]:[])}`;
+    const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    const n=Math.max(1,Math.min(3,(navigator.hardwareConcurrency||4)-1)),LD=perfLandD();
+    const init={init:1,DEM:{lv:DEM.lv.map(l=>({a:l.a,w:l.w,h:l.h,r:l.r})),rug:DEM.rug,w:DEM.w,h:DEM.h,r:DEM.r},LANDD:{d:LD.d,w:LD.w,h:LD.h,R:LD.R},MK:{m:relief.mask,w:relief.w,h:relief.h,R:relief.R}};
+    for(let k=0;k<n;k++){const wk=new Worker(url),W={wk,busy:null,ready:false};
+      wk.onmessage=e=>{const d=e.data;if(d.ready){W.ready=true;PERF.ok=true;perfPump();return}
+        const job=W.busy;W.busy=null;PERF.pend.delete(d.key);
+        if(d.err){console.warn('relief worker',d.err);perfKill();return}
+        if(job)perfStore(d.key,job.P,d.D||null);PERF.stats.wk++;perfPump()};
+      wk.onerror=e=>{console.warn('relief worker indisponible',e.message||e);perfKill()};
+      wk.postMessage(init);PERF.W.push(W)}
+  }catch(e){console.warn('relief : pas de worker',e);perfKill()}}
+function perfKill(){PERF.fail=true;PERF.ok=false;for(const W of PERF.W)try{W.wk.terminate()}catch(e){}PERF.W=[];PERF.pend.clear();PERF.queue=[]}
+function perfPump(){if(!PERF.ok)return;for(const W of PERF.W){if(!W.ready||W.busy)continue;let job=null;
+  while(PERF.queue.length){const q=PERF.queue.shift();if(!PERF.cache.has(q.P.key)&&!PERF.pend.has(q.P.key)){job=q;break}}
+  if(!job)break;W.busy=job;PERF.pend.set(job.P.key,1);W.wk.postMessage({key:job.P.key,P:job.P})}}
+const perfTileP=(L,i,j)=>perfRP(2**L,-i*TS,-j*TS,TS,TS);
+// file d'attente refaite à chaque image : on ne garde que ce qui sert à la vue actuelle et à la vue visée
+function perfWant(list){PERF.queue=[];const seen=new Set();for(const [L,i,j] of list){const P=perfTileP(L,i,j);if(seen.has(P.key)||PERF.cache.has(P.key)||PERF.pend.has(P.key))continue;seen.add(P.key);PERF.queue.push({P});if(PERF.queue.length>=48)break}perfPump()}
+function perfTilesOf(L,v,w,h,pad){const keep=view;view=v;const r=tileRange(L,w,h,pad);view=keep;const [i0,i1,j0,j1]=r,cx=(i0+i1)/2,cy=(j0+j1)/2,out=[];
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)if(!tileOK(TILES.get(L+'/'+i+'/'+j)))out.push([Math.hypot(i-cx,j-cy),i,j]);out.sort((p,q)=>p[0]-q[0]);return out}
+// remplace la boucle « tuiles à dessiner » de draw()
+function perfTiles(L,w,h,miss0,now,lastVT){
+  if(!PERF.ok&&!PERF.fail&&!PERF.W.length)perfStartWorkers();
+  const moving=!!ZT||now-lastVT<140;
+  // vue visée par le zoom en cours
+  let tv=view,TL=L;if(ZT){const keep=view;view={s:view.s,ox:view.ox,oy:view.oy};try{zoomAt(ZT.mx,ZT.my,ZT.s/view.s);tv=view}finally{view=keep}TL=lvlOf(ZT.s)}
+  const todo=(miss0||!moving)?perfTilesOf(L,view,w,h,miss0?0:1):[];
+  if(PERF.ok){const want=[];if(TL!==L||tv!==view)for(const [,i,j] of perfTilesOf(TL,tv,w,h,0))want.push([TL,i,j]);
+    for(const [,i,j] of todo)want.push([L,i,j]);
+    if(!moving&&!todo.length)for(const [,i,j] of perfTilesOf(L,view,w,h,1))want.push([L,i,j]);
+    perfWant(want)}
+  if(!miss0&&now-lastVT<=150)return;
+  // budget : quelques ms pendant un mouvement, davantage quand la vue est posée ; une tuile au moins si rien d'autre n'avance
+  const budget=moving?4:11,t0=performance.now();let n=0;
+  for(const [,i,j] of todo){
+    const ready=!PERF.ok||PERF.cache.has(perfTileP(L,i,j).key);
+    if(!ready)continue;
+    const cached=PERF.cache.has(perfTileP(L,i,j).key),est=(cached?PERF.est[L]:PERF.estF[L])||(cached?5:25),el=performance.now()-t0;
+    if(n&&el+est>budget)break;
+    if(!n&&moving&&est>budget&&(ZT||!PERF.fail&&PERF.ok))break;   // pendant un zoom : on étire les tuiles existantes
+    const t=performance.now();renderTileAt(L,i,j);const dt=performance.now()-t;n++;PERF.stats.tiles++;
+    const tab=cached?PERF.est:PERF.estF;tab[L]=tab[L]?tab[L]*.7+dt*.3:dt}
+  if(!todo.length&&!moving)for(const [k2,T2] of TILES){if(T2.L===LMIN&&!tileOK(T2)){const [,i,j]=k2.split('/').map(Number);renderTileAt(LMIN,i,j);break}}}
+// routes : seulement celles dont le tracé touche la zone dessinée
+function perfEdgeIn(e){
+  if(!e._bb){let a=1e9,b=1e9,c=-1e9,d=-1e9;const pts=e.cv||e.sv||[[N[e.a].x,N[e.a].y],[N[e.b].x,N[e.b].y]];
+    for(const p of pts){if(p[0]<a)a=p[0];if(p[1]<b)b=p[1];if(p[0]>c)c=p[0];if(p[1]>d)d=p[1]}
+    for(const n of [N[e.a],N[e.b]]){if(n.x<a)a=n.x;if(n.y<b)b=n.y;if(n.x>c)c=n.x;if(n.y>d)d=n.y}e._bb=[a,b,c,d]}
+  const s=view.s,m=10/s+.3,x0=-view.ox/s-m,y0=-view.oy/s-m,x1=x0+ctx.canvas.width/dpr/s+2*m,y1=y0+ctx.canvas.height/dpr/s+2*m,B=e._bb;
+  return B[2]>=x0&&B[0]<=x1&&B[3]>=y0&&B[1]<=y1}
+window.__perf=PERF;
+/* ================= FIN PERFORMANCE ================= */
 /* ================= COMMANDES DE LA CARTE (fil « Corriger les commandes de la campagne ») =================
    Source : /mnt/project-files/commandes/commandes.js, injecté avant « BOUCLE » par commandes/patch.py (relançable).
    Clic gauche = sélection ; glisser au clic gauche trace un cadre qui sélectionne plusieurs armées (Maj : ajouter) ; clic droit = tout le groupe marche. Caméra : clic droit ou molette enfoncée + glisser,
