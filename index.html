@@ -2258,14 +2258,13 @@ function draw(){
   if(miss0){const absent=l=>{let m=0;const [i0,i1,j0,j1]=tileRange(l,w,h,0);for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)if(!TILES.has(l+'/'+i+'/'+j))m++;return m};
     let done=false;for(const l of [L-1,L+1,L-2]){if(l<LMIN||l>LMAX)continue;if(!absent(l)){drawLevel(l,w,h);done=true;break}}
     if(!done){drawLevel(LMIN,w,h);for(const l of [L-2,L-1])if(l>LMIN)drawLevel(l,w,h)}}
-  drawLevel(L,w,h);
+  if(!PERF.skip.tiles)drawLevel(L,w,h);/*PERF*/
   // tuiles à dessiner : celles qui manquent à l'écran (du centre vers les bords), puis une couronne autour
   perfTiles(L,w,h,miss0,now,lastVT);/*PERF*/
   ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);
   const [x0,y0]=toWorld(0,0),[x1,y1]=toWorld(w,h),inV=(x,y,m)=>x>x0-m&&x<x1+m&&y>y0-m&&y<y1+m;
   if(sel&&sel.n!=null&&CELL[sel.n]){ctx.save();ctx.clip(s<5?landPath:landSmooth);ctx.fillStyle='rgba(255,245,210,.22)';ctx.fill(CELL[sel.n].path);ctx.restore()}
-  drawSieges(s,z,inV);
-  drawDynamic(w,h,s,z,inV);
+  if(!PERF.skip.dyn){const _p=performance.now();drawSieges(s,z,inV);drawDynamic(w,h,s,z,inV);PERF.t.dyn+=performance.now()-_p}/*PERF*/
 }
 // sommets rangés par cases de 40 km, pour ne parcourir que ceux de la tuile
 let GBK=null;function glyphsIn(a,b,c,d){const K=40;if(!GBK){GBK=new Map();for(const g of GLYPH.close){const k=Math.floor(g[0]/K)+','+Math.floor(g[1]/K);if(!GBK.has(k))GBK.set(k,[]);GBK.get(k).push(g)}}
@@ -2355,7 +2354,7 @@ function drawDynamic(w,h,s,z,inV){
   const f=fogC.getContext('2d');f.setTransform(1,0,0,1,0,0);f.globalCompositeOperation='source-over';f.clearRect(0,0,w,h);f.fillStyle='rgba(16,20,26,.52)';f.fillRect(0,0,w,h);
   f.globalCompositeOperation='destination-out';
   f.imageSmoothingEnabled=true;for(const q of SRC){const X=view.ox+q[0]*s,Y=view.oy+q[1]*s,R0=q[2]*VIS.band*s;if(X<-R0||Y<-R0||X>w+R0||Y>h+R0)continue;const v=vsOf(q),R=v.R1*s;f.drawImage(vsMask(v),X-R,Y-R,2*R,2*R)}
-  ctx.drawImage(fogC,0,0,w,h);
+  if(!PERF.skip.fog)ctx.drawImage(fogC,0,0,w,h);/*PERF*/
   // noms des peuples, vue lointaine
   if(s<.75){ctx.textAlign='center';ctx.textBaseline='middle';const fb=[];for(const L of FACLAB.slice().sort((a,b)=>(['car','rom'].includes(b.o)-['car','rom'].includes(a.o))||b.n-a.n)){if(L.n<2&&!['car','rom'].includes(L.o))continue;const X=view.ox+L.x*s,Y=view.oy+L.y*s;const fs=L.o==='car'||L.o==='rom'?17:12;ctx.font=`${fs}px Marcellus, Georgia, serif`;
     const t=FAC[L.o].n.toUpperCase().split('').join(String.fromCharCode(8202)),tw=ctx.measureText(t).width,bx=[X-tw/2-10,Y-fs/2-6,X+tw/2+10,Y+fs/2+6];if(fb.some(b=>b[0]<bx[2]&&b[2]>bx[0]&&b[1]<bx[3]&&b[3]>bx[1]))continue;fb.push(bx);ctx.lineWidth=3;ctx.strokeStyle='rgba(240,230,205,.6)';ctx.strokeText(t,X,Y);ctx.fillStyle=rgb(FAC[L.o].c.map(v=>v*.55),.9);ctx.fillText(t,X,Y)}}
@@ -5316,35 +5315,35 @@ const colOk=a=>a&&a.col&&a.col.av!=null&&a.col.ar!=null&&a.col.av!==a.col.ar&&co
 const _ambushMul11=ambushMul;
 ambushMul=function(b){let m=_ambushMul11(b);try{const A=sideArmies(b.att);if(m<1&&A.some(x=>x.legs.length&&colOk(x))){const a=A.find(x=>x.legs.length&&colOk(x)),g=subsOf(a)[a.col.ar-1]||(a.col.ar===0?genOf(a):null),sh=g&&(hasTr(g,'prud')||hasTr(g,'tact'))?.45:.6;m=1/(1+(1/m-1)*sh)}}catch(e){}return m};
 function colOrder(a){const C=corpsOf(a).filter(c=>c.u.length);if(!colOk(a))return C.map(c=>c.k);const mid=C.map(c=>c.k).filter(k=>k!==a.col.av&&k!==a.col.ar);return [a.col.av,...mid,a.col.ar]}
-function colDraw(s,x0,y0,x1,y1){if(s<.6)return;const e=7/s;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
-  for(const a of S.armies){if(a.dead||a.ship||!a.legs.length||corpsOf(a).length<2)continue;if(a.side!=='car'&&visOfArmy(a)<2)continue;if(a.x<x0-40||a.x>x1+40||a.y<y0-40||a.y>y1+40)continue;
-    const L=a.legs[0],dx=L.x-a.x,dy=L.y-a.y,d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d,C=corpsOf(a),car=a.side==='car',ph=(S.day*DAY_S*.25)%1;
-    const tint=u=>{const k=UT[u.t].k;return k==='eleph'?'#8d8a84':isCavK(k)?(car?'#a27ad6':'#e0675c'):k==='skirm'?(car?'#c3a9e4':'#eda39b'):(car?'#7d4fb8':'#bf3b31')};
-    // on recule le long de la route : chaque corps = une file de carrés (un par régiment), fanion en tête
-    let t=e*5;const heads=[],sq=[];
-    for(const k of colOrder(a)){const c=C.find(x=>x.k===k);if(!c||!c.u.length)continue;const ex=colOk(a)&&(k===a.col.av||k===a.col.ar);
-      heads.push({k,g:c.g||(k===0?genOf(a):null),x:a.x-ux*t,y:a.y-uy*t,ex});
-      for(const i of c.u){const u=a.units[i];if(!u)continue;sq.push({x:a.x-ux*t,y:a.y-uy*t,c:tint(u),ex,gd:u.gd});t+=e*1.45}
-      t+=e*1.1}
-    const bx=a.x-ux*(t+e*.4),by=a.y-uy*(t+e*.4);
-    ctx.strokeStyle='rgba(60,40,20,.45)';ctx.lineWidth=e*.35;ctx.setLineDash([e*.6,e*.5]);ctx.lineDashOffset=-ph*e*2.2;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(bx,by);ctx.stroke();ctx.setLineDash([]);
-    const ang=Math.atan2(uy,ux);
-    for(const q of sq){ctx.save();ctx.translate(q.x,q.y);ctx.rotate(ang);ctx.fillStyle=q.c;ctx.fillRect(-e*.55,-e*.55,e*1.1,e*1.1);ctx.strokeStyle=q.ex?'#ffd77a':'#1b1712';ctx.lineWidth=e*(q.ex?.22:.12);ctx.strokeRect(-e*.55,-e*.55,e*1.1,e*1.1);
-      if(q.gd){ctx.fillStyle='#ffd77a';ctx.beginPath();ctx.arc(0,0,e*.18,0,7);ctx.fill()}ctx.restore()}
-    ctx.save();ctx.translate(bx,by);ctx.rotate(ang);ctx.fillStyle='#8a6a3e';ctx.fillRect(-e*.9,-e*.5,e*1.8,e);ctx.strokeStyle='#3a2a18';ctx.lineWidth=e*.12;ctx.strokeRect(-e*.9,-e*.5,e*1.8,e);
-    ctx.fillStyle='#3a2a18';ctx.beginPath();ctx.arc(-e*.5,e*.55,e*.22,0,7);ctx.arc(e*.5,e*.55,e*.22,0,7);ctx.fill();ctx.restore();
-    // fanions : petite hampe et flamme ; de près, bannière avec le nom du commandant du corps
-    const fc=car?'#6b3f9f':'#9b2a22',big=s>=1.5;
-    for(const h of heads){const px=h.x,py=h.y-e*.55,top=py-e*2.1;
-      ctx.strokeStyle='#2a1d12';ctx.lineWidth=e*.14;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,top);ctx.stroke();
-      ctx.fillStyle=h.k===0?'#e0b84f':fc;ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px+e*1.1,top+e*.3);ctx.lineTo(px,top+e*.65);ctx.closePath();ctx.fill();ctx.strokeStyle='#1b1712';ctx.lineWidth=e*.07;ctx.stroke();
-      if(big&&h.g){const nm=h.g.name.split(' ').slice(-1)[0];const fz=Math.max(e*.82,11/s);ctx.font=`600 ${fz}px "Barlow Semi Condensed",Arial,sans-serif`;const w=ctx.measureText(nm).width+fz*.9,bx0=px+e*.07,by0=top-fz*1.5,bh=fz*1.4;
-        ctx.fillStyle=h.k===0?'#e0b84f':fc;ctx.beginPath();ctx.moveTo(bx0,by0);ctx.lineTo(bx0+w,by0);ctx.lineTo(bx0+w-fz*.35,by0+bh/2);ctx.lineTo(bx0+w,by0+bh);ctx.lineTo(bx0,by0+bh);ctx.closePath();ctx.fill();ctx.strokeStyle='#1b1712';ctx.lineWidth=e*.08;ctx.stroke();
-        ctx.strokeStyle='#2a1d12';ctx.lineWidth=e*.14;ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,by0);ctx.stroke();
-        ctx.fillStyle=h.k===0?'#1b1712':'#f4ead2';ctx.textAlign='left';ctx.fillText(nm,bx0+fz*.3,by0+bh/2+fz*.05);ctx.textAlign='center'}}}
+function colDraw(){} // remplacé : la colonne se dessine sur la grande colonne de régiments (formation), voir plus bas
+// colonne de marche dessinée sur la grande colonne de la carte : régiments rangés par corps (ordre de marche), fanion en tête de chaque corps, bagages en queue
+const _formation11=formation;
+formation=function(a,s){const C=a&&a.legs&&a.legs.length&&!a.ship&&TRAIL[a.id]&&TRAIL[a.id].length>1?corpsOf(a):null;
+  if(!C||C.length<2||C.filter(c=>c.u.length).length<2)return _formation11.apply(this,arguments);
+  const O=colOrder(a),seq=[],heads=[];for(const k of O){const c=C.find(x=>x.k===k);if(!c||!c.u.length)continue;heads.push({k,g:c.g||(k===0?genOf(a):null),i:seq.length,n:c.u.length,ex:colOk(a)&&(k===a.col.av||k===a.col.ar)});for(const i of c.u)if(a.units[i])seq.push(a.units[i])}
+  if(seq.length!==a.units.length)return _formation11.apply(this,arguments);
+  const keep=a.units,M={...MARCH};for(const k in MARCH)MARCH[k]=0;a.units=seq;let r;
+  try{r=_formation11.apply(this,arguments)}finally{a.units=keep;Object.assign(MARCH,M)}
+  try{const P=a._sq;if(P&&P.length===seq.length)colDeco(a,s,P,heads)}catch(e){}
+  return r};
+function colDeco(a,s,P,heads){const q=UNIT_KM*s,car=a.side==='car',fc=car?'#6b3f9f':'#9b2a22',dark='rgba(26,18,10,.95)';ctx.save();ctx.textBaseline='middle';
+  // liseré doré de l'avant-garde et de l'arrière-garde
+  for(const h of heads)if(h.ex){ctx.strokeStyle='#ffd77a';ctx.lineWidth=Math.max(1.5,q*.12);for(let j=h.i;j<h.i+h.n;j++){const [x,y]=P[j];ctx.strokeRect(x-q/2-1.5,y-q/2-1.5,q+3,q+3)}}
+  // bagages : chariots derrière le dernier régiment
+  const n=P.length,L=P[n-1],B=n>1?P[n-2]:[L[0],L[1]-1],dl=Math.hypot(L[0]-B[0],L[1]-B[1])||1,ux=(L[0]-B[0])/dl,uy=(L[1]-B[1])/dl,cw=Math.max(7,q*.9),ang=Math.atan2(uy,ux);
+  for(let j=1;j<=2;j++){const x=L[0]+ux*(q*.9+cw*1.15*j),y=L[1]+uy*(q*.9+cw*1.15*j);ctx.save();ctx.translate(x,y);ctx.rotate(ang);
+    ctx.fillStyle='#8a6a3e';ctx.fillRect(-cw*.5,-cw*.32,cw,cw*.64);ctx.fillStyle='#d9c9a0';ctx.fillRect(-cw*.42,-cw*.26,cw*.84,cw*.3);ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1,cw*.08);ctx.strokeRect(-cw*.5,-cw*.32,cw,cw*.64);
+    ctx.fillStyle=dark;ctx.beginPath();ctx.arc(-cw*.3,cw*.36,cw*.13,0,7);ctx.arc(cw*.3,cw*.36,cw*.13,0,7);ctx.fill();ctx.restore()}
+  // fanion en tête de chaque corps ; de près, bannière au nom du commandant
+  const big=s>1.4,ph=Math.max(10,q*1.5);
+  for(const h of heads){const [x,y]=P[h.i],px=x+q*.5,py=y-q*.5,top=py-ph,col=h.k===0?'#e0b84f':fc;
+    ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1.2,q*.08);ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,top);ctx.stroke();
+    const fw=Math.max(7,q*.6);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px+fw,top+fw*.3);ctx.lineTo(px,top+fw*.6);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke();
+    if(big&&h.g){const nm=h.g.name.split(' ').slice(-1)[0],fz=11;ctx.font=`600 ${fz}px "Barlow Semi Condensed",Arial,sans-serif`;const w=ctx.measureText(nm).width+fz*.9,bh=fz*1.4,bx=px,by=top-bh-1;
+      ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1.2,q*.08);ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,by);ctx.stroke();
+      ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+w,by);ctx.lineTo(bx+w-fz*.35,by+bh/2);ctx.lineTo(bx+w,by+bh);ctx.lineTo(bx,by+bh);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke();
+      ctx.fillStyle=h.k===0?'#1b1712':'#f4ead2';ctx.textAlign='left';ctx.fillText(nm,bx+fz*.3,by+bh/2+.5)}}
   ctx.restore()}
-const _drawVillagesDyn11=drawVillagesDyn;
-drawVillagesDyn=function(s,z,x0,y0,x1,y1){_drawVillagesDyn11.apply(this,arguments);try{colDraw(s,x0,y0,x1,y1)}catch(e){}};
 // vers la bataille 3D : avis du conseil et ordre de marche
 const _addBattleMods11=addBattleMods;
 addBattleMods=function(payload){_addBattleMods11(payload);try{const b=S.cur;if(!b||!payload||!payload.b)return;
@@ -8071,6 +8070,32 @@ function perfResRow(again){const c=$('mcard');if(!c)return;let d=$('perfRes');if
   const r=perfResGet();d.innerHTML=`<h3 style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;font-weight:500">Résolution de la carte</h3><div class="chips">${PERF_RES.map(([k,n])=>`<button type="button" data-res="${k}" class="${k===r?'on':''}">${n}</button>`).join('')}</div><p class="sub">Actuellement ${Math.round(dpr*100)} % (${Math.round(cv.width)} × ${Math.round(cv.height)} pixels). Plus bas, la carte est un peu moins nette mais plus fluide, surtout en plein écran ou avec l'affichage Windows réglé à 125-150 %.</p>`;
   d.querySelectorAll('[data-res]').forEach(b=>b.onclick=()=>perfResSet(b.dataset.res))}
 {const _om=openMenu;openMenu=function(){const r=_om.apply(this,arguments);try{perfResRow()}catch(e){}return r}}
+// ---- compteur de performances (menu Partie) : mesure sur la vraie machine, carte graphique comprise ----
+// PERF.t cumule les ms de JavaScript par poste ; le reste du temps d'image = navigateur + carte graphique.
+PERF.t={sim:0,draw:0,dyn:0,n:0};PERF.skip={};
+const PERF_TESTS=[['normal','Tout affiché'],['fog','Sans brouillard'],['tiles','Sans fond de carte'],['dyn','Sans armées ni animations']];
+let PERFHUD=null;
+function perfHud(on){
+  if(!on){if(PERFHUD){clearInterval(PERFHUD.iv);cancelAnimationFrame(PERFHUD.raf);PERFHUD.el.remove();PERFHUD=null}return}
+  if(PERFHUD)return;const el=document.createElement('div');el.id='perfHud';
+  el.style.cssText='position:fixed;left:10px;top:90px;z-index:60;background:rgba(22,19,14,.94);border:1px solid rgba(214,184,120,.4);border-radius:6px;padding:8px 10px;font:13px/1.35 var(--ui,sans-serif);color:#efe6d2;min-width:250px;pointer-events:auto';
+  document.body.appendChild(el);const H=PERFHUD={el,fr:[],last:performance.now(),raf:0,res:null,test:null};
+  (function f(t){H.fr.push(t-H.last);H.last=t;H.raf=requestAnimationFrame(f)})(H.last);
+  const snap=()=>{const fr=H.fr.splice(0);const T=PERF.t,n=Math.max(1,T.n);const r={ips:fr.length,ms:fr.length?fr.reduce((a,b)=>a+b,0)/fr.length:0,lent:fr.filter(x=>x>50).length,sim:T.sim/n,draw:T.draw/n,dyn:T.dyn/n};PERF.t={sim:0,draw:0,dyn:0,n:0};return r};
+  const row=(k,v)=>`<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#b5a98f">${k}</span><b style="font-weight:500">${v}</b></div>`;
+  const render=r=>{const autre=Math.max(0,r.ms-r.sim-r.draw);
+    el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b style="font-family:var(--display,serif);font-weight:400;font-size:15px">Performances</b><span><button type="button" data-p="test" style="min-height:24px;padding:1px 8px;font-size:12px">Test 12 s</button> <button type="button" data-p="x" style="min-height:24px;padding:1px 8px;font-size:12px">×</button></span></div>`+
+      row('Images par seconde',r.ips)+row('Temps par image',r.ms.toFixed(1)+' ms')+row('Images de plus de 50 ms',r.lent)+
+      row('· simulation',r.sim.toFixed(1)+' ms')+row('· dessin (calcul)',r.draw.toFixed(1)+' ms')+row('&nbsp;&nbsp;dont armées et animations',r.dyn.toFixed(1)+' ms')+row('· navigateur et carte graphique',autre.toFixed(1)+' ms')+
+      row('Résolution',`${Math.round(dpr*100)} % · ${cv.width}×${cv.height}`)+row('Calcul du relief',PERF.ok?'en arrière-plan':PERF.fail?'direct (repli)':'…')+
+      (H.test&&H.test.k<PERF_TESTS.length?`<p style="margin:6px 0 0;color:#d6b878">Test : ${PERF_TESTS[H.test.k][1]}… ne touchez à rien</p>`:'')+
+      (H.res?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(214,184,120,.25)">${H.res.map(x=>row(x.n,x.ms.toFixed(1)+' ms · '+x.ips+' im/s')).join('')}<p style="margin:4px 0 0;color:#b5a98f;font-size:12px">Faites une capture de ce cadre et envoyez-la.</p></div>`:'');
+    el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{if(b.dataset.p==='x')perfHud(false);else perfTest()})};
+  H.iv=setInterval(()=>{const r=snap();if(H.test){const T=H.test;if(T.skipFirst){T.skipFirst=false}else{T.out.push({n:PERF_TESTS[T.k][1],ms:r.ms,ips:r.ips});T.k++;
+      if(T.k<PERF_TESTS.length){PERF.skip={};PERF.skip[PERF_TESTS[T.k][0]]=1;T.skipFirst=true}else{PERF.skip={};H.res=T.out;H.test=null}}}
+    render(r)},1500);render(snap())}
+function perfTest(){const H=PERFHUD;if(!H||H.test)return;H.res=null;PERF.skip={};H.test={k:0,out:[],skipFirst:true};}
+{const _om=openMenu;openMenu=function(){const r=_om.apply(this,arguments);try{const d=$('perfRes');if(d&&!$('perfHudB')){const b=document.createElement('button');b.type='button';b.id='perfHudB';b.textContent=PERFHUD?'Masquer le compteur de performances':'Afficher le compteur de performances';b.style.marginTop='8px';b.onclick=()=>{perfHud(!PERFHUD);closeModal()};d.appendChild(b)}}catch(e){}return r}}
 window.__perf=PERF;
 /* ================= FIN PERFORMANCE ================= */
 /* ================= NAVAL VIVANT (fil « Rendre le naval de campagne vivant ») =================
@@ -9151,12 +9176,12 @@ setTimeout(async()=>{
   function frame(now){
     const raw=Math.min(.1,(now-last)/1000);last=now;
     if(!S.paused&&!S.cur&&!S.over&&($('modal').hidden||MPH())/*MP*/){
-      tick(raw/DAY_S*S.speed);computeVis();
+      {const _p=performance.now();tick(raw/DAY_S*S.speed);computeVis();PERF.t.sim+=performance.now()-_p}/*PERF*/
       for(const a of S.armies)if(a.side!=='car'&&visOfArmy(a)>0)S.intel[a.id]={x:a.x,y:a.y,d:Math.floor(S.day)};
       uiT-=raw;if(uiT<=0){uiT=.5;renderTop();if(sel&&!$('side').matches(':hover'))renderSide()}
     }
     if(sel&&sel.a&&sel.a.dead){sel=null;renderSide()}
-    {const bf=$('battle3d');if(!bf||bf.style.opacity!=='1'){stepZoom(raw||.016);draw()}}requestAnimationFrame(frame);
+    {const bf=$('battle3d');if(!bf||bf.style.opacity!=='1'){stepZoom(raw||.016);const _p=performance.now();draw();PERF.t.draw+=performance.now()-_p;PERF.t.n++}/*PERF*/}requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 },20);
