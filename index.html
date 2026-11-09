@@ -7749,7 +7749,49 @@ table.dip td:last-child{white-space:nowrap}
  .ui-menu button{min-width:0;font-size:0;padding:4px 7px}.ui-menu button .ui-i{width:20px;height:20px}
  #side{left:8px;right:8px;width:auto;max-height:46%;bottom:8px}
  #log{display:none!important}
-}`;
+}/* fiche d'armée à onglets (9 nov.) */
+#side.ua{display:flex;flex-direction:column;overflow:hidden;max-height:min(64%,calc(100% - 92px));padding-bottom:0}
+#side.ua>.ua-head{flex:none}
+.ua-gen{display:flex;flex-wrap:wrap;align-items:center;gap:3px 4px;margin:2px 0 2px}
+.ua-gen .stars{color:#e5c06c;font-size:12px;margin-right:3px}
+#side .ua-gen .tr{font-size:11px;padding:0 5px;margin:0}
+#side.ua .ui-tile{height:50px;padding-bottom:7px}
+#side.ua .ui-tiles{margin:2px 0 4px}
+.ua-gg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:6px 0 8px}
+.ua-g{min-width:0;border:1px solid rgba(210,174,108,.22);background:rgba(0,0,0,.22);padding:3px 6px 5px;display:grid;line-height:1.15}
+.ua-g small{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mu2)}
+.ua-g b{font-size:15px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ua-g em{font-style:normal;font-size:10.5px;color:var(--mu2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
+.ua-g s{display:block;height:3px;margin-top:3px;background:rgba(255,255,255,.09);text-decoration:none}
+.ua-g s i{display:block;height:100%}
+.ua-tabs{display:flex;flex:none;border-bottom:1px solid var(--bz);margin:0 -11px;padding:0 8px}
+#side .ua-tabs button{background:transparent;border:1px solid transparent;border-bottom:0;margin-bottom:-1px;min-height:26px;padding:3px 8px;color:var(--mu2);font-size:12.5px;border-radius:0}
+#side .ua-tabs button:hover{color:var(--tx)}
+#side .ua-tabs button.on{color:var(--tx);border-color:var(--bz);background:#2b2219;font-weight:600}
+.ua-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5c06c;margin-left:4px}
+.ua-body{flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -11px;padding:6px 11px 8px;scrollbar-width:thin}
+.ua-foot{flex:none;display:flex;flex-wrap:wrap;gap:4px;margin:0 -11px;padding:6px 11px;border-top:1px solid rgba(210,174,108,.25)}
+#side .ua-ctab{flex:none;display:flex;align-items:center;gap:6px;margin:0 -11px;padding:5px 11px;border:0;border-top:1px solid rgba(210,174,108,.25);background:rgba(0,0,0,.28);color:var(--mu2);font-size:12.5px;width:calc(100% + 22px);min-height:30px;border-radius:0;text-align:left}
+#side .ua-ctab:hover{background:rgba(210,174,108,.1)}
+.ua-ctab span{color:var(--bzL)}.ua-ctab b{color:var(--tx)}.ua-ctab small{margin-left:auto;font-size:11.5px}
+#side .ua-lbl{font-weight:600;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--bzL);display:flex;align-items:center;gap:8px;margin:10px 0 4px}
+#side .ua-lbl:first-child{margin-top:2px}
+.ua-lbl::after{content:"";flex:1;height:1px;background:rgba(210,174,108,.22)}
+.ua-corps{display:flex;align-items:baseline;gap:4px;font-size:12px;color:var(--mu2);margin:6px 0 2px}
+.ua-corps b{color:var(--tx);font-weight:600}
+.ua-corps span{margin-left:auto;font-size:11px}
+#side .ua-pane>h3:first-child{margin-top:2px}
+.ua-why{font-size:12px;color:var(--mu2);margin-top:8px}
+.ua-why summary{cursor:pointer}
+.ua-why p{margin:3px 0 0}
+.ua-why b{color:var(--tx);font-weight:600}
+.ua-reg{display:flex;border-bottom:1px solid var(--bz);margin:4px 0 10px}
+#mcard .ua-reg button{background:transparent;border:1px solid transparent;border-bottom:0;margin-bottom:-1px;border-radius:0;color:var(--mu2);padding:5px 14px}
+#mcard .ua-reg button.on{color:var(--tx);border-color:var(--bz);background:#2b2219;font-weight:600}
+.ua-drag{cursor:grab}.ua-lift{opacity:.45}
+#mcard .ua-over{outline:1px dashed #f1d08a;outline-offset:-1px;background:rgba(241,208,138,.07)!important}
+@media (max-width:760px){#side.ua{max-height:min(52%,calc(100% - 80px))}}
+`;
 const st=document.createElement('style');st.id='ui-bronze';st.textContent=css;document.head.appendChild(st);
 
 /* ---------- barre du haut ---------- */
@@ -7875,6 +7917,153 @@ $('top').addEventListener('mouseout',ev=>{const e=ev.target.closest(TSEL);if(e&&
 $('top').addEventListener('focusin',ev=>{const e=ev.target.closest(TSEL);if(e){if(e.title){e.dataset.tt=e.title;e.removeAttribute('title')}ttShow(e)}});
 $('top').addEventListener('focusout',ttHide);
 addEventListener('pointerdown',ttHide,true);
+/* ---------- fiche d'armée à onglets et registre (9 nov., choix de Baptiste : proposition A + registre) ----------
+   Après tous les autres modules (installé au premier rendu), on range le panneau d'une armée en onglets
+   Troupes / Ordres / Corps / Intendance, la ville à part derrière une languette, et on réunit
+   « Organiser l'armée » et « Organiser les corps » dans une seule fenêtre à deux onglets, le registre.
+   Les éléments sont déplacés, jamais recréés : leurs actions restent celles des autres modules. */
+const UA={tab:{},city:{},top:{},reg:'corps'};
+const UA_T=[['tr','Troupes'],['or','Ordres'],['co','Corps'],['in','Intendance']];
+const UA_ROM=['','Ier','IIe','IIIe','IVe','Ve'];
+function uaKind(n,cur){
+  const t=(n.textContent||'').trim(),q=s=>n.querySelector&&n.querySelector(s);
+  if(n.matches&&n.matches('.ui-x,.ui-head'))return 'head';
+  if(q('#aEmb'))return 'co';
+  if(q('[data-csub],[data-cauto],#cWin,#cGuard'))return 'co';
+  if(q('#aBag,[data-merc],[data-board],#aShip,#aRaid'))return 'in';
+  if(q('[data-pace],[data-mo],#aAmb,#aRef,#aGar,#aFeux,#aBoeufs,#aTransf,#aCamp'))return 'or';
+  if(n.classList&&n.classList.contains('sub')){
+    if(/^(Ordre de marche|Ruses|Allure)/.test(t))return 'or';
+    if(/^(Mercenaires|Ravitaillement|Bagages|Vitesse)/.test(t))return 'in';
+    if(/^(Chaîne de commandement|État-major|Conseil)/.test(t))return 'co';
+  }
+  return cur;
+}
+function uaCell(l,v,w,pct,col,tt){const d=document.createElement('div');d.className='ua-g';if(tt)d.title=tt;
+  d.innerHTML=`<small>${esc(l)}</small><b>${esc(v)}</b><em style="${col?'color:'+col:''}">${esc(w||'')}</em><s><i style="width:${pct};background:${col||'var(--bzL)'}"></i></s>`;return d}
+function uaGauge(n){const lab=((n.firstChild&&n.firstChild.nodeType===3?n.firstChild.textContent:'')||'').trim(),b=n.querySelector('b'),s=n.querySelector('.sub'),i=n.querySelector('.mbar i');
+  const v=s?s.textContent.replace(/[()]/g,'').trim():'';
+  return uaCell(lab||'État',v||(b?b.textContent:''),v?(b?b.textContent:''):'',i?i.style.width:'0%',i?i.style.background:'',n.textContent.replace(/\s+/g,' ').trim())}
+function uaGen(gb,top,gg,P,stash){
+  let cur='gen';
+  for(const n of [...gb.childNodes]){
+    if(n.nodeType!==1){if(cur!=='gen'&&n.textContent.trim())P[cur].appendChild(n);continue}
+    if(cur==='gen'&&(n.matches('.stars,.tr')||n.tagName==='BR'||n.tagName==='B')){if(n.tagName!=='BR'&&n.tagName!=='B')top.appendChild(n);continue}
+    if(n.querySelector('.mbar')){gg.appendChild(uaGauge(n));continue}
+    if(n.classList.contains('sub')&&/\d\s*hommes/.test(n.textContent)){const m=n.textContent.match(/^([\d\s  ]+)\s*hommes/);
+      const c=uaCell('Hommes',m?m[1].trim():'?','',  '100%','',n.textContent.trim());c.dataset.men='1';gg.prepend(c);continue}
+    if(n.classList.contains('sub')&&!n.textContent.trim()&&!n.children.length)continue;
+    if(n.querySelector('#aOrg')){stash.appendChild(n);continue}
+    const k=uaKind(n,cur==='gen'?'or':cur);cur=k;P[k].appendChild(n);
+  }
+  return cur;
+}
+function uaLbl(t){const p=document.createElement('p');p.className='ua-lbl';p.textContent=t;return p}
+function armTabs(){
+  const el=$('side');if(!el)return;
+  const a=sel&&sel.a,gb=el.querySelector(':scope > .genbox');
+  const on=!!(a&&!a.dead&&gb&&(typeof isMine!=='function'||isMine(a)));
+  el.classList.toggle('ua',on);
+  if(!on||el.querySelector(':scope > .ua-body'))return;
+  const id=a.id,kids=[...el.children];
+  const head=document.createElement('div');head.className='ua-head';
+  const top=document.createElement('div');top.className='ua-gen';
+  const gg=document.createElement('div');gg.className='ua-gg';
+  const bar=document.createElement('div');bar.className='ua-tabs';bar.setAttribute('role','tablist');
+  const body=document.createElement('div');body.className='ua-body';
+  const P={};UA_T.forEach(([k])=>{P[k]=document.createElement('div');P[k].className='ua-pane';P[k].dataset.k=k;body.appendChild(P[k])});
+  const city=document.createElement('div');city.className='ua-pane ua-city';body.appendChild(city);
+  const foot=document.createElement('div');foot.className='ua-foot';
+  const stash=document.createElement('div');stash.hidden=true;
+  let cur='head',seen=false,phase=0,cityName='';
+  const put=(n,k)=>{if(k==='head')head.appendChild(n);else if(k==='city')city.appendChild(n);else P[k].appendChild(n)};
+  for(const n of kids){
+    if(n===gb){seen=true;cur=uaGen(gb,top,gg,P,stash);gb.remove();continue}
+    if(n.tagName==='H3'&&/^Régiments/.test(n.textContent)){phase=1;n.classList.add('ua-h');put(n,'tr');continue}
+    if(phase>=1&&n.tagName==='H3'&&phase===1){phase=2;cityName=(n.textContent.split(':').pop()||'').trim()}
+    if(phase===2){put(n,'city');continue}
+    if(n.querySelector&&n.querySelector('#aHalt')){[...n.children].forEach(b=>{if(b.id==='aSplit'){const r=document.createElement('div');r.className='row ua-split';r.appendChild(b);P.tr.appendChild(r)}else foot.appendChild(b)});n.remove();continue}
+    if(phase===1){put(n,'tr');continue}
+    if(!seen){put(n,uaKind(n,'head'));continue}
+    const k=uaKind(n,cur);put(n,k==='head'?cur:k);if(k!=='head')cur=k;
+  }
+  // titre : étoiles et traits sous le nom
+  const hh=head.querySelector('.ui-head');if(hh&&top.childNodes.length)hh.after(top)
+  else if(top.childNodes.length)head.appendChild(top);
+  // vivres et hommes
+  const vtxt=P.in.textContent,vm=vtxt.match(/vivres\s+(\d+)\s*j/),vx=vtxt.match(/jusqu'à\s+(\d+)\s*j/);
+  if(vm){const d=+vm[1],mx=vx?+vx[1]:30,col=d<7?'var(--bad,#d24a3a)':d<15?'#e0883c':'';gg.appendChild(uaCell('Vivres',d+' j','',Math.min(100,Math.round(d/mx*100))+'%',col,'Vivres de l\'armée : '+d+' jours'))}
+  const rh=P.tr.querySelector('h3'),rm=rh&&rh.textContent.match(/(\d+)\s*\/\s*(\d+)/),mc=gg.querySelector('[data-men]');
+  if(mc&&rm){mc.querySelector('em').textContent=rm[1]+'/'+rm[2]+' rég.';mc.querySelector('s i').style.width=Math.round(rm[1]/rm[2]*100)+'%'}
+  if(gg.children.length){gg.style.gridTemplateColumns=`repeat(${gg.children.length},minmax(0,1fr))`;head.appendChild(gg)}
+  // régiments rangés par corps
+  const tiles=P.tr.querySelector('.ui-tiles');
+  if(tiles&&typeof corpsOf==='function'){try{const C=corpsOf(a);if(C&&C.length>1){
+    const by={};tiles.querySelectorAll(':scope > .ui-tile').forEach(t=>{const i=t.querySelector('input[data-k]');if(i)by[i.dataset.k]=t});
+    const frag=document.createDocumentFragment();
+    for(const c of C){const ts=c.u.map(i=>by[i]).filter(Boolean);if(!ts.length)continue;
+      const h=document.createElement('div');h.className='ua-corps';h.innerHTML=`<b>${c.k?(typeof corpsN==='function'?corpsN(c.k):UA_ROM[c.k]+' corps'):'Corps du chef'}</b>${c.g?' · '+esc(c.g.name):''}<span>${ts.length}</span>`;
+      const g=document.createElement('div');g.className='ui-tiles';ts.forEach(t=>{g.appendChild(t);delete by[t.querySelector('input').dataset.k]});frag.appendChild(h);frag.appendChild(g)}
+    const rest=Object.values(by);if(rest.length){const g=document.createElement('div');g.className='ui-tiles';rest.forEach(t=>g.appendChild(t));frag.appendChild(g)}
+    tiles.replaceWith(frag)}}catch(e){console.error('[UI]',e)}}
+  const sp=P.tr.querySelector('.ua-split');if(sp)P.tr.appendChild(sp);
+  // étiquettes de section
+  [P.or,P.in,P.co].forEach(p=>p.querySelectorAll(':scope > p.sub').forEach(x=>{if(x.textContent.trim().length<40&&!/\d/.test(x.textContent))x.className='ua-lbl'}));
+  const pace=P.or.querySelector('[data-pace]');if(pace){const r=pace.closest('#side .ua-pane > *');if(r)r.before(uaLbl('Allure'))}
+  const gar=P.or.querySelector('#aGar');if(gar){const r=gar.closest('.ua-pane > *');if(r){P.or.appendChild(uaLbl('Position'));P.or.appendChild(r)}}
+  const rav=[...P.in.children].find(x=>/^Ravitaillement/.test(x.textContent.trim()));if(rav)rav.before(uaLbl('Vivres'));
+  const emb=P.co.querySelector('#aEmb');if(emb){const r=emb.closest('.ua-pane > *');if(r){P.co.appendChild(uaLbl('Étendard'));P.co.appendChild(r)}}
+  // ordres impossibles : cachés, avec la raison à déplier
+  const why=[];P.or.querySelectorAll('button[disabled]').forEach(b=>{why.push(`<b>${esc(b.textContent.trim())}</b> : ${esc(b.title||'pas possible ici')}`);b.hidden=true});
+  P.or.querySelectorAll('.row').forEach(r=>{if(r.children.length&&![...r.children].some(c=>!c.hidden))r.hidden=true});
+  if(why.length){const d=document.createElement('details');d.className='ua-why';d.innerHTML=`<summary>${why.length} ordre${why.length>1?'s':''} impossible${why.length>1?'s':''} ici</summary>`+why.map(w=>`<p>${w}</p>`).join('');P.or.appendChild(d)}
+  // pied : organiser, halte, éclaireurs, centrer
+  const org=document.createElement('button');org.type='button';org.className='go';org.innerHTML=ico('split',14)+'Organiser…';org.title='Registre de l\'armée : corps, garde, général et régiments';
+  org.onclick=()=>{if(UA.reg==='org'&&$('aOrg'))$('aOrg').click();else if(typeof corpsWin==='function')corpsWin(a);else if($('aOrg'))$('aOrg').click()};
+  foot.prepend(org);
+  const sc=foot.querySelector('#aScout');if(sc){const t=[...sc.childNodes].reverse().find(x=>x.nodeType===3&&x.textContent.trim());if(t)t.textContent='Éclaireurs'}
+  // onglets
+  const want=UA.tab[id]&&P[UA.tab[id]].childNodes.length?UA.tab[id]:'tr';
+  const show=k=>{UA.tab[id]=k;bar.querySelectorAll('button').forEach(b=>{const o=b.dataset.k===k;b.classList.toggle('on',o);b.setAttribute('aria-selected',o)});UA_T.forEach(([x])=>P[x].hidden=x!==k)};
+  UA_T.forEach(([k,n])=>{if(!P[k].childNodes.length)return;const b=document.createElement('button');b.type='button';b.dataset.k=k;b.setAttribute('role','tab');b.textContent=n;
+    if(k==='in'&&(P.in.querySelector('[data-merc]')||(vm&&+vm[1]<7))){const i=document.createElement('i');i.className='ua-dot';i.title=vm&&+vm[1]<7?'Vivres bas':'Mercenaires à engager';b.appendChild(i)}
+    b.onclick=()=>{show(k);body.scrollTop=0;UA.top[id+k]=0};bar.appendChild(b)});
+  // ville derrière une languette
+  let ct=null;
+  if(city.childNodes.length){ct=document.createElement('button');ct.type='button';ct.className='ua-ctab';
+    const setC=v=>{UA.city[id]=v;el.classList.toggle('ua-incity',v);city.hidden=!v;bar.hidden=v;if(v)UA_T.forEach(([x])=>P[x].hidden=true);else show(UA.tab[id]||want);
+      ct.innerHTML=v?`<span>◂</span> Retour à l'armée`:`<span>▴</span> <b>${esc(cityName||'Ville')}</b><small>recruter, chantier, dépôt</small>`;body.scrollTop=0};
+    ct.onclick=()=>setC(!UA.city[id]);ct._set=setC}
+  el.append(head,bar,body,foot);if(ct)el.appendChild(ct);el.appendChild(stash);
+  show(want);city.hidden=true;if(ct)ct._set(!!UA.city[id]);else el.classList.remove('ua-incity');
+  const key=id+(UA.city[id]?'c':UA.tab[id]);body.scrollTop=UA.top[key]||0;
+  body.addEventListener('scroll',()=>{UA.top[id+(UA.city[id]?'c':UA.tab[id])]=body.scrollTop},{passive:true});
+}
+/* registre : une fenêtre, deux onglets ; glisser un régiment d'un corps à l'autre */
+function regHead(a,which){const c=$('mcard');if(!c||!a||c.querySelector('.ua-reg'))return;UA.reg=which;
+  const h2=c.querySelector('h2');if(h2)h2.textContent='Registre · '+(a.name||'armée');
+  const bar=document.createElement('div');bar.className='ua-reg';bar.setAttribute('role','tablist');
+  bar.innerHTML=`<button type="button" data-r="corps" class="${which==='corps'?'on':''}">Corps et garde</button><button type="button" data-r="org" class="${which==='org'?'on':''}">Général et régiments</button>`;
+  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(b.dataset.r===which)return;if(b.dataset.r==='corps')corpsWin(a);else openOrg(a)});
+  if(h2)h2.after(bar);else c.prepend(bar)}
+function regDrag(a){const c=$('mcard');if(!c||typeof corpsOf!=='function')return;const C=corpsOf(a);
+  const cols=[...c.querySelectorAll('div[style*="grid-template-columns:repeat"] > div')];if(cols.length!==C.length)return;
+  let from=null;
+  cols.forEach((col,j)=>{
+    col.querySelectorAll('[data-cmv]').forEach(b=>{const row=b.parentElement;if(row._uaD)return;row._uaD=1;row.draggable=true;row.classList.add('ua-drag');
+      row.addEventListener('dragstart',e=>{from=+b.dataset.cmv.split(':')[0];e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',String(from))}catch(_){}row.classList.add('ua-lift')});
+      row.addEventListener('dragend',()=>{row.classList.remove('ua-lift');cols.forEach(x=>x.classList.remove('ua-over'))})});
+    col.addEventListener('dragover',e=>{if(from==null)return;e.preventDefault();cols.forEach(x=>x.classList.toggle('ua-over',x===col))});
+    col.addEventListener('drop',e=>{e.preventDefault();const u=a.units[from],k=C[j].k;from=null;if(!u||u.cp===k){cols.forEach(x=>x.classList.remove('ua-over'));return}
+      u.cp=k;if(k)u.gd=0;corpsWin(a);renderAll()})});
+  const p=c.querySelector(':scope > p.sub');if(p&&!p._uaD){p._uaD=1;p.insertAdjacentHTML('beforeend',' Vous pouvez aussi glisser un régiment d\'une colonne à l\'autre.')}}
+function uaInstall(){
+  const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{armTabs()}catch(e){console.error('[UI onglets]',e)}return r};
+  if(typeof corpsWin==='function'){const _cw=corpsWin;corpsWin=function(a){const r=_cw.apply(this,arguments);try{regHead(a,'corps');regDrag(a)}catch(e){console.error('[UI registre]',e)}return r}}
+  if(typeof openOrg==='function'){const _oo=openOrg;openOrg=function(a){const r=_oo.apply(this,arguments);try{regHead(a,'org')}catch(e){console.error('[UI registre]',e)}return r}}
+  try{if(sel&&sel.a)renderSide()}catch(e){}
+}
+setTimeout(uaInstall,0);
 const mo=new MutationObserver(()=>{if(!$('modal').hidden)tabify()});
 mo.observe($('mcard'),{childList:true});
 })();
@@ -9703,6 +9892,281 @@ function rfJoin(b){
     if(late.length)payload.b.desc+=' Renforts en route : '+late.join(' ; ')+'.'}catch(e){console.warn(e)}}}
 window.__echelle={rfJoin,RF_KM};
 /* ================= FIN ÉCHELLE DES BATAILLES ================= */
+/* ================= SONS ET MUSIQUE (fil « Ajouter sons, embuscades et bataille à deux ») =================
+   Tout est synthétisé dans le navigateur (Web Audio), aucun fichier son : lyre pincée (Karplus-Strong), tambour sur cadre,
+   trompes, bourdon, chocs de fer, volées, pas, galop, foule, vent, oiseaux. Trois volumes (musique, effets, ambiance)
+   gardés dans localStorage « bellum.son », partagés par la carte et le champ de bataille.
+   Source : /mnt/project-files/futur/son-moteur.js (+ son-campagne.js ou son-bataille.js), injecté par futur/patch.py. */
+const SON=(()=>{
+  const KEY='bellum.son',cfg={on:1,m:.5,e:.8,a:.5};
+  try{Object.assign(cfg,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(cfg))}catch(e){}};
+  let ac=null,out,busM,busE,busA,rev,revIn,fxF,NB=null,mood=null,musT=0,musG=null,starters=[],beat=0,phrase=null,drone=null,ambN=[];
+  const R=Math.random,rr=(a,b)=>a+R()*(b-a);
+  function init(){
+    if(ac)return ac;const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+    try{ac=new C()}catch(e){return null}
+    const comp=ac.createDynamicsCompressor();comp.threshold.value=-16;comp.ratio.value=4;comp.connect(ac.destination);
+    out=ac.createGain();out.connect(comp);
+    busM=ac.createGain();busE=ac.createGain();busA=ac.createGain();
+    fxF=ac.createBiquadFilter();fxF.type='lowpass';fxF.frequency.value=18000;busE.connect(fxF);fxF.connect(out);
+    busM.connect(out);busA.connect(out);
+    musG=ac.createGain();musG.gain.value=0;musG.connect(busM);
+    // réverbération : réponse impulsionnelle tirée au hasard (salle de pierre, 2,4 s)
+    rev=ac.createConvolver();const L=Math.floor(ac.sampleRate*2.4),ir=ac.createBuffer(2,L,ac.sampleRate);
+    for(let c=0;c<2;c++){const d=ir.getChannelData(c);for(let i=0;i<L;i++)d[i]=(R()*2-1)*Math.pow(1-i/L,3.2)}
+    rev.buffer=ir;revIn=ac.createGain();revIn.gain.value=.32;revIn.connect(rev);rev.connect(out);
+    NB=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);{const d=NB.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=R()*2-1}
+    apply();
+    document.addEventListener('visibilitychange',()=>{if(!ac)return;if(document.hidden)ac.suspend().catch(()=>{});else if(cfg.on)ac.resume().catch(()=>{})});
+    return ac}
+  function apply(){if(!ac)return;const t=ac.currentTime;out.gain.setTargetAtTime(cfg.on?.9:0,t,.05);busM.gain.setTargetAtTime(cfg.m*.55,t,.05);busE.gain.setTargetAtTime(cfg.e*.9,t,.05);busA.gain.setTargetAtTime(cfg.a*.6,t,.05)}
+  let started=false;
+  function unlock(){if(!init())return;if(ac.state!=='running'&&cfg.on)ac.resume().catch(()=>{});if(!started){started=true;for(const f of starters)try{f()}catch(e){console.warn('[son]',e)}}}
+  ['pointerdown','keydown','touchstart'].forEach(k=>addEventListener(k,unlock,{capture:true,passive:true}));
+  const ok=()=>ac&&started&&cfg.on&&ac.state==='running';
+  const now=()=>ac.currentTime;
+  // ---- briques ----
+  function pan(p){const n=ac.createStereoPanner?ac.createStereoPanner():null;if(n)n.pan.value=Math.max(-1,Math.min(1,p||0));return n}
+  function chain(nodes){for(let i=0;i<nodes.length-1;i++)if(nodes[i]&&nodes[i+1])nodes[i].connect(nodes[i+1]);return nodes[0]}
+  const BUS=b=>b==='e'?busE:b==='a'?busA:b==='m'?musG:(b||busE);
+  function toBus(node,bus,p,wet){bus=BUS(bus);const pn=pan(p);if(pn){node.connect(pn);pn.connect(bus);if(wet)pn.connect(revIn)}else{node.connect(bus);if(wet)node.connect(revIn)}}
+  function env(g,t,a,peak,d,sus){g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(peak,t+a);g.gain.setTargetAtTime(sus||0,t+a,d)}
+  function noise(t,dur,filt,f,q,vol,bus,p,wet,a,d){
+    const s=ac.createBufferSource();s.buffer=NB;s.loop=true;const fl=ac.createBiquadFilter();fl.type=filt;fl.frequency.value=f;if(q)fl.Q.value=q;
+    const g=ac.createGain();env(g,t,a||.005,vol,d||dur/3);chain([s,fl,g]);toBus(g,bus,p,wet);s.start(t,R()*1.5);s.stop(t+dur+.05);return fl}
+  function osc(t,type,f,dur,vol,bus,p,wet,a,d){const o=ac.createOscillator();o.type=type;o.frequency.value=f;const g=ac.createGain();env(g,t,a||.01,vol,d||dur/3);o.connect(g);toBus(g,bus,p,wet);o.start(t);o.stop(t+dur+.05);return o}
+  // lyre : corde pincée calculée une fois par hauteur (Karplus-Strong)
+  const KS={};
+  function ksBuf(f){const k=Math.round(f*2);if(KS[k])return KS[k];const sr=ac.sampleRate,n=Math.floor(sr*2.6),b=ac.createBuffer(1,n,sr),d=b.getChannelData(0),N=Math.max(2,Math.round(sr/f));
+    const ring=new Float32Array(N);for(let i=0;i<N;i++)ring[i]=(R()*2-1)*(.6+.4*Math.sin(i/N*Math.PI));
+    const dk=f>500?.996:.998;let p=0;for(let i=0;i<n;i++){const v=ring[p];d[i]=v;ring[p]=dk*.5*(v+ring[(p+1)%N]);p=(p+1)%N}
+    // attaque plus nette, fin adoucie
+    for(let i=0;i<n;i++){const x=i/n;d[i]*=x<.002?x/.002:1;if(x>.85)d[i]*=(1-x)/.15}
+    return KS[k]=b}
+  function pluck(t,f,vol,p,bus){bus=bus?BUS(bus):musG;const s=ac.createBufferSource();s.buffer=ksBuf(f);const fl=ac.createBiquadFilter();fl.type='lowpass';fl.frequency.value=Math.min(9000,f*9);const g=ac.createGain();g.gain.value=vol;chain([s,fl,g]);toBus(g,bus,p,true);s.start(t)}
+  // tambour sur cadre (tympanon) : « doum » grave et « tek » sur le bord
+  function drum(t,vol,low,bus,p){bus=bus?BUS(bus):musG;
+    if(low){const o=ac.createOscillator();o.type='sine';o.frequency.setValueAtTime(115,t);o.frequency.exponentialRampToValueAtTime(52,t+.25);const g=ac.createGain();env(g,t,.004,vol,.18);o.connect(g);toBus(g,bus,p,true);o.start(t);o.stop(t+.8);
+      noise(t,.08,'bandpass',260,1.2,vol*.35,bus,p,false,.002,.03)}
+    else noise(t,.07,'bandpass',1800,2.5,vol*.5,bus,p,true,.001,.025)}
+  // trompe (cornu, salpinx) : deux dents de scie, filtre qui s'ouvre
+  function horn(t,notes,vol,bus,p,low){bus=BUS(bus);let tt=t;
+    for(const [f,d] of notes){if(f){const o1=ac.createOscillator(),o2=ac.createOscillator();o1.type=o2.type='sawtooth';o1.frequency.value=f;o2.frequency.value=f*1.006;
+        o1.frequency.setValueAtTime(f*.94,tt);o1.frequency.linearRampToValueAtTime(f,tt+.07);
+        const fl=ac.createBiquadFilter();fl.type='lowpass';fl.Q.value=3;fl.frequency.setValueAtTime(low?250:400,tt);fl.frequency.linearRampToValueAtTime(low?900:2200,tt+.12);fl.frequency.setTargetAtTime(low?600:1300,tt+.15,d*.5);
+        const g=ac.createGain();g.gain.setValueAtTime(0,tt);g.gain.linearRampToValueAtTime(vol,tt+.06);g.gain.setValueAtTime(vol*.85,tt+Math.max(.08,d-.12));g.gain.linearRampToValueAtTime(0,tt+d);
+        o1.connect(fl);o2.connect(fl);fl.connect(g);toBus(g,bus,p,true);o1.start(tt);o2.start(tt);o1.stop(tt+d+.05);o2.stop(tt+d+.05)}
+      tt+=d}}
+  // fer contre fer : bruit très court et quelques partiels métalliques
+  function clash(t,vol,p){noise(t,.05,'bandpass',rr(2500,5200),6,vol*.7,busE,p,true,.001,.012);
+    const f0=rr(1700,2600);for(const m of [1,1.47,2.09,2.76])osc(t,'sine',f0*m*rr(.98,1.02),.35,vol*.12/m,busE,p,true,.001,rr(.04,.12))}
+  function thud(t,vol,p,f){noise(t,.1,'lowpass',f||220,.8,vol,busE,p,false,.002,.04)}
+  function whoosh(t,vol,p,kind){const d=kind==='pierre'?.25:kind==='javelot'?.5:.6,fl=noise(t,d,'bandpass',kind==='javelot'?1100:2400,kind==='pierre'?3:1.6,vol,busE,p,true,d*.35,d*.25);
+    fl.frequency.setValueAtTime(kind==='javelot'?1300:2800,t);fl.frequency.exponentialRampToValueAtTime(kind==='javelot'?500:900,t+d)}
+  // voix d'hommes (cri, clameur) : dents de scie dans des formants « a », « o »
+  function shout(t,vol,p,dur,f0){dur=dur||.7;const f=f0||rr(120,190),o=ac.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(f*.85,t);o.frequency.linearRampToValueAtTime(f*1.15,t+dur*.3);o.frequency.linearRampToValueAtTime(f*.8,t+dur);
+    const lfo=ac.createOscillator(),lg=ac.createGain();lfo.frequency.value=rr(5,7);lg.gain.value=f*.03;lfo.connect(lg);lg.connect(o.frequency);
+    const g=ac.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.06);g.gain.setTargetAtTime(0,t+dur*.6,dur*.2);
+    const F=R()<.5?[730,1090,2440]:[570,840,2410];for(const [i,fq] of F.entries()){const b=ac.createBiquadFilter();b.type='bandpass';b.frequency.value=fq*rr(.95,1.05);b.Q.value=8;const bg=ac.createGain();bg.gain.value=[1,.5,.18][i];o.connect(b);b.connect(bg);bg.connect(g)}
+    toBus(g,busE,p,true);o.start(t);lfo.start(t);o.stop(t+dur+.3);lfo.stop(t+dur+.3)}
+  function crowd(t,vol,p,n){for(let i=0;i<(n||5);i++)shout(t+rr(0,.35),vol/Math.sqrt(n||5)*1.3,(p||0)+rr(-.25,.25),rr(.6,1.2))}
+  function trumpetEleph(t,vol,p){const o=ac.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(380,t);o.frequency.exponentialRampToValueAtTime(820,t+.25);o.frequency.exponentialRampToValueAtTime(560,t+.9);
+    const fl=ac.createBiquadFilter();fl.type='bandpass';fl.frequency.value=1200;fl.Q.value=2;const g=ac.createGain();env(g,t,.05,vol,.3);chain([o,fl,g]);toBus(g,busE,p,true);o.start(t);o.stop(t+1.2)}
+  function bell(t,f,vol,bus,p){for(const [m,a] of [[1,1],[2.76,.45],[5.4,.2],[8.93,.08]])osc(t,'sine',f*m,2.5,vol*a,bus||busE,p,true,.002,.5/m)}
+  function coin(t,vol,p){osc(t,'sine',3150,.25,vol,busE,p,true,.001,.06);osc(t+.05,'sine',4120,.25,vol*.8,busE,p,true,.001,.06)}
+  function tick(t,vol){noise(t,.03,'highpass',2500,.7,vol,busE,0,false,.001,.006)}
+  function anvil(t,vol,p){osc(t,'square',880,.5,vol*.2,busE,p,true,.001,.08);for(const m of [1,2.4,3.9])osc(t,'sine',1560*m,.8,vol*.25/m,busE,p,true,.001,.15)}
+  // ---- ambiance ----
+  function windLoop(level){const s=ac.createBufferSource();s.buffer=NB;s.loop=true;const fl=ac.createBiquadFilter();fl.type='lowpass';fl.frequency.value=380;fl.Q.value=.6;
+    const g=ac.createGain();g.gain.value=level;const l1=ac.createOscillator(),l1g=ac.createGain();l1.frequency.value=.07;l1g.gain.value=160;l1.connect(l1g);l1g.connect(fl.frequency);
+    const l2=ac.createOscillator(),l2g=ac.createGain();l2.frequency.value=.11;l2g.gain.value=level*.6;l2.connect(l2g);l2g.connect(g.gain);
+    chain([s,fl,g]);g.connect(busA);s.start();l1.start();l2.start();return {g,set:v=>g.gain.setTargetAtTime(v,ac.currentTime,1.5)}}
+  function seaLoop(level){const s=ac.createBufferSource();s.buffer=NB;s.loop=true;const fl=ac.createBiquadFilter();fl.type='lowpass';fl.frequency.value=700;
+    const g=ac.createGain();g.gain.value=0;const l=ac.createOscillator(),lg=ac.createGain();l.frequency.value=.13;lg.gain.value=level*.5;l.connect(lg);lg.connect(g.gain);
+    const base=ac.createConstantSource?ac.createConstantSource():null;if(base){base.offset.value=level*.55;base.connect(g.gain);base.start()}
+    chain([s,fl,g]);g.connect(busA);s.start();l.start();return {set:v=>{if(base)base.offset.setTargetAtTime(v*.55,ac.currentTime,1.5);lg.gain.setTargetAtTime(v*.5,ac.currentTime,1.5)}}}
+  function bird(t,vol,p){const n=2+Math.floor(R()*4),f=rr(2600,4200);for(let i=0;i<n;i++){const tt=t+i*rr(.08,.16),o=ac.createOscillator();o.type='sine';o.frequency.setValueAtTime(f*rr(.9,1.1),tt);o.frequency.exponentialRampToValueAtTime(f*rr(1.2,1.6),tt+.06);
+    const g=ac.createGain();env(g,tt,.005,vol,.03);o.connect(g);toBus(g,busA,p,true);o.start(tt);o.stop(tt+.15)}}
+  // ---- musique : modes antiques, phrases de lyre, bourdon, tambour ----
+  const D3=146.83,MODE={paix:[0,2,3,5,7,9,10],guerre:[0,1,3,5,7,8,10],calme:[0,2,3,5,7,9,10]};
+  const hz=(deg,oct,m)=>{const sc=MODE[m]||MODE.paix,n=sc.length,o=Math.floor(deg/n),d=((deg%n)+n)%n;return D3*Math.pow(2,(sc[d]+12*(o+oct))/12)};
+  function setDrone(m){if(drone){const d=drone;d.g.gain.setTargetAtTime(0,now(),1.2);setTimeout(()=>{try{d.o.forEach(o=>o.stop())}catch(e){}},5000);drone=null}
+    if(!m)return;const g=ac.createGain();g.gain.value=0;const fl=ac.createBiquadFilter();fl.type='lowpass';fl.frequency.value=m==='guerre'?420:300;fl.Q.value=.8;fl.connect(g);g.connect(musG);
+    const os=[[D3/2,'sawtooth',.5],[D3/2*1.004,'sawtooth',.5],[D3*.75,'triangle',.35]].map(([f,ty,v])=>{const o=ac.createOscillator();o.type=ty;o.frequency.value=f;const og=ac.createGain();og.gain.value=v;o.connect(og);og.connect(fl);o.start();return o});
+    g.gain.setTargetAtTime(m==='guerre'?.07:.045,now(),2);drone={g,o:os}}
+  function newPhrase(m){const L=m==='guerre'?6:8,ch=[0,6,0,4,3,0,6,0];const notes=[];let deg=Math.floor(rr(4,9)),b=0;
+    for(let bar=0;bar<L;bar++){const root=ch[bar%ch.length];for(let k=0;k<4;k++){if(R()<(k===0?.12:.28)){b++;continue}
+        const strong=k===0||k===2;if(strong&&R()<.6){const tg=root+[0,2,4][Math.floor(R()*3)];deg=deg+Math.max(-3,Math.min(3,Math.round((tg+7*Math.round((deg-tg)/7)-deg))))}else deg+=[-2,-1,-1,1,1,2][Math.floor(R()*6)];
+        deg=Math.max(2,Math.min(13,deg));
+        if(R()<.25){notes.push([b,deg,.5]);notes.push([b+.5,deg+(R()<.5?1:-1),.5])}else notes.push([b,deg,1]);b++}}
+    return {notes,len:L*4,root:ch}}
+  function musicStep(){if(!ok()||!mood){return}
+    const bpm=mood==='guerre'?80:mood==='calme'?60:64,sp=60/bpm;
+    while(musT<now()+.6){const t=Math.max(musT,now()+.02);
+      if(!phrase||beat>=phrase.len+(mood==='guerre'?2:4)){phrase=newPhrase(mood);beat=0}
+      // une mesure à la fois
+      for(const [b,deg,d] of phrase.notes)if(b>=beat&&b<beat+1)pluck(t+(b-beat)*sp,hz(deg,1,mood),mood==='guerre'?.32:.4,rr(-.3,.3));
+      const bar=Math.floor(beat/4);
+      if(beat%4===0&&beat<phrase.len){const r=phrase.root[bar%phrase.root.length];pluck(t,hz(r,0,mood),.3,-.2);if(mood!=='guerre')pluck(t+sp*2,hz(r+4,0,mood),.18,.2)}
+      if(mood==='guerre'){const pat=[1,0,.5,0,1,.5,.5,0][(beat*2)%8];if(pat)drum(t,.5*pat,pat===1);const p2=[1,0,.5,0,1,.5,.5,0][(beat*2+1)%8];if(p2)drum(t+sp/2,.4*p2,p2===1)}
+      else if(mood==='calme'&&beat%2===0)drum(t,.25,true);
+      musT=t+sp;beat++}}
+  setInterval(()=>{try{musicStep()}catch(e){}},200);
+  function setMood(m){if(m===mood)return;mood=m;if(!ac)return;phrase=null;beat=0;musT=now()+.3;
+    musG.gain.cancelScheduledValues(now());musG.gain.setTargetAtTime(m?1:0,now(),m?1.5:.8);if(started)setDrone(m)}
+  // ---- réglages : bouton ♪ et fenêtre aux trois curseurs ----
+  function ui(where,before){
+    if(!document.getElementById('sonStyle')){const st=document.createElement('style');st.id='sonStyle';st.textContent=`
+#sonBtn{min-width:34px}#sonPop{position:fixed;z-index:60;min-width:230px;padding:12px 14px;border-radius:8px;background:rgba(28,22,14,.96);border:1px solid rgba(214,184,120,.55);color:#efe6d2;font:13px/1.4 Georgia,serif;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#sonPop h4{margin:0 0 8px;font-size:15px;color:#e6c98a}#sonPop label{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0}#sonPop input[type=range]{width:120px;accent-color:#c9a45c}
+#sonPop .row{display:flex;gap:8px;margin-top:8px}#sonPop button{flex:1}`;document.head.appendChild(st)}
+    const b=document.createElement('button');b.type='button';b.id='sonBtn';const lab=()=>{b.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="display:block;margin:auto" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" fill-opacity=".25"/>${cfg.on?'<path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>':'<path d="M17 9l5 6M22 9l-5 6"/>'}</svg>`;b.title=cfg.on?'Sons et musique (réglages)':'Sons coupés (cliquer pour régler)';b.setAttribute('aria-label',b.title)};lab();
+    if(before&&before.parentNode)before.parentNode.insertBefore(b,before);else if(where)where.appendChild(b);
+    b.addEventListener('click',e=>{e.stopPropagation();let p=document.getElementById('sonPop');if(p){p.remove();return}unlock();
+      p=document.createElement('div');p.id='sonPop';p.setAttribute('role','dialog');p.setAttribute('aria-label','Sons et musique');
+      const sl=(k,n)=>`<label>${n}<input type="range" min="0" max="100" value="${Math.round(cfg[k]*100)}" data-k="${k}" aria-label="${n}"></label>`;
+      p.innerHTML=`<h4>Sons et musique</h4><label>Activés <input type="checkbox" id="sonOn" ${cfg.on?'checked':''}></label>${sl('m','Musique')}${sl('e','Effets')}${sl('a','Ambiance')}<div class="row"><button type="button" id="sonTest">Essayer</button><button type="button" id="sonOk">Fermer</button></div>`;
+      document.body.appendChild(p);const r=b.getBoundingClientRect();p.style.top=Math.min(innerHeight-220,r.bottom+6)+'px';p.style.left=Math.max(8,Math.min(innerWidth-250,r.right-240))+'px';
+      p.querySelectorAll('input[type=range]').forEach(i=>i.oninput=()=>{cfg[i.dataset.k]=i.value/100;apply();save()});
+      p.querySelector('#sonOn').onchange=e2=>{cfg.on=e2.target.checked?1:0;apply();save();lab();if(cfg.on&&ac)ac.resume().catch(()=>{})};
+      p.querySelector('#sonTest').onclick=()=>{if(!ok())return;const t=now()+.05;horn(t,[[220,.5],[330,.9]],.18);pluck(t+1.5,hz(7,1,'paix'),.4);pluck(t+1.8,hz(9,1,'paix'),.4);clash(t+2.3,.5,0)};
+      p.querySelector('#sonOk').onclick=()=>p.remove();
+      setTimeout(()=>addEventListener('pointerdown',function f(ev){if(!p.contains(ev.target)&&ev.target!==b){p.remove();removeEventListener('pointerdown',f,true)}},true),0)});
+    return b}
+  return {get ac(){return ac},ok,now,onStart:f=>{starters.push(f);if(started)try{f()}catch(e){}},setMood,get mood(){return mood},ui,cfg,
+    horn,drum,pluck,clash,thud,whoosh,shout,crowd,trumpetEleph,bell,coin,tick,anvil,bird,windLoop,seaLoop,noise,osc,hz,
+    setMuffle:(k)=>{if(fxF)fxF.frequency.setTargetAtTime(k,ac.currentTime,.2)},unlock};
+})();
+window.__son=SON;
+// ---- sons de la carte de campagne ----
+{
+  const SW=SON;let wind=null,sea=null,lastOwn=null,lastEv={},birdT=0;
+  const rl=(k,ms)=>{const t=performance.now();if(lastEv[k]&&t-lastEv[k]<ms)return false;lastEv[k]=t;return true};
+  const battleOpen=()=>{const f=$('battle3d');return !!f};
+  SW.onStart(()=>{wind=SW.windLoop(.5);sea=SW.seaLoop(0)});
+  // fanfares et plaintes
+  const fanfare=t=>SW.horn(t,[[220,.25],[277,.25],[330,.6],[440,1.1]],.16);
+  const lament=t=>SW.horn(t,[[196,.7],[175,.7],[147,1.4]],.14,null,0,true);
+  // humeur de la musique : paix, guerre quand une bataille se prépare, silence quand le champ de bataille est ouvert
+  setInterval(()=>{if(!SW.ok()||typeof S==='undefined'||!S)return;
+    const bo=battleOpen();SW.setMood(bo?null:S.cur?'guerre':S.over?null:'paix');
+    if(wind)wind.set(bo?0:season()==='Hiver'?.75:.45);
+    // mer : plus forte quand la vue rapprochée montre surtout de l'eau
+    if(sea){let w=0;try{if(!bo&&view.s>.8){const c=toWorld(cv.clientWidth/2,cv.clientHeight/2);let n=0;for(const [dx,dy] of [[0,0],[-1,0],[1,0],[0,-1],[0,1]]){const k=40/view.s;if(!landFast(c[0]+dx*k,c[1]+dy*k))n++}w=n/5}}catch(e){}sea.set(w*.9)}
+    // oiseaux au printemps et en été, vue rapprochée, sur terre
+    birdT-=.5;if(!bo&&birdT<=0&&view.s>3&&(season()==='Printemps'||season()==='Été')){birdT=3+Math.random()*7;try{const c=toWorld(cv.clientWidth/2,cv.clientHeight/2);if(landFast(c[0],c[1]))SW.bird(SW.now()+.05,.1,Math.random()*1.6-.8)}catch(e){}}
+    // villes prises ou perdues
+    try{const o=S.own;if(lastOwn&&o){let won=0,lost=0;for(const id in o){const a=lastOwn[id],b=o[id];if(a===b)continue;if(b==='car')won++;else if(a==='car')lost++}
+        if(won&&rl('ville',4000))fanfare(SW.now()+.05);else if(lost&&rl('ville',4000))lament(SW.now()+.05)}
+      lastOwn=o?Object.assign({},o):null}catch(e){}
+  },500);
+  // bataille : appel de trompe quand elle s'annonce, fanfare ou plainte au résultat
+  {const _sb=startBattle;startBattle=function(att,defs){const had=S.cur;const r=_sb.apply(this,arguments);
+      if(SW.ok()&&!had&&S.cur&&rl('bataille',3000)){const mine=(att&&att.side==='car')||(defs&&defs.some(d=>d&&d.side==='car'));if(mine){const t=SW.now()+.05;SW.horn(t,[[147,.9],[220,1.4]],.2,null,0,true);SW.drum(t+.2,.5,true,'e');SW.drum(t+.7,.5,true,'e')}}
+      return r}}
+  {const _ar=applyResult;applyResult=function(b,res){let w=null;try{const a=S.armies.find(x=>x.id===b.att[0]),d=S.armies.find(x=>x.id===b.def[0]);
+      if(a&&a.side==='car')w=!!res.attWin;else if(d&&d.side==='car')w=!res.attWin}catch(e){}
+    const r=_ar.apply(this,arguments);
+    if(SW.ok()&&w!=null&&rl('resultat',2500)){const t=SW.now()+.4;if(w){fanfare(t);SW.crowd(t+.3,.12,0,6)}else lament(t)}
+    return r}}
+  // ordres de marche : tambour et pas cadencés
+  {const _or=order;order=function(a){const r=_or.apply(this,arguments);
+    if(r&&SW.ok()&&a&&a.side==='car'&&rl('marche',700)){const t=SW.now()+.03;SW.drum(t,.35,true,'e');for(let i=0;i<4;i++)SW.thud(t+.25+i*.32,.22,(i%2?.15:-.15),160)}
+    return r}}
+  if(typeof orderFleet==='function'){const _of=orderFleet;orderFleet=function(f){const r=_of.apply(this,arguments);
+    if(r&&SW.ok()&&f&&f.side==='car'&&rl('flotte',700)){const t=SW.now()+.03;for(let i=0;i<3;i++){SW.noise(t+i*.45,.4,'bandpass',600,1.2,.22,null,0,true,.12,.12)}SW.drum(t,.25,false,'e')}
+    return r}}
+  // recrues : enclume de l'armurier
+  {const _rc=addRecruit;addRecruit=function(i,side){const r=_rc.apply(this,arguments);if(side==='car'&&SW.ok()&&rl('recrue',1500))SW.anvil(SW.now()+.05,.35,0);return r}}
+  // journal : cloche pour les messagers et les éclaireurs, pièces pour l'or reçu
+  {const _lg=log;log=function(t){const r=_lg.apply(this,arguments);if(SW.ok()){const s=String(t||'').toLowerCase();
+      if(/messager|éclaireur|repér|signal/.test(s)&&rl('msg',2500))SW.bell(SW.now()+.03,660,.12);
+      else if(/butin|tribut|rançon|marchands|filon|subside/.test(s)&&rl('or',2500))SW.coin(SW.now()+.03,.25,0)}
+    return r}}
+  // clics : petit bruit de bois sur les boutons
+  document.addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('button');if(b&&SW.ok()&&rl('clic',60))SW.tick(SW.now(),.18)},true);
+  // bouton ♪ dans la barre du haut
+  try{const m=$('bMenu');SW.ui(m&&m.parentNode,m)}catch(e){}
+}
+/* ================= FIN SONS ET MUSIQUE ================= */
+/* ================= BATAILLE À DEUX ET BRUME (campagne ; fil « Ajouter sons, embuscades et bataille à deux ») =================
+   Quand les deux joueurs concernés veulent livrer la bataille sur le terrain, ils s'affrontent pour de vrai :
+   - le joueur du camp attaquant (« hôte de la bataille ») fait tourner la simulation dans son champ de bataille ;
+   - il envoie à l'autre (« invité de la bataille ») le champ de bataille (armées, terrain), puis l'état des régiments ;
+   - l'invité donne ses ordres, qui repartent chez l'hôte. Les messages passent par la connexion de la partie à plusieurs
+     (l'hôte de la partie les relaie en connexion directe). Le résultat revient à la campagne comme pour une bataille seule.
+   Brume : chaque bataille tire au sort (selon la saison, l'eau proche) une brume du matin, envoyée dans CAMP.b.brume.
+   Source : /mnt/project-files/futur/pvp-campagne.js, injecté par futur/patch.py après les autres blocs (avant BOUCLE). */
+const PVPC={cur:null,done:new Set()};
+{
+  const sideOfIds=ids=>{const a=S.armies.find(x=>x.id===ids[0]);return a&&a.side};
+  function pvpSend(m){const P=PVPC.cur;if(!P||!MP.tr)return;mpSend({t:'bv',to:P.peer,o:MP.me,d:m})}
+  function pvpSendPay(){const P=PVPC.cur;if(!P||!P.pay||!MP.tr)return;mpSendBig('bvb',{k:'pay',pay:P.pay},{to:P.peer,o:MP.me})}
+  function pvpRecv(d){
+    if(d.to!==MP.me){if(MP.role==='host'&&MP.tr&&MP.tr.kind==='direct'){const c=Object.assign({},d);delete c.f;mpSend(c)}return} // relais (étoile WebRTC)
+    if(d.t==='bvb'){mpChunk(d,o=>pvpIn(o,d));return}
+    pvpIn(d.d,d)}
+  function pvpIn(m,d){const P=PVPC.cur;if(!m||!P||d.o!==P.peer)return;P.seen=performance.now();
+    if(m.k==='pay'){if(P.role==='g')pvpGo(m.pay);return}
+    if(m.k==='want'){if(P.role==='h')pvpSendPay();return}
+    const f=$('battle3d');if(f&&f.contentWindow)f.contentWindow.postMessage({bellum:'pvp',d:m},'*')}
+  // le champ de bataille parle au réseau par la page
+  window.addEventListener('message',ev=>{const d=ev.data;if(!d||d.bellum!=='pvp')return;const f=$('battle3d');if(!f||ev.source!==f.contentWindow)return;pvpSend(d.d)});
+  {const _h=mpOnHost;mpOnHost=function(d){
+    if(d&&(d.t==='bv'||d.t==='bvb')){const g=MP.gs[d.f];if(g)g.lastHb=performance.now();pvpRecv(d);return}
+    // résultat d'une bataille à deux livrée chez un invité
+    if(d&&d.t==='bres'&&S.cur&&S.cur.mp&&S.cur.mp.state==='pvp'&&S.cur.mp.bh===d.f&&mpBKey(S.cur)===d.k){const b=S.cur,r=d.res;S.cur=null;closeModal();
+      log(`${battleTitle(b)} : ${esc(mpName(b.mp.bh))} et ${esc(mpName(b.mp.bg))} ont livré la bataille sur le terrain.`);applyResult(b,{attWin:r.attWin,A:r.A,D:r.D});refreshAfterBattle();mpKfSoon(0);return}
+    return _h.apply(this,arguments)}}
+  {const _g=mpOnGuest;mpOnGuest=function(d){if(d&&(d.t==='bv'||d.t==='bvb')){if(d.to&&d.to!==MP.me)return;pvpRecv(d);return}return _g.apply(this,arguments)}}
+  // les deux veulent le terrain : bataille à deux (l'attaquant héberge la bataille)
+  {const _r=mpResolve;mpResolve=function(){const b=S.cur;
+    if(b&&b.mp&&!b.mp.state&&b.mp.car==='3d'&&b.mp.rom==='3d'){const O=b.mp.o||{},aS=sideOfIds(b.att)||'car',dS=aS==='car'?'rom':'car';
+      if(O[aS]&&O[dS]&&O[aS]!==O[dS]){b.mp.state='pvp';b.mp.bh=O[aS];b.mp.bg=O[dS];b.mp.id=Math.random().toString(36).slice(2,8);
+        log(`${battleTitle(b)} : ${esc(mpName(O.car))} et ${esc(mpName(O.rom))} vont s'affronter sur le terrain.`);MP.bmod=null;save();mpBattleUI();mpKfSoon(0);return}}
+    return _r.apply(this,arguments)}}
+  {const _ui=mpBattleUI;mpBattleUI=function(){const b=S&&S.cur,mp=b&&b.mp;
+    if(!MP.role||!mp||mp.state!=='pvp'){const r=_ui.apply(this,arguments);
+      try{document.querySelectorAll('#mcard p.sub').forEach(p=>{if(p.innerHTML.includes('la bataille à deux arrive bientôt'))p.innerHTML=p.innerHTML.replace(/si les deux la veulent, résolution automatique pour l'instant \(la bataille à deux arrive bientôt\)/,'si les deux la veulent, <b>vous vous affrontez sur le terrain</b>, chacun avec son armée')})}catch(e){}
+      return r}
+    if(MP.role==='guest'&&!MP.ready)return;
+    const key=mpBKey(b);
+    // une bataille déjà livrée (l'état de l'hôte peut la montrer encore un instant) ne se relance pas
+    if(PVPC.done.has(mp.id))return;
+    if(mp.bh===MP.me||mp.bg===MP.me){if(PVPC.cur&&PVPC.cur.key===key)return;
+      const h=mp.bh===MP.me;PVPC.cur={role:h?'h':'g',peer:h?mp.bg:mp.bh,key,id:mp.id};MP.played=key;
+      if(h){if(MP.role==='guest')MP.in3d=key;closeModal();const att=S.armies.find(x=>x.id===b.att[0]);go3D(!!att&&att.side==='car')}
+      else{MP.pvpG=key;MP.bmod=null;modal(`<i data-mpb hidden></i><h2>${battleTitle(b)}</h2><p>Bataille à deux : ${esc(mpName(mp.bh))} prépare le champ de bataille…</p><p class="sub">Il commande l'attaquant ; vous commanderez votre armée depuis votre écran.</p>`);
+        const P=PVPC.cur;(function ask(){if(PVPC.cur!==P||P.go)return;pvpSend({k:'want'});setTimeout(ask,2500)})()}
+      return}
+    const k2=key+'|pvp';if(MP.bmod===k2&&!$('modal').hidden)return;MP.bmod=k2;
+    modal(`<i data-mpb hidden></i><h2>${battleTitle(b)}</h2><p>${esc(mpName(mp.bh))} et ${esc(mpName(mp.bg))} s'affrontent sur le terrain, chacun avec son armée.</p><p class="sub">Le jeu est en pause pour tous les joueurs jusqu'à la fin de la bataille.</p>`)}}
+  // hôte de la bataille : on garde le champ de bataille pour l'envoyer à l'autre joueur
+  {const _dv=dive;dive=function(payload){const P=PVPC.cur;
+    if(P&&P.role==='h'&&!payload.pvp&&S.cur&&mpBKey(S.cur)===P.key){let size=1;try{size=+localStorage.getItem('bellum.taille')||1}catch(e){}
+      payload.pvp={role:'h',size,peer:mpName(P.peer)};P.pay={v:payload.v,b:payload.b,t:payload.t,size,me:mpName(MP.me)};pvpSendPay()}
+    return _dv.apply(this,arguments)}}
+  // invité de la bataille : même champ de bataille, vu de l'autre côté
+  function pvpGo(pay){const P=PVPC.cur;if(!P||P.role!=='g'||P.go||!pay||!pay.t)return;P.go=true;closeModal();
+    const b=Object.assign({},pay.b);if(b.cmd)b.cmd={p:b.cmd.e,e:b.cmd.p};if(b.walls)b.walls=Object.assign({},b.walls,{side:b.walls.side==='p'?'e':'p'});
+    b.desc=`Bataille à deux contre ${pay.me}, qui commande l'attaquant.`;b.enemy=pay.me;
+    const t=Object.assign({},pay.t);delete t.intro;
+    dive({v:pay.v,st:S,b,t,pvp:{role:'g',size:pay.size||1,peer:pay.me}})}
+  // l'invité de la bataille n'applique pas le résultat : c'est l'hôte de la bataille qui le renvoie à la campagne
+  {const _ar=applyResult;applyResult=function(b,res){if(MP.pvpG&&b&&mpBKey(b)===MP.pvpG){MP.pvpG=null;if(MP.role==='host'&&!S.cur)S.cur=b;return}return _ar.apply(this,arguments)}}
+  // fin de la bataille chez l'invité alors que la campagne a déjà tourné la page : on referme quand même le champ de bataille
+  window.addEventListener('message',ev=>{const d=ev.data;if(!d||d.bellum!=='retour')return;const f=$('battle3d');if(!f||ev.source!==f.contentWindow)return;
+    const P=PVPC.cur;PVPC.cur=null;if(!P)return;PVPC.done.add(P.id);
+    setTimeout(()=>{if(DIVE&&DIVE.fr===f){DIVE=null;f.style.transition='opacity .6s';f.style.opacity='0';f.style.pointerEvents='none';setTimeout(()=>f.remove(),650);refreshAfterBattle()}},0)});
+  window.__pvp={get cur(){return PVPC.cur},pvpIn,pvpGo};
+  // ---- brume du matin, tirée au sort pour chaque bataille ----
+  {const _dv2=dive;dive=function(payload){try{const b=payload.b;if(b&&b.brume==null&&S){const s=season(),t=payload.t||{};
+      let p={Printemps:.2,'Été':.06,Automne:.3,Hiver:.22}[s]||.15;if(t.water)p*=t.water.sea?1.4:1.9;p=Math.min(.6,p);
+      const c=S.cur||{},h=Math.abs(Math.sin(Math.floor(S.day)*12.9898+(c.x||0)*78.233+(c.y||0)*37.719)*43758.5453)%1;b.brume=h<p}}catch(e){}
+    return _dv2.apply(this,arguments)}}
+}
+/* ================= FIN BATAILLE À DEUX ET BRUME (campagne) ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
