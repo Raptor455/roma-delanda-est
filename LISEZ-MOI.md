@@ -1,4 +1,4 @@
-# Bellum · Roma Delenda Est
+# Roma Delenda Est
 
 Campagne de la deuxième guerre punique, en temps réel, jouable à plusieurs dans le navigateur.
 
