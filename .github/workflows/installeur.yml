@@ -54,12 +54,29 @@ jobs:
           PYTHONUTF8: "1"
         run: python installeur/preparer_jeu.py . installeur/vendor installeur/jeu
 
-      - name: Fabriquer et publier l'installeur
+      - name: Fabriquer l'installeur
         working-directory: installeur
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          npm pkg set version=${{ steps.v.outputs.num }}.0.0
+          npx electron-builder --win nsis --x64 --publish never
+          ls sortie
+
+      # Publication en une fois (installeur + latest.yml + blockmap) : la publication
+      # parallèle d'electron-builder créait la Release deux fois et perdait latest.yml.
+      - name: Publier dans les Releases
+        working-directory: installeur/sortie
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm ci --no-audit --no-fund
-          npm pkg set version=${{ steps.v.outputs.num }}.0.0
-          npx electron-builder --win nsis --x64 --publish always
+          tag=v${{ steps.v.outputs.num }}.0.0
+          fichiers="Bellum-installation-${{ steps.v.outputs.num }}.0.0.exe Bellum-installation-${{ steps.v.outputs.num }}.0.0.exe.blockmap latest.yml"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" $fichiers --clobber
+          else
+            gh release create "$tag" $fichiers --target "$GITHUB_SHA" --title "Bellum v${{ steps.v.outputs.num }}" \
+              --notes "Installeur Windows de Bellum v${{ steps.v.outputs.num }}. Téléchargez Bellum-installation-${{ steps.v.outputs.num }}.0.0.exe ; le jeu installé se met ensuite à jour tout seul."
+          fi
+          gh release edit "$tag" --latest
