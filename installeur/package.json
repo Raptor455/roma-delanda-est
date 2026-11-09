@@ -1,8 +1,8 @@
 {
   "name": "bellum",
-  "productName": "Bellum",
+  "productName": "Roma Delenda Est",
   "version": "132.0.0",
-  "description": "Bellum : campagne de la deuxième guerre punique",
+  "description": "Roma Delenda Est : campagne de la deuxième guerre punique",
   "author": "Baptiste",
   "main": "main.js",
   "private": true,
@@ -12,7 +12,7 @@
   },
   "build": {
     "appId": "fr.baptiste.bellum",
-    "productName": "Bellum",
+    "productName": "Roma Delenda Est",
     "files": [
       "main.js",
       "icone.png",
@@ -39,8 +39,8 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "createDesktopShortcut": true,
-      "shortcutName": "Bellum",
-      "artifactName": "Bellum-installation-${version}.exe",
+      "shortcutName": "Roma Delenda Est",
+      "artifactName": "Roma-Delenda-Est-installation-${version}.exe",
       "language": "1036",
       "deleteAppDataOnUninstall": false
     },
