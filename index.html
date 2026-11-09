@@ -10666,6 +10666,45 @@ function gbDeck(L,W,k,prog){// tablier de -L à -L+2L*prog
   ctx.restore()}catch(e){console.error(e)}}}
 window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
+/* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
+// 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
+//    redessiner la barre ; on surveille l'état et on montre la raison sous l'étiquette PAUSE.
+// 2) Journal : élisions (« de Ilorci » → « d'Ilorci »), « pillent Ilici, près d'Ilici », convoi « (0 rations) ».
+(function(){
+  const FIN_CSS=document.createElement('style');
+  FIN_CSS.textContent='#pauseTag .finWhy{display:block;max-width:440px;white-space:normal;font-family:var(--ui);font-size:12.5px;letter-spacing:0;line-height:1.3;margin:2px 0 1px;color:var(--ink);text-transform:none}'+
+    '#pauseTag.finAuto{text-align:center;border-color:var(--gold,#d6b878)!important;animation:finBlink 1.2s ease-out 2}@keyframes finBlink{0%{box-shadow:0 0 0 0 rgba(214,184,120,.8)}100%{box-shadow:0 0 0 14px rgba(214,184,120,0)}}';
+  document.head.appendChild(FIN_CSS);
+  // --- journal : corrections de français, sur tous les messages
+  const VOY=/(^|[\s(>«'’])([Dd])e ((?:<[^>]+>)?[AEIOUYÉÈÊÂÎÔÛH][a-zà-ÿ'’-])/g;
+  window.finFr=function(t){
+    if(typeof t!=='string')return t;
+    t=t.replace(VOY,(m,a,d,w)=>a+d+"'"+w);
+    t=t.replace(/pillent ([^,<]+), près d['’]\1\./g,"pillent les campagnes d'$1.");
+    t=t.replace(/pillent ([^,<]+), près de \1\./g,'pillent les campagnes de $1.');
+    t=t.replace(/s'empare d'un convoi ennemi \(0 rations\)\./g,"s'empare d'un convoi ennemi : ses chariots sont déjà pleins, le reste est brûlé.");
+    return t;
+  };
+  const _finLog=log;
+  log=function(t){return _finLog.call(this,finFr(t),...[].slice.call(arguments,1))};
+  // --- pause : barre du haut tenue à jour, raison affichée
+  let finK='',finTop=null;
+  setInterval(()=>{try{
+    if(typeof S==='undefined'||!S)return;
+    const top=S.log&&S.log[0],k=(S.paused?1:0)+'|'+S.speed+'|'+(S.cur?1:0)+'|'+(S.over?1:0);
+    if(k!==finK){
+      const wasRunning=finK&&finK[0]==='0';finK=k;
+      try{renderTop()}catch(e){}
+      const pt=$('pauseTag');
+      if(pt){
+        if(S.paused&&!S.cur&&wasRunning&&top&&top!==finTop){pt.innerHTML='PAUSE<span class="finWhy"></span>';pt.querySelector('.finWhy').innerHTML=top.t;pt.classList.add('finAuto')}
+        else if(!S.paused||!wasRunning){pt.textContent='PAUSE';pt.classList.remove('finAuto')}
+      }
+    }
+    finTop=top;
+  }catch(e){}},200);
+})();
+/* ================= FIN FINITIONS ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();

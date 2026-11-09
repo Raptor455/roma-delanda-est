@@ -3250,3 +3250,16 @@ hudTick=function(){_hudTick();try{updCards()}catch(e){}};
 },30);
 })();
 </script>
+<script>/* ================= FINITIONS BATAILLE ================= */
+// Les batailles sont en 2D : plus de « Prototype 3D » ; le choix des figurines (et le crédit Beelim) ne sert qu'à la vue 3D ancienne.
+(function(){
+  try{document.title=document.title.replace(/\s*3D$/,'');const sp=document.querySelector('.brand span');if(sp)sp.textContent=sp.textContent.replace(/^Prototype 3D\s*·\s*/i,'')}catch(e){}
+  let n=0;const t=setInterval(()=>{
+    const sF=document.getElementById('sFig'),c=document.getElementById('c3d');
+    if((!sF||!c)&&++n<50)return;clearInterval(t);if(!sF)return;
+    const lab=sF.closest('label'),cred=[...document.querySelectorAll('p')].find(p=>/Modèles Beelim : Beelim/.test(p.textContent));
+    const upd=()=>{const on=!!(c&&c.checked);if(lab)lab.style.display=on?'':'none';if(cred)cred.style.display=on?'':'none'};
+    if(c)c.addEventListener('change',upd);upd();
+  },100);
+})();
+/* ================= FIN FINITIONS BATAILLE ================= */</script>
