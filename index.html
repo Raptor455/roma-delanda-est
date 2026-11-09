@@ -10528,6 +10528,8 @@ function foldGb(b,a){S.gb=S.gb.filter(x=>x!==b);gbGrid();a.mat=Math.min(matCap(a
 // la marche hors route passe par la case du pont
 {const _rg=rivGrid;rivGrid=function(){const fresh=!RIVG,G=_rg();if(fresh&&gbOn()){const L=DEM.lv[0],r=L.r,w=L.w;
   for(const b of S.gb){const i0=Math.floor(b.x/r),j0=Math.floor(b.y/r);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const i=i0+di,j=j0+dj;if(i>=0&&j>=0&&i<w&&j<L.h)G[j*w+i]=0}}}return G}}
+// la marche hors route ne traverse jamais un fleuve hors d'un pont (la grille de 1,5 km laissait passer les courts trajets)
+{const _hl=horsLegs;horsLegs=function(x0,y0,x1,y1){const L=_hl.apply(this,arguments);if(!L)return L;let px=x0,py=y0;for(const l of L){if(crossRiv(px,py,l.x,l.y))return null;px=l.x;py=l.y}return L}}
 // ---- machines de siège en matériel (joueur) ; l'ordinateur paie toujours en or ----
 {const K0=['rams','tow','cat'].map(k=>[k,ENG[k]]);for(const [k] of K0)delete ENG[k];
   ENG.lad={n:'Échelles',d:2,c:10,w:.94,t:"Des dizaines d'échelles pour l'escalade : à l'assaut, les murs comptent 6 % de moins."};for(const [k,v] of K0)ENG[k]=v}
@@ -10670,6 +10672,7 @@ window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
 //    redessiner la barre ; on surveille l'état et on montre la raison sous l'étiquette PAUSE.
 // 3) Itinéraires : plus de grands détours (voir plus bas).
+// 4) Flotte à quai dans un port qui tombe : elle appareille (voir plus bas).
 // 2) Journal : élisions (« de Ilorci » → « d'Ilorci »), « pillent Ilici, près d'Ilici », convoi « (0 rations) ».
 (function(){
   const FIN_CSS=document.createElement('style');
@@ -10683,6 +10686,7 @@ window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear
     t=t.replace(VOY,(m,a,d,w)=>a+d+"'"+w);
     t=t.replace(/pillent ([^,<]+), près d['’]\1\./g,"pillent les campagnes d'$1.");
     t=t.replace(/pillent ([^,<]+), près de \1\./g,'pillent les campagnes de $1.');
+    t=t.replace(/\b1 navires( désarmés)?/g,(m,d)=>'1 navire'+(d?' désarmé':''));
     t=t.replace(/s'empare d'un convoi ennemi \(0 rations\)\./g,"s'empare d'un convoi ennemi : ses chariots sont déjà pleins, le reste est brûlé.");
     return t;
   };
@@ -10749,6 +10753,37 @@ window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear
     }catch(err){return r0}
   };
 }
+
+/* --- 4) Flotte dans un port qui tombe (9 nov.) ---
+   Avant : quand l'ennemi prenait la ville, la flotte restait à quai dans un port devenu ennemi, sans vivres, jusqu'à disparaître.
+   Maintenant elle appareille vers le port ami le plus proche ; désarmée au port (à l'abri), elle perd un dixième de ses navires. */
+{
+  function finFleetFlee(f,i){
+    const n=N[i];let lost=0;
+    if(f.inG){lost=sink(f,.1);f.inG=false}
+    const ok=typeof goHome==='function'&&goHome(f);
+    if(!ok){f.at=null;f.legs=f.legs||[]}
+    if(f.side==='car'){
+      const to=ok&&f.dest!=null?N[f.dest].n:null;
+      log(`${f.name} quitte en hâte le port ${deN(n.n)}, tombé à l'ennemi${lost?` (${lost} navire${lost>1?'s':''} désarmé${lost>1?'s':''} perdu${lost>1?'s':''} à quai)`:''}${to?` : cap sur ${to}.`:' : aucun port ami où se réfugier.'}`);
+      S.paused=true;
+    }
+  }
+  const _finCap=capture;
+  capture=function(i,side){
+    const r=_finCap.apply(this,arguments);
+    try{for(const f of (S.fleets||[]).slice())if(f.at===i&&f.side!==side&&!f.dead&&cityHostile(i,f.side))finFleetFlee(f,i)}catch(err){}
+    return r;
+  };
+  // parties déjà en cours : une flotte restée dans un port ennemi repart au chargement
+  const _finAL=afterLoad;
+  afterLoad=function(){
+    const r=_finAL.apply(this,arguments);
+    try{for(const f of (S.fleets||[]).slice())if(f.at!=null&&!f.dead&&cityHostile(f.at,f.side))finFleetFlee(f,f.at)}catch(err){}
+    return r;
+  };
+}
+window.__finitions={capture:(...x)=>capture(...x),plan:(...x)=>plan(...x),finFr:t=>finFr(t)};
 /* ================= FIN FINITIONS ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
