@@ -194,7 +194,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v155</span>
+ <span class="chg-ver">v156</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -8079,6 +8079,7 @@ function rgcShow(mx,my){if(!S)return;const wx=(mx-view.ox)/view.s,wy=(my-view.oy
   let c=$('rgCard');if(!c){c=document.createElement('div');c.id='rgCard';document.body.appendChild(c)}
   c.style.cssText='position:fixed;z-index:30;max-width:330px;min-width:220px;background:var(--pan2,#231b14);color:var(--tx,#efe4cc);border:1px solid var(--bz,#8a6a3c);border-radius:6px;padding:8px 12px 10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45)';
   c.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-family:Marcellus,Georgia,serif;font-size:16px;letter-spacing:.04em">Territoire ${esc(deN(t.n))}</b><button type="button" id="rgX" title="Fermer" style="padding:0 6px">×</button></div><div class="sub" style="font-size:12px;margin-bottom:4px">${esc(kind)}${r?' · '+esc(r):''}</div><div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin:5px 0"><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};margin-right:6px;vertical-align:-1px"></i><b>${esc(rgcOwnerName(o))}</b></span><span style="white-space:nowrap">${btn}</span></div>`;
+  try{const pl=popLine(t);if(pl)c.insertAdjacentHTML('beforeend',pl.replace('<p class="sub">','<p class="sub" style="margin:4px 0 0;font-size:12px">'))}catch(e){}
   const rc=cv.getBoundingClientRect(),W=window.innerWidth,H=window.innerHeight;let x=rc.left+mx+14,y=rc.top+my+14;
   const bw=c.offsetWidth,bh=c.offsetHeight;if(x+bw>W-8)x=Math.max(8,rc.left+mx-bw-14);if(y+bh>H-8)y=Math.max(8,H-bh-8);c.style.left=x+'px';c.style.top=y+'px';
   $('rgX').onclick=rgcClose;
@@ -8101,6 +8102,117 @@ function drawRegionHL(s){if(!RGC||RGC.i==null||!CELL||!CELL[RGC.i]||!CELL[RGC.i]
 {let first=true;const _alSt=afterLoad;afterLoad=function(){const r=_alSt.apply(this,arguments);if(first){first=false;if(!BOOT_SKIP)setTimeout(()=>{try{if(!S.cur)openStart()}catch(e){console.error(e)}},0)}return r}}
 {const _ohI=openHelpIntro;openHelpIntro=function(){if(!BOOT_SKIP)return;return _ohI.apply(this,arguments)}}
 
+// garde-fou : un peuple sans liste de généraux (ex. les Étoliens en mode Macédoine) en reçoit une, au lieu de bloquer la journée
+{const GEN_X={eto:['Dorimachos','Scopas','Phainéas','Damocritos','Alexandros','Archidamos'],ach:['Aratos','Philopoimen','Lykortas'],ill:['Skerdilaïdas','Démétrios de Pharos','Pleuratos']};
+  const _ngP=nextGen;nextGen=function(side){try{if(!GEN[side]||!GEN[side].length)GEN[side]=GEN_X[side]||[1,2,3,4,5].map(k=>'Chef '+((FAC[side]&&FAC[side].n)||side)+(k>1?' '+['','II','III','IV','V'][k-1]:''));
+    S.gi=S.gi||{};if(S.gi[side]==null||!isFinite(S.gi[side]))S.gi[side]=0}catch(e){}return _ngP.apply(this,arguments)}}
+/* ---------- 17. POPULATION : réserves d'hommes des villes et de leurs villages ---------- */
+// S.pop[id] = hommes mobilisables d'une ville, ses villages compris. Le recrutement, le remplissage des régiments diminués,
+// les levées de paysans et les auxiliaires y puisent. La réserve se refait lentement ; sièges, sacs, pillages et levées la vident.
+// S.popRes[id] = hommes déjà retenus pour le régiment en formation ; S.levV[id village] = jour de la dernière levée ; S.levT[id ville] = jours des levées.
+const POP_SZ=[500,1500,3500,8000],POP_VK={ferme:40,village:120,bourg:320},POP_DAYS=720;
+let POPV=null;
+function popVil(){if(POPV)return POPV;const M={};if(!VIL||!VIL.length)return M;for(const v of VIL)M[v.t]=(M[v.t]||0)+POP_VK[v.k];return POPV=M}
+// l'Italie fournit beaucoup d'hommes (paysans citoyens et alliés) ; les capitales et les plaines peuplées aussi
+function popMax(n){if(!n||n.col)return 0;let m=POP_SZ[n.size]||500;m+=Math.min(5000,popVil()[n.i]||0);if(n.cul==='ita')m*=1.5;return Math.round(m)}
+function popGet(n){S.pop=S.pop||{};let p=S.pop[n.id];if(p==null||!isFinite(p))p=S.pop[n.id]=popMax(n)*.8;return p}
+function popAdd(n,v){const m=popMax(n);S.pop[n.id]=Math.max(0,Math.min(m,popGet(n)+v))}
+// villes qui peuvent fournir des hommes à « side » autour de la ville i : elle d'abord, puis celles de sa région, les plus proches d'abord
+function popSrc(side,i,wide,guest){const n=N[i],L=[];if(!n||n.col)return L;if(ownerN(i)===side||guest)L.push(n);if(!wide)return L;const r=regOf(n);if(!r)return L;
+  for(const m of TOWNS)if(m!==n&&!m.col&&ownerN(m.i)===side&&regOf(m)===r)L.push(m);
+  return L.sort((a,b)=>(a===n?-1:b===n?1:Math.hypot(a.x-n.x,a.y-n.y)-Math.hypot(b.x-n.x,b.y-n.y)))}
+function popAvail(side,i,wide,guest){return popSrc(side,i,wide,guest).reduce((s,n)=>s+popGet(n),0)}
+function popTake(side,i,need,wide,guest){let got=0;for(const n of popSrc(side,i,wide,guest)){if(got>=need)break;const k=Math.min(popGet(n),need-got);S.pop[n.id]-=k;got+=k}return got}
+// d'où une armée au repos tire ses hommes : sa ville, ou la ville du territoire où elle campe ; en quartiers d'hiver chez un ami, la ville hôte
+function popHome(a){if(a.at!=null&&N[a.at]&&!N[a.at].col&&(ownerN(a.at)===a.side||a.qh))return a.at;const t=townAt(a.x,a.y);return t&&ownerN(t.i)===a.side?t.i:null}
+const popOn=side=>!(FAC[side]&&FAC[side].a);
+// regain quotidien : environ deux ans pour refaire une ville vide ; rien pendant un siège ; moins quand les villages sont brûlés
+function popRegen(){S.pop=S.pop||{};const ru={};
+  for(const id in S.vil){const st=S.vil[id];if(st.r&&S.day<st.r&&VIL[id]){const t=VIL[id].t;ru[t]=(ru[t]||0)+POP_VK[VIL[id].k]}}
+  const w=season()==='Hiver'?1.25:1;
+  for(const n of TOWNS){if(n.col||S.siege[n.id])continue;const m=popMax(n);if(!m)continue;const p=popGet(n);if(p>=m)continue;
+    const vr=popVil()[n.i]||0,k=vr?1-.7*Math.min(1,(ru[n.i]||0)/vr):1;S.pop[n.id]=Math.min(m,p+m/POP_DAYS*w*k)}}
+// remplissage : tout ce que les règles existantes rendent aux régiments (repos, garnison, quartiers d'hiver, chevaux…) est payé en hommes
+function popSnap(){const M=new Map();for(const a of S.armies)if(!a.dead&&popOn(a.side))for(const u of a.units)M.set(u,u.men);return M}
+function popSettle(M){for(const a of S.armies){if(a.dead||!popOn(a.side))continue;let need=0;const L=[];
+    for(const u of a.units){const m0=M.get(u);if(m0==null)continue;const d=u.men-m0;if(d>1e-6){need+=d;L.push([u,m0,d])}}
+    if(!need)continue;const i=popHome(a),got=i==null?0:popTake(a.side,i,need,true,a.qh&&i===a.at);
+    if(got<need-1e-6){const k=got/need;for(const [u,m0,d] of L)u.men=m0+d*k;
+      if(isMine(a)&&i!=null&&got<need*.5&&!(a._popE>S.day)){a._popE=S.day+90;log(`Les campagnes autour ${deN(N[i].n)} n'ont plus d'hommes : ${esc(a.name)} ne se refait plus. Allez dans une autre région, levez des paysans ou payez des mercenaires.`)}}}}
+setTimeout(()=>{const _dPop=daily;daily=function(d){if(!S||S.cur||S.over)return _dPop.apply(this,arguments);let M=null;try{M=popSnap()}catch(e){}
+  const r=_dPop.apply(this,arguments);try{if(M)popSettle(M);popRegen()}catch(e){console.error(e)}return r}},0);
+// recrutement : le régiment prend ses hommes à la ville (ou à sa région) ; ceux du joueur sont retenus dès la mise en formation
+{const _arP=addRecruit;addRecruit=function(i,side,t,ds){const before=new Set();for(const a of S.armies)if(a.side===side)for(const u of a.units)before.add(u);
+  const r=_arP.apply(this,arguments);try{if(!popOn(side))return r;const id=N[i].id;S.popRes=S.popRes||{};
+    let nu=null;for(const a of S.armies){if(a.side!==side||a.dead)continue;for(const u of a.units)if(!before.has(u)){nu=u;break}if(nu)break}
+    if(!nu)return r;const need=UT[nu.t].men;let got;
+    if(S.popRes[id]!=null){got=Math.min(need,S.popRes[id]);delete S.popRes[id]}else got=popTake(side,i,need,true);
+    if(got<need-1){nu.men=Math.max(1,got);
+      if(side==='car'||!isFinite(S.gold[side]))log(`${esc(uName(nu))} : faute d'hommes à ${N[i].n}, le régiment n'a que ${Math.round(got)} soldats sur ${need}.`);
+      else S.gold[side]+=Math.round(UT[nu.t].cost*(1-got/need)*.8)}
+  }catch(e){console.error(e)}return r}}
+// les meilleures troupes se lèvent dans les villes : un bourg ne donne ni cavalerie ni éléphants ni vétérans
+function popBigOnly(t,ds){const k=UT[t]&&UT[t].k,d=ds!=null?desOf(ds):null;return k==='cav'||k==='eleph'||!!(d&&d.train==='vet')}
+{const _btP=bindTown;bindTown=function(){const r=_btP.apply(this,arguments);try{
+  document.querySelectorAll('[data-rec],[data-recd]').forEach(b=>{const i=+b.dataset.n,n=N[i];if(!n)return;
+    const d=b.dataset.recd!=null?desOf(+b.dataset.recd):null,t=d?d.base:b.dataset.rec,need=UT[t]?UT[t].men:600;
+    if(n.size<2&&popBigOnly(t,d&&d.id)){b.disabled=true;b.title="Un bourg ne fournit ni cavalerie, ni éléphants, ni vétérans : il faut une ville";return}
+    if(popAvail('car',i,true)<need*.5){b.disabled=true;b.title=`Pas assez d'hommes dans la région (il en faut au moins ${Math.round(need*.5)})`;return}
+    const old=b.onclick;b.onclick=function(e){const id=n.id,had=!!S.q[id];const res=old&&old.call(this,e);
+      try{if(!had&&S.q[id]){S.popRes=S.popRes||{};S.popRes[id]=popTake('car',i,need,true)}}catch(x){}return res}})}catch(e){console.error(e)}return r}}
+// fiche de la ville : la réserve d'hommes
+function popLine(n){if(!n||n.col)return '';const o=ownerN(n.i);if(o!=='car'&&visAt(n.x,n.y)<1)return '';const p=popGet(n),m=popMax(n);if(!m)return '';
+  const f=p/m,txt=f>=.75?'nombreux':f>=.4?'moyens':f>=.15?'rares':'épuisés',col=f<.15?'#d98a6a':f<.4?'#d9b25a':'inherit';
+  return `<p class="sub">Hommes mobilisables : <b style="color:${col}">${Math.round(p).toLocaleString('fr-FR')}</b> / ${m.toLocaleString('fr-FR')} (${txt})${S.siege[n.id]?' · le siège empêche de les refaire':''}${S.popRes&&S.popRes[n.id]?` · ${Math.round(S.popRes[n.id])} en formation`:''}.</p>`}
+{const _tbP=townBlock;townBlock=function(i,main){let h=_tbP.apply(this,arguments);try{const n=N[i];if(!n||n.col)return h;const L=popLine(n);if(!L)return h;
+  const m=h.match(/<p class="sub">Revenu[^<]*<\/p>/);h=m?h.replace(m[0],m[0]+L):h+L;
+  if(ownerN(i)==='car'&&n.size===1)h=h.replace(/(<h3>Recrutement à [^<]*<\/h3>)/,'$1<p class="sub">Bourg : infanterie et tirailleurs seulement. La cavalerie, les éléphants et les vétérans se lèvent dans les villes.</p>')}catch(e){}return h}}
+// ---- levée de paysans dans les villages ----
+function levyBase(n){const P=POOL_CAR[n.cul]||POOL_CAR.ibe||['iber'];return P.find(t=>CORPS[t]&&CORPS[t].k==='inf')||P.find(t=>CORPS[t]&&CORPS[t].k==='skirm')||P[0]}
+function levyDesign(base){S.designs=S.designs||[];let d=S.designs.find(x=>x.sys==='lev'&&x.base===base);if(d)return d;
+  const k=CORPS[base].k,adj=(CORPS[base].adjP&&CORPS[base].adjP[S.peo])||CORPS[base].adj;
+  d=Object.assign({},newDesign(base),{base,helm:'nu',crest:'rien',armor:'tunique',jamb:'aucune',shield:k==='skirm'?'aucun':'peau',arm:k==='skirm'?'dague':'lance',jet:'javelots',train:'levee',manteau:'aucun'});
+  dFix(d);d.base=base;d.name=('Paysans '+(adj||'levés')).trim();d.sys='lev';d.del=true;d.id=S.duid=(S.duid||0)+1;S.designs.push(d);return d}
+const LEV_CD=180,LEV_F={village:.5,bourg:.75};
+function levyInfo(v){const n=N[v.t],base=levyBase(n),men=Math.round(UT[base].men*(LEV_F[v.k]||.5));S.levV=S.levV||{};const cd=S.levV[v.id]!=null&&S.day<S.levV[v.id]+LEV_CD;
+  return {n,base,men,cd,left:cd?Math.ceil((S.levV[v.id]+LEV_CD-S.day)/30):0,ok:popGet(n)>=men}}
+function levyCount(id){S.levT=S.levT||{};const L=(S.levT[id]||[]).filter(d=>S.day-d<180);S.levT[id]=L;return L.length}
+function raiseLevy(v,a){if(!a||a.units.length>=MAXU)return null;const I=levyInfo(v);if(I.cd||!I.ok)return null;
+  const d=levyDesign(I.base);popAdd(I.n,-I.men);a.units.push({t:I.base,men:I.men,d:d.id,xp:0,lev:1});
+  S.levV[v.id]=Math.floor(S.day);levyCount(I.n.id);S.levT[I.n.id].push(Math.floor(S.day));
+  if(a.food!=null)a.food+=5;return d}
+{const _vbP=villageBlock;villageBlock=function(v,a,main){let h=_vbP.apply(this,arguments);try{
+  if(!a||v.k==='ferme'||vRel(v,'car')!=='own'||vRuined(v))return h;const I=levyInfo(v),k=levyCount(I.n.id);
+  const tip=I.cd?`Ce village a déjà donné ses hommes : encore ${I.left} mois`:!I.ok?`${I.n.n} n'a plus assez d'hommes`:`${I.men} paysans mal armés (levée : moral et attaque faibles), pris sur la réserve ${deN(I.n.n)}. Gratuit, mais chaque levée fâche la ville pendant six mois (ordre public −6)${k?` ; déjà ${k} levée${k>1?'s':''} récente${k>1?'s':''}`:''}`;
+  const b=`<button id="vLev" type="button" title="${esc(tip)}" ${I.cd||!I.ok||a.units.length>=MAXU?'disabled':''}>Lever des paysans (${I.men} h.)</button>`;
+  const j=h.lastIndexOf('</div>');h=j>=0?h.slice(0,j)+b+h.slice(j):h+`<div class="row">${b}</div>`}catch(e){console.error(e)}return h}}
+{const _bvP=bindVillage;bindVillage=function(v,a){const r=_bvP.apply(this,arguments);const e=$('vLev');
+  if(e)e.onclick=()=>{const d=raiseLevy(v,a);if(d){const k=levyCount(N[v.t].id);log(`${a.name} lève des paysans à ${v.n} : ${esc(d.name)}${k>=3?`. ${N[v.t].n} gronde contre ces levées répétées`:''}.`)}renderAll()};return r}}
+// les auxiliaires des bourgs viennent aussi de la réserve
+{const _vaP=vAux;vAux=function(v,a){const n=N[v.t],t=(AUX[a.side]||AUX.car)[v.cul]||'sling',need=UT[t].men*.6;
+  if(popOn(a.side)&&popGet(n)<need){if(isMine(a))log(`${v.n} n'a plus d'hommes à donner : la réserve ${deN(n.n)} est épuisée.`);return null}
+  const r=_vaP.apply(this,arguments);if(r&&popOn(a.side))popAdd(n,-need);return r}}
+// ordre public : les levées forcées et les campagnes vidées fâchent la ville
+{const _opP=ordParts;ordParts=function(n){const P=_opP.apply(this,arguments);try{const k=levyCount(n.id);if(k)P.push(['levées forcées',-6*k]);
+  const m=popMax(n);if(m&&popGet(n)<m*.1)P.push(['campagnes vidées',-5])}catch(e){}return P}}
+// la guerre vide le pays : prise (et surtout sac) d'une ville, villages pillés ou brûlés
+{const _cpP=capture;capture=function(i,side){const n=N[i],sg=S.siege[n.id],prev=ownerN(i);
+  const sack=(typeof CAPMODE!=='undefined'&&CAPMODE==='pil')||(sg&&sg.side===side&&sg.sack==='pil');
+  const r=_cpP.apply(this,arguments);try{if(prev!==ownerN(i)&&!n.col){popGet(n);S.pop[n.id]*=sack?.4:.8;if(S.popRes)delete S.popRes[n.id]}}catch(e){}return r}}
+{const _vpP=vPillage;vPillage=function(v,a){const r=_vpP.apply(this,arguments);try{popAdd(N[v.t],-POP_VK[v.k]*.6)}catch(e){}return r}}
+{const _vbuP=vBurn;vBurn=function(v,side){const r=_vbuP.apply(this,arguments);try{popAdd(N[v.t],-POP_VK[v.k]*.2)}catch(e){}return r}}
+// ---- compléter les rangs avec des mercenaires (or au lieu des hommes du pays) ----
+function mercFillCost(a){let c=0,m=0;for(const u of a.units){const mx=UT[u.t].men,miss=mx-u.men;if(miss<1)continue;m+=miss;c+=miss*uCost(u)/mx*1.6}return {c:Math.ceil(c),m:Math.round(m)}}
+function mercFillOk(a){return a&&!a.dead&&!a.legs.length&&!a.ship&&!a.g&&a.reinf==null&&!(ownerAt(a.x,a.y)&&hostileSides(ownerAt(a.x,a.y),a.side))}
+function mercFill(a){const F=mercFillCost(a);if(!F.m||!mercFillOk(a))return false;let ok=false;
+  engPay(a,()=>{if((S.gold[a.side]||0)<F.c)return;S.gold[a.side]-=F.c;for(const u of a.units){const mx=UT[u.t].men;if(u.men<mx){if(u.xp&&u.men>0)u.xp*=u.men/mx;u.men=mx;u._m=mx}}ok=true});
+  if(ok&&isMine(a))log(`${esc(a.name)} complète ses rangs avec ${F.m.toLocaleString('fr-FR')} mercenaires (${F.c} or).`);return ok}
+function popArmyHtml(a){if(!a||!isMine(a)||a.legs.length||a.ship||a.g)return '';const F=mercFillCost(a);if(F.m<1)return '';const i=popHome(a);
+  let h=`<div class="sub" data-popbox style="margin:6px 0 2px">`+(i==null?`Hors de vos terres : les régiments ne se refont pas.`:`Les régiments se refont en puisant dans la réserve ${deN(N[i].n)} et de sa région : <b>${Math.round(popAvail(a.side,i,true,a.qh&&i===a.at)).toLocaleString('fr-FR')}</b> hommes.`);
+  if(mercFillOk(a))h+=` <button type="button" data-pmerc="${a.id}" ${(S.gold[a.side]||0)<F.c?'disabled':''} title="Remplit tout de suite les ${F.m.toLocaleString('fr-FR')} places vides avec des mercenaires, sans toucher à la réserve ; l'expérience se dilue">Compléter avec des mercenaires (${F.c} or)</button>`;
+  return h+`</div>`}
+setTimeout(()=>{const _ulP=unitLines;unitLines=function(a,checks){const h=_ulP.apply(this,arguments);try{if(checks)return h+popArmyHtml(a)}catch(e){}return h}},0);
+document.addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('[data-pmerc]');if(!b||b.disabled)return;const a=S&&S.armies.find(x=>x.id==b.dataset.pmerc);if(a&&isMine(a)){mercFill(a);renderAll()}});
 /* ---------- branchements : journée, mois, boutons, raccourcis de test ---------- */
 const _dailyG=daily;
 daily=function(d){const r=_dailyG.apply(this,arguments);if(S.cur||S.over)return r;
@@ -8115,7 +8227,7 @@ const _afterLoadG=afterLoad;afterLoad=function(){const r=_afterLoadG.apply(this,
     const I={bGen:['<circle cx="12" cy="7" r="4"/><path d="M4 21c0-5 4-8 8-8s8 3 8 8z"/><path d="M9 3l3-2 3 2" fill="none" stroke-width="1.6"/>','Généraux'],
       bSea:['<path d="M3 15h18l-3 5H6z"/><path d="M11 3h2v11h-2z"/><path d="M13 4c3 1 5 4 5 8h-5z"/><path d="M11 6c-2 1-4 3-4 6h4z"/>','Commerce']};
     for(const id in I){const b=$(id);if(b&&!b.querySelector('.ui-i'))b.innerHTML=svg(I[id][0],I[id][1])}}catch(e){}},0)}
-window.__meca2={rgcShow,rgcClose,dipOpenFac,get RGC(){return RGC},openCoord,cdAsk,cdRegions,cdMonthly,cdInit,mxDaily,MX,inSard,mxLand,openTreaty,pzScore,pzSign,pzRegions,PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
+window.__meca2={daily:d=>daily(d),popMax,popGet,popTake,popAvail,popHome,popRegen,raiseLevy,levyInfo,levyDesign,mercFill,mercFillCost,get POPV(){return popVil()},rgcShow,rgcClose,dipOpenFac,get RGC(){return RGC},openCoord,cdAsk,cdRegions,cdMonthly,cdInit,mxDaily,MX,inSard,mxLand,openTreaty,pzScore,pzSign,pzRegions,PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
   aiSide,applyScen,startScen,openScen,autoRun,autoTxt,openAutoTest,showAuto,mirrorGame,openPolRome,romElectPlayer,warScore:()=>warScore(),victoryCheck:d=>victoryCheck(d),SCEN,realSide,routeState,get S(){return S}};
 /* ================= FIN MÉCANIQUES II ================= */
 /* ================= INTERFACE BRONZE (fil « Refaire l'interface ») =================
