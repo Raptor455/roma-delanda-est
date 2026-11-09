@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v168</span>
+ <span class="chg-ver">v171</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -3814,10 +3814,10 @@ function emblem(side,r){const ink='rgba(40,26,12,.9)';ctx.fillStyle=ink;ctx.stro
 // cartouche d'une armée en vue dézoomée
 function genCard(a,s){
   const k=s<.5?.78:s<.8?.9:1,c=FAC[a.side].c,sel_=sel&&sel.a===a,X=Math.round(view.ox+a._p[0]*s),Y=Math.round(view.oy+a._p[1]*s);
-  const U=a.units.slice().sort((p,r)=>MARCH[UT[p.t].k]-MARCH[UT[r.t].k]),per=5,q=Math.round(12*k),g=Math.max(2,Math.round(2.5*k)),rows=Math.ceil(U.length/per)||1;
+  const U=a.units.slice().sort((p,r)=>MARCH[UT[p.t].k]-MARCH[UT[r.t].k]),per=5,q=Math.round(14*k),g=Math.max(2,Math.round(2*k)),rows=Math.ceil(U.length/per)||1;
   const gridW=Math.min(per,U.length||1)*(q+g)-g,gridH=rows*(q+g)-g;
   ctx.save();ctx.font=`600 ${Math.round(11*k)}px Marcellus, Georgia, serif`;const name=a.name.toUpperCase(),tw=ctx.measureText(name).width;
-  const pw=Math.max(tw+14*k,gridW+8*k),ph=Math.round(18*k),mr=Math.round(18*k);
+  const pw=Math.max(tw+14*k,gridW+8*k),ph=Math.round(18*k),mr=Math.round(27*k);/*CARTE-PC*/
   // pied : trait jusqu'à la position réelle
   const gy=Y-8*k,top=gy-gridH,py=top-3*k-ph,my=py-mr*.55;
   ctx.strokeStyle='rgba(30,20,10,.8)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(X,gy);ctx.lineTo(X,Y);ctx.stroke();ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(X,Y,4,1.8,0,0,7);ctx.fill();
@@ -3833,8 +3833,7 @@ function genCard(a,s){
   // grille des régiments, cinq par rang
   const dark='rgba(26,18,10,.95)',pts=[];
   U.forEach((u,i)=>{const r=Math.floor(i/per),n=Math.min(per,U.length-r*per),x=X-(n*(q+g)-g)/2+(i%per)*(q+g)+q/2,y=top+r*(q+g)+q/2;pts.push([x,y]);
-    if(UT[u.t].k==='skirm'){ctx.fillStyle='rgba(238,226,196,.9)';ctx.fillRect(x-q/2,y-q/2,q,q);ctx.strokeStyle=dark;ctx.lineWidth=1;ctx.strokeRect(x-q/2+.5,y-q/2+.5,q-1,q-1)}
-    unitSq(x,y,UT[u.t].k==='skirm'?q*.9:q,u,c,dark)});
+    if(typeof cardPiece==='function')cardPiece(x,y,q,u,c);else unitSq(x,y,q,u,c,dark)});
   ctx.restore();
   a._sq=[...pts,[X,py+ph/2],[X,my]];
 }
@@ -11664,7 +11663,54 @@ function uiPieces(){const a=sel&&sel.a;if(!a||!a.units)return;const side=documen
   {const hd=side.querySelector('.ua-head .ui-head'),gn=side.querySelector('.ua-head > .ua-gen');if(hd&&!hd.querySelector('.ui-hcol')){const h2=hd.querySelector('h2');if(h2){const c=document.createElement('div');c.className='ui-hcol';hd.insertBefore(c,h2);c.appendChild(h2);if(gn)c.appendChild(gn)}}}
   side.querySelectorAll('.ui-tile input[data-k]').forEach(inp=>{const t=inp.closest('.ui-tile'),u=a.units[+inp.dataset.k];if(!t||!u||t.classList.contains('pc'))return;
     const sv=t.querySelector('svg.ui-sym');const h=pcSVG(u,a.side);if(!h)return;if(sv)sv.outerHTML=h;else t.insertAdjacentHTML('afterbegin',h);t.classList.add('pc')})}
-window.__genie={uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- PILLARDS À TERRE (9 nov., Baptiste : « les animations de pillage des armées ») : les fourrageurs qui pillent ne sont plus
+   un carré mais une bande de petits pillards comme les descentes de la flotte : course, sac du village (bras qui frappent,
+   flammes, villageois et troupeau qui fuient), retour chargés de butin et de captifs. Carré gardé quand on est trop loin. ---- */
+function pilDraw(p,s,T){const a=parArmy(p);if(!a)return;const c=FAC[p.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,X=view.ox+p.x*s,Y=view.oy+p.y*s,e=Math.max(3.5,Math.min(14,s*.2)),t=performance.now()/1000,m=4;
+  const v=VIL[p.v],vx=v?view.ox+v.x*s:X,vy=v?view.oy+v.y*s:Y,L=p.legs[0],hx=L?L.x-p.x:vx-X,hy=L?L.y-p.y:vy-Y,hl=Math.hypot(hx,hy)||1,dx=hx/hl,dy=hy/hl;
+  ctx.save();ctx.lineCap='round';
+  if(L){for(let k=1;k<=2;k++){ctx.fillStyle=`rgba(170,150,110,${.28-k*.08})`;ctx.beginPath();ctx.arc(X-dx*e*1.6*k,Y-dy*e*1.6*k,e*(.9+k*.4),0,7);ctx.fill()}}
+  if(p.state==='burn'&&v){const ax=view.ox+a.x*s,ay=view.oy+a.y*s,R=Math.max(8,.25*s);
+    // flammes et fumée sur le village
+    flFlame(vx,vy,e*1.1,t,p.id,1);
+    for(let k=0;k<4;k++){const ph=(T*.3+k/4)%1;ctx.fillStyle=`rgba(50,45,40,${.45*(1-ph)})`;ctx.beginPath();ctx.arc(vx+ph*R*.6,vy-R*.6-ph*R*2.2,R*.35*(1+ph*1.5),0,7);ctx.fill()}
+    // pillards autour du village : ils frappent, portent des torches
+    for(let q=0;q<m;q++){const an=q*1.57+p.id,jx=Math.cos(an)*e*1.7,jy=Math.sin(an)*e*1.1,sw=(t*2.2+q*.4)%1;
+      flMan(vx+jx,vy+jy,e,col,-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5,0);
+      if(q%2===0){ctx.fillStyle=`rgba(255,${170+Math.floor(60*Math.sin(t*14+q))},50,.95)`;ctx.beginPath();ctx.arc(vx+jx+e*.9,vy+jy-e*1.6,Math.max(1.4,e*.22),0,7);ctx.fill()}}
+    // villageois et troupeau qui fuient à l'opposé de l'armée
+    const ph=(t*.35+p.id*.13)%1,fx=vx-ax,fy=vy-ay,fl=Math.hypot(fx,fy)||1;ctx.globalAlpha=1-ph;
+    for(let q=0;q<4;q++){const sp=(q-1.5)*.5,ddx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),ddy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=e*(2+ph*(8+q*2));
+      if(q===3){ctx.fillStyle='#e9e1cc';ctx.beginPath();ctx.ellipse(vx+ddx*r,vy+ddy*r,e*.55,e*.35,0,0,7);ctx.fill()}else flMan(vx+ddx*r,vy+ddy*r,e*.85,'#cbbf9c',null,t*15+q)}
+    ctx.globalAlpha=1}
+  else{const back=p.state==='back',px=-dy,py=dx;
+    for(let q=0;q<m;q++){const o=(q-(m-1)/2)*e*1.25,bk=(q%2)*e*.9,x=X+px*o-dx*bk+(flH(q+p.id)-.5)*e*.6,y=Y+py*o-dy*bk+(flH(q*3+p.id)-.5)*e*.5;
+      flMan(x,y,e,col,back?null:Math.atan2(dy,dx)-.6,t*(back?11:14)+q);
+      if(back){if(q===m-1){const cx=x-dx*e*1.4,cy=y-dy*e*1.4;flMan(cx,cy,e*.9,'#d8ccb0',null,t*11+q);ctx.strokeStyle='rgba(40,28,14,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y-e*.6);ctx.lineTo(cx,cy-e*.6);ctx.stroke()}
+        else{ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}}}
+  ctx.restore()}
+{const _dfP=drawFleets;drawFleets=function(s,z,inV){if(!S||!S.par||!S.par.length||s<1.2||typeof flMan!=='function')return _dfP.apply(this,arguments);
+  const all=S.par,T=S.day*DAY_S,mine=[];
+  for(const p of all){if(p.k!=='raid')continue;const vis=p.side==='car'||visAt(p.x,p.y)===2;if(!vis||!inV(p.x,p.y,20)){mine.push(p);continue}try{pilDraw(p,s,T);mine.push(p)}catch(e){console.error(e)}}
+  S.par=all.filter(p=>!mine.includes(p));try{return _dfP.apply(this,arguments)}finally{S.par=all}}}
+/* ---- CARTOUCHE DE L'ARMÉE (9 nov., Baptiste « règle aussi ce menu ») : patch.py retouche genCard (repère CARTE-PC) :
+   médaillon/portrait 27 px de rayon au lieu de 18, régiments dessinés comme les pièces de bataille (cadre sombre, plaque bombée,
+   symbole gravé), coin arraché puis plaque assombrie selon les pertes. ---- */
+const CP_G={};
+function cardPiece(x,y,q,u,c){const T=UT[u.t];if(!T)return;const k=T.k==='skirm'?'skirm':T.k,fr=Math.max(0,Math.min(1,u.men/(T.men||1))),x0=x-q/2,y0=y-q/2,b=Math.max(1.3,q*.13),pz=q-2*b;
+  const sh=(m)=>`rgb(${c.map(v=>Math.max(0,Math.min(255,Math.round(v*m)))).join(',')})`;
+  ctx.save();ctx.fillStyle='rgba(12,8,3,.42)';ctx.fillRect(x0+q*.1,y0+q*.13,q,q);
+  ctx.beginPath();if(fr<.6){const cut=q*(fr<.3?.5:.32);ctx.moveTo(x0,y0);ctx.lineTo(x0+q,y0);ctx.lineTo(x0+q,y0+q-cut);ctx.lineTo(x0+q-cut*.45,y0+q-cut*.4);ctx.lineTo(x0+q-cut,y0+q);ctx.lineTo(x0,y0+q);ctx.closePath()}else ctx.rect(x0,y0,q,q);
+  ctx.fillStyle='#16110c';ctx.fill();ctx.save();ctx.clip();
+  const g=ctx.createRadialGradient(x-q*.1,y-q*.12,q*.04,x,y,q*.66),w=(1-fr)*.35;g.addColorStop(0,sh(1.42-w));g.addColorStop(.5,sh(1.05-w));g.addColorStop(1,sh(.52-w*.4));
+  ctx.fillStyle=g;ctx.fillRect(x0+b,y0+b,pz,pz);
+  ctx.lineWidth=Math.max(.8,b*.55);ctx.strokeStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.moveTo(x0+b,y0+q-b);ctx.lineTo(x0+b,y0+b);ctx.lineTo(x0+q-b,y0+b);ctx.stroke();
+  const tint=sh(.38),m=pz*.06,X0=x0+b,Y0=y0+b;ctx.strokeStyle=tint;ctx.fillStyle=tint;ctx.lineCap='round';ctx.lineWidth=Math.max(1,pz*.11);ctx.beginPath();
+  if(k==='inf'||k==='eleph'){ctx.moveTo(X0+m,Y0+m);ctx.lineTo(X0+pz-m,Y0+pz-m);ctx.moveTo(X0+pz-m,Y0+m);ctx.lineTo(X0+m,Y0+pz-m);ctx.stroke();if(k==='eleph'){ctx.beginPath();ctx.arc(X0+pz/2,Y0+pz/2,pz*.2,0,7);ctx.stroke()}}
+  else if(k==='cav'||k==='lcav'){ctx.moveTo(X0+pz-m,Y0+m);ctx.lineTo(X0+m,Y0+pz-m);ctx.stroke();if(k==='lcav'){ctx.beginPath();ctx.arc(X0+pz*.7,Y0+pz*.7,pz*.1,0,7);ctx.fill()}}
+  else{for(const [a2,b2] of [[.3,.33],[.7,.33],[.5,.7]]){ctx.beginPath();ctx.arc(X0+pz*a2,Y0+pz*b2,pz*.12,0,7);ctx.fill()}}
+  ctx.restore();ctx.restore()}
+window.__genie={cardPiece,pilDraw,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
@@ -12496,6 +12542,95 @@ if(typeof nv3Open==='function'){const _nv=nv3Open;nv3Open=function(me,foe){let o
     if(o&&NV3&&NV3.fr){const fr=NV3.fr;chgBataille(o);fr.style.opacity='0';fr.onload=()=>chgBPret(()=>{fr.style.opacity='1';try{fr.focus()}catch(e){}})}
     return r}}
 /* ================= FIN ÉCRANS DE CHARGEMENT ================= */
+/* ================= BATAILLES RANGÉES : terrain généré (fil « Concevoir les terrains de bataille rangée ») =================
+   Le champ de bataille n'est plus recentré à 1,3 km d'un fleuve redressé contre le bord ouest : on garde l'endroit réel
+   et l'on envoie le vrai tracé des fleuves (avec méandres), les gués, les ponts (coupés ou non), les marais et le relief.
+   t.rg = {riv:[{p,hw,n}], cross:[{x,y,a,k:'gue'|'pont'|'coupe',hw,w}], marsh:[[[x,y]…]], dem:{x0,y0,st,nx,ny,h}}  (mètres du champ, avant ×G) */
+(function(){
+  const RG_BIG=new Set(["l'Èbre",'le Rhône','la Garonne','le Pô','le Tage','le Douro','le Danube','le Bétis']),RG_MID=new Set(['le Tibre','le Volturne','l\'Arno','la Save','l\'Axios','le Strymon','l\'Hèbre','la Charente','le Bagradas']);
+  const X0=-1300,X1=4500,Y0=-1300,Y1=3300;
+  const h1=(a,b)=>{let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967295};
+  window.__rgCamp={RIVD,RIVN,get BR(){return BR}};
+  const _bt=battleTerrain;
+  battleTerrain=function(b,attMine){
+    // 1. terrain d'origine, sans les fleuves : le champ reste centré sur l'endroit réel, l'ennemi au nord (la mer garde son ancien traitement)
+    const keep=RIV.slice();RIV.length=0;let t;
+    try{t=_bt(b,attMine)}finally{RIV.push(...keep)}
+    try{t.rg=rgBuild(t)}catch(e){console.warn('rangées',e)}
+    return t};
+  // image du sol envoyée à la bataille : sans les fleuves de la carte, la bataille dessine leur vrai tracé
+  const _bg=battleGround;
+  battleGround=function(t){if(!(t&&t.rg&&t.rg.riv&&t.rg.riv.length))return _bg.apply(this,arguments);
+    const keep=RIV.slice();RIV.length=0;try{return _bg.apply(this,arguments)}finally{RIV.push(...keep)}};
+  function rgBuild(t){
+    const f=t.f,B=(X,Y)=>{const dx=X-f.cx,dy=Y-f.cy;return [1700+(dx*f.ex[0]+dy*f.ex[1])*1000,1000+(dx*f.ey[0]+dy*f.ey[1])*1000]},
+      Cp=(sx,sy)=>[f.cx+((sx-1700)*f.ex[0]+(sy-1000)*f.ey[0])/1000,f.cy+((sx-1700)*f.ex[1]+(sy-1000)*f.ey[1])/1000];
+    const inB=([x,y],m=0)=>x>X0-m&&x<X1+m&&y>Y0-m&&y<Y1+m;
+    const rg={v:1,riv:[],cross:[],marsh:[],dem:null};
+    // relief : altitude détaillée tous les 100 m (en mètres, arrondie)
+    {const st=100,nx=Math.round((X1-X0)/st)+1,ny=Math.round((Y1-Y0)/st)+1,h=[];
+      for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const [X,Y]=Cp(X0+i*st,Y0+j*st);h.push(landFast(X,Y)?Math.round(relH(X,Y,.05)):-5)}
+      rg.dem={x0:X0,y0:Y0,st,nx,ny,h}}
+    // fleuves : tracé de la carte, rééchantillonné tous les 40 m et ondulé (méandres tirés de l'endroit, toujours les mêmes)
+    for(let r=0;r<RIVD.length;r++){const R=RIVD[r],P=R.P;if(R.b[0]>f.cx+5||R.b[2]<f.cx-5||R.b[1]>f.cy+5||R.b[3]<f.cy-5)continue;
+      const name=RIVN[r]||'le fleuve',hw=RG_BIG.has(name)?55:RG_MID.has(name)?32:20;
+      let cur=[];const flush=()=>{if(cur.length>3)rg.riv.push({p:cur,hw,n:name});cur=[]};
+      for(let q=1;q<P.length;q++){const a=B(P[q-1][0],P[q-1][1]),c=B(P[q][0],P[q][1]),L=Math.hypot(c[0]-a[0],c[1]-a[1]),m=Math.max(1,Math.ceil(L/40));
+        for(let s=(q>1?1:0);s<=m;s++){const x=a[0]+(c[0]-a[0])*s/m,y=a[1]+(c[1]-a[1])*s/m;if(inB([x,y],900))cur.push([x,y]);else flush()}}
+      flush()}
+    for(const R of rg.riv){const p=R.p,n=p.length,o=[];let acc=0;
+      // méandres : grande ondulation dont la période et l'amplitude varient doucement le long du cours
+      for(let i=0;i<n;i++){const a=p[Math.max(0,i-1)],c=p[Math.min(n-1,i+1)],dx=c[0]-a[0],dy=c[1]-a[1],l=Math.hypot(dx,dy)||1;if(i)acc+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);
+        const [X,Y]=Cp(p[i][0],p[i][1]),ph=acc/(190+R.hw*2.5)+vnoise(X*.35,Y*.35)*5,amp=(90+R.hw*2.2)*(.55+.9*vnoise(X*.5+7,Y*.5-3)),w=Math.sin(ph)*amp+Math.sin(ph*2.3+1.7)*amp*.22;
+        o.push([p[i][0]-dy/l*w,p[i][1]+dx/l*w])}
+      for(let k=0;k<3;k++)for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}
+      // le fleuve contourne la ville voisine (jamais à travers les maisons)
+      if(t.town){const tr=780+(t.town.size||0)*180+R.hw;for(let k=0;k<4;k++){for(const q of o){const dx=q[0]-t.town.x,dy=q[1]-t.town.y,d=Math.hypot(dx,dy)||1;if(d<tr){q[0]=t.town.x+dx/d*tr;q[1]=t.town.y+dy/d*tr}}
+        for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}}}
+      R.p=o.map(([x,y])=>[Math.round(x),Math.round(y)])}
+    function r0(v){return Math.round(v*10)}
+    // ponts : là où une route du champ franchit un fleuve ; coupé si le pont de la campagne l'est
+    const segX2=(a,b,c,d)=>{const rx=b[0]-a[0],ry=b[1]-a[1],sx=d[0]-c[0],sy=d[1]-c[1],den=rx*sy-ry*sx;if(Math.abs(den)<1e-9)return null;const t=((c[0]-a[0])*sy-(c[1]-a[1])*sx)/den,u=((c[0]-a[0])*ry-(c[1]-a[1])*rx)/den;return t>=0&&t<=1&&u>=0&&u<=1?[t,u]:null};
+    for(const rd of t.roads)for(let i=1;i<rd.p.length;i++)for(const R of rg.riv)for(let j=1;j<R.p.length;j++){const s=segX2(rd.p[i-1],rd.p[i],R.p[j-1],R.p[j]);if(!s)continue;
+      const x=rd.p[i-1][0]+(rd.p[i][0]-rd.p[i-1][0])*s[0],y=rd.p[i-1][1]+(rd.p[i][1]-rd.p[i-1][1])*s[0];if(!inB([x,y],200))continue;
+      if(rg.cross.some(c=>Math.hypot(c.x-x,c.y-y)<300))continue;
+      const [X,Y]=Cp(x,y);let br=null,bd=1.5;for(const o of BR){const d=Math.hypot(o.x-X,o.y-Y);if(d<bd){bd=d;br=o}}
+      const big=rd.k==='via'||rd.k==='route',ra=Math.atan2(R.p[j][1]-R.p[j-1][1],R.p[j][0]-R.p[j-1][0]);
+      rg.cross.push({x:Math.round(x),y:Math.round(y),a:+ra.toFixed(3),hw:R.hw,k:br&&brDown(br)?'coupe':(br||big)?'pont':'gue',w:big?14:9})}
+    // gués : un tous les 1,6 km environ le long de chaque fleuve dans le champ (au moins deux), plus larges sur les petits cours d'eau
+    for(const R of rg.riv){const p=R.p;
+      // grands fleuves : pas de gué, sauf s'il n'y a aucun pont dans le champ (eaux basses, un seul)
+      if(R.hw>=50&&rg.cross.some(c=>c.hw===R.hw&&inB([c.x,c.y],-150)&&c.k==='pont'))continue;
+      let acc=0,next=400+h1(p[0][0],p[0][1])*700;const L=[];
+      for(let i=1;i<p.length;i++){acc+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);if(acc>=next){next+=(R.hw<30?1000:1300)+h1(p[i][0],i)*600;L.push(i)}}
+      const inField=L.filter(i=>inB(p[i],-150));if(inField.length<2)for(let i=1;i<p.length-1;i+=Math.max(1,Math.floor(p.length/5)))if(inB(p[i],-150)&&!inField.includes(i))inField.push(i);
+      if(R.hw>=50){inField.sort((i,j)=>Math.hypot(p[i][0]-1700,p[i][1]-1000)-Math.hypot(p[j][0]-1700,p[j][1]-1000));inField.length=Math.min(1,inField.length)}
+      for(const i of inField){const [x,y]=p[i];if(rg.cross.some(c=>Math.hypot(c.x-x,c.y-y)<500))continue;
+        rg.cross.push({x,y,a:+Math.atan2(p[i+1][1]-p[i-1][1],p[i+1][0]-p[i-1][0]).toFixed(3),hw:R.hw,k:'gue',w:R.hw>40?70:R.hw>25?100:120})}}
+    // marais : au creux des méandres, là où le sol est bas et plat (jamais en montagne ni dans le désert)
+    if(t.ter!=='montagne'&&t.ter!=='desert')for(const R of rg.riv){const p=R.p;
+      for(let i=8;i<p.length-8;i+=6){const a=p[i-8],m=p[i],c=p[i+8],cr=(m[0]-a[0])*(c[1]-m[1])-(m[1]-a[1])*(c[0]-m[0]),L=Math.hypot(c[0]-a[0],c[1]-a[1]);
+        if(Math.abs(cr)/(L*L+1)<.18||!inB(m,-100)||h1(m[0]>>4,m[1]>>4)>.45)continue;
+        if(rg.marsh.some(q=>Math.hypot(q[0][0]-m[0],q[0][1]-m[1])<900)||rg.cross.some(q=>Math.hypot(q.x-m[0],q.y-m[1])<350))continue;
+        const sgn=Math.sign(cr),nx=(c[1]-a[1])/L*sgn,ny=-(c[0]-a[0])/L*sgn,cx=m[0]+nx*(R.hw+170),cy=m[1]+ny*(R.hw+170),poly=[];
+        for(let k=0;k<11;k++){const an=k/11*6.283,rr=(170+h1(k,i)*110)*(1+.35*Math.cos(an*2));poly.push([Math.round(cx+Math.cos(an)*rr*1.3),Math.round(cy+Math.sin(an)*rr*.8)])}
+        rg.marsh.push(poly)}}
+    return rg}
+})();
+/* ================= FIN BATAILLES RANGÉES ================= */
+/* ================= APERÇU BATAILLE ================= */
+// fil Batailles 2D (v166) : la bataille (iframe de même origine) lit ici l'aperçu de l'atelier, les noms des pièces et les portraits des chefs
+try{(function(){
+  const DEF={id:null,name:'',helm:'bronze',crest:'rien',armor:'lin',jamb:'aucune',shield:'rond',motif:'peuple',teinte:'pourpre',tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'reg'};
+  const des=(base,gear)=>{if(typeof CORPS==='undefined'||!CORPS[base])return null;let d=Object.assign({},DEF,(typeof BDEF!=='undefined'&&BDEF[base])||{},gear||{});d.base=base;try{if(typeof dFix==='function')d=dFix(d)}catch(e){}return d};
+  window.__apercu={
+    svg(base,gear){try{const d=des(base,gear);return d?(typeof vaseSVG==='function'?vaseSVG(d,false):dollSVG(d,false)):null}catch(e){return null}},
+    gear(base,gear){try{const d=des(base,gear);if(!d||typeof GEAR==='undefined')return null;const o=[];
+      for(const s of Object.keys(GEAR)){const v=d[s],g=GEAR[s].o[v];if(!g||/^(motif|teinte|tenue|manteau)$/.test(s)&&!/^(manteau)$/.test(s)||/^(aucun|aucune|rien)$/.test(v))continue;o.push([GEAR[s].n,g.n])}return o}catch(e){return null}},
+    por(k){try{const [aid,ck]=String(k).split(':');const a=S.armies.find(x=>String(x.id)===aid);if(!a)return null;
+      const c=(typeof corpsOf==='function'?corpsOf(a):[{g:a.g}])[+ck||0],g=c&&c.g;return g&&typeof porGenURL==='function'?porGenURL(g):null}catch(e){return null}}};
+})()}catch(e){console.warn('aperçu bataille',e)}
+/* ================= FIN APERÇU BATAILLE ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
