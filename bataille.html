@@ -2308,6 +2308,19 @@ if(!V3D){
     else if(k==='cav'||k==='lcav'){g2.moveTo(x0+z,y0);g2.lineTo(x0,y0+z);g2.stroke();if(k==='lcav'){g2.beginPath();g2.arc(x0+z*.7,y0+z*.7,z*.1,0,6.283);g2.fillStyle=INK;g2.fill()}}
     else if(k==='skirm'){g2.fillStyle=INK;for(const [a,b] of [[.32,.36],[.68,.36],[.5,.68]]){g2.beginPath();g2.arc(x0+z*a,y0+z*b,z*.1,0,6.283);g2.fill()}}
     else if(k==='eleph'){g2.moveTo(x0+m,y0+m);g2.lineTo(x0+z-m,y0+z-m);g2.moveTo(x0+z-m,y0+m);g2.lineTo(x0+m,y0+z-m);g2.stroke();g2.beginPath();g2.arc(x0+z/2,y0+z/2,z*.2,0,6.283);g2.fillStyle=P.str;g2.fill();g2.stroke()}}
+  function sym2(k,x0,y0,z,col){const m=z*.04;g2.lineWidth=Math.max(.8,z*.06);g2.strokeStyle=col;g2.lineCap='round';g2.beginPath();
+    if(k==='inf'||k==='eleph'){g2.moveTo(x0+m,y0+m);g2.lineTo(x0+z-m,y0+z-m);g2.moveTo(x0+z-m,y0+m);g2.lineTo(x0+m,y0+z-m);g2.stroke();
+      if(k==='eleph'){g2.beginPath();g2.arc(x0+z/2,y0+z/2,z*.2,0,6.283);g2.stroke()}}
+    else if(k==='cav'||k==='lcav'){g2.moveTo(x0+z-m,y0+m);g2.lineTo(x0+m,y0+z-m);g2.stroke();if(k==='lcav'){g2.beginPath();g2.arc(x0+z*.7,y0+z*.7,z*.09,0,6.283);g2.fillStyle=col;g2.fill()}}
+    else{g2.fillStyle=col;for(const [a,b] of [[.3,.33],[.7,.33],[.5,.7]]){g2.beginPath();g2.arc(x0+z*a,y0+z*b,z*.11,0,6.283);g2.fill()}}
+    g2.lineCap='butt'}
+  let SMEAR=[];
+  function drawSmears(){for(const [x,y,a,z,r] of SMEAR){const w=z*(.8+.12*Math.sin(rt*7+r*20)),h=z*(.36+.08*Math.sin(rt*5.3+r*13));g2.save();g2.translate(x,y);g2.rotate(a);
+      const g=g2.createRadialGradient(0,0,0,0,0,w);g.addColorStop(0,'rgba(156,128,92,.7)');g.addColorStop(.5,'rgba(146,118,84,.36)');g.addColorStop(1,'rgba(140,112,80,0)');
+      g2.fillStyle=g;g2.scale(h/w,1);g2.beginPath();g2.arc(0,0,w,0,6.283);g2.fill();
+      // quelques traits clairs : le choc soulève la poussière
+      g2.restore()}
+    SMEAR=[]}
   // ---- armes qui s'affrontent au contact : épées, lances, haches selon l'équipement de chaque régiment ----
   let CLASH=[];
   function weaponOf(u){if(u._wp)return u._wp;let w='epee';try{const g=gearOf(u);w=g.arm==='lance'||g.arm==='sarisse'||g.arm==='xyston'?'lance':g.arm==='hache'?'hache':'epee'}catch(e){}if(u.T.kind==='eleph')w='lance';return u._wp=w}
@@ -2389,11 +2402,13 @@ if(!V3D){
     if(u._men==null)u._men=u.men;if(u.men<u._men-.5){u._hit=rt;u._hk=Math.floor(Math.random()*C)}u._men=u.men;
     const hit=u._hit!=null?Math.max(0,1-(rt-u._hit)/.3):0,fight=u.contacts.length>0,shot=u.shotT!=null&&rt-u.shotT<.5?1-(rt-u.shotT)/.5:0;
     const x0=-z/2,y0=-z/2,lw=Math.max(1,Math.min(2,z/12));
-    const grads={};const grad=c=>{const key=Math.round(c*20);return grads[key]||(grads[key]=(()=>{const g=g2.createLinearGradient(x0,y0,x0+z,y0+z);g.addColorStop(0,shade(P.lt||P.blk,1.08-c*.3));g.addColorStop(.45,shade(P.blk,1.05-c*.25));g.addColorStop(1,shade(P.blk,.62-c*.2));return g})())};
-    let mix=null;if(fight){mix=g2.createLinearGradient(x0+z*.35,0,x0+z*1.05,0);mix.addColorStop(0,'rgba(0,0,0,0)');mix.addColorStop(1,shade(E.blk,1).replace('rgb','rgba').replace(')',',.78)'))}
+    // pièce de jeu : cadre sombre épais, plaque colorée bombée (claire au centre), symbole gravé dans un ton plus foncé
+    const b=Math.max(1.3,z*.13),pz=z-2*b,tint=shade(P.blk,.38);
+    const grads={};const grad=c=>{const key=Math.round(c*20);return grads[key]||(grads[key]=(()=>{const g=g2.createRadialGradient(-z*.1,-z*.12,z*.04,0,0,z*.66);
+      g.addColorStop(0,shade(P.blk,1.42-c*.4));g.addColorStop(.5,shade(P.blk,1.05-c*.3));g.addColorStop(1,shade(P.blk,.52-c*.15));return g})())};
     // ombres portées d'abord, en un seul passage
-    g2.fillStyle='rgba(15,10,4,.32)';
-    for(let t=0;t<N;t++){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const [sx,sy]=scr(q.x,q.y);g2.save();g2.translate(sx+1.5,sy+2);g2.rotate(scrAng(q.a));g2.fillRect(x0,y0,z,z);g2.restore()}
+    g2.fillStyle='rgba(12,8,3,.42)';
+    for(let t=0;t<N;t++){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const [sx,sy]=scr(q.x,q.y);g2.save();g2.translate(sx+Math.max(1.5,z*.1),sy+Math.max(2,z*.13));g2.rotate(scrAng(q.a));g2.fillRect(x0,y0,z,z);g2.restore()}
     for(let t=R*C-1;t>=0;t--){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const row=Math.floor(t/C),col=t%C;
       let [sx,sy]=scr(q.x,q.y);const a=scrAng(q.a);
       if(shot&&row===0){const r=z*.12*shot*Math.sin(t+1);sx-=Math.cos(a)*r;sy-=Math.sin(a)*r}
@@ -2403,21 +2418,26 @@ if(!V3D){
       g2.save();g2.translate(sx,sy);g2.rotate(a);if(u.routing)g2.globalAlpha=.55+.25*Math.sin(rt*9+t);
       const chip=c>.6?z*.32*(c-.6)/.4:0,co=cr.chip,pts=[[x0,y0],[x0+z,y0],[x0+z,y0+z],[x0,y0+z]];
       const shape=()=>{g2.beginPath();pts.forEach((p,i)=>{if(i===co&&chip){const n=pts[(i+1)%4],pv=pts[(i+3)%4];g2.lineTo(p[0]+(pv[0]-p[0])/z*chip,p[1]+(pv[1]-p[1])/z*chip);g2.lineTo(p[0]+(n[0]-p[0])/z*chip,p[1]+(n[1]-p[1])/z*chip)}else g2.lineTo(p[0],p[1])});g2.closePath()};
-      shape();g2.fillStyle=grad(c);g2.fill();
-      if(k==='cav'||k==='lcav'){g2.save();g2.clip();g2.beginPath();g2.moveTo(x0,y0);g2.lineTo(x0+z,y0);g2.lineTo(x0,y0+z);g2.closePath();g2.fillStyle=k==='lcav'?'rgba(255,255,255,.4)':'rgba(255,255,255,.2)';g2.fill();g2.restore()}
-      // premier rang au contact : les couleurs des deux camps se mêlent
-      if(mix&&row===0){g2.fillStyle=mix;g2.fill()}
-      if(hk){g2.fillStyle=`rgba(255,90,50,${.5*hk})`;g2.fill()}
-      symbol(k,x0,y0,z,P);
-      if(c>.08){const nc=Math.ceil(c*cr.L.length*1.1);g2.save();g2.clip();
+      // cadre
+      shape();g2.fillStyle='#16110c';g2.fill();
+      g2.save();g2.clip();
+      // plaque
+      g2.beginPath();g2.rect(x0+b,y0+b,pz,pz);g2.fillStyle=grad(c);g2.fill();
+      // ombre intérieure en haut à gauche, reflet en bas à droite : la plaque semble enfoncée dans le cadre
+      g2.lineWidth=Math.max(.8,b*.55);g2.strokeStyle='rgba(0,0,0,.35)';g2.beginPath();g2.moveTo(x0+b,y0+z-b);g2.lineTo(x0+b,y0+b);g2.lineTo(x0+z-b,y0+b);g2.stroke();
+      g2.strokeStyle=shade(P.lt||P.blk,.95).replace('rgb','rgba').replace(')',',.45)');g2.beginPath();g2.moveTo(x0+z-b,y0+b);g2.lineTo(x0+z-b,y0+z-b);g2.lineTo(x0+b,y0+z-b);g2.stroke();
+      if(hk){g2.fillStyle=`rgba(255,90,50,${.5*hk})`;g2.fillRect(x0,y0,z,z)}
+      sym2(k,x0+b,y0+b,pz,tint);
+      if(c>.08){const nc=Math.ceil(c*cr.L.length*1.1);
         for(let i=0;i<Math.min(nc,cr.L.length);i++){const L=cr.L[i],deep=Math.min(1,c*1.6);g2.beginPath();g2.moveTo(L[0][0]*z,L[0][1]*z);const mm=1+Math.ceil(deep*(L.length-1));for(let j=1;j<mm&&j<L.length;j++)g2.lineTo(L[j][0]*z,L[j][1]*z);
-          g2.lineWidth=1.4;g2.strokeStyle='rgba(255,240,210,.3)';g2.stroke();g2.lineWidth=.9;g2.strokeStyle='rgba(20,12,6,.95)';g2.stroke()}
-        g2.restore()}
-      // biseau clair comme une pièce de jeu, puis contour
-      shape();g2.lineWidth=lw;g2.strokeStyle='rgba(255,255,255,.55)';g2.stroke();
-      g2.beginPath();g2.rect(x0+lw,y0+lw,z-2*lw,z-2*lw);g2.lineWidth=Math.max(.6,lw*.6);g2.strokeStyle='rgba(20,14,8,.35)';g2.stroke();
-      if(sel||hov){g2.lineWidth=sel?2:1;g2.strokeStyle=sel?'#fff2c0':'rgba(255,250,230,.7)';g2.strokeRect(x0-2,y0-2,z+4,z+4)}
-      g2.restore()}
+          g2.lineWidth=1.3;g2.strokeStyle='rgba(255,240,210,.28)';g2.stroke();g2.lineWidth=.85;g2.strokeStyle='rgba(14,9,4,.95)';g2.stroke()}}
+      g2.restore();
+      // arête claire très fine autour du cadre
+      shape();g2.lineWidth=.7;g2.strokeStyle='rgba(255,245,220,.18)';g2.stroke();
+      if(sel||hov){g2.lineWidth=sel?2:1;g2.strokeStyle=sel?'#fff2c0':'rgba(255,250,230,.7)';g2.strokeRect(x0-2.5,y0-2.5,z+5,z+5)}
+      g2.restore();
+      // mêlée : traînée de poussière sur le bord qui touche l'ennemi (dessinée après tous les régiments)
+      if(fight&&row===0){const fx_=Math.cos(a),fy_=Math.sin(a);SMEAR.push([sx+fx_*z*.5,sy+fy_*z*.5,a,z,q.r])}}
     // mêlée : poussière, et paires de régiments au contact pour les armes qui s'affrontent (une fois par paire)
     if(fight)for(const e of u.contacts){if(e.id<u.id)continue;const mx=(u.x+e.x)/2,my=(u.y+e.y)/2;
       if(Math.random()<.15)fx('dust',mx+(Math.random()-.5)*u.w*.8,my+(Math.random()-.5)*u.w*.3,{life:1.4+Math.random(),r:6+Math.random()*6,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,c:'110,86,58',a:.15});
@@ -2485,7 +2505,7 @@ if(!V3D){
     for(const u of units){if(u.reg==null||!u.dead||u.pend||u._shat||!u._sq||!u._sq[0])continue;u._shat=1;const q=u._sq[0],z=Math.max(5,u.w*s2*.92);
       for(let i=0;i<10;i++){const an=Math.random()*6.283,sp=(40+Math.random()*60)/s2;fx('shard',q.x,q.y,{vx:Math.cos(an)*sp,vy:Math.sin(an)*sp,life:.8+Math.random()*.6,r:Math.max(1.6,z*.18)*(.6+Math.random()*.8),c:PAL[u.side].blk,rot:an,vr:(Math.random()-.5)*12})}
       fx('dust',q.x,q.y,{life:1.2,r:u.w*.5,a:.28})}
-    drawFx(true);CLASH=[];for(const u of order)drawUnit(u);drawClashes();
+    drawFx(true);CLASH=[];SMEAR=[];for(const u of order)drawUnit(u);drawSmears();
     drawFx(false);
     drawProjs();drawBanners();
     g2.restore();
