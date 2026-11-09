@@ -2692,27 +2692,62 @@ let BRUME=!!(CAMP&&CAMP.b&&CAMP.b.brume);
   try{const st=document.createElement('style');st.textContent='#sBrume{margin-left:4px}';document.head.appendChild(st)}catch(e){}
 }
 /* ================= FIN BRUME ET EMBUSCADES ================= */
+/* ================= RENFORTS EN CARRÉS (champ de bataille ; fil « Rejoindre une bataille en direct à plusieurs ») =================
+   La fonction arrive() du bloc ÉCHELLE est déclarée dans un bloc { } : la boucle des renforts appelle donc la version du bloc,
+   pas celle que BATAILLE 2D enveloppe pour faire entrer les 5 carrés d'un régiment. Seul le premier carré entrait.
+   On fait entrer les renforts ici, avant la boucle, avec window.__echelle.arrive (la version enveloppée). */
+{
+  const E=window.__echelle;
+  if(E&&E.res){
+    const due=s=>{for(const r of E.res)if(!r.done&&(s==null?time>=r.arr:r.side===s))try{E.arrive(r)}catch(e){console.warn(e)}};
+    const _st=step;step=function(dt){if(started&&!ended)due(null);return _st.apply(this,arguments)};
+    const _ce=checkEnd;checkEnd=function(){try{if(!ended&&units)for(const s of [0,1])if(!units.some(u=>u.side===s&&!u.dead&&!u.routing))due(s)}catch(e){console.warn(e)}return _ce.apply(this,arguments)};
+  }
+}
+/* ================= FIN RENFORTS EN CARRÉS ================= */
 /* ================= BATAILLE À DEUX (champ de bataille ; fil « Ajouter sons, embuscades et bataille à deux ») =================
-   CAMP.pvp.role = 'h' : cette page fait tourner la bataille ; le camp 1 obéit à l'autre joueur au lieu de l'IA.
-   CAMP.pvp.role = 'g' : cette page ne simule rien ; elle reçoit l'état des régiments, montre la bataille de son côté
-   (camps inversés, caméra retournée) et renvoie les ordres. Messages : postMessage vers la campagne, qui les relaie.
+   CAMP.pvp.role = 'h' : cette page fait tourner la bataille. Le camp 1 obéit à l'autre joueur (gid) au lieu de l'IA ;
+     solo=1 : bataille contre l'IA, que d'autres joueurs peuvent rejoindre en cours.
+   CAMP.pvp.role = 'g' (l'autre camp) ou 'j' (un joueur qui rejoint la bataille en cours) : cette page ne simule rien ;
+     elle reçoit l'état des régiments, montre la bataille de son côté (flip : camps inversés, caméra retournée)
+     et renvoie les ordres de SES régiments.
+   Qui commande un régiment (ctl) : son propriétaire (c.ow, joueur qui commande l'armée en campagne) s'il est sur le champ
+   de bataille, sinon l'hôte (camp 0), l'invité (camp 1) ou l'IA. Régiments des armées qui peuvent rejoindre (c.jn) :
+   tenus hors du champ jusqu'à l'ordre « join » de la campagne, puis ils entrent en renfort après c.arr secondes.
+   Messages : postMessage vers la campagne, qui les relaie (f = joueur qui envoie).
    Source : /mnt/project-files/futur/pvp-bataille.js, injecté avant BOUCLE par futur/patch.py. */
-const PVP=(CAMP&&CAMP.pvp&&(CAMP.pvp.role==='h'||CAMP.pvp.role==='g'))?{role:CAMP.pvp.role,peer:CAMP.pvp.peer||"l'adversaire",ready:false,peerReady:false,peerOn:false,seen:0,lost:false,hostEnded:false}:null;
+const PVP=(CAMP&&CAMP.pvp&&['h','g','j'].includes(CAMP.pvp.role))?{role:CAMP.pvp.role,peer:CAMP.pvp.peer||"l'adversaire",hid:CAMP.pvp.hid||null,gid:CAMP.pvp.gid||null,
+  me:CAMP.pvp.role==='h'?CAMP.pvp.hid:CAMP.pvp.me,solo:!!CAMP.pvp.solo,flip:CAMP.pvp.role==='g'||!!CAMP.pvp.flip,names:CAMP.pvp.names||{},
+  ready:false,peerReady:false,peerOn:false,seen:0,lost:!!CAMP.pvp.solo,hostEnded:false,on:new Map(),cand:new Map(),jd:new Set()}:null;
 if(PVP){
-  window.__pvpNoAI=true;
+  window.__pvpNoAI=!PVP.solo;
   const isH=PVP.role==='h',send=d=>{try{window.parent.postMessage({bellum:'pvp',d},'*')}catch(e){}};
-  const byId=new Map();const idx=()=>{byId.clear();for(const u of units)byId.set(u.id,u)};
+  const byId=new Map();const idx=()=>{byId.clear();for(const u of (typeof units!=="undefined"&&units)||[])byId.set(u.id,u)};
   const r1=v=>Math.round(v*10)/10,r3=v=>Math.round(v*1000)/1000;
+  const nm=id=>PVP.names[id]||(id===PVP.hid?PVP.peer:'un allié');
+  // joueurs présents sur le champ de bataille (hôte compris) ; l'hôte les annonce aux autres
+  const present=id=>!!id&&(id===PVP.hid||PVP.on.has(id));
+  const entryOf=u=>{if(u.ci==null||!CAMP.b)return null;return ((u.sd0==null?u.side:u.sd0)===0?CAMP.b.p:CAMP.b.e||[])[u.ci]||null};
+  function ctl(u){if(!u)return null;const c=entryOf(u)||{};const own=c.ow||null;
+    if(own&&present(own)&&(own!==PVP.gid||!PVP.lost))return own;
+    const s0=u.sd0==null?u.side:u.sd0;return s0===0?PVP.hid:(PVP.gid&&!PVP.lost?PVP.gid:'ai')}
+  const mine=u=>ctl(u)===PVP.me;
+  // on ne sélectionne que ses propres régiments (un allié commande les siens)
+  try{const add=Set.prototype.add;selected.add=function(u){if(u&&u.side===0&&!mine(u))return this;return add.call(this,u)}}catch(e){}
   // bandeau d'état
   const bar=document.createElement('div');bar.id='pvpBar';bar.setAttribute('role','status');
   bar.style.cssText='position:absolute;left:50%;top:52px;transform:translateX(-50%);z-index:8;padding:6px 14px;border-radius:6px;background:rgba(20,18,14,.88);border:1px solid rgba(214,184,120,.5);color:#efe6d2;font:14px Georgia,serif;pointer-events:none;max-width:90vw;text-align:center';
   ($('app')||document.body).appendChild(bar);
   const say=t=>{bar.textContent=t;bar.hidden=!t};
+  let note='',noteT=0;const tell=t=>{note=t;noteT=performance.now();status()};
   function status(){if(ended){say('');return}
-    if(PVP.lost){say(isH?`${PVP.peer} ne répond plus : l'IA commande son armée.`:`Liaison perdue avec ${PVP.peer}…`);return}
+    if(note&&performance.now()-noteT<6000){say(note);return}
+    if(PVP.solo&&isH){say(paused&&started&&PVP.on.size?'Pause':'');return}
+    if(PVP.lost&&!PVP.solo){say(isH?`${PVP.peer} ne répond plus : l'IA commande son armée.`:`Liaison perdue avec ${PVP.peer}…`);return}
+    if(PVP.role==='j'){say(!PVP.peerOn?`En liaison avec ${PVP.peer}…`:started?(paused?'Pause':''):`${PVP.peer} prépare la bataille…`);return}
     if(!started){say(!PVP.peerOn?`Bataille à deux : en attente de ${PVP.peer}…`:PVP.ready?`Prêt. En attente de ${PVP.peer}…`:PVP.peerReady?`${PVP.peer} est prêt : placez vos troupes puis lancez la bataille.`:`Bataille à deux contre ${PVP.peer} : placez vos troupes puis lancez la bataille.`);return}
     say(paused?`Pause (${PVP.peer} ou vous pouvez reprendre)`:'')}
-  // départ : les deux joueurs doivent être prêts
+  // départ : l'hôte et l'invité doivent être prêts (contre l'IA, l'hôte part seul)
   const _begin=begin;
   begin=function(){if(started)return;PVP.ready=true;$('start').hidden=true;send({k:'rdy'});if(isH)tryStart();status()};
   $('bGo').onclick=()=>begin();
@@ -2721,51 +2756,73 @@ if(PVP){
   $('bPause').onclick=()=>togglePause();
   document.querySelectorAll('.spd').forEach(b=>b.onclick=()=>{const v=+b.dataset.s;if(isH){speed=v;document.querySelectorAll('.spd').forEach(x=>x.classList.toggle('on',x===b));snap(true)}else send({k:'spd',v})});
   const spdUI=()=>document.querySelectorAll('.spd').forEach(x=>x.classList.toggle('on',+x.dataset.s===speed));
-  addEventListener('message',ev=>{if(ev.source!==window.parent||!ev.data||ev.data.bellum!=='pvp')return;const m=ev.data.d;if(!m)return;
-    PVP.seen=performance.now();if(!PVP.peerOn){PVP.peerOn=true;status()}if(PVP.lost){PVP.lost=false;status()}
-    try{(isH?onHost:onGuest)(m)}catch(e){console.warn('[pvp]',e)}});
+  // armées qui peuvent rejoindre : leurs régiments restent hors du champ (ni renfort automatique, ni décompte)
+  function holdCands(){const E=window.__echelle;if(!E||!E.res)return;const R=E.res;
+    for(let i=R.length-1;i>=0;i--){const r=R[i],c=r.us&&r.us[0]&&entryOf(r.us[0]);if(!c||c.jn==null)continue;R.splice(i,1);PVP.cand.set(c.jn,r);r.jn=c.jn;r.ow=c.ow}
+    if(!PVP.cand.size)return;
+    // le texte « Renforts en route » de l'écran de départ ne les annonce pas
+    const names=[...PVP.cand.values()].map(r=>r.an).filter(Boolean);
+    try{document.querySelectorAll('#start .ech-p').forEach(p=>{if(!/Renforts en route/.test(p.textContent))return;const parts=p.innerHTML.replace(/^<b>Renforts en route<\/b> : /,'').replace(/\.$/,'').split(' ; ').filter(s=>!names.some(n=>s.includes(n)));
+      if(parts.length)p.innerHTML='<b>Renforts en route</b> : '+parts.join(' ; ')+'.';else p.remove()})}catch(e){}}
+  function joinArmy(aid,arr,pid){const r=PVP.cand.get(aid);if(!r||PVP.jd.has(aid))return;PVP.jd.add(aid);PVP.cand.delete(aid);
+    r.arr=time+Math.max(5,+arr||30);r.done=false;const E=window.__echelle;if(E&&E.res){E.res.push(r);E.res.sort((a,b)=>a.arr-b.arr)}
+    const s=r.us[0]&&r.us[0].side;tell(`${r.an||'Une armée'} (${nm(pid)}) rejoint la bataille : ${s===0?'renforts':'renforts ennemis'} dans ${Math.max(1,Math.round((+arr||30)/60))} min.`)}
+  {const _st=setup;setup=function(){const r=_st.apply(this,arguments);try{for(const u of units)u.sd0=u.side;holdCands()}catch(e){console.warn(e)}return r}}
+  addEventListener('message',ev=>{if(ev.source!==window.parent||!ev.data||ev.data.bellum!=='pvp')return;const m=ev.data.d,f=ev.data.f;if(!m)return;
+    if(m.k==='join'){if(isH)joinArmy(m.aid,m.arr,m.pid);return}
+    PVP.seen=performance.now();if(isH&&f){const o=PVP.on.get(f);if(!o){PVP.on.set(f,{seen:PVP.seen});if(f!==PVP.gid)tell(`${nm(f)} regarde la bataille et commande ses régiments.`)}else o.seen=PVP.seen}
+    if(!PVP.peerOn&&(!isH||f===PVP.gid||!PVP.gid)){PVP.peerOn=true;status()}if(PVP.lost&&!PVP.solo&&(!isH||f===PVP.gid)){PVP.lost=false;status()}
+    try{(isH?onHost:onGuest)(m,f)}catch(e){console.warn('[pvp]',e)}});
   /* ---- hôte de la bataille ---- */
   if(isH){
     {const _sh=shoot;shoot=function(u){const n=projs.length,r=_sh.apply(this,arguments);for(let i=n;i<projs.length;i++)projs[i].src=u.id;return r}}
-    const _ai=ai;ai=function(){if(!PVP.lost)return;return _ai.apply(this,arguments)};
-    let sent=new Map(),seq=0,full=0,sentP=new WeakSet(),snapT=0;
-    function snap(force){if(!PVP.peerOn||!units)return;if(!byId.size)idx();const all=force||performance.now()-full>2000;if(all)full=performance.now();
+    // l'IA ne commande que les régiments qui n'ont pas de joueur
+    const _ai=ai;ai=function(){if(!PVP.lost)return;const keep=[];for(const u of units)if(u.side===1&&ctl(u)!=='ai')keep.push([u,u.order]);
+      const r=_ai.apply(this,arguments);for(const [u,o] of keep)u.order=o;return r};
+    let sent=new Map(),seq=0,full=0,sentP=new WeakSet(),pp='';
+    function snap(force){if(!PVP.on.size||!units)return;if(!byId.size)idx();const P2=[...PVP.on.keys()].join(',');if(P2!==pp){pp=P2;force=true}
+      const all=force||performance.now()-full>2000;if(all)full=performance.now();
       const U=[];for(const u of units){const f=(u.routing?1:0)|(u.dead?2:0)|(u.fled?4:0)|(u.moving?8:0)|(u.pend?16:0)|(u.lastRun?32:0)|(u.order?64:0)|(u.chargeT>0?128:0)|(u.underFire>0?256:0);
         const e=[u.id,r1(u.x),r1(u.y),r3(u.ang),r1(u.men),r1(u.morale),f,r1(u.w),u.contacts.map(c=>c.id)],k=JSON.stringify(e);if(!all&&sent.get(u.id)===k)continue;sent.set(u.id,k);U.push(e)}
       const P=[];for(const p of projs){if(sentP.has(p))continue;sentP.add(p);P.push([p.src||0,r1(p.x0),r1(p.y0),r1(p.tx),r1(p.ty),r3(p.dur),p.k||'fleche',r3(p.seed),p.target?p.target.id:0])}
-      const H={k:'s',q:++seq,t:r1(time),pa:paused?1:0,st:started?1:0,sp:speed,en:ended?1:0};
+      const H={k:'s',q:++seq,t:r1(time),pa:paused?1:0,st:started?1:0,sp:speed,en:ended?1:0,pp:[...PVP.on.keys()],lo:PVP.lost?1:0,jd:[...PVP.jd]};
       for(let i=0;i<P.length;i+=30)send(Object.assign({},H,{U:[],P:P.slice(i,i+30)}));
       if(!U.length){if(!P.length)send(H);return}
       for(let i=0;i<U.length;i+=26)send(Object.assign({},H,{U:U.slice(i,i+26),P:[]}))}
-    setInterval(()=>{if(PVP.peerOn)snap(false);
-      // plus de nouvelles depuis 25 s : l'IA reprend l'armée de l'autre joueur
-      if(PVP.peerOn&&!PVP.lost&&performance.now()-PVP.seen>25000){PVP.lost=true;status();tryStart()}},200);
+    setInterval(()=>{snap(false);const now=performance.now();
+      // un joueur silencieux depuis 25 s : on le considère parti (l'invité : l'IA reprend son armée)
+      for(const [id,o] of PVP.on)if(now-o.seen>25000){PVP.on.delete(id);if(id===PVP.gid&&!PVP.solo){PVP.lost=true;tryStart()}else tell(`${nm(id)} a quitté la bataille : vous commandez ses régiments.`)}
+      if(PVP.gid&&!PVP.solo&&PVP.peerOn&&!PVP.lost&&!PVP.on.has(PVP.gid)){PVP.lost=true;tryStart()}
+      status()},200);
     // avant le départ : si l'autre joueur n'arrive jamais, on peut jouer contre l'IA
-    setTimeout(()=>{if(PVP.peerOn||started)return;const b=document.createElement('button');b.type='button';b.textContent="Jouer contre l'IA";b.style.cssText='margin-top:6px';
+    if(!PVP.solo)setTimeout(()=>{if(PVP.peerOn||started)return;const b=document.createElement('button');b.type='button';b.textContent="Jouer contre l'IA";b.style.cssText='margin-top:6px';
       b.onclick=()=>{PVP.lost=true;window.__pvpNoAI=false;b.remove();if(PVP.ready)tryStart();status()};const c=document.querySelector('#start .card');if(c)c.appendChild(b)},45000);
-    function onHost(m){
+    function onHost(m,f){
       if(m.k==='ka')return;
       if(m.k==='hi'){if(!byId.size)idx();snap(true);status();return}
-      if(m.k==='rdy'){PVP.peerReady=true;tryStart();status();return}
+      if(m.k==='rdy'){if(f===PVP.gid){PVP.peerReady=true;tryStart()}status();return}
       if(m.k==='pause'){if(started&&!ended){paused=!paused;updatePauseBtn();snap(true)}status();return}
       if(m.k==='spd'){if([1,2,4].includes(m.v)){speed=m.v;spdUI();snap(true)}return}
-      if(m.k==='o'){if(!byId.size)idx();const u=byId.get(m.id);if(!u||u.side!==1||u.dead)return;
+      if(m.k==='o'){if(!byId.size)idx();const u=byId.get(m.id);if(!u||u.dead||u.pend||ctl(u)!==f)return;
         if(m.f&&Math.abs((u.front||1)-m.f)>.01)setFrontage(u,m.f);
         const o=m.o;if(!o){u.order=null;return}
-        if(o.type==='attack'){const t=byId.get(o.t);if(t&&t.side===0&&!t.dead)u.order={type:'attack',target:t,run:!!o.run}}
+        if(o.type==='attack'){const t=byId.get(o.t);if(t&&t.side!==u.side&&!t.dead)u.order={type:'attack',target:t,run:!!o.run}}
         else u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,o.x)),y:Math.max(20,Math.min(H-20,o.y)),face:o.face==null?null:o.face,run:!!o.run};
         snap(false)}}
     const _ce=checkEnd;checkEnd=function(){const r=_ce.apply(this,arguments);if(ended)snap(true);return r};
+    window.__pvpH={joinArmy,ctl,get on(){return PVP.on},get cand(){return PVP.cand}};
   }
-  /* ---- invité de la bataille : il voit, il commande, il ne simule pas ---- */
+  /* ---- invité de la bataille ou joueur qui la rejoint : il voit, il commande ses régiments, il ne simule pas ---- */
   else{
-    const _setup=setup;setup=function(){const r=_setup.apply(this,arguments);
+    if(PVP.flip){const _setup=setup;setup=function(){const r=_setup.apply(this,arguments);
       for(const u of units){u.side=1-u.side;u.order=null}
-      PAL.reverse();try{document.documentElement.style.setProperty('--punic',PAL[0].css);document.documentElement.style.setProperty('--roma',PAL[1].css)}catch(e){}
+      // PAL est déjà dans l'ordre du joueur (la campagne de chacun fixe b.pk : son camp d'abord), on ne l'inverse pas
       try{const C=window.__echelle&&window.__echelle.corps;if(C){C.reverse();for(const s of [0,1])for(const o of C[s])o.side=s}if(typeof corpsButtons==='function')corpsButtons()}catch(e){}
-      try{const ps=document.querySelectorAll('#start .card > p');if(ps[0])ps[0].textContent=`Bataille à deux contre ${PVP.peer}. Vous commandez ${PAL[0].n} (${PAL[0].adj}), ${PVP.peer} commande ${PAL[1].n} (${PAL[1].adj}).`;
+      try{const ps=document.querySelectorAll('#start .card > p');if(ps[0])ps[0].textContent=PVP.role==='g'?`Bataille à deux contre ${PVP.peer}. Vous commandez ${PAL[0].n} (${PAL[0].adj}), ${PVP.peer} commande ${PAL[1].n} (${PAL[1].adj}).`:`Vous rejoignez la bataille contre ${PVP.peer}, dans le camp ${PAL[0].adj}.`;
         const a=$('fP'),b=$('fR');if(a)a.textContent=PAL[0].n;if(b)b.textContent=PAL[1].n}catch(e){}
-      cam.yaw+=Math.PI;cam.tx=3400*G-cam.tx;cam.ty=2000*G-cam.ty;idx();renderSel();return r};
+      cam.yaw+=Math.PI;cam.tx=3400*G-cam.tx;cam.ty=2000*G-cam.ty;idx();renderSel();return r}}
+    else{const _setup=setup;setup=function(){const r=_setup.apply(this,arguments);for(const u of units)u.order=null;idx();
+      try{const ps=document.querySelectorAll('#start .card > p');if(ps[0])ps[0].textContent=`Vous rejoignez la bataille aux côtés de ${PVP.peer}. Vous commandez vos régiments ; les siens restent à lui.`}catch(e){}return r}}
     // pas de simulation : on rejoint en douceur les positions reçues
     let vT=0;step=function(dt){
       vT-=dt;if(vT<=0){vT=.25;try{window.__brume&&__brume.computeVis()}catch(e){}}
@@ -2776,8 +2833,9 @@ if(PVP){
     const _ce=checkEnd;checkEnd=function(){if(!PVP.hostEnded)return;return _ce.apply(this,arguments)};
     let lastQ=0;
     function onGuest(m){
-      if(m.k!=='s')return;if(!byId.size)idx();
-      if(m.q<lastQ-50)lastQ=0;lastQ=Math.max(lastQ,m.q);
+      if(m.k!=='s'||!units||!selected)return;if(!byId.size)idx();
+      // l'hôte annonce qui est sur le champ de bataille, et si l'IA a repris le camp de l'invité
+      if(Array.isArray(m.pp))PVP.on=new Map(m.pp.map(id=>[id,{}]));if('lo' in m)PVP.lost=!!m.lo;
       for(const e of (m.U||[])){const [id,x,y,a,men,mor,f,w,cs]=e,u=byId.get(id);if(!u)continue;
         const first=u._tx==null;u._tx=x;u._ty=y;u._ta=a;if(first||Math.hypot(u.x-x,u.y-y)>400*G){u.x=x;u.y=y;u.ang=a}
         u.men=men;u.morale=mor;const was=u.routing;u.routing=!!(f&1);u.dead=!!(f&2);u.fled=!!(f&4);u.moving=!!(f&8);u.lastRun=!!(f&32);u.chargeT=f&128?1:0;u.underFire=f&256?1:0;
@@ -2791,14 +2849,16 @@ if(PVP){
       if(m.st&&!started){_begin()}
       paused=!!m.pa||!started;updatePauseBtn();
       if(m.en&&!PVP.hostEnded){PVP.hostEnded=true;setTimeout(()=>checkEnd(),400)}
+      for(const u of selected)if(!mine(u))selected.delete(u);
       status()}
-    // ordres : on envoie tout changement d'ordre ou de front de ses régiments
+    // ordres : on envoie tout changement d'ordre ou de front de SES régiments
     const ser=u=>{const o=u.order;if(!o)return null;return o.type==='attack'?{type:'attack',t:o.target&&o.target.id,run:!!o.run}:{type:'move',x:r1(o.x),y:r1(o.y),face:o.face==null?null:r3(o.face),run:!!o.run}};
-    setInterval(()=>{if(!units)return;for(const u of units){if(u.side!==0||u.dead)continue;const o=ser(u),sig=JSON.stringify([o,r3(u.front||1)]);if(u._osig===undefined){u._osig=sig;continue}
+    setInterval(()=>{if(!units)return;for(const u of units){if(u.side!==0||u.dead||!mine(u))continue;const o=ser(u),sig=JSON.stringify([o,r3(u.front||1)]);if(u._osig===undefined){u._osig=sig;continue}
         if(sig!==u._osig){u._osig=sig;u._oT=performance.now();send({k:'o',id:u.id,o,f:r3(u.front||1)})}}},100);
     // on se signale tant que l'hôte de la bataille n'a rien envoyé, puis régulièrement
-    (function hello(){send({k:PVP.peerOn?'ka':'hi'});if(PVP.peerOn&&!PVP.lost&&performance.now()-PVP.seen>25000){PVP.lost=true;status()}setTimeout(hello,PVP.peerOn?4000:1200)})();
+    (function hello(){send({k:PVP.peerOn?'ka':'hi'});if(PVP.peerOn&&!PVP.lost&&performance.now()-PVP.seen>25000&&PVP.role==='g'){PVP.lost=true;status()}setTimeout(hello,PVP.peerOn?4000:1200)})();
   }
+  window.__pvpB={ctl,mine,PVP};
   setTimeout(status,300);setInterval(status,1000);
 }
 /* ================= FIN BATAILLE À DEUX ================= */
@@ -3045,7 +3105,7 @@ window.__son=SON;
     if(g){g.globalAlpha=1;g.restore()}}
   {const _rr=renderer.render;renderer.render=function(){const r=_rr.apply(this,arguments);try{drawBanners()}catch(e){}return r}}
   // morts infligés, envoyés à la campagne avant le résultat
-  {const _cr=campReturn;campReturn=function(win){try{if(CAMP&&CAMP.b&&window.parent!==window&&!(CAMP.pvp&&CAMP.pvp.role==='g')){
+  {const _cr=campReturn;campReturn=function(win){try{if(CAMP&&CAMP.b&&window.parent!==window&&!(CAMP.pvp&&(CAMP.pvp.role==='g'||CAMP.pvp.role==='j'))){
       const p=(CAMP.b.p||[]).map(()=>0),e=(CAMP.b.e||[]).map(()=>0);
       for(const u of units){if(u.ci==null)continue;const L=u.side===0?p:e;if(u.ci<L.length)L[u.ci]=Math.round(u.kills||0)}
       window.parent.postMessage({bellum:'exploits',p,e},'*')}}catch(e){console.warn(e)}
