@@ -2553,21 +2553,24 @@ if(!V3D){
   // la première construction des effets du déploiement déclenche le partage, puis on construit ceux des nouveaux carrés
   {const _mf=makeFx;makeFx=function(u){if(units&&!units._split&&!REVUE&&!REVUE_P){splitAll();const r=_mf.apply(this,arguments);for(const v of units)if(v.reg!=null&&v.rk>0&&!v._fx){v._fx=1;_mf(v)}return r}return _mf.apply(this,arguments)}}
   {const _st=setup;setup=function(){KIDS.clear();return _st.apply(this,arguments)}}
-  // 1. les carrés ne se superposent pas : séparation par axes (deux carrés orientés), amis avec un petit jeu, ennemis au contact
-  function sepPair(a,b,gap){const dx=b.x-a.x,dy=b.y-a.y,h=SQ/2;if(Math.abs(dx)>SQ*1.5+gap||Math.abs(dy)>SQ*1.5+gap)return;
+  // 1. les carrés ne se superposent pas : séparation par axes (deux carrés orientés) ; ennemis : au contact ; amis : seulement à l'arrêt, en douceur (v166)
+  function sepPair(a,b,gap,k){const dx=b.x-a.x,dy=b.y-a.y,h=SQ/2;if(Math.abs(dx)>SQ*1.5+gap||Math.abs(dy)>SQ*1.5+gap)return;
     let best=1e9,bx=0,by=0;
     for(const an of [a.ang,a.ang+1.5708,b.ang,b.ang+1.5708]){const ax=Math.cos(an),ay=Math.sin(an),d=dx*ax+dy*ay;
       const ea=h*(Math.abs(Math.cos(an-a.ang))+Math.abs(Math.sin(an-a.ang))),eb=h*(Math.abs(Math.cos(an-b.ang))+Math.abs(Math.sin(an-b.ang)));
       const ov=ea+eb+gap-Math.abs(d);if(ov<=0)return;if(ov<best){best=ov;const sg=d<0?-1:1;bx=ax*sg;by=ay*sg}}
     // celui qui se bat ou qui ne bouge pas cède moins
-    const wa=(a.contacts.length?.3:1)*(a.moving?1:.6),wb=(b.contacts.length?.3:1)*(b.moving?1:.6),t=wa+wb||1;
+    const wa=(a.contacts.length?.3:1)*(a.moving?1:.6),wb=(b.contacts.length?.3:1)*(b.moving?1:.6),t=(wa+wb||1)/(k||1);
     a.x-=bx*best*wa/t;a.y-=by*best*wa/t;b.x+=bx*best*wb/t;b.y+=by*best*wb/t}
   const CELL=SQ*2;
   function separate(){const L=units.filter(u=>!u.dead&&!u.pend&&!u.routing&&u.reg!=null);if(L.length<2)return;const grid=new Map(),K=c=>(c.x+32768)*65536+c.y+32768;
     for(const u of L){const k=(Math.floor(u.x/CELL)+32768)*65536+Math.floor(u.y/CELL)+32768;let c=grid.get(k);if(!c)grid.set(k,c=[]);c.push(u)}
     for(const u of L){const cx=Math.floor(u.x/CELL),cy=Math.floor(u.y/CELL);
       for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const c=grid.get((cx+i+32768)*65536+cy+j+32768);if(!c)continue;
-        for(const v of c)if(v.id>u.id)sepPair(u,v,u.side===v.side?.8:-1.5)}}}
+        for(const v of c){if(v.id<=u.id)continue;
+          if(u.side!==v.side)sepPair(u,v,-1.5,1);
+          // amis : ceux qui marchent se croisent librement (les formations se font) ; à l'arrêt, une poussée douce, 2 m de jeu
+          else if(!u.moving&&!v.moving)sepPair(u,v,-2,.25)}}}}
   {const _sp=step;step=function(dt){const r=_sp.apply(this,arguments);try{separate()}catch(e){}return r}}
   {const _ic=inContact;inContact=function(a,b){const r=(a.w+b.w)/2+30,dx=a.x-b.x,dy=a.y-b.y;if(dx>r||dx<-r||dy>r||dy<-r)return false;return _ic(a,b)}}
   // 4. déroute : le carré fait demi-tour sur place, puis fuit tout droit
@@ -2775,7 +2778,68 @@ if(!V3D){
     for(const u of units){if(!u._wd||u.dead)continue;if(u.routing||time-u._wd>8){u._wd=0;continue}
       if(u.contacts.length){u.x-=Math.cos(u.ang)*u.T.speed*.55*dt;u.y-=Math.sin(u.ang)*u.T.speed*.55*dt}else{u._wd=0;follow(u)}}
     return r}}
-  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
+  /* -- v166 : la campagne (page parente, même origine) prête ses dessins via window.__apercu (bloc APERÇU BATAILLE de la campagne) -- */
+  let PH;function PAR(){if(PH)return PH;try{const P=window.parent;if(P&&P!==window&&P.__apercu)PH=P.__apercu}catch(e){}return PH||null}
+  // petites bannières : portrait du général ou du chef de corps
+  const PORI=new Map();
+  function porImg(o){if(!o||!o.k)return null;let e=PORI.get(o.k);if(e===undefined){e=null;const P=PAR(),src=P&&P.por(o.k);if(src){e=new Image();e.src=src}PORI.set(o.k,e)}return e&&e.complete&&e.naturalWidth?e:null}
+  drawBanners=function(){
+    const L=(window.__echelle&&window.__echelle.corps)||[[],[]];
+    for(const s of [0,1])for(const o of L[s]){const u=o.gu;if(!u||u.dead||u.pend)continue;
+      const [px,py]=scr(u.x,u.y),P=PAL[s],im=porImg(o),bw=im?36:30,bh=im?42:36,top=py-(im?70:62);
+      g2.save();g2.globalAlpha=u.routing?.5:1;
+      g2.strokeStyle=INK;g2.lineWidth=2.5;g2.beginPath();g2.moveTo(px,py);g2.lineTo(px,top-6);g2.stroke();
+      g2.beginPath();g2.moveTo(px-bw/2-4,top);g2.lineTo(px+bw/2+4,top);g2.stroke();
+      g2.beginPath();g2.moveTo(px-bw/2,top);g2.lineTo(px+bw/2,top);g2.lineTo(px+bw/2,top+bh);g2.lineTo(px,top+bh+8);g2.lineTo(px-bw/2,top+bh);g2.closePath();
+      g2.fillStyle=P.flag;g2.fill();g2.lineWidth=2;g2.strokeStyle=P.str;g2.stroke();
+      if(im){const r=bw/2-4,cy=top+r+4;g2.save();g2.beginPath();g2.arc(px,cy,r,0,6.2832);g2.clip();g2.drawImage(im,px-r,cy-r,r*2,r*2);g2.restore();
+        g2.beginPath();g2.arc(px,cy,r,0,6.2832);g2.lineWidth=1.6;g2.strokeStyle=P.str;g2.stroke();
+        g2.fillStyle=P.str;g2.font='bold 10px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';g2.fillText(o.chef?'★':'✦',px,top+bh-1)}
+      else{g2.fillStyle=P.str;g2.font='bold 15px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';g2.fillText(o.chef?'★':'✦',px,top+bh/2)}
+      g2.restore()}};
+  /* -- fiche d'unité : un clic gauche sur un carré, ami ou ennemi, montre le régiment : aperçu de l'atelier, équipement, statistiques -- */
+  const esc2=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const KIND={inf:'Infanterie',skirm:'Tirailleurs',cav:'Cavalerie',lcav:'Cavalerie légère',eleph:'Éléphants'};
+  let FU=null;
+  function ficheBox(){let b=document.getElementById('fiche');if(b)return b;b=document.createElement('div');b.id='fiche';b.className='hud';b.hidden=true;
+    (document.getElementById('app')||document.body).appendChild(b);
+    b.addEventListener('click',e=>{if(e.target.closest('.fx'))hideFiche()});
+    for(const k of ['pointerdown','wheel'])b.addEventListener(k,e=>e.stopPropagation());
+    const st=document.createElement('style');st.textContent=`#fiche{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:92px;width:268px;max-height:calc(100% - 330px);overflow:auto;z-index:6;padding:10px 12px;
+  background:rgba(28,20,12,.94);border:1px solid rgba(214,184,120,.45);border-radius:6px;color:#efe3c6;font:13px/1.35 Georgia,serif;box-shadow:0 6px 22px rgba(0,0,0,.45)}
+#fiche .fh{display:flex;gap:10px;align-items:flex-start}#fiche .pv{flex:none;width:92px;height:92px;border-radius:6px;background:rgba(0,0,0,.25);overflow:hidden}
+#fiche .pv svg{width:100%;height:100%;display:block}#fiche .pv.sym{display:flex;align-items:center;justify-content:center;font-size:40px}
+#fiche h4{margin:0 0 2px;font-size:15px;font-weight:normal;line-height:1.2}#fiche .sd{font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+#fiche .fx{position:absolute;right:6px;top:4px;background:none;border:0;color:#d6b878;font-size:18px;cursor:pointer;padding:2px 6px}
+#fiche .gr{display:grid;grid-template-columns:1fr auto;gap:1px 10px;margin-top:8px}#fiche .gr span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+#fiche .tt{margin-top:9px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9a98a;border-top:1px solid rgba(214,184,120,.2);padding-top:6px}
+#fiche .bar{height:5px;background:rgba(255,255,255,.12);border-radius:3px;margin-top:3px}#fiche .bar i{display:block;height:100%;border-radius:3px}
+@media (max-width:760px){#fiche{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:45%}}`;document.head.appendChild(st);return b}
+  function hideFiche(){FU=null;const b=document.getElementById('fiche');if(b)b.hidden=true}
+  function payOf(u){try{const h=regOf(u)[0];if(!CAMP||!CAMP.b||h.ci==null)return null;return (h.side===0?CAMP.b.p:CAMP.b.e)[h.ci]||null}catch(e){return null}}
+  function fiche(u){const b=ficheBox();if(!u){hideFiche();return}FU=u;
+    const g=regOf(u),h=g[0],al=g.filter(v=>!v.dead),T=h.T,c=payOf(h),X=c&&c.x,P=PAR(),base=(c&&c.t)||h.type,gear=h.gear||(X&&X.gear)||null,k=msOf(h);
+    const men=al.reduce((a,v)=>a+v.men,0),tot=T.men*(h.reg!=null?NSPL:1),mor=al.length?al.reduce((a,v)=>a+Math.max(0,v.morale/v.T.morale),0)/al.length:0;
+    const svg=P&&P.svg(base,gear),eq=P&&P.gear(base,gear),pal=PAL[h.side];
+    const sym={inf:'✕',skirm:'∴',cav:'⟋',lcav:'⟋',eleph:'◆'}[T.kind]||'■';
+    const row=(a,v)=>v==null||v===''?'':`<span>${a}</span><span>${v}</span>`,n1=x=>(Math.round(x*100)/100).toLocaleString('fr-FR');
+    let s=`<button class="fx" type="button" title="Fermer" aria-label="Fermer">×</button><div class="fh"><div class="pv${svg?'':' sym'}" style="${svg?'':'color:'+pal.lt}">${svg||sym}</div><div>
+      <div class="sd" style="color:${pal.lt}">${esc2(pal.n)}</div><h4>${esc2(h.label||T.name)}</h4><div style="color:#b9a98a">${esc2(T.name)}${KIND[T.kind]?' · '+KIND[T.kind]:''}</div></div></div>
+      <div class="gr">${row('Effectif',`${Math.ceil(men*k).toLocaleString('fr-FR')} / ${Math.round(tot*k).toLocaleString('fr-FR')}`)}${h.reg!=null?row('Carrés',`${al.filter(v=>!v.routing).length} / ${NSPL}`):''}</div>
+      <div class="bar" title="Effectif"><i style="width:${Math.min(100,men/tot*100)}%;background:#d2ae6c"></i></div>
+      <div class="bar" title="Moral"><i style="width:${Math.round(mor*100)}%;background:${mor>.5?'#9fd18c':mor>.25?'#e0883c':'#d24a3a'}"></i></div>
+      <div class="tt">Statistiques</div><div class="gr">${row('Attaque',n1(T.atk))}${row('Défense',n1(T.def))}${row('Moral',Math.round(T.morale))}${row('Charge',n1(T.charge))}${row('Vitesse',Math.round(T.speed)+' m/s')}
+      ${T.ranged?row('Tir',`${Math.round(T.ranged.range)} m · ${n1(T.ranged.dmg)} dégâts`):''}${T.fear?row('Effroi',T.fear):''}
+      ${X&&X.weight!=null?row('Poids porté',Math.round(X.weight)+' kg'):''}${X&&X.endurance!=null?row('Endurance',Math.round(X.endurance)):''}${X&&X.missileDef!=null?row('Contre les traits',n1(X.missileDef)):''}
+      ${X&&X.pierce!=null?row('Perforation',n1(X.pierce)):''}${X&&X.antiCav!=null?row('Contre la cavalerie',n1(X.antiCav)):''}${X&&X.cohesion!=null?row('Cohésion',Math.round(X.cohesion)):''}</div>`;
+    if(eq&&eq.length)s+=`<div class="tt">Équipement</div><div class="gr">${eq.map(([a,v])=>row(esc2(a),esc2(v))).join('')}</div>`;
+    if(X&&X.aux&&X.aux.length)s+=`<div class="tt">Auxiliaires</div><div>${X.aux.map(esc2).join(', ')}</div>`;
+    if(!svg&&!eq)s+=`<div class="tt" style="border:0;text-transform:none;letter-spacing:0">L'aperçu de l'atelier s'affiche dans les batailles lancées depuis la campagne.</div>`;
+    b.innerHTML=s;b.hidden=false;b._t=performance.now()}
+  {const _ck=click;click=function(cx,cy,btn,add){if(btn===0){try{const p=groundAt(cx,cy),u=pick(p,cx,cy);if(u&&!u.dead)fiche(u);else if(!add)hideFiche()}catch(e){console.warn('fiche',e)}}return _ck.apply(this,arguments)}}
+  // tenue à jour une fois par seconde
+  {const _ht2=hudTick;hudTick=function(){const r=_ht2.apply(this,arguments);try{if(FU){const b=document.getElementById('fiche');if(regOf(FU).every(v=>v.dead||v.fled))hideFiche();else if(b&&performance.now()-b._t>1000)fiche(FU)}}catch(e){}return r}}
+  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
