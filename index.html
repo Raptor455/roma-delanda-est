@@ -10254,12 +10254,14 @@ function flSq(x,y,q,c,load){const h=q/2;ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillR
 function flParty(x,y,q,c,n,ang,load,t,seed){const ux=Math.cos(ang),uy=Math.sin(ang);for(let k=0;k<n;k++){const b=Math.sin(t*9+k*1.7+seed)*q*.08,o=(k-(n-1)/2)*q*1.25,bx=x-ux*(k%2)*q*1.1-uy*o,by=y-uy*(k%2)*q*1.1+ux*o+b;flSq(bx,by,q,c,load)}}
 const flQ=s=>Math.max(4,Math.min(11,.16*s));
 // une ferme : à l'aller (0–.4), on la met à sac et on y met le feu (.4–.65), retour chargés (.65–1)
-function farmRaidDraw(R,u,t,s,SX,SY,c){const ox=SX(R.ox),oy=SY(R.oy),fx=SX(R.fx),fy=SY(R.fy),q=flQ(s),col=`rgb(${c[0]},${c[1]},${c[2]})`;
-  if(u<.4){const w=u/.4;flParty(ox+(fx-ox)*w,oy+(fy-oy)*w,q,col,3,Math.atan2(fy-oy,fx-ox),false,t,R.fx)}
-  else if(u<.65){for(let k=0;k<3;k++){const a=t*1.4+k*2.1,r=q*(1.2+.4*Math.sin(t*3+k));flSq(fx+Math.cos(a)*r,fy+Math.sin(a)*r*.6,q,col,false)}
-    // torches portées aux bâtiments
-    const fl=Math.sin(t*14)*.5+.5;ctx.fillStyle=`rgba(255,${150+fl*80|0},50,.95)`;ctx.beginPath();ctx.arc(fx+q*.8,fy-q*.9,Math.max(1.5,q*.25),0,7);ctx.fill()}
-  else{const w=(u-.65)/.35;flParty(fx+(ox-fx)*w,fy+(oy-fy)*w,q,col,3,Math.atan2(oy-fy,ox-fx),true,t,R.fx)}}
+function farmRaidDraw(R,u,t,s,SX,SY,c){const ox=SX(R.ox),oy=SY(R.oy),fx=SX(R.fx),fy=SY(R.fy),e=Math.max(3.5,Math.min(14,s*.2)),col=`rgb(${c[0]},${c[1]},${c[2]})`,h=R.fx*7.3+R.fy*3.1;
+  /* PILLAGE ANCIEN (9 nov., demande de Baptiste) : petits pillards au lieu des carrés — course (0–.4), sac (.4–.65), retour chargés */
+  for(let q=0;q<3;q++){const jx=(flH(q+h)-.5)*e*2.2,jy=(flH(q*3+h)-.5)*e*1.6,lag=q*.02,w0=u-lag;if(w0<0)continue;
+    if(w0<.4){const w=w0/.4;flMan(ox+(fx-ox)*w+jx,oy+(fy-oy)*w+jy,e,col,-.9,t*14+q)}
+    else if(w0<.65){const sw=(t*2.2+q*.4)%1;flMan(fx+jx*1.4,fy+jy*1.4,e,col,-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5,0)}
+    else{const w=Math.min(1,(w0-.65)/.35),x=fx+(ox-fx)*w+jx,y=fy+(oy-fy)*w+jy;flMan(x,y,e,col,null,t*11+q);
+      ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}
+  if(u>=.4&&u<.65){const fl=Math.sin(t*14)*.5+.5;ctx.fillStyle=`rgba(255,${150+fl*80|0},50,.95)`;ctx.beginPath();ctx.arc(fx+e*.8,fy-e*1.4,Math.max(1.5,e*.25),0,7);ctx.fill()}}
 // ferme brûlée : parcelle noircie, bâtiments en cendres, fumée les premiers jours
 function farmBurntDraw(k,x,y,a,day,t,s,SX,SY){if(s<3)return;const X=SX(x),Y=SY(y),co=Math.cos(a),si=Math.sin(a),age=S.day-day;
   ctx.save();ctx.translate(X,Y);ctx.rotate(a);const w=.9*s,h=.6*s;ctx.fillStyle=`rgba(38,30,24,${age<30?.72:Math.max(0,.72-(age-30)/40)})`;ctx.fillRect(-w/2,-h/2,w,h);
@@ -10267,7 +10269,7 @@ function farmBurntDraw(k,x,y,a,day,t,s,SX,SY){if(s<3)return;const X=SX(x),Y=SY(y
   ctx.fillStyle='rgba(30,22,16,.9)';for(const [hx,hy,hq] of [[.28,-.2,.13],[.42,-.12,.1]])ctx.fillRect((hx-hq/2)*s,(hy-hq/2)*s,hq*s,hq*s);ctx.restore();
   if(age<6){const hx=X+(.28*co+.2*si)*s,hy=Y+(.28*si-.2*co)*s,al=age<4?1:(6-age)/2;flFlame(hx,hy,Math.max(3,Math.min(12,.08*s)),t,x*7,al*(age<1.5?1:.35))}}
 // descente : chaloupes qui accostent, détachements qui courent aux villages et aux fermes, villageois qui fuient, retour chargés de butin
-function raidScene(a,X,Y,age,t,s,SX,SY,loop){const tx=SX(a.tx),ty=SY(a.ty),c=FAC[a.side]?FAC[a.side].c:[200,180,140],col=`rgb(${c[0]},${c[1]},${c[2]})`,e=Math.max(3.5,Math.min(14,s*.2)),q=flQ(s);
+function raidScene(a,X,Y,age,t,s,SX,SY,loop){const tx=SX(a.tx),ty=SY(a.ty),c=FAC[a.side]?FAC[a.side].c:[200,180,140],col=`rgb(${c[0]},${c[1]},${c[2]})`,e=Math.max(3.5,Math.min(14,s*.2));
   // flotte collée au rivage : les chaloupes partent un peu plus au large, à l'opposé des villages
   if(Math.hypot(tx-X,ty-Y)<e*9&&a.vs&&a.vs.length){let mx=0,my=0;for(const p of a.vs){mx+=SX(p[0]);my+=SY(p[1])}mx/=a.vs.length;my/=a.vs.length;const dx=tx-mx,dy=ty-my,l=Math.hypot(dx,dy)||1;X=tx+dx/l*e*10;Y=ty+dy/l*e*10}
   const d=Math.hypot(tx-X,ty-Y),ux=d>1?(tx-X)/d:1,uy=d>1?(ty-Y)/d:0,nb=a.big?6:4,al=loop?1:age<.04?age/.04:age>.94?(1-age)/.06:1;
@@ -10278,20 +10280,25 @@ function raidScene(a,X,Y,age,t,s,SX,SY,loop){const tx=SX(a.tx),ty=SY(a.ty),c=FAC
     if(v>0&&v<1){ctx.strokeStyle='rgba(240,248,252,.5)';ctx.lineWidth=1;const sg=back?-1:1;ctx.beginPath();ctx.moveTo(bx-ux*e*sg,by-uy*e*sg);ctx.lineTo(bx-ux*e*2.6*sg,by-uy*e*2.6*sg);ctx.stroke()}
     nvShip(bx,by,Math.max(3.5,e*1.15),Math.atan2(uy,ux)+(back?Math.PI:0)+(v===1?Math.sin(t*1.5+k)*.05:0),'#7a5634',null);
     if(v>0&&v<1){ctx.strokeStyle='rgba(70,48,28,.85)';ctx.lineWidth=1;const sw=Math.sin(t*7+k)*e*.35;for(const sg of [-1,1]){ctx.beginPath();ctx.moveTo(bx-uy*sg*e*.3,by+ux*sg*e*.3);ctx.lineTo(bx-uy*sg*e*1.1+ux*sw,by+ux*sg*e*1.1+uy*sw);ctx.stroke()}}}
-  if(s>=1.5){const tg=(a.vs||[]).map(p=>[SX(p[0]),SY(p[1]),0]).concat((a.fm||[]).map(p=>[SX(p[0]),SY(p[1]),1]));
-    tg.forEach(([vx,vy,isF],j)=>{const lag=j*.012,u=age-lag;
-      // détachements : course vers la cible (.2–.42), sac (.42–.6), retour chargés (.6–.8)
-      if(u>=.2&&u<=.8){
-        if(u<.42){const w=(u-.2)/.22;flParty(tx+(vx-tx)*w,ty+(vy-ty)*w,q,col,isF?2:3,Math.atan2(vy-ty,vx-tx),false,t,j)}
-        else if(u<.6){for(let k=0;k<(isF?2:3);k++){const an=t*1.3+k*2.1+j,r=q*(1.3+.4*Math.sin(t*3+k));flSq(vx+Math.cos(an)*r,vy+Math.sin(an)*r*.6,q,col,false)}}
-        else{const w=(u-.6)/.2;flParty(vx+(tx-vx)*w,vy+(ty-vy)*w,q,col,isF?2:3,Math.atan2(ty-vy,tx-vx),true,t,j);
-          // captifs : points clairs tirés derrière le détachement
-          if(!isF){const px=vx+(tx-vx)*Math.max(0,w-.06),py=vy+(ty-vy)*Math.max(0,w-.06);ctx.fillStyle='#e6dcc2';for(let k=0;k<2;k++){ctx.beginPath();ctx.arc(px+(k-.5)*q,py+q*.6,Math.max(1.3,q*.28),0,7);ctx.fill()}}}}
-      // villageois et troupeau qui fuient : points clairs qui s'éparpillent à l'opposé de la plage
-      if(!isF&&age>.36&&age<.75){const w=(age-.36)/.39,fx=vx-tx,fy=vy-ty,fl=Math.hypot(fx,fy)||1;ctx.globalAlpha=al*(1-w);
-        for(let k=0;k<6;k++){const sp=(k-2.5)*.35,dx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),dy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=w*q*(6+k*1.3);ctx.fillStyle=k>3?'#f2eee2':'#d8ccae';ctx.beginPath();ctx.arc(vx+dx*r,vy+dy*r,Math.max(1.3,q*(k>3?.38:.3)),0,7);ctx.fill()}ctx.globalAlpha=al}
+  /* PILLAGE ANCIEN (9 nov., demande de Baptiste) : petits pillards, villageois et troupeau qui fuient (comme avant la v105) */
+  if(s>1.2){const tg=(a.vs||[]).map(p=>[SX(p[0]),SY(p[1]),0]).concat((a.fm||[]).map(p=>[SX(p[0]),SY(p[1]),1])).filter(p=>Math.hypot(p[0]-tx,p[1]-ty)<300);
+    tg.forEach(([vx,vy,isF],j)=>{const m=isF?2:a.big?4:3;
+      // pillards : course vers la cible (.2–.42), sac (.42–.6), retour chargés (.6–.8)
+      for(let q=0;q<m;q++){const lag=q*.015+j*.01,u=age-lag;let x,y,arm=null,stp=0,load=false;
+        const jx=(flH(q+j*5)-.5)*e*2.2,jy=(flH(q*3+j)-.5)*e*1.6;
+        if(u<.2||u>.8)continue;
+        if(u<.42){const w=(u-.2)/.22;x=tx+(vx-tx)*w+jx;y=ty+(vy-ty)*w+jy;stp=t*14+q;arm=-.9}
+        else if(u<.6){x=vx+jx*1.4;y=vy+jy*1.4;const sw=(t*2.2+q*.4)%1;arm=-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5}
+        else{const w=(u-.6)/.2;x=vx+(tx-vx)*w+jx;y=vy+(ty-vy)*w+jy;stp=t*11+q;load=true}
+        flMan(x,y,e,col,arm,stp);
+        if(load){if(!isF&&q%3===2){const cx=x+e*1.2,cy=y+e*.3;flMan(cx,cy,e*.9,'#d8ccb0',null,t*11+q);ctx.strokeStyle='rgba(40,28,14,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+e*.3,y-e*.6);ctx.lineTo(cx-e*.3,cy-e*.6);ctx.stroke()}
+          else{ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}}
+      // villageois qui fuient à l'opposé de la plage, troupeau dispersé
+      if(!isF&&age>.36&&age<.75){const w=(age-.36)/.39,fx=vx-tx,fy=vy-ty,fl=Math.hypot(fx,fy)||1;
+        for(let q=0;q<4;q++){const sp=(q-1.5)*.5,dx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),dy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=w*e*(10+q*2);ctx.globalAlpha=al*(1-w);
+          if(q===3){ctx.fillStyle='#e9e1cc';ctx.beginPath();ctx.ellipse(vx+dx*r,vy+dy*r,e*.55,e*.35,0,0,7);ctx.fill()}else flMan(vx+dx*r,vy+dy*r,e*.85,'#cbbf9c',null,t*15+q)}ctx.globalAlpha=al}
       // en boucle (mission « piller ») : les cibles flambent après le passage
-      if(loop&&age>.45)flFlame(vx,vy,Math.max(3,Math.min(12,e*.8)),t,j,Math.min(1,(age-.45)*6)*(age>.9?(1-age)*10:1))})}
+      if(loop&&age>.45)flFlame(vx,vy,e*1.1,t,j,Math.min(1,(age-.45)*6)*(age>.9?(1-age)*10:1))})}
   ctx.restore()}
 function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/1000,now=S.day;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
   const SX=x=>view.ox+x*s,SY=y=>view.oy+y*s,inS=(X,Y,m)=>X>-m&&Y>-m&&X<w+m&&Y<h+m;
