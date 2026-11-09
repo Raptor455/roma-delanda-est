@@ -1,0 +1,65 @@
+# Fabrique l'installeur Windows de Bellum et le publie dans les Releases du dépôt.
+# Se lance tout seul quand le site change de version (VERSION.txt sur main),
+# ou à la main depuis l'onglet Actions (« Run workflow »).
+# L'appli installée vérifie ces Releases au démarrage et se met à jour seule.
+name: Installeur Windows
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION.txt]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: installeur
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: installeur/package-lock.json
+
+      - name: Numéro de version (VERSION.txt « v133 · date » → 133.0.0)
+        id: v
+        shell: bash
+        run: |
+          n=$(grep -oE 'v[0-9]+' VERSION.txt | head -1 | tr -d v)
+          test -n "$n"
+          echo "num=$n" >> "$GITHUB_OUTPUT"
+          echo "Version $n.0.0"
+
+      - name: Bibliothèques locales (3D, carte, multijoueur, polices)
+        shell: bash
+        run: |
+          mkdir -p installeur/vendor && cd installeur/vendor
+          for p in three@0.128.0 d3-delaunay@6.0.4 peerjs@1.5.4 @fontsource/marcellus@5.3.0 @fontsource/barlow-semi-condensed@5.3.0; do
+            f=$(npm pack -q "$p")
+            d="${f%.tgz}"; mkdir -p "$d"; tar xzf "$f" -C "$d"
+          done
+          ls
+
+      - name: Copier le jeu dans l'application
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: python installeur/preparer_jeu.py . installeur/vendor installeur/jeu
+
+      - name: Fabriquer et publier l'installeur
+        working-directory: installeur
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm pkg set version=${{ steps.v.outputs.num }}.0.0
+          npx electron-builder --win nsis --x64 --publish always
