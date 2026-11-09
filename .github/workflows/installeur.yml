@@ -1,4 +1,4 @@
-# Fabrique l'installeur Windows de Bellum et le publie dans les Releases du dépôt.
+# Fabrique l'installeur Windows de Roma Delenda Est et le publie dans les Releases du dépôt.
 # Se lance tout seul quand le site change de version (VERSION.txt sur main),
 # ou à la main depuis l'onglet Actions (« Run workflow »).
 # L'appli installée vérifie ces Releases au démarrage et se met à jour seule.
@@ -29,14 +29,17 @@ jobs:
           cache: npm
           cache-dependency-path: installeur/package-lock.json
 
-      - name: Numéro de version (VERSION.txt « v133 · date » → 133.0.0)
+      - name: Numéro de version (VERSION.txt « v133 · date » → 133.0.<passage>)
         id: v
         shell: bash
         run: |
           n=$(grep -oE 'v[0-9]+' VERSION.txt | head -1 | tr -d v)
           test -n "$n"
           echo "num=$n" >> "$GITHUB_OUTPUT"
-          echo "Version $n.0.0"
+          # 3e chiffre = numéro du passage : une coquille refaite sur la même version du jeu
+          # (nouvelle icône, correctif) reste « plus récente » pour la mise à jour automatique.
+          echo "ver=$n.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "Version $n.0.${{ github.run_number }}"
 
       - name: Bibliothèques locales (3D, carte, multijoueur, polices)
         shell: bash
@@ -59,7 +62,7 @@ jobs:
         shell: bash
         run: |
           npm ci --no-audit --no-fund
-          npm pkg set version=${{ steps.v.outputs.num }}.0.0
+          npm pkg set version=${{ steps.v.outputs.ver }}
           npx electron-builder --win nsis --x64 --publish never
           ls sortie
 
@@ -71,12 +74,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag=v${{ steps.v.outputs.num }}.0.0
-          fichiers="Bellum-installation-${{ steps.v.outputs.num }}.0.0.exe Bellum-installation-${{ steps.v.outputs.num }}.0.0.exe.blockmap latest.yml"
+          tag=v${{ steps.v.outputs.ver }}
+          fichiers="$(ls *.exe *.exe.blockmap) latest.yml"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" $fichiers --clobber
           else
-            gh release create "$tag" $fichiers --target "$GITHUB_SHA" --title "Bellum v${{ steps.v.outputs.num }}" \
-              --notes "Installeur Windows de Bellum v${{ steps.v.outputs.num }}. Téléchargez Bellum-installation-${{ steps.v.outputs.num }}.0.0.exe ; le jeu installé se met ensuite à jour tout seul."
+            gh release create "$tag" $fichiers --target "$GITHUB_SHA" --title "Roma Delenda Est v${{ steps.v.outputs.num }}" \
+              --notes "Installeur Windows de Roma Delenda Est v${{ steps.v.outputs.num }}. Téléchargez le fichier .exe ; le jeu installé se met ensuite à jour tout seul."
           fi
           gh release edit "$tag" --latest

@@ -1,4 +1,4 @@
-// Bellum : coquille Electron autour des fichiers du jeu (jeu/index.html, bataille.html, naval.html).
+// Roma Delenda Est (ex-Bellum) : coquille Electron autour des fichiers du jeu (jeu/index.html, bataille.html, naval.html).
 const { app, BrowserWindow, shell, Menu, session, dialog } = require('electron');
 const path = require('path');
 
@@ -8,6 +8,12 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
+// Le jeu s'appelait « Bellum » : on garde ce dossier de données pour ne pas perdre
+// les sauvegardes (localStorage) des joueurs qui l'avaient déjà installé.
+app.setPath('userData', path.join(app.getPath('appData'), 'Bellum'));
+
+const TITRE = 'Roma Delenda Est';
+
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 
 let win;
@@ -15,7 +21,7 @@ function creer() {
   win = new BrowserWindow({
     width: 1600, height: 900, minWidth: 1024, minHeight: 640,
     backgroundColor: '#1a140e', show: false, autoHideMenuBar: true,
-    title: 'Bellum',
+    title: TITRE,
     icon: path.join(__dirname, 'icone.png'),
     webPreferences: {
       backgroundThrottling: false,
@@ -25,6 +31,7 @@ function creer() {
     },
   });
   Menu.setApplicationMenu(null);
+  win.on('page-title-updated', (e) => e.preventDefault());
   win.once('ready-to-show', () => { win.maximize(); win.show(); });
 
   // Liens externes : navigateur du système. Pages du jeu : même fenêtre.
@@ -65,8 +72,8 @@ function verifierMiseAJour() {
   autoUpdater.on('update-downloaded', (info) => {
     if (!win) return;
     dialog.showMessageBox(win, {
-      type: 'info', title: 'Bellum', buttons: ['Redémarrer maintenant', 'Plus tard'], defaultId: 0, cancelId: 1,
-      message: 'Nouvelle version de Bellum prête (v' + String(info.version).split('.')[0] + ')',
+      type: 'info', title: TITRE, buttons: ['Redémarrer maintenant', 'Plus tard'], defaultId: 0, cancelId: 1,
+      message: 'Nouvelle version de Roma Delenda Est prête (v' + String(info.version).split('.')[0] + ')',
       detail: 'Redémarrez pour en profiter. Sinon, elle s\'installera à la fermeture du jeu. Vos sauvegardes sont conservées.',
     }).then((r) => { if (r.response === 0) autoUpdater.quitAndInstall(false, true); });
   });
