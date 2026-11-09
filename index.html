@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bellum Campagne</title>
+<title>Roma Delenda Est · Campagne</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Marcellus&display=swap">
 <style>
@@ -123,7 +123,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <body>
 <div id="app">
   <header id="top">
-    <div class="brand"><h1>Bellum</h1><span>Campagne · 2<sup>e</sup> guerre punique</span></div>
+    <div class="brand"><h1>Roma Delenda Est</h1><span>Campagne · 2<sup>e</sup> guerre punique</span></div>
     <div id="date"></div>
     <div class="grp" id="speeds">
       <button id="bPause" type="button" title="Pause (Espace)">Pause</button>
@@ -6781,7 +6781,7 @@ function mirFix(root){if(!S||!S.mirror||!root)return;
   root.querySelectorAll('.att>span:first-child:not([data-mir])').forEach(e=>{e.dataset.mir='1';const v=e.textContent;if(v==='Carthage')e.textContent='Rome';else if(v==='Rome')e.textContent='Carthage'})}
 const SPQR_SVG='<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 3l2 3h-4z" fill="currentColor"/><text x="12" y="15.2" text-anchor="middle" font-size="6.6" font-family="Georgia,serif" font-weight="700" fill="currentColor">SPQR</text><path d="M5 18h14" stroke="currentColor" stroke-width="1.2"/></svg>';
 function mirMed(m){if(m&&!m.dataset.mir){m.dataset.mir='1';m.innerHTML=SPQR_SVG}}
-function mirTop(){if(!S||!S.mirror)return;mirMed(document.querySelector('.ui-fac .ui-med'));if(!sel)mirMed(document.querySelector('#side .ui-head .ui-med'));const f=document.querySelector('.ui-fac b');if(f&&f.textContent==='Carthage'){f.textContent='Rome';const sm=f.nextElementSibling;if(sm)sm.textContent='Sénat et peuple romain';const fac=f.closest('.ui-fac');if(fac)fac.title='Bellum, campagne de la 2e guerre punique, côté romain'}}
+function mirTop(){if(!S||!S.mirror)return;mirMed(document.querySelector('.ui-fac .ui-med'));if(!sel)mirMed(document.querySelector('#side .ui-head .ui-med'));const f=document.querySelector('.ui-fac b');if(f&&f.textContent==='Carthage'){f.textContent='Rome';const sm=f.nextElementSibling;if(sm)sm.textContent='Sénat et peuple romain';const fac=f.closest('.ui-fac');if(fac)fac.title='Roma Delenda Est, campagne de la 2e guerre punique, côté romain'}}
 // observe les panneaux (les autres modules les redessinent après nous) ; changer un texte ne relance pas l'observateur
 let _mirObs=null;
 function mirApply(){if(!S||!S.mirror)return;try{mirFix($('mcard'));const el=$('side');mirFix(el);if(!sel){const h=el&&el.querySelector('h2');if(h&&h.textContent==='Carthage')h.textContent='Rome'}mirTop()}catch(e){}}
@@ -6790,7 +6790,7 @@ function mirObserve(){if(_mirObs||typeof MutationObserver==='undefined')return;_
 try{mirObserve()}catch(e){}
 // bataille 3D : couleurs et noms du peuple joué
 {const _diveM=dive;dive=function(payload){try{if(payload&&payload.b)payload.b.pk=S&&S.peo==='mac'?['mac','rom']:S&&S.peo==='syr'?['syr','rom']:S&&S.peo==='ath'?['ath','mac']:S&&PX&&PX[S.peo]?[PX[S.peo].pal,PX[S.peo].foePal]:S&&S.mirror?['rom','car']:['car','rom']}catch(e){}return _diveM.apply(this,arguments)}}
-function mirrorStatic(){if(typeof mpSwapStatic==='function')mpSwapStatic();const t=AUX.car;AUX.car=AUX.rom;AUX.rom=t;document.title='Bellum · Rome'}
+function mirrorStatic(){if(typeof mpSwapStatic==='function')mpSwapStatic();const t=AUX.car;AUX.car=AUX.rom;AUX.rom=t;document.title='Roma Delenda Est · Rome'}
 const _afterLoadR=afterLoad;afterLoad=function(){if(S&&S.mirror&&!(typeof MP!=='undefined'&&MP.swapped))mirrorStatic();if(S&&S.mirror)mirObserve();return _afterLoadR.apply(this,arguments)};
 // la politique romaine : Sénat, consuls, prorogation, levées, jeux
 const CONS_EXTRA=['M. Valerius Laevinus','Cn. Fulvius Centumalus','P. Sulpicius Galba','Ti. Claudius Nero','Q. Caecilius Metellus','L. Veturius Philo','P. Licinius Crassus','Ti. Sempronius Tuditanus','M. Cornelius Cethegus','Cn. Servilius Caepio','C. Servilius Geminus','Ti. Claudius Nero'];
@@ -6887,7 +6887,7 @@ let macDone=false;
 function macStatic(){if(macDone)return;macDone=true;peoDone='mac';
   FAC.pun={n:'Carthage',c:FAC.car.c.slice(),a:[40,-100],cul:'afr'};FAC.car={n:'Macédoine',c:[200,150,46]};
   GEN.pun=GEN.car.slice();GEN.car=GEN_MAC.slice();for(const k in POOL_CAR)delete POOL_CAR[k];Object.assign(POOL_CAR,POOL_MAC);
-  try{const R=document.documentElement.style;R.setProperty('--punic','#c8962e')}catch(e){}document.title='Bellum · Macédoine'}
+  try{const R=document.documentElement.style;R.setProperty('--punic','#c8962e')}catch(e){}document.title='Roma Delenda Est · Macédoine'}
 function startMac(df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit();applyScen(216)}catch(e){console.error(e)}
   scenSetup=true;try{macSetup()}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();
@@ -6986,7 +6986,7 @@ const SYR_TXT="Hiéronymos est mort, assassiné à Léontinoi. Hippocrate et Ép
 function syrStatic(){if(peoDone==='syr')return;peoDone='syr';macDone=true;
   FAC.pun={n:'Carthage',c:FAC.car.c.slice(),a:[40,-100],cul:'afr'};FAC.car={n:'Syracuse',c:[63,120,192]};
   GEN.pun=GEN.car.slice();GEN.car=GEN_SYR.slice();for(const k in POOL_CAR)delete POOL_CAR[k];Object.assign(POOL_CAR,POOL_SYR);
-  try{document.documentElement.style.setProperty('--punic','#3f78c0')}catch(e){}document.title='Bellum · Syracuse'}
+  try{document.documentElement.style.setProperty('--punic','#3f78c0')}catch(e){}document.title='Roma Delenda Est · Syracuse'}
 function startSyr(df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit();applyScen(216)}catch(e){console.error(e)}
   scenSetup=true;try{syrSetup()}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();
@@ -7035,7 +7035,7 @@ const ATH_TXT="Philippe V tient la Grèce par ses « entraves » : Corinthe, Cha
 function athStatic(){if(peoDone==='ath')return;peoDone='ath';macDone=true;
   FAC.pun={n:'Carthage',c:FAC.car.c.slice(),a:[40,-100],cul:'afr'};FAC.car={n:'Athènes',c:[96,140,80]};
   GEN.pun=GEN.car.slice();GEN.car=GEN_ATH.slice();GEN.mac=GEN_MAC.slice();for(const k in POOL_CAR)delete POOL_CAR[k];Object.assign(POOL_CAR,POOL_ATH);
-  try{document.documentElement.style.setProperty('--punic','#6f9a4a')}catch(e){}document.title='Bellum · Athènes'}
+  try{document.documentElement.style.setProperty('--punic','#6f9a4a')}catch(e){}document.title='Roma Delenda Est · Athènes'}
 function startAth(df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit();applyScen(211)}catch(e){console.error(e)}
   scenSetup=true;try{athSetup()}finally{scenSetup=false}
   S.started=false;S.paused=true;save();afterLoad();closeModal();
@@ -7283,7 +7283,7 @@ function pxStatic(k){if(peoDone===k)return;peoDone=k;macDone=true;const X=PX[k];
   GEN.pun=GEN.car.slice();GEN.car=X.gens.slice();if(X.foeGens&&X.p218.foe)GEN[X.p218.foe]=X.foeGens.slice();
   const cul=new Set(Object.keys(POOL_CAR));for(const f in FAC)if(FAC[f].cul)cul.add(FAC[f].cul);['afr','ibe','gau','ita','gre','num','bal','lig','cel'].forEach(c=>cul.add(c));
   for(const c in POOL_CAR)delete POOL_CAR[c];for(const c of cul)POOL_CAR[c]=[...new Set(X.units)];
-  try{document.documentElement.style.setProperty('--punic',X.css)}catch(e){}document.title='Bellum · '+X.n}
+  try{document.documentElement.style.setProperty('--punic',X.css)}catch(e){}document.title='Roma Delenda Est · '+X.n}
 // tous les peuples : rétablir les tables du peuple joué (aussi appelé par le multijoueur)
 function peoStatic(k){if(k==='mac')macStatic();else if(k==='syr')syrStatic();else if(k==='ath')athStatic();else if(PX[k])pxStatic(k)}
 function pxSetup(k){const X=PX[k];
@@ -7393,7 +7393,7 @@ const startDates0=k=>PX&&PX[k]?[]:k==='mac'?[{k:'mac',n:'215 : Philippe V et Han
 function startCamp(){if(!S)return '';return S.peo==='mac'?'Macédoine':S.peo==='syr'?'Syracuse':S.peo==='ath'?'Athènes':PX&&PX[S.peo]?PX[S.peo].n:S.mirror?'Rome':'Carthage'}
 function openStart(){let peo=S&&(S.peo||(S.mirror?'rom':'car'))||'car',date='218',df=(S&&S.diff)||'normal';const canGo=S&&(S.started||S.day>0)&&!S.over;
   const draw=()=>{const D=startDates(peo);if(!D.some(x=>x.k===date))date=D[0].k;const c=cal(S.day);
-    modal(`<h2 style="margin-bottom:2px">Bellum</h2><p class="sub" style="margin-top:0">La deuxième guerre punique, 218 à 201 av. J.-C.</p>
+    modal(`<h2 style="margin-bottom:2px">Roma Delenda Est</h2><p class="sub" style="margin-top:0">La deuxième guerre punique, 218 à 201 av. J.-C.</p>
     ${canGo?`<div class="rec" style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:10px 0"><span><b>Continuer la partie</b><br><span class="sub">${startCamp()} · ${c.season.toLowerCase()} ${c.year} av. J.-C.</span></span><button class="go" id="stCont" type="button">Continuer</button></div>`:''}
     <div class="stH">Votre pays</div>
     <div id="stPeo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">${START_PEO.map(p=>`<button type="button" data-peo="${p.k}" style="display:flex;gap:10px;align-items:center;text-align:left;padding:10px;min-height:64px;${peo===p.k?`border-color:${p.c};background:${p.c}33;box-shadow:inset 0 0 0 1px ${p.c}`:''}">
@@ -7798,7 +7798,7 @@ const st=document.createElement('style');st.id='ui-bronze';st.textContent=css;do
 (function buildTop(){
   const top=$('top');if(!top)return;
   const br=top.querySelector('.brand');
-  if(br){br.outerHTML=`<div class="ui-fac" title="Bellum, campagne de la 2e guerre punique"><div class="ui-med">${ico('tanit',26)}</div><div><b>Carthage</b><small>Famille Barca</small></div></div>`}
+  if(br){br.outerHTML=`<div class="ui-fac" title="Roma Delenda Est, campagne de la 2e guerre punique"><div class="ui-med">${ico('tanit',26)}</div><div><b>Carthage</b><small>Famille Barca</small></div></div>`}
   const clock=document.createElement('div');clock.className='ui-clock';
   const d=$('date'),sp=$('speeds');if(d&&sp){d.before(clock);clock.append(d,sp)}
   if($('gold'))clock.before($('gold'));
@@ -8156,7 +8156,7 @@ function mpSwapStatic(){if(MP.swapped)return;MP.swapped=true;
   for(const k in POOL_CAR)if(!cul.has(k))POOL_CAR[k]=k==='ita'?['legion','velites','rcav','acav']:['velites','acav'];
   const cs=getComputedStyle(document.documentElement),pu=cs.getPropertyValue('--punic'),ro=cs.getPropertyValue('--roma');
   document.documentElement.style.setProperty('--punic',ro);document.documentElement.style.setProperty('--roma',pu);
-  document.title='Bellum · Rome (à plusieurs)'}
+  document.title='Roma Delenda Est · Rome (à plusieurs)'}
 /* ---- différences d'état ---- */
 const MPX_TOP=new Set(['mirror','peo','mpD','mpCity','mpNews','log','intel','intelR','cur','day','uid','over','msg','rep','overMsg','ev','vict','defeats','bigWin','t0']);
 const MPX_OBJ=new Set(['x','y','food','fat','mor']);
