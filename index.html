@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v171</span>
+ <span class="chg-ver">v172</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -1511,7 +1511,7 @@ PL.push(
  ['phocaea','Phocée',26.75,38.67,'ion',1,'p'],['smyrna','Smyrne',27.14,38.42,'ion',1,'p'],['ephesus','Éphèse',27.34,37.94,'ion',2,'p'],['miletus','Milet',27.28,37.53,'ion',1,'p'],
  ['halicarnassus','Halicarnasse',27.42,37.04,'ion',1,'p'],['chios','Chios',26.14,38.37,'ion',1,'p'],['samos','Samos',26.94,37.69,'ion',1,'p'],['cyzicus','Cyzique',27.89,40.38,'ion',1,'p'],['abydos','Abydos',26.41,40.19,'ion',1,'p'],
  ['perinthus','Périnthe',27.96,40.98,'byz',1,'p'],['byzantium','Byzance',28.98,41.01,'byz',2,'p'],
- ['chalcedon','Chalcédoine',29.03,40.99,'bit',1,'p'],['nicomedia','Nicomédie',29.92,40.77,'bit',2,'p'],['prusa','Pruse',29.06,40.19,'bit',1],['nicaea','Nicée',29.72,40.43,'bit',1],
+ ['chalcedon','Chalcédoine',29.03,40.99,'bit',1,'p'],['nicomedia','Nicomédie',29.92,40.77,'bit',2,'p'],['prusa','Pruse',29.06,40.19,'bit',1],['nicaea_bit','Nicée',29.72,40.43,'bit',1],
  ['sardis','Sardes',28.04,38.49,'sel',2],['magnesia','Magnésie du Sipyle',27.43,38.61,'sel',1],['tralles','Tralles',27.84,37.86,'sel',1],['laodicea','Laodicée du Lycos',29.11,37.84,'sel',1],['apamea','Apamée',30.17,38.07,'sel',1],
  ['rhodus','Rhodes',28.22,36.44,'rho',2,'p'],['caunus','Kaunos',28.62,36.83,'rho',1,'p'],['lindos','Lindos',28.08,36.09,'rho',1,'p']
 );
@@ -1523,7 +1523,7 @@ FAC.rho={n:'Rhodes',c:[204,120,60],a:[0,10],cul:'gre'};
 // l'Hellespont se passe entre Sestos et Lampsaque ou Abydos, le Bosphore entre Byzance et Chalcédoine
 STRAIT.push(['sestos','lampsacus'],['sestos','abydos'],['byzantium','chalcedon']);
 ROUTE.push(['elaia','pergamum','thyatira','sardis','magnesia','smyrna'],['smyrna','ephesus','miletus','halicarnassus'],['ephesus','tralles','laodicea','apamea'],
- ['lampsacus','cyzicus','prusa','nicaea','nicomedia','chalcedon'],['lysimachia','perinthus','byzantium'],['adramyttium','pergamum']);
+ ['lampsacus','cyzicus','prusa','nicaea_bit','nicomedia','chalcedon'],['lysimachia','perinthus','byzantium'],['adramyttium','pergamum']);
 FAC.les={n:'Lesbos',c:[130,150,180],a:[0,0],cul:'gre'};
 // Régions historiques (nom, longitude, latitude du centre) : chaque ville appartient à la plus proche
 const REGIONS=[
@@ -1702,7 +1702,7 @@ function battleHills(a0,b0,a1,b1,B,inB){const st=.25,nx=Math.ceil((a1-a0)/st)+1,
   return out}
 
 /* ================= GÉOGRAPHIE CALCULÉE ================= */
-let landPath,landSmooth,COAST=[],landCtx,N=[],NI={},EDGES=[],ADJ=[],delaunay,voronoi,CELL=[],BORDER=[],GLYPH={far:[],near:[],forest:[]},relief;
+let landPath,landSmooth,COAST=[],landCtx,N=[],NI={},EDGES=[],ADJ=[],delaunay,voronoi,CELL=[],BORDER=[],TLAB=null,GLYPH={far:[],near:[],forest:[]},relief;
 function isLand(x,y){return landCtx.isPointInPath(landPath,x,y)}
 // grille de terrain à 1 km (pour le dessin des détails, rapide), bords cassés par un bruit
 let TGRID=null;
@@ -1769,28 +1769,73 @@ function buildGeo(){
   for(const [a,b] of SEA)add(NI[a],NI[b],'mer');
   for(const [a,b] of STRAIT)add(NI[a],NI[b],'detroit');
   ADJ=N.map(()=>[]);EDGES.forEach((e,k)=>{ADJ[e.a].push(k);ADJ[e.b].push(k)});
-  // territoires : cellules de Voronoï autour des villes, frontières ondulées
-  delaunay=d3.Delaunay.from(towns,n=>n.x,n=>n.y);voronoi=(()=>{/*CELLS-BORNEES*/const pts=towns.map(n=>[n.x,n.y]),G=30,R=80;for(let x=-180;x<MW+180;x+=G)for(let y=-180;y<MH+180;y+=G){const jx=x+(vnoise(x*.13,y*.13)-.5)*G*.6,jy=y+(vnoise(y*.13+3,x*.13)-.5)*G*.6,k=delaunay.find(jx,jy);const lat=LAT1-jy/KY,rr=!isLand(jx,jy)?110:lat<34.4?R:220;if(Math.hypot(towns[k].x-jx,towns[k].y-jy)>rr)pts.push([jx,jy])}return d3.Delaunay.from(pts).voronoi([-200,-200,MW+200,MH+200])})();
-  CELL=N.map(()=>null);
-  const jit=new Map();
-  const wavy=(p,q)=>{const k1=p[0].toFixed(2)+','+p[1].toFixed(2),k2=q[0].toFixed(2)+','+q[1].toFixed(2),key=k1<k2?k1+'|'+k2:k2+'|'+k1;
-    let pts=jit.get(key);if(!pts){const [P,Q]=k1<k2?[p,q]:[q,p],L=Math.hypot(Q[0]-P[0],Q[1]-P[1]),n=Math.max(1,Math.round(L/7)),nx=-(Q[1]-P[1])/L,ny=(Q[0]-P[0])/L;pts=[];
-      for(let s=1;s<n;s++){const t=s/n,amp=(vnoise(P[0]*.05+s*1.7,P[1]*.05)-.5)*Math.min(9,L*.12)*Math.sin(Math.PI*t)*2.2;pts.push([P[0]+(Q[0]-P[0])*t+nx*amp,P[1]+(Q[1]-P[1])*t+ny*amp])}
-      jit.set(key,pts);if(k1>=k2)pts=pts.slice().reverse()}else if(k1>=k2)pts=pts.slice().reverse();
-    return pts};
-  towns.forEach((n,ti)=>{
-    const poly=voronoi.cellPolygon(ti);if(!poly)return;
-    const path=new Path2D(),pts=[];
-    for(let k=0;k<poly.length-1;k++){const p=poly[k],q=poly[k+1];pts.push(p);for(const w of wavy(p,q))pts.push(w)}
-    pts.forEach(([x,y],k)=>k?path.lineTo(x,y):path.moveTo(x,y));path.closePath();
-    CELL[n.i]={path,pts};
-    for(const tj of voronoi.neighbors(ti)){if(tj<=ti)continue;const m=towns[tj];if(!m)continue;
-      // arête commune
-      const pa=voronoi.cellPolygon(tj);if(!pa)continue;const shared=[];
-      for(let k=0;k<poly.length-1;k++)for(let l=0;l<pa.length-1;l++){const p=poly[k];const q=pa[l];if(Math.abs(p[0]-q[0])<1e-6&&Math.abs(p[1]-q[1])<1e-6)shared.push(p)}
-      if(shared.length>=2){const [p,q]=shared;BORDER.push({a:n.i,b:m.i,pts:[p,...wavy(p,q),q]})}
-    }
-  });
+  /*TERR-RASTER*/ // territoires : chaque parcelle de terre va à la ville la plus proche par voie de terre (bruit pour des frontières naturelles), coins adoucis, aucun trou hors du désert
+  delaunay=d3.Delaunay.from(towns,n=>n.x,n=>n.y);voronoi=null;CELL=N.map(()=>null);
+  {const G=3,gw=Math.ceil(MW/G)+2,gh=Math.ceil(MH/G)+2,NP=gw*gh,nT=towns.length;
+   const cv=document.createElement('canvas');cv.width=gw;cv.height=gh;const g=cv.getContext('2d');g.setTransform(1/G,0,0,1/G,0,0);g.fillStyle='#fff';g.fill(landPath);
+   const im=g.getImageData(0,0,gw,gh).data,land=new Uint8Array(NP);for(let p=0;p<NP;p++)land[p]=im[p*4+3]>110?1:0;
+   // mer côtière (5 cases) : les cellules débordent un peu sur l'eau, la côte les coupe ensuite
+   const near=new Uint8Array(NP);{let q=[];for(let p=0;p<NP;p++)if(land[p]){near[p]=1;q.push(p)}
+     for(let r=0;r<5;r++){const nq=[];for(const p of q){const x=p%gw,y=(p/gw)|0;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=gw||Y>=gh)continue;const k=Y*gw+X;if(!near[k]){near[k]=2;nq.push(k)}}}q=nq}}
+   // Dijkstra multi-sources
+   const dist=new Float32Array(NP).fill(1e9),lab=new Int16Array(NP).fill(-1),fix=new Uint8Array(NP);
+   let hk=new Float64Array(1<<20),hv=new Int32Array(1<<20),hn=0,hl=new Int16Array(1<<20);
+   const push=(d,p,l)=>{if(hn>=hk.length){const a=new Float64Array(hk.length*2);a.set(hk);hk=a;const b=new Int32Array(hv.length*2);b.set(hv);hv=b;const c=new Int16Array(hl.length*2);c.set(hl);hl=c}
+     let i=hn++;while(i>0){const j=(i-1)>>1;if(hk[j]<=d)break;hk[i]=hk[j];hv[i]=hv[j];hl[i]=hl[j];i=j}hk[i]=d;hv[i]=p;hl[i]=l};
+   const pop=()=>{const d=hk[0],p=hv[0],l=hl[0];hn--;if(hn>0){const D=hk[hn],P=hv[hn],L=hl[hn];let i=0;for(;;){let j=2*i+1;if(j>=hn)break;if(j+1<hn&&hk[j+1]<hk[j])j++;if(hk[j]>=D)break;hk[i]=hk[j];hv[i]=hv[j];hl[i]=hl[j];i=j}hk[i]=D;hv[i]=P;hl[i]=L}return [d,p,l]};
+   towns.forEach((n,t)=>{const x=Math.min(gw-1,Math.max(0,Math.floor(n.x/G))),y=Math.min(gh-1,Math.max(0,Math.floor(n.y/G))),p=y*gw+x;if(dist[p]>0){dist[p]=0;push(0,p,t);fix[p]=1;near[p]=near[p]||1}});
+   const nb=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+   const fac=new Float32Array(NP);for(let p=0;p<NP;p++)if(near[p]){const x=(p%gw+.5)*G,y=((p/gw)|0)*G+G/2;fac[p]=near[p]===1?.7+.6*vnoise(x*.025,y*.025):3}
+   while(hn){const [d,p,l]=pop();if(lab[p]>=0)continue;lab[p]=l;const x=p%gw,y=(p/gw)|0;
+     for(const [dx,dy,w] of nb){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=gw||Y>=gh)continue;const k=Y*gw+X;if(!near[k]||lab[k]>=0)continue;
+       const nd=d+G*w*(fac[p]+fac[k])/2;if(nd>=dist[k])continue;
+       if(land[k]&&nd>110){const la=LAT1-(Y+.5)*G/KY-34.4+(vnoise(X*.04,Y*.04)-.5)*1.1;if(la<0||nd>110+la*380)continue} // désert : pas de territoire loin des villes, lisière irrégulière
+       dist[k]=nd;push(nd,k,l)}}
+   // adoucir : filtre de majorité (coins et pointes émoussés)
+   const cnt=new Int32Array(nT);
+   for(let pass=0;pass<3;pass++){const src=lab.slice(),R=3;
+     for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){const p=y*gw+x,a=src[p];if(a<0||fix[p])continue;let best=a,bc=0,seen=[];
+       for(let Y=Math.max(0,y-R);Y<=Math.min(gh-1,y+R);Y++)for(let X=Math.max(0,x-R);X<=Math.min(gw-1,x+R);X++){const b=src[Y*gw+X];if(b<0)continue;if(!cnt[b])seen.push(b);cnt[b]++}
+       for(const b of seen){if(cnt[b]>bc||(cnt[b]===bc&&b===a)){bc=cnt[b];best=b}}
+       if(cnt[best]>cnt[a])lab[p]=best;for(const b of seen)cnt[b]=0}}
+   TLAB={lab,G,gw,gh};
+   // contours : arêtes entre cases de maîtres différents, chaînées en boucles (région à droite)
+   const VW=gw+1,L_=(p)=>p<0?-1:lab[p];
+   const out=new Map(); // clé sommet*nT+label -> liste d'arêtes
+   const E=[];const addE=(v0,v1,a,b)=>{const k=v0*nT+a;let l=out.get(k);if(!l)out.set(k,l=[]);l.push(E.length);E.push([v0,v1,a,b,0])};
+   for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){const p=y*gw+x,a=lab[p];if(a<0)continue;
+     const up=y>0?lab[p-gw]:-1,dn=y<gh-1?lab[p+gw]:-1,lf=x>0?lab[p-1]:-1,rt=x<gw-1?lab[p+1]:-1;
+     const v=(X,Y)=>Y*VW+X;
+     if(up!==a)addE(v(x,y),v(x+1,y),a,up);if(rt!==a)addE(v(x+1,y),v(x+1,y+1),a,rt);if(dn!==a)addE(v(x+1,y+1),v(x,y+1),a,dn);if(lf!==a)addE(v(x,y+1),v(x,y),a,lf)}
+   const loops=towns.map(()=>[]);
+   for(let e0=0;e0<E.length;e0++){if(E[e0][4])continue;const a=E[e0][2],L=[];let e=e0;
+     while(e!=null&&!E[e][4]){E[e][4]=1;L.push(e);const l=out.get(E[e][1]*nT+a);e=null;if(l)for(const k of l)if(!E[k][4]){e=k;break}}
+     loops[a].push(L)}
+   const W=v=>[(v%VW)*G,Math.floor(v/VW)*G];
+   const dp=(P,tol)=>{if(P.length<3)return P;const keep=new Uint8Array(P.length);keep[0]=keep[P.length-1]=1;const st=[[0,P.length-1]];
+     while(st.length){const [i,j]=st.pop();const [x1,y1]=P[i],[x2,y2]=P[j],dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1;let m=-1,md=tol;
+       for(let k=i+1;k<j;k++){const d=Math.abs((P[k][0]-x1)*dy-(P[k][1]-y1)*dx)/L;if(d>md){md=d;m=k}}if(m>0){keep[m]=1;st.push([i,m],[m,j])}}
+     return P.filter((_,k)=>keep[k])};
+   const chaikin=(P,closed)=>{for(let it=0;it<2;it++){const Q=closed?[]:[P[0]],n=P.length;for(let k=0;k<(closed?n:n-1);k++){const a=P[k],b=P[(k+1)%n];Q.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}if(!closed)Q.push(P[n-1]);P=Q}return P};
+   const shared=new Map();
+   const runPts=(vs,a,b)=>{const v0=vs[0],v1=vs[vs.length-1];if(b<0)return chaikin(dp(vs.map(W),G*.7),false);
+     const key=Math.min(a,b)+','+Math.max(a,b)+','+Math.min(v0,v1)+','+Math.max(v0,v1);let r=shared.get(key);
+     if(!r){const fw=v0<v1||(v0===v1&&a<b);const P=chaikin(dp((fw?vs:vs.slice().reverse()).map(W),G*.7),false);r={P,v0:fw?v0:v1};shared.set(key,r);
+       const A=fw?a:b,B=fw?b:a;BORDER.push({a:towns[A].i,b:towns[B].i,pts:P})}
+     return r.v0===v0?r.P:r.P.slice().reverse()};
+   towns.forEach((n,a)=>{if(!loops[a].length)return;const path=new Path2D();let pts0=null;
+     for(const L of loops[a]){const bs=L.map(e=>E[e][3]);let st=0;for(let k=0;k<L.length;k++){if(bs[k]!==bs[(k-1+L.length)%L.length]){st=k;break}}
+       let P=[];
+       if(bs.every(b=>b===bs[0])){ // une seule voisine tout autour : boucle fermée, départ au plus petit sommet
+         let mi=0;for(let k=1;k<L.length;k++)if(E[L[k]][0]<E[L[mi]][0])mi=k;const vs=[];for(let k=0;k<L.length;k++)vs.push(E[L[(mi+k)%L.length]][0]);
+         P=chaikin(dp(vs.map(W),G*.7),true);
+         if(bs[0]>=0&&a<bs[0]){/* enclave : la frontière une fois */const key='c'+Math.min(a,bs[0])+','+Math.max(a,bs[0])+','+vs[0];if(!shared.has(key)){shared.set(key,1);BORDER.push({a:n.i,b:towns[bs[0]].i,pts:P.concat([P[0]])})}}
+         else if(bs[0]>=0){const key='c'+Math.min(a,bs[0])+','+Math.max(a,bs[0])+','+vs[0];if(!shared.has(key)){shared.set(key,1);BORDER.push({a:n.i,b:towns[bs[0]].i,pts:P.concat([P[0]])})}}
+       }else{let k=0;while(k<L.length){const b=bs[(st+k)%L.length],vs=[E[L[(st+k)%L.length]][0]];while(k<L.length&&bs[(st+k)%L.length]===b){vs.push(E[L[(st+k)%L.length]][1]);k++}
+           const R=runPts(vs,a,b);for(let j=P.length?1:0;j<R.length;j++)P.push(R[j])}}
+       P.forEach(([x,y],k)=>k?path.lineTo(x,y):path.moveTo(x,y));path.closePath();if(!pts0||P.length>pts0.length)pts0=P}
+     CELL[n.i]={path,pts:pts0||[]}})}
+  /*FIN-TERR-RASTER*/
   buildRelief();buildTGrid();routeEdges();
   GLYPH.close=[];
 }
@@ -2248,8 +2293,8 @@ function load(){try{const t=localStorage.getItem(SAVE);if(t)return JSON.parse(t)
 
 /* ================= OUTILS ================= */
 const ownerN=i=>S.own[N[i].id]||null;
-const cellAt=(x,y)=>{const k=delaunay.find(x,y);return N.filter(n=>!n.col)[k]};
-let TOWNS=null;const townAt=(x,y)=>TOWNS[delaunay.find(x,y)];
+const tFind=(x,y)=>{if(TLAB){const X=Math.floor(x/TLAB.G),Y=Math.floor(y/TLAB.G);if(X>=0&&Y>=0&&X<TLAB.gw&&Y<TLAB.gh){const l=TLAB.lab[Y*TLAB.gw+X];if(l>=0)return l}}return delaunay.find(x,y)};const cellAt=(x,y)=>{const k=tFind(x,y);return N.filter(n=>!n.col)[k]};
+let TOWNS=null;const townAt=(x,y)=>TOWNS[tFind(x,y)];
 const ownerAt=(x,y)=>ownerN(townAt(x,y).i);
 const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 function cal(d){const m=Math.floor(d/30),mo=(m+2)%12,year=218-Math.floor((m+2)/12);return {dm:d%30+1,mo,year,season:mo>=2&&mo<=4?'Printemps':mo>=5&&mo<=7?'Été':mo>=8&&mo<=10?'Automne':'Hiver'}}
@@ -3149,16 +3194,14 @@ function drawStatic(w,h,T){
   if(texPat&&s>=5){ctx.save();ctx.clip(landSmooth);const m=new DOMMatrix().scale(.08);texPat.setTransform(m);ctx.fillStyle=texPat;ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.restore()}
   // territoires
   ctx.save();ctx.clip(landSmooth);if(!NOTERR){
-  /*TERR-LISIBLE*/const tA=s>4?.55:s>2.5?.7:s>1?.85:1;for(const o in ownerPaths){if(o==='_')continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.3:.5)*tA);ctx.fill(ownerPaths[o])}
-  const bandW=14*z,bandBy={};
+  /*TERR-LISIBLE*/const tA=s>4?.55:s>2.5?.7:s>1?.85:1;for(const o in ownerPaths){if(o==='_')continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.36:.5)*tA);ctx.fill(ownerPaths[o])}
   // frontières : entre maîtres différents, plus discrètes entre villes d'un même maître quand on zoome
   for(const B of BORDER){if(!B.bb){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of B.pts){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}B.bb=[a,b,c,d]}if(B.bb[2]<vx0||B.bb[0]>vx1||B.bb[3]<vy0||B.bb[1]>vy1)continue;const oa=ownerN(B.a),ob=ownerN(B.b);
     if(oa===ob){if(s<1.4)continue;ctx.strokeStyle='rgba(70,50,30,.22)';ctx.lineWidth=1*z;ctx.setLineDash([4*z,4*z])}
     else{ctx.setLineDash([]);ctx.strokeStyle='rgba(40,28,16,.75)';ctx.lineWidth=Math.max(1.4*z,.35)}
     ctx.beginPath();B.pts.forEach(([x,y],k)=>k?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();
-    if(oa!==ob){for(const o of [oa,ob]){if(!o||o==='_'||!ownerPaths[o])continue;const P=bandBy[o]||(bandBy[o]=new Path2D());B.pts.forEach(([x,y],k)=>k?P.lineTo(x,y):P.moveTo(x,y))}}
+    
   }
-  ctx.setLineDash([]);ctx.lineJoin='round';for(const o in bandBy){const neutral=!!FAC[o].a;ctx.save();ctx.clip(ownerPaths[o]);ctx.strokeStyle=rgb(FAC[o].c,neutral?.75:.95);ctx.lineWidth=bandW;ctx.stroke(bandBy[o]);ctx.restore()}
   }ctx.setLineDash([]);
   ctx.restore();
   // côtes
