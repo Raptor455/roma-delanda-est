@@ -203,7 +203,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v157</span>
+ <span class="chg-ver">v163</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -835,10 +835,16 @@ function vaseSVG(d,small){
     arm+=`<path d="M103 65 Q93 76 ${hx} ${hy}" stroke="${B}" stroke-width="5.4" fill="none" stroke-linecap="round"/><circle cx="${hx}" cy="${hy}" r="3.4" fill="${B}"/>`;
     const A=d.arm;
     if(A==='lance'||A==='xyston'||A==='sarisse'){
-      const [x1,y1,x2,y2]=A==='sarisse'?[14,140,198,46]:A==='xyston'?[22,138,196,50]:[30,128,186,58];
+      // la hampe passe par la main et tient entière dans le médaillon (rayon 90, moins la pointe)
+      const sc=mounted?.8:1,ox=mounted?17.6:0,oy=mounted?-3:0,cx=(100-ox)/sc,cy=(100-oy)/sc;
+      const ag=(A==='sarisse'?-27:A==='xyston'?-24.6:-24.2)*Math.PI/180,ux=Math.cos(ag),uy=Math.sin(ag);
+      const ch=r=>{const px=hx-cx,py=hy-cy,b=px*ux+py*uy,q=Math.sqrt(Math.max(0,b*b-(px*px+py*py)+r*r));return[-b-q,-b+q]};
+      const tf=ch(74/sc)[1],tb=ch(82/sc)[0],L=A==='sarisse'?1e9:A==='xyston'?150/sc:128/sc;
+      const f=Math.min(tf,L*.6),bk=Math.max(tb,f-L);
+      const [x1,y1,x2,y2]=[hx+ux*bk,hy+uy*bk,hx+ux*f,hy+uy*f];
       weap+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${B}" stroke-width="${A==='sarisse'?2:1.8}"/>`;
       const ang=Math.atan2(y2-y1,x2-x1)*180/Math.PI;
-      weap+=`<path d="M0 0 q-5 -3.4 -12 0 q7 3.4 12 0z" fill="${B}" transform="translate(${x2+4} ${y2-2}) rotate(${ang})"/>`;
+      weap+=`<path d="M0 0 q-5 -3.4 -12 0 q7 3.4 12 0z" fill="${B}" transform="translate(${x2+ux*12} ${y2+uy*12}) rotate(${ang})"/>`;
       if(A!=='lance')weap+=`<path d="M0 0 l-6 -1.6 v3.2z" fill="${B}" transform="translate(${x1} ${y1}) rotate(${ang})"/>`;
     }
     if(A==='epee'||A==='glaive'||A==='longue'||A==='dague'||A==='kopis'){
@@ -11831,6 +11837,7 @@ window.__camp={get SRC(){return SRC},get SRCR(){return SRCR},visAt,visAtR,vsOf,v
 </script>
 </body>
 </html>
+</body></html>
 </body></html>
 </body></html>
 </body></html>
