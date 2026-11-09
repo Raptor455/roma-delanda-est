@@ -2518,10 +2518,10 @@ if(!V3D){
     drawProjs();drawBanners();
     g2.restore();
   }
-  /* -- carrés indépendants : chaque régiment se partage en 5 carrés (1/5 des hommes, 1/5 du front) que l'on sélectionne
+  /* -- carrés indépendants : chaque régiment se partage en 10 carrés (1/10 des hommes chacun) que l'on sélectionne
         et déplace un à un. C'est au joueur (et à l'IA) d'échelonner ses rangs pour relever les carrés qui faiblissent.
         Le régiment reste un tout pour la campagne (pertes additionnées), les cartes d'unités et les corps. -- */
-  const NSPL=5,SQ=16; // tous les carrés ont la même taille (m)
+  const NSPL=10,SQ=16; // 10 carrés par régiment (5 de front sur 2 rangs au déploiement) // tous les carrés ont la même taille (m)
   const T5=new Map();const tOf=T=>{let t=T5.get(T);if(!t){t=Object.assign({},T,{men:T.men/NSPL,w:SQ,d:SQ});T5.set(T,t);T5.set(t,t)}return t};
   const KIDS=new Map(); // id du régiment → ses carrés (le premier est l'unité d'origine)
   const regOf=u=>KIDS.get(u.reg!=null?u.reg:u.id)||[u];
@@ -2531,14 +2531,14 @@ if(!V3D){
     const list=units.slice();
     for(const u of list){if(u.reg!=null)continue;
       const T0=u.T,men=u.men,w5=SQ,c=Math.cos(u.ang),s=Math.sin(u.ang),px=-s,py=c,leg=u.leg;
-      const ai=u.side===1&&T0.kind==='inf';                  // l'IA aligne 3 carrés et en garde 2 en relève derrière
-      const slots=ai?[[-1,0],[-.5,-1],[0,0],[.5,-1],[1,0]]:[[-2,0],[-1,0],[0,0],[1,0],[2,0]];
+      const ai=u.side===1&&T0.kind==='inf';                  // l'IA garde son second rang en relève
+      const COLS=[0,-1,1,-2,2],slots=[...COLS.map(c=>[c,0]),...COLS.map(c=>[c,-1])];
       const T1=tOf(T0),grp=[];
       for(let k=0;k<NSPL;k++){const v=k===0?u:Object.assign({},u,{id:uid++,contacts:[],order:null,preview:null,slots:makeSlots(T1),ib:null,tag:null,_sq:null,_cr:null,_ord:null,_gd:null,_nA:null,_men:null,_lx:null,_ly:null,genO:null,leg:null});
         if(k>0)delete v.kills;
         v.T=T1;v.men=men/NSPL;v.w=T1.w;v.dBase=T1.d;v.dd=T1.d*(.45+.55*frac(v));v.reg=u.id;v.rk=k;
-        const [sx,sr]=slots[(k+2)%NSPL],back=sr*(T1.d+6);
-        v.x=u.x+px*sx*w5*1.04+c*back;v.y=u.y+py*sx*w5*1.04+s*back;v.res=ai&&sr<0;v._sx=sx;
+        const [sx,sr]=slots[k%slots.length],back=sr*(T1.d+4);
+        v.x=u.x+px*sx*w5*1.04+c*back;v.y=u.y+py*sx*w5*1.04+s*back;v.res=ai&&sr<0;v._sx=sx;v._sr=sr;
         if(u.order&&u.order.type==='move'&&k>0)v.order=Object.assign({},u.order,{x:u.order.x+(v.x-u.x),y:u.order.y+(v.y-u.y)});
         grp.push(v);if(k>0){units.push(v);
           // les morts infligés par un carré comptent pour tout le régiment
@@ -2563,12 +2563,13 @@ if(!V3D){
     const wa=(a.contacts.length?.3:1)*(a.moving?1:.6),wb=(b.contacts.length?.3:1)*(b.moving?1:.6),t=wa+wb||1;
     a.x-=bx*best*wa/t;a.y-=by*best*wa/t;b.x+=bx*best*wb/t;b.y+=by*best*wb/t}
   const CELL=SQ*2;
-  function separate(){const L=units.filter(u=>!u.dead&&!u.pend&&!u.routing&&u.reg!=null);if(L.length<2)return;const grid=new Map();
-    for(const u of L){const k=Math.floor(u.x/CELL)+','+Math.floor(u.y/CELL);let c=grid.get(k);if(!c)grid.set(k,c=[]);c.push(u)}
+  function separate(){const L=units.filter(u=>!u.dead&&!u.pend&&!u.routing&&u.reg!=null);if(L.length<2)return;const grid=new Map(),K=c=>(c.x+32768)*65536+c.y+32768;
+    for(const u of L){const k=(Math.floor(u.x/CELL)+32768)*65536+Math.floor(u.y/CELL)+32768;let c=grid.get(k);if(!c)grid.set(k,c=[]);c.push(u)}
     for(const u of L){const cx=Math.floor(u.x/CELL),cy=Math.floor(u.y/CELL);
-      for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const c=grid.get((cx+i)+','+(cy+j));if(!c)continue;
+      for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const c=grid.get((cx+i+32768)*65536+cy+j+32768);if(!c)continue;
         for(const v of c)if(v.id>u.id)sepPair(u,v,u.side===v.side?.8:-1.5)}}}
-  {const _sp=step;step=function(dt){const r=_sp.apply(this,arguments);try{for(let i=0;i<2;i++)separate()}catch(e){}return r}}
+  {const _sp=step;step=function(dt){const r=_sp.apply(this,arguments);try{separate()}catch(e){}return r}}
+  {const _ic=inContact;inContact=function(a,b){const r=(a.w+b.w)/2+30,dx=a.x-b.x,dy=a.y-b.y;if(dx>r||dx<-r||dy>r||dy<-r)return false;return _ic(a,b)}}
   // 4. déroute : le carré fait demi-tour sur place, puis fuit tout droit
   flee=function(u,dt){
     u.routeT+=dt;
@@ -2585,7 +2586,7 @@ if(!V3D){
     if(!u.rallied&&u.routeT>14&&nd>420*G&&frac(u)>.3){u.routing=false;u.rallied=true;u.morale=u.T.morale*.4;u.dirty=true;u.ang=u.side===0?-Math.PI/2:Math.PI/2;u._fh=null;u._ft=0}
     if(u.y<-60||u.y>H+60){u.fled=true;u.dead=true;selected.delete(u)}
   };
-  // pertes : chaque carré ne compte que pour 1/5 du régiment (mêlée comme traits)
+  // pertes : chaque carré ne compte que pour 1/10 du régiment (mêlée comme traits)
   {const _h=hurt;hurt=function(e,cas){return _h.call(this,e,e&&e.reg!=null?cas/NSPL:cas)}}
   // une déroute n'ébranle les voisins que comme un cinquième de régiment
   {const _r=rout;rout=function(u){if(!u||u.reg==null)return _r.apply(this,arguments);
@@ -2593,7 +2594,7 @@ if(!V3D){
     const r=_r.apply(this,arguments);for(const o of near)if(!o.routing)o.morale+=8*(1-1/NSPL);return r}}
   // renforts : les carrés arrivent avec leur régiment, côte à côte
   try{const _ar=arrive;arrive=function(r){const was=r&&r.done,res=_ar.apply(this,arguments);if(!was&&r)for(const u of r.us){const c=Math.cos(u.ang),s=Math.sin(u.ang);
-      regOf(u).forEach((v,k)=>{if(v===u)return;const sx=(k<3?k:k-NSPL);v.x=u.x-s*sx*v.w*1.04;v.y=u.y+c*sx*v.w*1.04;v.ang=u.ang;v.dead=false;v.pend=null;v.dirty=true;v.v=0;
+      regOf(u).forEach((v,k)=>{if(v===u)return;const sx=v._sx||0,b=(v._sr||0)*(v.T.d+4);v.x=u.x-s*sx*v.w*1.04+c*b;v.y=u.y+c*sx*v.w*1.04+s*b;v.ang=u.ang;v.dead=false;v.pend=null;v.dirty=true;v.v=0;
         if(u.order)v.order=Object.assign({},u.order,{x:u.order.x+(v.x-u.x),y:u.order.y+(v.y-u.y)})})}return res};if(window.__echelle)window.__echelle.arrive=arrive}catch(e){}
   // retour vers la campagne : un régiment = la somme de ses carrés
   {const _cr=campReturn;campReturn=function(win){
@@ -2605,7 +2606,7 @@ if(!V3D){
   {const _ai=ai;ai=function(){const r=_ai.apply(this,arguments);
     for(const [id,grp] of KIDS){if(grp[0].side!==1)continue;const front=grp.filter(v=>!v.res&&!v.dead&&!v.routing);
       for(const v of grp){if(!v.res||v.dead||v.routing)continue;
-        const weak=grp.find(f=>!f.res&&(f.dead||f.routing||frac(f)<.5||f.morale<f.T.morale*.35));
+        const tw=f=>f&&(f.dead||f.routing||frac(f)<.5||f.morale<f.T.morale*.35),own=grp.find(f=>!f.res&&f._sx===v._sx),weak=tw(own)?own:null; // chaque relève couvre sa file
         if(v.contacts.length||!front.length||weak){v.res=false;
           const tg=weak&&!weak.dead?(weak.contacts[0]||null):null;
           if(weak&&!weak.dead&&!weak.routing){v.order={type:'move',x:weak.x-Math.cos(weak.ang)*4,y:weak.y-Math.sin(weak.ang)*4,face:weak.ang,run:true};if(tg)v.order={type:'attack',target:tg,run:true}}
@@ -2698,9 +2699,11 @@ if(!V3D){
       if(sp[4])sp[4].textContent=nf(loss(0));if(sp[7])sp[7].textContent=nf(loss(1))}}}catch(e){}return r}}
   // étiquettes : seulement pour les carrés choisis ou survolés (les fissures montrent déjà l'usure)
   {const _ut=updateTags;updateTags=function(){const r=_ut.apply(this,arguments);const many=selected.size>1;for(const u of units)if(u.tag&&!u.tag.hidden&&!(u===hover||(selected.has(u)&&(!many||u.rk===0))))u.tag.hidden=true;return r}}
-  // cartes d'unités : une carte par régiment (total des 5 carrés) ; un clic choisit tous ses carrés encore debout
+  // cartes d'unités : une carte par régiment (total de ses carrés) ; un clic choisit tous ses carrés encore debout
   // (posé au premier dessin : l'interface « Bronze » enveloppe hudTick plus tard, et ses cartes doivent être corrigées après elle)
-  let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTop()}catch(e){}try{const bar=document.getElementById('uiCards');if(bar){
+  let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;
+    {const _sh=shoot;shoot=function(u,dt){if(!u.T.ranged||u.routing||u.contacts.length)return;if(u.cd-dt>0){u.cd-=dt;return}return _sh.apply(this,arguments)}}
+const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTop()}catch(e){}try{const bar=document.getElementById('uiCards');if(bar){
       if(!bar._sq){bar._sq=1;bar.addEventListener('click',e=>{const d=e.target.closest('.ui-uc');if(!d)return;const u=d._u;if(!u)return;
           const g=regOf(u).filter(v=>!v.dead&&!v.routing),on=e.shiftKey||e.ctrlKey;if(!on)selected.clear();
           const all=g.every(v=>selected.has(v));for(const v of g){if(on&&all)selected.delete(v);else selected.add(v)}renderSel()});
