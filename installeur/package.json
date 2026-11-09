@@ -1,0 +1,60 @@
+{
+  "name": "bellum",
+  "productName": "Bellum",
+  "version": "132.0.0",
+  "description": "Bellum : campagne de la deuxième guerre punique",
+  "author": "Baptiste",
+  "main": "main.js",
+  "private": true,
+  "devDependencies": {
+    "electron": "44.10.1",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "fr.baptiste.bellum",
+    "productName": "Bellum",
+    "files": [
+      "main.js",
+      "icone.png",
+      "jeu/**/*"
+    ],
+    "asar": true,
+    "directories": {
+      "output": "sortie"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icone.png",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "Bellum",
+      "artifactName": "Bellum-installation-${version}.exe",
+      "language": "1036",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Raptor455",
+        "repo": "roma-delanda-est",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  },
+  "repository": "https://github.com/Raptor455/roma-delanda-est"
+}
