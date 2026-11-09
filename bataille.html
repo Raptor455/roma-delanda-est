@@ -2628,7 +2628,7 @@ if(!V3D){
     // chaque carré prend la place libre la plus proche dans son rang (moins de croisements)
     for(let r=0;r<rows;r++){const P=out.filter((q,i)=>Math.floor(i/cols)===r),U=P.map(q=>q.u).sort((a,b)=>(a.x*ux+a.y*uy)-(b.x*ux+b.y*uy)),S=P.map(q=>[q.x,q.y]).sort((a,b)=>(a[0]*ux+a[1]*uy)-(b[0]*ux+b[1]*uy));P.forEach((q,i)=>{q.u=U[i];q.x=S[i][0];q.y=S[i][1]})}
     return out};
-  {const _rs=renderSel;renderSel=function(){const r=_rs.apply(this,arguments);try{const a=[...selected];if(a.length>1&&a.every(u=>u.reg!=null)){const b=$('selBody');if(b)b.innerHTML=b.innerHTML.replace(/(\d+) régiments/,'$1 carrés').replace(/(\d+) ×/g,'$1 carrés ×')}}catch(e){}return r}}
+  {const _rs=renderSel;renderSel=function(){const r=_rs.apply(this,arguments);try{const a=[...selected];if(a.length>1&&a.every(u=>u.reg!=null)){const b=$('selBody'),G=regMode(a.filter(u=>!u.dead&&!u.routing));if(b)b.innerHTML=b.innerHTML.replace(/(\d+) régiments/,G?(G.length>1?G.length+' régiments':'1 régiment')+' · $1 carrés':'$1 carrés').replace(/(\d+) ×/g,'$1 carrés ×')}}catch(e){}return r}}
   /* -- formations toutes faites : boutons du panneau de sélection, appliqués aux carrés choisis, là où ils sont,
         face à leur direction moyenne. Les carrés les plus frais vont devant. -- */
   const FSP=SQ+1.6,FRK=SQ+3;
@@ -2660,10 +2660,16 @@ if(!V3D){
     const fx=Math.cos(A),fy=Math.sin(A),rx=-fy,ry=fx;
     const P=F[3](arr.length),mx=P.reduce((a,p)=>a+p.x,0)/P.length,my=P.reduce((a,p)=>a+p.y,0)/P.length;
     // rangs : les plus frais devant ; dans un rang, chacun prend la place la plus proche de son côté (moins de croisements)
-    const ranks=[...new Set(P.map(p=>p.r))].sort((a,b)=>a-b),pool=[...arr].sort((a,b)=>frac(b)-frac(a));
-    for(const r of ranks){const S=P.filter(p=>p.r===r).sort((a,b)=>a.x-b.x||a.y-b.y),U=pool.splice(0,S.length).sort((a,b)=>((a.x-cx)*rx+(a.y-cy)*ry)-((b.x-cx)*rx+(b.y-cy)*ry));
-      S.forEach((p,i)=>{const u=U[i];if(!u)return;const x=p.x-mx,y=p.y-my;
-        u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,cx+rx*x-fx*y)),y:Math.max(20,Math.min(H-20,cy+ry*x-fy*y)),face:A+p.a,run:false};u.preview=null})}
+    const G=regMode(arr);markSolo(arr,!G);
+    const lat=u=>(u.x-cx)*rx+(u.y-cy)*ry,put=(PP,units)=>{
+      const ranks=[...new Set(PP.map(p=>p.r))].sort((a,b)=>a-b),pool=[...units].sort((a,b)=>frac(b)-frac(a));
+      for(const r of ranks){const S=PP.filter(p=>p.r===r).sort((a,b)=>a.x-b.x||a.y-b.y),U=pool.splice(0,S.length).sort((a,b)=>lat(a)-lat(b));
+        S.forEach((p,i)=>{const u=U[i];if(!u)return;const x=p.x-mx,y=p.y-my;
+          u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,cx+rx*x-fx*y)),y:Math.max(20,Math.min(H-20,cy+ry*x-fy*y)),face:A+p.a,run:false};u.preview=null})}};
+    if(G&&G.length>1){ // régiments entiers : chacun prend une bande de places côte à côte (ils ne se mélangent pas)
+      const Ps=[...P].sort((a,b)=>a.x-b.x||a.r-b.r),gs=[...G].sort((a,b)=>lat(cen(a))-lat(cen(b)));let k=0;
+      for(const g of gs){put(Ps.slice(k,k+g.length),g);k+=g.length}}
+    else put(P,arr);
     renderSel()}
   // petits pictogrammes : points pour les places des carrés
   function formIcon(key){const P=FORMS.find(f=>f[0]===key)[3](key==='orbe'?10:key==='colonne'?8:9);
@@ -2671,16 +2677,105 @@ if(!V3D){
     return `<svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true">${P.map(p=>`<rect x="${(15+(p.x-(x0+x1)/2)*k-1.8).toFixed(1)}" y="${(8+(p.y-(y0+y1)/2)*k-1.8).toFixed(1)}" width="3.6" height="3.6" fill="currentColor"/>`).join('')}<path d="M3 1h24" stroke="currentColor" stroke-width=".8" opacity=".45"/></svg>`}
   function formBox(){let box=document.getElementById('formBtns');if(box)return box;const sel=document.getElementById('sel');if(!sel)return null;
     box=document.createElement('div');box.id='formBtns';
-    box.innerHTML='<div class="fl">Formation</div><div class="fg">'+FORMS.map(f=>`<button type="button" data-f="${f[0]}" title="${f[2]}">${formIcon(f[0])}<span>${f[1]}</span></button>`).join('')+'</div>';
+    box.innerHTML='<div class="fl">Formation</div><div class="fg">'+FORMS.map(f=>`<button type="button" data-f="${f[0]}" title="${f[2]}">${formIcon(f[0])}<span>${f[1]}</span></button>`).join('')+'</div>'+'<div class="fh">Clic : régiment entier · Alt+clic : un seul carré</div>';
     box.addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(b)applyForm(b.dataset.f)});
     const btns=sel.querySelector('.btns');if(btns)btns.after(box);else sel.appendChild(box);
     const st=document.createElement('style');st.textContent=`#formBtns{display:none;flex-direction:column;gap:4px;margin-top:2px}#formBtns.on{display:flex}
+#formBtns .fh{font-size:11px;color:var(--muted,#b9a98a);opacity:.85;margin-top:1px}
 #formBtns .fl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#b9a98a)}
 #formBtns .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 #formBtns button{display:flex;align-items:center;gap:4px;padding:3px 5px;font-size:12px;line-height:1.1;min-width:0;white-space:nowrap}
 #formBtns button svg{flex:none}#formBtns button span{overflow:hidden;text-overflow:ellipsis}
 @media (max-width:760px){#formBtns .fg{grid-template-columns:repeat(3,1fr)}#formBtns button span{display:none}}`;document.head.appendChild(st);return box}
   {const _rs2=renderSel;renderSel=function(){const r=_rs2.apply(this,arguments);try{const b=formBox();if(b)b.classList.toggle('on',mine().length>=2)}catch(e){}return r}}
+  /* -- régiments pilotés (v1xx) : un clic ou un cadre choisit le régiment entier ; ses ordres le font marcher en gardant
+        sa formation, et ses carrés se relèvent tout seuls au combat. Alt+clic (ou Alt+cadre) commande un carré seul. -- */
+  let ALT=false,SELCLR=false,PREV=new Set(),LASTREG=false;
+  addEventListener('pointerdown',e=>{ALT=!!e.altKey},true);
+  addEventListener('keydown',e=>{if(e.key!=='Alt')ALT=false},true);
+  const okSel=v=>v.side===0&&!v.dead&&!v.routing&&!v.pend;
+  const rkey=u=>u.reg!=null?u.reg:u.id;
+  const cen=a=>({x:a.reduce((s,u)=>s+u.x,0)/a.length,y:a.reduce((s,u)=>s+u.y,0)/a.length});
+  function expandSel(){
+    if(!ALT){const cur=[...selected];
+      if(SELCLR){for(const u of cur)for(const v of regOf(u))if(okSel(v))selected.add(v)}
+      else{const rem=[...PREV].filter(u=>!selected.has(u)&&okSel(u)),add=cur.filter(u=>!PREV.has(u));
+        for(const u of rem)for(const v of regOf(u))selected.delete(v);
+        for(const u of add)for(const v of regOf(u))if(okSel(v))selected.add(v)}}
+    SELCLR=false;PREV=new Set(selected)}
+  // la sélection est-elle faite de régiments entiers ? (alors on les pilote en blocs)
+  function regMode(arr){if(ALT||!arr.length)return null;const m=new Map();
+    for(const u of arr){const k=rkey(u);if(!m.has(k))m.set(k,[]);m.get(k).push(u)}
+    for(const g of m.values()){if(g.length<regOf(g[0]).filter(okSel).length)return null}
+    return [...m.values()]}
+  function markSolo(arr,solo){for(const u of arr){u._solo=!!solo;u._pf=null;u._relieving=null;u._wd=0}}
+  // place derrière le carré de tête de sa file
+  function follow(u){const p=u._pf;if(!p||p.dead||p.routing)return;
+    const t=p.order&&p.order.type==='attack'&&p.order.target&&!p.contacts.length?p.order.target:null,a=t?Math.atan2(t.y-p.y,t.x-p.x):p.ang,b=FRK*(u._row||1);
+    u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,p.x-Math.cos(a)*b)),y:Math.max(20,Math.min(H-20,p.y-Math.sin(a)*b)),face:a,run:!!(p.order&&p.order.run)}}
+  // marche : chaque régiment garde son dessin et pivote vers sa destination ; les rangs ne se croisent pas
+  {const _om=orderMove;orderMove=function(p,run){const arr=mine(),G=regMode(arr);markSolo(arr,!G);
+    if(!G||!p)return _om.apply(this,arguments);
+    const c=cen(arr);if(Math.hypot(p.x-c.x,p.y-c.y)<=25)return _om.apply(this,arguments);
+    let sx=0,sy=0;for(const u of arr){sx+=Math.cos(u.ang);sy+=Math.sin(u.ang)}
+    const A0=Math.atan2(sy,sx),F=Math.atan2(p.y-c.y,p.x-c.x),d=angDiff(F,A0),cd=Math.cos(d),sd=Math.sin(d);
+    const f0={x:Math.cos(A0),y:Math.sin(A0)},r0={x:-f0.y,y:f0.x},f1={x:Math.cos(F),y:Math.sin(F)},r1={x:-f1.y,y:f1.x};
+    const rot=(x,y)=>({x:x*cd-y*sd,y:x*sd+y*cd});
+    // places des régiments : leur décalage tourne avec l'ensemble, mais ils gardent leur ordre de gauche à droite
+    const C=G.map(cen),S=C.map(q=>{const o=rot(q.x-c.x,q.y-c.y);return{x:p.x+o.x,y:p.y+o.y}});
+    const lat=(q,r)=>q.x*r.x+q.y*r.y,gi=G.map((g,i)=>i).sort((a,b)=>lat(C[a],r1)-lat(C[b],r1)),si=S.map((s,i)=>i).sort((a,b)=>lat(S[a],r1)-lat(S[b],r1));
+    gi.forEach((k,j)=>{const g=G[k],gc=C[k],sc=S[si[j]],slots=g.map(u=>{const dx=u.x-gc.x,dy=u.y-gc.y,dep=dx*f0.x+dy*f0.y,la=dx*r0.x+dy*r0.y;
+        return{row:Math.round(dep/(SQ*.7)),x:sc.x+f1.x*dep+r1.x*la,y:sc.y+f1.y*dep+r1.y*la,fa:Math.abs(angDiff(u.ang,A0))>.5?F+angDiff(u.ang,A0):F}});
+      const rows=new Map();g.forEach((u,i)=>{const r=slots[i].row;if(!rows.has(r))rows.set(r,{U:[],S:[]});rows.get(r).U.push(u);rows.get(r).S.push(slots[i])});
+      for(const {U,S:SS} of rows.values()){U.sort((a,b)=>lat(a,r1)-lat(b,r1));SS.sort((a,b)=>lat(a,r1)-lat(b,r1));
+        U.forEach((u,i)=>{const q=SS[i];u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,q.x)),y:Math.max(20,Math.min(H-20,q.y)),face:q.fa,run:!!run};u.preview=null})}})}}
+  // attaque : le premier rang de chaque régiment choisit chacun un carré ennemi en face, les autres suivent derrière leur file
+  {const _oa=orderAttack;orderAttack=function(t,run){const arr=mine(),G=regMode(arr);markSolo(arr,!G);
+    if(!G||!t)return _oa.apply(this,arguments);
+    let TG=regOf(t).filter(v=>!v.dead&&!v.routing&&!v.pend);if(!TG.length)TG=[t];const tc=cen(TG);
+    for(const g of G){const gc=cen(g),A=Math.atan2(tc.y-gc.y,tc.x-gc.x),fx=Math.cos(A),fy=Math.sin(A),rx=-fy,ry=fx;
+      const dep=u=>(u.x-gc.x)*fx+(u.y-gc.y)*fy,la=u=>(u.x-gc.x)*rx+(u.y-gc.y)*ry,mx=Math.max(...g.map(dep));
+      const front=g.filter(u=>dep(u)>=mx-SQ*.7).sort((a,b)=>la(a)-la(b)),rest=g.filter(u=>!front.includes(u));
+      const E=[...TG].sort((a,b)=>Math.abs(la(a))-Math.abs(la(b))).slice(0,front.length).sort((a,b)=>la(a)-la(b)),m=E.length,n=front.length;
+      front.forEach((u,i)=>{u.order={type:'attack',target:E[n>1?Math.round(i*(m-1)/(n-1)):Math.floor((m-1)/2)],run:!!run}});
+      for(const u of rest){let b=front[0],bd=1e9;for(const f of front){const q=Math.abs(la(f)-la(u));if(q<bd){bd=q;b=f}}
+        u._pf=b;u._row=Math.max(1,Math.round((mx-dep(u))/FRK));follow(u)}}}}
+  // tracé au clic droit en mode régiment : chaque régiment en bloc, côte à côte, la longueur fixe la largeur des blocs
+  {const _pl=planLine;planLine=function(arr,p0,p1){const G=regMode(arr);LASTREG=!!G;if(!G)return _pl.apply(this,arguments);
+    const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<12)return null;
+    const ux=dx/L,uy=dy/L,face=Math.atan2(-dx,dy),bx=-Math.cos(face),by=-Math.sin(face),gap=6,n=G.length,wR=Math.max(FSP,(L-gap*(n-1))/n);
+    const C=G.map(cen),ord=G.map((g,i)=>i).sort((a,b)=>(C[a].x*ux+C[a].y*uy)-(C[b].x*ux+C[b].y*uy)),out=[];
+    ord.forEach((k,j)=>{const g=G[k],cols=Math.max(1,Math.min(g.length,Math.floor((wR+1.6)/FSP))),o0=j*(wR+gap)+wR/2,byF=[...g].sort((a,b)=>frac(b)-frac(a)),rows=Math.ceil(g.length/cols);
+      for(let r=0;r<rows;r++){const U=byF.slice(r*cols,(r+1)*cols),inR=U.length,SS=[];
+        for(let c=0;c<inR;c++){const o=o0+(c-(inR-1)/2)*FSP;SS.push({x:p0.x+ux*o+bx*r*FRK,y:p0.y+uy*o+by*r*FRK})}
+        U.sort((a,b)=>(a.x*ux+a.y*uy)-(b.x*ux+b.y*uy));U.forEach((u,i)=>out.push({u,x:SS[i].x,y:SS[i].y,face,f:1}))}});
+    return out}}
+  {const _al=applyLine;applyLine=function(plan){try{markSolo(plan.map(q=>q.u),!LASTREG)}catch(e){}return _al.apply(this,arguments)}}
+  // relève automatique côté joueur (toutes les 0,8 s) : un carré frais monte au contact, puis le carré épuisé recule derrière lui
+  const ST={relief:0,swap:0,fill:0};
+  function relieve(){
+    for(const [id,grp] of KIDS){if(grp[0].side!==0)continue;const al=grp.filter(v=>!v.dead&&!v.routing&&!v.pend);if(!al.length)continue;
+      const eng=al.filter(v=>v.contacts.length);for(const v of eng)v._lastE=v.contacts[0];
+      for(const v of al){if(v._solo||v.contacts.length||v._wd)continue;
+        if(v._relieving){const w=v._relieving;if(w.dead||w.routing||!w.contacts.length)v._relieving=null;continue}
+        if(!v._pf)continue;const p=v._pf;
+        if(p.dead||p.routing){ // la tête de file est tombée : on prend sa place
+          ST.fill++;v._pf=null;const e=[p._lastE,...eng.map(f=>f.contacts[0])].find(e=>e&&!e.dead&&!e.routing);
+          v.order=e?{type:'attack',target:e,run:true}:{type:'move',x:p.x,y:p.y,face:p.ang,run:true};continue}
+        follow(v)}
+      for(const v of al)if(v._relieving&&v.contacts.length){const w=v._relieving;v._relieving=null;if(!w.dead&&!w.routing&&w.contacts.length){w._wd=time;w._pf=v;w._row=1;w.order=null;ST.swap++}}
+      if(!eng.length||time<(grp._rcd||0))continue;
+      const weak=eng.filter(v=>!v._solo&&!v._wd&&(frac(v)<.45||v.morale<v.T.morale*.4)&&!al.some(f=>f._relieving===v)).sort((a,b)=>frac(a)-frac(b))[0];if(!weak)continue;
+      const fresh=al.filter(v=>!v._solo&&!v.contacts.length&&!v._wd&&!v._relieving&&frac(v)>.65&&v.morale>v.T.morale*.6&&Math.hypot(v.x-weak.x,v.y-weak.y)<90)
+        .sort((a,b)=>Math.hypot(a.x-weak.x,a.y-weak.y)-Math.hypot(b.x-weak.x,b.y-weak.y))[0];if(!fresh)continue;
+      ST.relief++;fresh._relieving=weak;fresh._pf=null;fresh.order={type:'attack',target:weak.contacts[0],run:true};grp._rcd=time+2.5}}
+  {const _ai2=ai;ai=function(){const r=_ai2.apply(this,arguments);try{relieve()}catch(e){console.warn('relève',e)}return r}}
+  // le carré relevé se dégage à reculons, face à l'ennemi
+  {const _sp2=step;step=function(dt){const r=_sp2.apply(this,arguments);
+    for(const u of units){if(!u._wd||u.dead)continue;if(u.routing||time-u._wd>8){u._wd=0;continue}
+      if(u.contacts.length){u.x-=Math.cos(u.ang)*u.T.speed*.55*dt;u.y-=Math.sin(u.ang)*u.T.speed*.55*dt}else{u._wd=0;follow(u)}}
+    return r}}
+  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
@@ -2702,11 +2797,13 @@ if(!V3D){
   // cartes d'unités : une carte par régiment (total de ses carrés) ; un clic choisit tous ses carrés encore debout
   // (posé au premier dessin : l'interface « Bronze » enveloppe hudTick plus tard, et ses cartes doivent être corrigées après elle)
   let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;
+    try{selected.clear=function(){SELCLR=true;return Set.prototype.clear.call(this)}}catch(e){}
+    {const _rsx=renderSel;renderSel=function(){try{expandSel()}catch(e){}return _rsx.apply(this,arguments)}}
     {const _sh=shoot;shoot=function(u,dt){if(!u.T.ranged||u.routing||u.contacts.length)return;if(u.cd-dt>0){u.cd-=dt;return}return _sh.apply(this,arguments)}}
 const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTop()}catch(e){}try{const bar=document.getElementById('uiCards');if(bar){
-      if(!bar._sq){bar._sq=1;bar.addEventListener('click',e=>{const d=e.target.closest('.ui-uc');if(!d)return;const u=d._u;if(!u)return;
+      if(!bar._sq){bar._sq=1;bar.addEventListener('click',e=>{const d=e.target.closest('.ui-uc');bar._was=!!(d&&d._u&&regOf(d._u).filter(v=>!v.dead&&!v.routing).every(v=>selected.has(v)))},true);bar.addEventListener('click',e=>{const d=e.target.closest('.ui-uc');if(!d)return;const u=d._u;if(!u)return;
           const g=regOf(u).filter(v=>!v.dead&&!v.routing),on=e.shiftKey||e.ctrlKey;if(!on)selected.clear();
-          const all=g.every(v=>selected.has(v));for(const v of g){if(on&&all)selected.delete(v);else selected.add(v)}renderSel()});
+          const all=bar._was;for(const v of g){if(on&&all)selected.delete(v);else selected.add(v)}renderSel()});
         bar.addEventListener('dblclick',e=>{const d=e.target.closest('.ui-uc');if(!d||!d._u)return;const g=regOf(d._u).filter(v=>!v.dead);if(g.length){cam.tx=g.reduce((a,v)=>a+v.x,0)/g.length;cam.ty=g.reduce((a,v)=>a+v.y,0)/g.length}})}
       const seen=new Set();
       for(const d of bar.querySelectorAll('.ui-uc')){const t=d.title;
