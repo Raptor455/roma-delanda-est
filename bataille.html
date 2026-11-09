@@ -2326,7 +2326,7 @@ if(!V3D){
   function drawClashes(){
     for(const [u,e] of CLASH){if(u.dead||e.dead)continue;
       const [ax,ay]=scr(u.x,u.y),[bx,by]=scr(e.x,e.y);let dx=bx-ax,dy=by-ay;const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
-      const L=Math.max(11,Math.min(22,Math.min(u.w,e.w)/NSQ*s2*.9)),n=Math.max(1,Math.min(4,Math.round(Math.min(u.w,e.w)*s2/34))),wa=weaponOf(u),wb=weaponOf(e);
+      const L=Math.max(11,Math.min(22,Math.min(u.w,e.w)/(u.reg!=null?1:NSQ)*s2*.9)),n=Math.max(1,Math.min(4,Math.round(Math.min(u.w,e.w)*s2/34))),wa=weaponOf(u),wb=weaponOf(e);
       const [mx,my]=scr((u.x+e.x)/2,(u.y+e.y)/2),span=Math.min(u.w,e.w)*s2*.85;
       for(let i=0;i<n;i++){const h=Math.sin(u.id*12.9+e.id*7.3+i*4.1)*43758.5,hr=h-Math.floor(h),o=(n>1?(i/(n-1)-.5)*span:0)+(hr-.5)*span*.12,dep=(hr-.5)*L*.5,cx=mx-dy*o+dx*dep,cy=my+dx*o+dy*dep;
         // cycle : on arme, on frappe, les fers se croisent, on recule
@@ -2342,7 +2342,7 @@ if(!V3D){
         if(f>.5&&f<.62){const k=1-Math.abs(f-.56)/.06;g2.fillStyle=`rgba(255,250,235,${.85*k})`;g2.beginPath();g2.arc(cx,cy,2+2*k,0,6.283);g2.fill()}}}
   }
   // ---- régiment en bloc serré : 5 files de front, plusieurs rangs (infanterie 3, phalange 4, cavalerie 2) ----
-  function gridOf(u){if(u._gd)return u._gd;const k=u.T.kind;let C=5,R=k==='inf'?(u.T.d>=30?4:3):k==='eleph'?1:2;if(k==='eleph')C=3;return u._gd={C,R,N:C*R}}
+  function gridOf(u){if(u._gd)return u._gd;if(u.reg!=null)return u._gd={C:1,R:1,N:1};const k=u.T.kind;let C=5,R=k==='inf'?(u.T.d>=30?4:3):k==='eleph'?1:2;if(k==='eleph')C=3;return u._gd={C,R,N:C*R}}
   // place d'une case, en mètres dans le repère du régiment (+x = front, y = largeur) ; rang 0 = premier rang
   function sqTarget(u,t){const {C,R}=gridOf(u),m=u.w/C,sk=u.T.kind==='skirm',col=t%C,row=Math.floor(t/C);
     return [((R-1)/2-row)*m*(sk?1.3:1),(col-(C-1)/2+(sk&&row%2?.5:0))*m*(sk?1.12:1)]}
@@ -2355,10 +2355,10 @@ if(!V3D){
     if(u._lx==null){u._lx=u.x;u._ly=u.y}let dux=(u.x-u._lx)*.8,duy=(u.y-u._ly)*.8;u._lx=u.x;u._ly=u.y;if(Math.abs(dux)+Math.abs(duy)>u.w){dux=0;duy=0}
     for(let t=0;t<N;t++){let [lx,ly]=sqTarget(u,t);const row=Math.floor(t/C),q=u._sq[t]||(u._sq[t]={x:NaN,y:0,a:u.ang,r:Math.random(),gx:0,gy:0,nx:0,ny:0,nt:0,sp:1});
       q.nt-=dt;if(q.nt<=0){const front=fight&&row===0,amp=front?.2:fight?.1:u.moving?.09:.035;
-        q.gx=(Math.random()-.5)*2*m*amp+(front?m*(.15+Math.random()*.35):0);q.gy=(Math.random()-.5)*2*m*amp*.5;
+        q.gx=(Math.random()-.5)*2*m*amp+(front?m*(N>1?.15+Math.random()*.35:.04+Math.random()*.16):0);q.gy=(Math.random()-.5)*2*m*amp*.5;
         q.nt=front?.25+Math.random()*.6:.6+Math.random()*1.4;q.sp=u.moving?.6+Math.random()*.8:1}
       const kn=1-Math.exp(-dt*(fight&&row===0?5:1.6));q.nx+=(q.gx-q.nx)*kn;q.ny+=(q.gy-q.ny)*kn;lx+=q.nx;ly+=q.ny;
-      if(fight)lx+=row===0?m*.25:m*.12;                                          // les rangs se serrent vers l'ennemi
+      if(fight)lx+=N>1?(row===0?m*.25:m*.12):m*.1;                                          // les rangs se serrent vers l'ennemi
       if(u.routing){const k2=Math.min(3,u.routeT||0),h=Math.sin(t*12.9+u.id*7.7)*43758.5,hr=h-Math.floor(h);lx+=(hr-.5)*m*1.6*k2;ly+=(Math.cos(t*3.1+u.id)*.5)*m*1.2*k2}
       const tx=u.x+lx*c-ly*s,ty=u.y+lx*s+ly*c;
       if(!(q.x===q.x)||Math.hypot(tx-q.x,ty-q.y)>u.w*2.5){q.x=tx;q.y=ty;q.a=u.ang;continue}
@@ -2376,7 +2376,7 @@ if(!V3D){
     const [px,py]=scr(u.x,u.y);if(px<-160||py<-160||px>SW+160||py>SH+160){u._sq=null;return}
     updSquares(u);
     const {C,R,N}=gridOf(u),k=u.T.kind,P=PAL[u.side],E=PAL[1-u.side],sel=selected.has(u),hov=u===hover,fr=frac(u),CR=cracksOf(u),ord=fallOrder(u);
-    const z=Math.max(6,u.w/C*s2*.9)*(k==='skirm'?.78:1);
+    const z=Math.max(5,u.w/C*s2*.92)*(k==='skirm'&&N>1?.78:1);
     // cases encore debout ; celle qui va tomber porte les fissures les plus profondes
     const nA=Math.max(0,Math.ceil(fr*N-1e-6)),local=1-(fr*N-(nA-1)),gen=(1-fr)*.5;
     const gone=new Set(ord.slice(0,N-nA)),next=ord[N-nA];
@@ -2482,12 +2482,111 @@ if(!V3D){
     drawOrders();
     const order=units.filter(u=>!u.dead&&!u.pend).sort((a,b)=>(a.routing?0:1)-(b.routing?0:1));
     {const d=Math.min(.1,Math.max(0,rt-fxT));fxT=rt;FDT=d;stepFx(d)}
+    for(const u of units){if(u.reg==null||!u.dead||u.pend||u._shat||!u._sq||!u._sq[0])continue;u._shat=1;const q=u._sq[0],z=Math.max(5,u.w*s2*.92);
+      for(let i=0;i<10;i++){const an=Math.random()*6.283,sp=(40+Math.random()*60)/s2;fx('shard',q.x,q.y,{vx:Math.cos(an)*sp,vy:Math.sin(an)*sp,life:.8+Math.random()*.6,r:Math.max(1.6,z*.18)*(.6+Math.random()*.8),c:PAL[u.side].blk,rot:an,vr:(Math.random()-.5)*12})}
+      fx('dust',q.x,q.y,{life:1.2,r:u.w*.5,a:.28})}
     drawFx(true);CLASH=[];for(const u of order)drawUnit(u);drawClashes();
     drawFx(false);
     drawProjs();drawBanners();
     g2.restore();
   }
-  renderer.render=function(){draw2d()};
+  /* -- carrés indépendants : chaque régiment se partage en 5 carrés (1/5 des hommes, 1/5 du front) que l'on sélectionne
+        et déplace un à un. C'est au joueur (et à l'IA) d'échelonner ses rangs pour relever les carrés qui faiblissent.
+        Le régiment reste un tout pour la campagne (pertes additionnées), les cartes d'unités et les corps. -- */
+  const NSPL=5;
+  const T5=new Map();const tOf=T=>{let t=T5.get(T);if(!t){t=Object.assign({},T,{men:T.men/NSPL,w:T.w/NSPL,d:Math.max(T.w/NSPL,Math.min(T.d,T.w/NSPL*1.1))});T5.set(T,t);T5.set(t,t)}return t};
+  const KIDS=new Map(); // id du régiment → ses carrés (le premier est l'unité d'origine)
+  const regOf=u=>KIDS.get(u.reg!=null?u.reg:u.id)||[u];
+  window.__carres={regOf,get regs(){return KIDS}};
+  function splitAll(){
+    if(units._split)return;units._split=true;KIDS.clear();
+    const list=units.slice();
+    for(const u of list){if(u.reg!=null)continue;
+      const T0=u.T,men=u.men,w5=T0.w/NSPL,c=Math.cos(u.ang),s=Math.sin(u.ang),px=-s,py=c,leg=u.leg;
+      const ai=u.side===1&&T0.kind==='inf';                  // l'IA aligne 3 carrés et en garde 2 en relève derrière
+      const slots=ai?[[-1,0],[-.5,-1],[0,0],[.5,-1],[1,0]]:[[-2,0],[-1,0],[0,0],[1,0],[2,0]];
+      const T1=tOf(T0),grp=[];
+      for(let k=0;k<NSPL;k++){const v=k===0?u:Object.assign({},u,{id:uid++,contacts:[],order:null,preview:null,slots:makeSlots(T1),ib:null,tag:null,_sq:null,_cr:null,_ord:null,_gd:null,_nA:null,_men:null,_lx:null,_ly:null,genO:null,leg:null});
+        if(k>0)delete v.kills;
+        v.T=T1;v.men=men/NSPL;v.w=T1.w;v.dBase=T1.d;v.dd=T1.d*(.45+.55*frac(v));v.reg=u.id;v.rk=k;
+        const [sx,sr]=slots[(k+2)%NSPL],back=sr*(T1.d+6);
+        v.x=u.x+px*sx*w5*1.04+c*back;v.y=u.y+py*sx*w5*1.04+s*back;v.res=ai&&sr<0;v._sx=sx;
+        if(u.order&&u.order.type==='move'&&k>0)v.order=Object.assign({},u.order,{x:u.order.x+(v.x-u.x),y:u.order.y+(v.y-u.y)});
+        grp.push(v);if(k>0){units.push(v);
+          // les morts infligés par un carré comptent pour tout le régiment
+          Object.defineProperty(v,'kills',{get(){return u.kills||0},set(x){u.kills=x},configurable:true})}}
+      if(leg)u.leg=leg;
+      u.order=u.order&&u.order.type==='move'?Object.assign({},u.order,{x:u.order.x+(u.x-u.x)}):u.order;
+      KIDS.set(u.id,grp)}
+    // corps de l'armée : tous les carrés du régiment en font partie
+    try{for(const s of [0,1])for(const o of (window.__echelle&&window.__echelle.corps||[[],[]])[s]){const add=[];for(const u of o.us)for(const v of regOf(u))if(v!==u)add.push(v);o.us.push(...add)}}catch(e){}
+  }
+  // la première construction des effets du déploiement déclenche le partage, puis on construit ceux des nouveaux carrés
+  {const _mf=makeFx;makeFx=function(u){if(units&&!units._split&&!REVUE&&!REVUE_P){splitAll();const r=_mf.apply(this,arguments);for(const v of units)if(v.reg!=null&&v.rk>0&&!v._fx){v._fx=1;_mf(v)}return r}return _mf.apply(this,arguments)}}
+  {const _st=setup;setup=function(){KIDS.clear();return _st.apply(this,arguments)}}
+  // pertes : chaque carré ne compte que pour 1/5 du régiment (mêlée comme traits)
+  {const _h=hurt;hurt=function(e,cas){return _h.call(this,e,e&&e.reg!=null?cas/NSPL:cas)}}
+  // une déroute n'ébranle les voisins que comme un cinquième de régiment
+  {const _r=rout;rout=function(u){if(!u||u.reg==null)return _r.apply(this,arguments);
+    const near=units.filter(o=>o!==u&&o.side===u.side&&!o.dead&&!o.routing&&Math.hypot(o.x-u.x,o.y-u.y)<190*G);
+    const r=_r.apply(this,arguments);for(const o of near)if(!o.routing)o.morale+=8*(1-1/NSPL);return r}}
+  // renforts : les carrés arrivent avec leur régiment, côte à côte
+  try{const _ar=arrive;arrive=function(r){const was=r&&r.done,res=_ar.apply(this,arguments);if(!was&&r)for(const u of r.us){const c=Math.cos(u.ang),s=Math.sin(u.ang);
+      regOf(u).forEach((v,k)=>{if(v===u)return;const sx=(k<3?k:k-NSPL);v.x=u.x-s*sx*v.w*1.04;v.y=u.y+c*sx*v.w*1.04;v.ang=u.ang;v.dead=false;v.pend=null;v.dirty=true;v.v=0;
+        if(u.order)v.order=Object.assign({},u.order,{x:u.order.x+(v.x-u.x),y:u.order.y+(v.y-u.y)})})}return res};if(window.__echelle)window.__echelle.arrive=arrive}catch(e){}
+  // retour vers la campagne : un régiment = la somme de ses carrés
+  {const _cr=campReturn;campReturn=function(win){
+    for(const [id,grp] of KIDS){const u=grp[0];if(u.ci===undefined)continue;let m=0;
+      for(const v of grp)m+=v.pend?v.men:v.dead?0:v.men*(v.fled?.7:v.routing?.85:1);
+      u.men=m;u.dead=m<=0;u.fled=false;u.routing=false;u.T=Object.assign({},u.T,{men:u.T.men*NSPL});for(const v of grp)if(v!==u)delete v.ci}
+    return _cr.apply(this,arguments)}}
+  // IA : les carrés de relève suivent leur régiment et montent quand un carré du premier rang plie
+  {const _ai=ai;ai=function(){const r=_ai.apply(this,arguments);
+    for(const [id,grp] of KIDS){if(grp[0].side!==1)continue;const front=grp.filter(v=>!v.res&&!v.dead&&!v.routing);
+      for(const v of grp){if(!v.res||v.dead||v.routing)continue;
+        const weak=grp.find(f=>!f.res&&(f.dead||f.routing||frac(f)<.5||f.morale<f.T.morale*.35));
+        if(v.contacts.length||!front.length||weak){v.res=false;
+          const tg=weak&&!weak.dead?(weak.contacts[0]||null):null;
+          if(weak&&!weak.dead&&!weak.routing){v.order={type:'move',x:weak.x-Math.cos(weak.ang)*4,y:weak.y-Math.sin(weak.ang)*4,face:weak.ang,run:true};if(tg)v.order={type:'attack',target:tg,run:true}}
+          else if(weak){const f=front.find(f=>f.contacts.length)||front[0];v.order=f&&f.contacts[0]?{type:'attack',target:f.contacts[0],run:true}:{type:'move',x:weak.x,y:weak.y,face:weak.ang,run:true}}
+          continue}
+        const cx=front.reduce((a,f)=>a+f.x,0)/front.length,cy=front.reduce((a,f)=>a+f.y,0)/front.length,a=front[0].ang,k=v._sx||0;
+        v.order={type:'move',x:cx-Math.cos(a)*(v.T.d+6)-Math.sin(a)*k*v.w*1.04,y:cy-Math.sin(a)*(v.T.d+6)+Math.cos(a)*k*v.w*1.04,face:a}}}
+    return r}}
+  // tracé au clic droit : la longueur de la ligne fixe le nombre de carrés de front, le reste se range en rangs derrière
+  planLine=function(arr,p0,p1){
+    const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<12)return null;
+    const ux=dx/L,uy=dy/L,face=Math.atan2(-dx,dy),bx=-Math.cos(face),by=-Math.sin(face);
+    const sorted=[...arr].sort((a,b)=>(a.x*ux+a.y*uy)-(b.x*ux+b.y*uy)),wM=Math.max(...sorted.map(u=>u.T.w)),dM=Math.max(...sorted.map(u=>u.T.d)),gap=1.5;
+    const cols=Math.max(1,Math.min(sorted.length,Math.floor((L+gap)/(wM+gap)))),rows=Math.ceil(sorted.length/cols);
+    // premier rang : les carrés les plus frais ; derrière, ceux qui ont souffert
+    const byFresh=[...sorted].sort((a,b)=>frac(b)-frac(a)),out=[];
+    for(let i=0;i<byFresh.length;i++){const row=Math.floor(i/cols),inRow=Math.min(cols,byFresh.length-row*cols),col=i%cols,o=(col-(inRow-1)/2)*(wM+gap)+L/2;
+      out.push({u:byFresh[i],x:p0.x+ux*o+bx*row*(dM+4),y:p0.y+uy*o+by*row*(dM+4),face,f:1})}
+    // chaque carré prend la place libre la plus proche dans son rang (moins de croisements)
+    for(let r=0;r<rows;r++){const P=out.filter((q,i)=>Math.floor(i/cols)===r),U=P.map(q=>q.u).sort((a,b)=>(a.x*ux+a.y*uy)-(b.x*ux+b.y*uy)),S=P.map(q=>[q.x,q.y]).sort((a,b)=>(a[0]*ux+a[1]*uy)-(b[0]*ux+b[1]*uy));P.forEach((q,i)=>{q.u=U[i];q.x=S[i][0];q.y=S[i][1]})}
+    return out};
+  {const _rs=renderSel;renderSel=function(){const r=_rs.apply(this,arguments);try{const a=[...selected];if(a.length>1&&a.every(u=>u.reg!=null)){const b=$('selBody');if(b)b.innerHTML=b.innerHTML.replace(/(\d+) régiments/,'$1 carrés').replace(/(\d+) ×/g,'$1 carrés ×')}}catch(e){}return r}}
+  // étiquettes : seulement pour les carrés choisis ou survolés (les fissures montrent déjà l'usure)
+  {const _ut=updateTags;updateTags=function(){const r=_ut.apply(this,arguments);for(const u of units)if(u.tag&&!u.tag.hidden&&!(selected.has(u)||u===hover))u.tag.hidden=true;return r}}
+  // cartes d'unités : une carte par régiment (total des 5 carrés) ; un clic choisit tous ses carrés encore debout
+  // (posé au premier dessin : l'interface « Bronze » enveloppe hudTick plus tard, et ses cartes doivent être corrigées après elle)
+  let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{const bar=document.getElementById('uiCards');if(bar){
+      if(!bar._sq){bar._sq=1;bar.addEventListener('click',e=>{const d=e.target.closest('.ui-uc');if(!d)return;const u=d._u;if(!u)return;
+          const g=regOf(u).filter(v=>!v.dead&&!v.routing),on=e.shiftKey||e.ctrlKey;if(!on)selected.clear();
+          const all=g.every(v=>selected.has(v));for(const v of g){if(on&&all)selected.delete(v);else selected.add(v)}renderSel()});
+        bar.addEventListener('dblclick',e=>{const d=e.target.closest('.ui-uc');if(!d||!d._u)return;const g=regOf(d._u).filter(v=>!v.dead);if(g.length){cam.tx=g.reduce((a,v)=>a+v.x,0)/g.length;cam.ty=g.reduce((a,v)=>a+v.y,0)/g.length}})}
+      const seen=new Set();
+      for(const d of bar.querySelectorAll('.ui-uc')){const t=d.title;
+        if(!d._u){const u=units.find(x=>x.side===0&&x.reg===x.id&&(x.label+' · '+x.T.name)===t&&!seen.has(x.id))||units.find(x=>x.side===0&&(x.label+' · '+x.T.name)===t&&!seen.has(x.reg));d._u=u||null}
+        const u=d._u;if(!u||seen.has(u.reg!=null?u.reg:u.id)){d.style.display='none';continue}seen.add(u.reg!=null?u.reg:u.id);d.style.display='';
+        const g=regOf(u),alive=g.filter(v=>!v.dead),men=alive.reduce((a,v)=>a+v.men,0),b=d.querySelector('b');if(b)b.textContent=Math.ceil(men);
+        const gi=d.querySelectorAll('.g i');if(gi[0])gi[0].style.width=Math.min(100,men/(u.T.men*NSPL)*100)+'%';
+        if(gi[1]&&alive.length){const m=alive.reduce((a,v)=>a+Math.max(0,v.morale/v.T.morale),0)/alive.length;gi[1].style.width=m*100+'%';gi[1].style.background=m>.5?'#9fd18c':m>.25?'#e0883c':'#d24a3a'}
+        d.classList.toggle('on',g.some(v=>selected.has(v)));d.classList.toggle('dead',!alive.length);d.classList.toggle('rout',alive.length>0&&alive.every(v=>v.routing));
+        d.classList.toggle('fight',g.some(v=>!v.dead&&!v.routing&&v.contacts.length));
+        const n=alive.length;d.title=t.split(' · carrés')[0]+(n<NSPL?` · carrés : ${n}/${NSPL}`:'')}}}catch(e){}return r}}
+  renderer.render=function(){hookCards();draw2d()};
   // hors campagne, la vue de départ montre tout le front
   let zoomed=false;const _su=setup;setup=function(){const r=_su.apply(this,arguments);if(!INTRO&&!zoomed){zoomed=true;cam.dist*=.85}return r};
   // le sol se prépare au premier affichage (après l'arrivée éventuelle de l'image de la campagne)
@@ -2902,7 +3001,8 @@ window.__son=SON;
    Les régiments légendaires de la campagne arrivent avec leur surnom et leur étendard (c.leg={n,c,svg}) :
    moral +20 %, étendard dessiné au-dessus du régiment ; leur déroute ébranle les voisins.
    Chaque régiment compte les morts qu'il inflige (mêlée et traits) ; le compte part vers la campagne
-   (message « exploits ») juste avant le résultat. Source : /mnt/project-files/futur/legendes-bataille.js. */
+   (message « exploits ») juste avant le résultat. Bataille 2D en carrés (v131) : le régiment garde surnom et étendard
+   sur son premier carré ; l'étendard suit un carré voisin du centre (ou le plus proche du centre), le moral +20 % vaut pour les 5 carrés. Source : /mnt/project-files/futur/legendes-bataille.js. */
 {
   let CURA=null;
   {const _m=melee;melee=function(u){const p=CURA;CURA=u;try{return _m.apply(this,arguments)}finally{CURA=p}}}
@@ -2910,9 +3010,15 @@ window.__son=SON;
   {const _l=landProj;landProj=function(p){const q=CURA;CURA=p&&p.srcU||null;try{return _l.apply(this,arguments)}finally{CURA=q}}}
   {const _h=hurt;hurt=function(e,cas){const a=CURA,m0=e&&e.men;const r=_h.apply(this,arguments);if(a&&e&&a.side!==e.side&&m0>e.men)a.kills=(a.kills||0)+(m0-e.men);return r}}
   // déroute d'un régiment légendaire : les voisins vacillent
-  {const _r=rout;rout=function(u){const was=u&&u.routing;const r=_r.apply(this,arguments);
-    if(u&&u.leg&&!was){for(const o of units)if(o!==u&&o.side===u.side&&!o.dead&&!o.routing&&Math.hypot(o.x-u.x,o.y-u.y)<260*G)o.morale-=6;
-      try{if(typeof banner==='function')banner(u.side===0?`${u.leg.n} plient ! Leur étendard recule.`:`${u.leg.n} plient devant vous !`,u.side===0?'#e0a060':'#e8c46a')}catch(e){}}
+  // régiment découpé en carrés (bataille 2D) : ses carrés, et le premier qui porte surnom et étendard
+  const grpOf=u=>{try{return window.__carres?window.__carres.regOf(u):[u]}catch(e){return [u]}};
+  const legOf=u=>u&&(u.leg||(u.reg!=null?(grpOf(u)[0]||{}).leg:null));
+  {const _r=rout;rout=function(u){const was=u&&u.routing;const r=_r.apply(this,arguments);const L=legOf(u);
+    if(L&&!was){const G5=grpOf(u),k=1/Math.max(1,G5.length);
+      for(const o of units)if(!G5.includes(o)&&o.side===u.side&&!o.dead&&!o.routing&&Math.hypot(o.x-u.x,o.y-u.y)<260*G)o.morale-=6*k;
+      // un seul message, quand la moitié des carrés a plié
+      const own=G5[0]||u;if(!own._lgR&&G5.filter(v=>v.routing||v.dead).length*2>=G5.length){own._lgR=1;
+        try{if(typeof banner==='function')banner(u.side===0?`${L.n} plient ! Leur étendard recule.`:`${L.n} plient devant vous !`,u.side===0?'#e0a060':'#e8c46a')}catch(e){}}}
     return r}}
   // surnom, moral et étendard à l'arrivée
   const imgs=new Map();
@@ -2926,12 +3032,16 @@ window.__son=SON;
   // étendards au-dessus des régiments (vue de carte)
   function drawBanners(){const cv=document.getElementById('map2d');if(!cv||cv.style.display==='none'||!units)return;const B=window.__brume;
     let g=null,DPR=1;
-    for(const u of units){if(!u.leg)continue;if(!u._lgl){u._lgl=1;if(!String(u.label).includes(u.leg.n))u.label=u.leg.n+(/^Garde de /.test(u.label)?` (${u.label.replace(/^G/,'g')})`:'');u.dirty=true}
-      if(u.dead||u.fled||u.pend)continue;if(B&&B.on&&u.side!==0&&B.seenBy&&!B.seenBy(0,u))continue;
+    for(const u of units){if(!u.leg)continue;const G5=grpOf(u);
+      if(!u._lgl){u._lgl=1;const nm=String(u.label).includes(u.leg.n)?u.label:u.leg.n+(/^Garde de /.test(u.label)?` (${u.label.replace(/^G/,'g')})`:'');for(const v of G5){v.label=nm;v.dirty=true}}
+      // le porte-étendard : un carré à côté du centre (le général s'y tient), sinon le carré debout le plus proche du centre
+      const live=G5.filter(v=>!v.dead&&!v.fled&&!v.pend);if(!live.length)continue;
+      let q=live.length>1?live.find(v=>v.rk===1)||live.find(v=>v.rk===4)||null:live[0];if(!q){const cx=live.reduce((a,v)=>a+v.x,0)/live.length,cy=live.reduce((a,v)=>a+v.y,0)/live.length;q=live.reduce((b,v)=>Math.hypot(v.x-cx,v.y-cy)<Math.hypot(b.x-cx,b.y-cy)?v:b)}
+      if(B&&B.on&&q.side!==0&&B.seenBy&&!B.seenBy(0,q))continue;
       const im=legImg(u.leg);if(!im||!im.complete||!im.naturalWidth)continue;
       if(!g){g=cv.getContext('2d');DPR=cv.width/(cv.clientWidth||1);g.save();g.setTransform(DPR,0,0,DPR,0,0)}
-      const hx=-Math.sin(u.ang)*u.w*.5,hy=Math.cos(u.ang)*u.w*.5,e1=toScreen(u.x+hx,u.y+hy,0),e2=toScreen(u.x-hx,u.y-hy,0),p=e1.x>e2.x?e1:e2;if(p.ok===false)continue;const h=Math.max(30,Math.min(48,32*Math.sqrt(900*Math.sqrt(G)/Math.max(300,cam.dist)))),w=h/1.4;
-      g.globalAlpha=u.routing?.55:1;g.drawImage(im,p.x-w*.5+4,p.y-h+4,w,h)}
+      const p=toScreen(q.x,q.y,0);if(p.ok===false)continue;const h=Math.max(30,Math.min(48,32*Math.sqrt(900*Math.sqrt(G)/Math.max(300,cam.dist)))),w=h/1.4;
+      g.globalAlpha=q.routing?.55:1;g.drawImage(im,p.x-w*.5+2,p.y-h-4,w,h)}
     if(g){g.globalAlpha=1;g.restore()}}
   {const _rr=renderer.render;renderer.render=function(){const r=_rr.apply(this,arguments);try{drawBanners()}catch(e){}return r}}
   // morts infligés, envoyés à la campagne avant le résultat
@@ -2940,7 +3050,7 @@ window.__son=SON;
       for(const u of units){if(u.ci==null)continue;const L=u.side===0?p:e;if(u.ci<L.length)L[u.ci]=Math.round(u.kills||0)}
       window.parent.postMessage({bellum:'exploits',p,e},'*')}}catch(e){console.warn(e)}
     return _cr.apply(this,arguments)}}
-  window.__lege={drawBanners,tagLeg,pos:u=>toScreen(u.x,u.y,0)};
+  window.__lege={drawBanners,tagLeg,legOf,pos:u=>toScreen(u.x,u.y,0)};
 }
 /* ================= FIN RÉGIMENTS LÉGENDAIRES (champ de bataille) ================= */
 /* ================= BOUCLE ================= */
