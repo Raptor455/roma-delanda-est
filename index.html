@@ -10756,7 +10756,23 @@ function garStart(){if(!S||S.gar0)return;S.gar0=1;if(S.day>=1)return;
     f.at=n.i;f.x=n.anch[0];f.y=n.anch[1];f.inG=true;f.task=null}}
 {const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);try{garStart()}catch(e){console.error(e)}return r}}
 {const _dS=daily;daily=function(d){try{garStart()}catch(e){console.error(e)}return _dS.apply(this,arguments)}}
-window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- ÉCHELLE DES HOMMES (9 nov., choix de Baptiste « ×4 ») : un régiment = 5 carrés de bataille ; un carré = 480 fantassins,
+   240 cavaliers ou tirailleurs, 4 éléphants. Seuls les effectifs changent : coûts, entretien, force relative restent par régiment.
+   La bataille garde son ancienne échelle de calcul : on lui envoie les hommes divisés par r.ms, avec r.ms pour l'affichage,
+   et on remultiplie les hommes qui reviennent. UT[k].m0 = ancien effectif. ---- */
+const MEN_K=4,ELE_MEN=20;
+function menScale(){for(const k in UT){const t=UT[k];if(!t||t.m0!=null)continue;t.m0=t.men;t.men=t.k==='eleph'?ELE_MEN:t.men*MEN_K}}
+const menMs=t=>{const T=UT[t];return T&&T.m0?T.men/T.m0:1};
+menScale();
+{const _ng=newGame;newGame=function(){menScale();const r=_ng.apply(this,arguments);try{if(S)S.men4=1}catch(e){}return r}}
+{const _al=afterLoad;afterLoad=function(){try{menScale();if(S&&!S.men4){S.men4=1;for(const a of S.armies||[])for(const u of a.units||[])u.men*=menMs(u.t)}}catch(e){console.error(e)}return _al.apply(this,arguments)}}
+function menPay(payload){const b=payload&&payload.b;if(b&&Array.isArray(b.p)&&!b.ms){b.ms=1;const M={p:[],e:[]};
+  for(const k of ['p','e'])for(const r of b[k]||[]){const m=menMs(r.t);r.ms=m;r.men=Math.round(r.men/m);M[k].push(m)}if(S&&S.cur)S.cur._ms=M}}
+{const _dv=dive;dive=function(payload){try{menPay(payload)}catch(e){console.error(e)}return _dv.apply(this,arguments)}}
+// retour de bataille : les hommes reviennent à l'échelle de la campagne (avant tous les autres écouteurs du retour)
+window.addEventListener('message',ev=>{const d=ev.data;if(!d||d.bellum!=='retour'||!d.res||d.res._s4||!S||!S.cur||!S.cur._ms)return;const M=S.cur._ms;d.res._s4=1;
+  for(const [k,L] of [['p',d.res.p],['e',d.res.e]])if(Array.isArray(L))L.forEach((v,i)=>{if(typeof v==='number')L[i]=Math.round(v*(M[k][i]||1))})},true);
+window.__genie={menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans

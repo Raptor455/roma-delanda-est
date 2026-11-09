@@ -2628,11 +2628,79 @@ if(!V3D){
     for(let r=0;r<rows;r++){const P=out.filter((q,i)=>Math.floor(i/cols)===r),U=P.map(q=>q.u).sort((a,b)=>(a.x*ux+a.y*uy)-(b.x*ux+b.y*uy)),S=P.map(q=>[q.x,q.y]).sort((a,b)=>(a[0]*ux+a[1]*uy)-(b[0]*ux+b[1]*uy));P.forEach((q,i)=>{q.u=U[i];q.x=S[i][0];q.y=S[i][1]})}
     return out};
   {const _rs=renderSel;renderSel=function(){const r=_rs.apply(this,arguments);try{const a=[...selected];if(a.length>1&&a.every(u=>u.reg!=null)){const b=$('selBody');if(b)b.innerHTML=b.innerHTML.replace(/(\d+) régiments/,'$1 carrés').replace(/(\d+) ×/g,'$1 carrés ×')}}catch(e){}return r}}
+  /* -- formations toutes faites : boutons du panneau de sélection, appliqués aux carrés choisis, là où ils sont,
+        face à leur direction moyenne. Les carrés les plus frais vont devant. -- */
+  const FSP=SQ+1.6,FRK=SQ+3;
+  // chaque générateur rend des places {x (le long du front), y (profondeur, + vers l'arrière), r (rang), a (écart d'orientation)}
+  const FORMS=[
+    ['ligne','Ligne','Ligne : un seul rang, le front le plus large',n=>grid(n,1)],
+    ['rangs2','2 rangs','Deux rangs : la seconde ligne relève la première',n=>grid(n,2)],
+    ['rangs3','3 rangs','Trois rangs : front étroit et profond',n=>grid(n,3)],
+    ['croissant','Croissant','Croissant : le centre bombé vers l\'ennemi, les ailes en retrait',n=>arc(n,1)],
+    ['tenaille','Tenaille','Tenaille (arc rentrant) : les ailes avancées pour envelopper',n=>arc(n,-1)],
+    ['coin','Coin','Coin : pointe en avant pour percer',n=>wedge(n)],
+    ['damier','Damier','Damier : deux rangs en quinconce, des passages pour la relève',n=>checker(n)],
+    ['orbe','Orbe','Orbe : cercle fermé, face à toutes les directions',n=>ring(n)],
+    ['colonne','Colonne','Colonne : deux de front, pour marcher vite',n=>grid(n,Math.ceil(n/2))]];
+  function grid(n,R){R=Math.max(1,Math.min(n,R));const cols=Math.ceil(n/R),P=[];
+    for(let i=0;i<n;i++){const r=Math.floor(i/cols),inR=Math.min(cols,n-r*cols),c=i%cols;P.push({x:(c-(inR-1)/2)*FSP,y:r*FRK,r,a:0})}return P}
+  function arc(n,dir){const R=n>14?2:1,cols=Math.ceil(n/R),span=Math.PI*.62,Rr=Math.max(cols*FSP/span,FSP*1.5),P=[];
+    for(let i=0;i<n;i++){const r=Math.floor(i/cols),inR=Math.min(cols,n-r*cols),c=i%cols,th=inR>1?(c/(inR-1)-.5)*span*(inR/cols):0,rr=Rr+r*FRK*dir*-1;
+      P.push({x:Math.sin(th)*rr,y:dir*(Rr-Math.cos(th)*rr)+r*FRK*(dir>0?0:0),r,a:dir*th})}return P}
+  function wedge(n){const P=[];let r=0,i=0;while(i<n){const k=Math.min(2*r+1,n-i);for(let c=0;c<k;c++,i++)P.push({x:(c-(k-1)/2)*FSP,y:r*FRK,r,a:0});r++}return P}
+  function checker(n){const P=[],c0=Math.ceil(n/2);for(let i=0;i<n;i++){const r=i<c0?0:1,c=r?i-c0:i,m=r?n-c0:c0;P.push({x:(c-(m-1)/2)*FSP*2+(r?FSP*.0:0)+(r&&m===c0?FSP:0)-(r&&m<c0?0:0),y:r*FRK,r,a:0})}
+    // second rang décalé d'une demi-maille par rapport au premier
+    const row1=P.filter(p=>p.r===1);if(row1.length){const m=row1.length;row1.forEach((p,c)=>{p.x=(c-(m-1)/2)*FSP*2+(m===c0?FSP:0)})}return P}
+  function ring(n){const R=Math.max(FSP*1.2,n*FSP/(2*Math.PI)),P=[];for(let i=0;i<n;i++){const f=i/n*2*Math.PI;P.push({x:Math.sin(f)*R,y:-Math.cos(f)*R,r:0,a:f})}return P}
+  function applyForm(key){
+    const arr=mine();if(arr.length<2)return;const F=FORMS.find(f=>f[0]===key);if(!F)return;
+    let sx=0,sy=0;for(const u of arr){sx+=Math.cos(u.ang);sy+=Math.sin(u.ang)}const A=Math.atan2(sy,sx);
+    const cx=arr.reduce((a,u)=>a+u.x,0)/arr.length,cy=arr.reduce((a,u)=>a+u.y,0)/arr.length;
+    const fx=Math.cos(A),fy=Math.sin(A),rx=-fy,ry=fx;
+    const P=F[3](arr.length),mx=P.reduce((a,p)=>a+p.x,0)/P.length,my=P.reduce((a,p)=>a+p.y,0)/P.length;
+    // rangs : les plus frais devant ; dans un rang, chacun prend la place la plus proche de son côté (moins de croisements)
+    const ranks=[...new Set(P.map(p=>p.r))].sort((a,b)=>a-b),pool=[...arr].sort((a,b)=>frac(b)-frac(a));
+    for(const r of ranks){const S=P.filter(p=>p.r===r).sort((a,b)=>a.x-b.x||a.y-b.y),U=pool.splice(0,S.length).sort((a,b)=>((a.x-cx)*rx+(a.y-cy)*ry)-((b.x-cx)*rx+(b.y-cy)*ry));
+      S.forEach((p,i)=>{const u=U[i];if(!u)return;const x=p.x-mx,y=p.y-my;
+        u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,cx+rx*x-fx*y)),y:Math.max(20,Math.min(H-20,cy+ry*x-fy*y)),face:A+p.a,run:false};u.preview=null})}
+    renderSel()}
+  // petits pictogrammes : points pour les places des carrés
+  function formIcon(key){const P=FORMS.find(f=>f[0]===key)[3](key==='orbe'?10:key==='colonne'?8:9);
+    const xs=P.map(p=>p.x),ys=P.map(p=>p.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),k=Math.min(26/Math.max(1,x1-x0),12/Math.max(1,y1-y0));
+    return `<svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true">${P.map(p=>`<rect x="${(15+(p.x-(x0+x1)/2)*k-1.8).toFixed(1)}" y="${(8+(p.y-(y0+y1)/2)*k-1.8).toFixed(1)}" width="3.6" height="3.6" fill="currentColor"/>`).join('')}<path d="M3 1h24" stroke="currentColor" stroke-width=".8" opacity=".45"/></svg>`}
+  function formBox(){let box=document.getElementById('formBtns');if(box)return box;const sel=document.getElementById('sel');if(!sel)return null;
+    box=document.createElement('div');box.id='formBtns';
+    box.innerHTML='<div class="fl">Formation</div><div class="fg">'+FORMS.map(f=>`<button type="button" data-f="${f[0]}" title="${f[2]}">${formIcon(f[0])}<span>${f[1]}</span></button>`).join('')+'</div>';
+    box.addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(b)applyForm(b.dataset.f)});
+    const btns=sel.querySelector('.btns');if(btns)btns.after(box);else sel.appendChild(box);
+    const st=document.createElement('style');st.textContent=`#formBtns{display:none;flex-direction:column;gap:4px;margin-top:2px}#formBtns.on{display:flex}
+#formBtns .fl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#b9a98a)}
+#formBtns .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+#formBtns button{display:flex;align-items:center;gap:4px;padding:3px 5px;font-size:12px;line-height:1.1;min-width:0;white-space:nowrap}
+#formBtns button svg{flex:none}#formBtns button span{overflow:hidden;text-overflow:ellipsis}
+@media (max-width:760px){#formBtns .fg{grid-template-columns:repeat(3,1fr)}#formBtns button span{display:none}}`;document.head.appendChild(st);return box}
+  {const _rs2=renderSel;renderSel=function(){const r=_rs2.apply(this,arguments);try{const b=formBox();if(b)b.classList.toggle('on',mine().length>=2)}catch(e){}return r}}
+  /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
+        la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
+  const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
+  const msOf=u=>u&&u._ms||1;
+  {const _dc=deployCamp;deployCamp=function(){const r=_dc.apply(this,arguments);try{if(MSON())for(const u of units){if(u.ci==null)continue;const c=(u.side===0?CAMP.b.p:CAMP.b.e||[])[u.ci];u._ms=c&&+c.ms||1}}catch(e){}return r}}
+  const nf=x=>Math.round(x).toLocaleString('fr-FR');
+  function fixSel(){if(!MSON())return;const a=[...selected].filter(u=>!u.dead),b=$('selBody');if(!b||!a.length)return;
+    const rows=b.querySelectorAll('.row');for(const row of rows){const sp=row.querySelectorAll('span');if(sp.length<2||sp[0].textContent!=='Effectif')continue;
+      if(a.length===1){const u=a[0],k=msOf(u);sp[1].textContent=`${nf(Math.ceil(u.men)*k)} / ${nf(u.T.men*k)} ${u.T.kind==='eleph'?'éléphants':'hommes'}`}
+      else sp[1].textContent=nf(a.reduce((s,u)=>s+(u.T.kind==='eleph'?0:u.men*msOf(u)),0))+' hommes'}}
+  {const _rs3=renderSel;renderSel=function(){const r=_rs3.apply(this,arguments);try{fixSel()}catch(e){}return r}}
+  function fixTop(){if(!MSON())return;const sum=s=>units.filter(u=>u.side===s&&!u.dead&&!u.routing).reduce((a,u)=>a+(u.T.kind==='eleph'?u.men*40:u.men)*msOf(u),0);
+    const a=$('fP'),b=$('fR');if(a&&/\d/.test(a.textContent))a.textContent=PAL[0].n+' '+nf(sum(0));if(b&&/\d/.test(b.textContent))b.textContent=nf(sum(1))+' '+PAL[1].n}
+  {const _ce=checkEnd;checkEnd=function(){const was=ended,r=_ce.apply(this,arguments);try{if(!was&&ended&&MSON()){const S=$('endS');if(S){const sp=S.children;
+      const loss=s=>units.filter(u=>u.side===s&&u.T.kind!=='eleph').reduce((a,u)=>a+(u.fled?0:(u.T.men-u.men)*msOf(u)),0);
+      if(sp[4])sp[4].textContent=nf(loss(0));if(sp[7])sp[7].textContent=nf(loss(1))}}}catch(e){}return r}}
   // étiquettes : seulement pour les carrés choisis ou survolés (les fissures montrent déjà l'usure)
-  {const _ut=updateTags;updateTags=function(){const r=_ut.apply(this,arguments);for(const u of units)if(u.tag&&!u.tag.hidden&&!(selected.has(u)||u===hover))u.tag.hidden=true;return r}}
+  {const _ut=updateTags;updateTags=function(){const r=_ut.apply(this,arguments);const many=selected.size>1;for(const u of units)if(u.tag&&!u.tag.hidden&&!(u===hover||(selected.has(u)&&(!many||u.rk===0))))u.tag.hidden=true;return r}}
   // cartes d'unités : une carte par régiment (total des 5 carrés) ; un clic choisit tous ses carrés encore debout
   // (posé au premier dessin : l'interface « Bronze » enveloppe hudTick plus tard, et ses cartes doivent être corrigées après elle)
-  let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{const bar=document.getElementById('uiCards');if(bar){
+  let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTop()}catch(e){}try{const bar=document.getElementById('uiCards');if(bar){
       if(!bar._sq){bar._sq=1;bar.addEventListener('click',e=>{const d=e.target.closest('.ui-uc');if(!d)return;const u=d._u;if(!u)return;
           const g=regOf(u).filter(v=>!v.dead&&!v.routing),on=e.shiftKey||e.ctrlKey;if(!on)selected.clear();
           const all=g.every(v=>selected.has(v));for(const v of g){if(on&&all)selected.delete(v);else selected.add(v)}renderSel()});
@@ -2641,7 +2709,7 @@ if(!V3D){
       for(const d of bar.querySelectorAll('.ui-uc')){const t=d.title;
         if(!d._u){const u=units.find(x=>x.side===0&&x.reg===x.id&&(x.label+' · '+x.T.name)===t&&!seen.has(x.id))||units.find(x=>x.side===0&&(x.label+' · '+x.T.name)===t&&!seen.has(x.reg));d._u=u||null}
         const u=d._u;if(!u||seen.has(u.reg!=null?u.reg:u.id)){d.style.display='none';continue}seen.add(u.reg!=null?u.reg:u.id);d.style.display='';
-        const g=regOf(u),alive=g.filter(v=>!v.dead),men=alive.reduce((a,v)=>a+v.men,0),b=d.querySelector('b');if(b)b.textContent=Math.ceil(men);
+        const g=regOf(u),alive=g.filter(v=>!v.dead),men=alive.reduce((a,v)=>a+v.men,0),b=d.querySelector('b');if(b)b.textContent=Math.ceil(men*msOf(u)).toLocaleString('fr-FR');
         const gi=d.querySelectorAll('.g i');if(gi[0])gi[0].style.width=Math.min(100,men/(u.T.men*NSPL)*100)+'%';
         if(gi[1]&&alive.length){const m=alive.reduce((a,v)=>a+Math.max(0,v.morale/v.T.morale),0)/alive.length;gi[1].style.width=m*100+'%';gi[1].style.background=m>.5?'#9fd18c':m>.25?'#e0883c':'#d24a3a'}
         d.classList.toggle('on',g.some(v=>selected.has(v)));d.classList.toggle('dead',!alive.length);d.classList.toggle('rout',alive.length>0&&alive.every(v=>v.routing));
@@ -2653,6 +2721,7 @@ if(!V3D){
   // le sol se prépare au premier affichage (après l'arrivée éventuelle de l'image de la campagne)
   const _bt=buildTerrain;buildTerrain=function(){_bt();try{if(GROUND)groundFromCampaign();if(!GM)buildGround()}catch(e){console.warn('sol 2D',e);buildGround()}};
 }
+try{const o=document.querySelector('#sFig option[value="bellum"]');if(o)o.textContent='Roma Delenda Est (construites)'}catch(e){}
 // option « Vue 3D » (ancienne vue) sur l'écran d'accueil
 try{const sF=$('sFig'),lb=document.createElement('label');lb.innerHTML='<input type="checkbox" id="c3d"> Vue 3D (ancienne)';sF.parentElement.after(lb);
   const c=$('c3d');c.checked=V3D;c.onchange=()=>{try{localStorage.setItem('bellum.vue',c.checked?'3d':'2d')}catch(e){}const u=new URL(location.href);u.searchParams.delete('vue');location.href=u.href}}catch(e){}
