@@ -11267,7 +11267,44 @@ function siegeTab(){const el=$('side'),or=el&&el.querySelector('.ua-pane[data-k=
     while(i+1<kids.length&&kids[i+1].classList.contains('row')){g.push(kids[++i])}got.push({g,first:/^(La garnison|Ville sans armée|Enfermée dans)/.test(t)?0:1})}}
   if(!got.length)return;got.sort((a,b)=>a.first-b.first);const lb=document.createElement('p');lb.className='ua-lbl';lb.textContent='Siège';or.prepend(lb,...got.flatMap(x=>x.g))}
 setTimeout(()=>{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{siegeTab()}catch(e){console.error(e)}return r};try{if(sel&&sel.a)renderSide()}catch(e){}},80);
-window.__genie={menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- PEUPLES EN ARMES (9 nov., choix de Baptiste « levée en guerre + armée de départ ») : les grands peuples neutres
+   ont une armée de campagne en garnison dans leur capitale ; un peuple en guerre lève une armée tribale (tous les 45 jours
+   s'il est en dessous de sa cible) qui marche secourir ses villes assiégées, puis rentre. S.peu[f]={mix,t,cap}. ---- */
+const PEU_WAR=new Set(['ibe','cel','lus','vac','carp','olc','gau','ins','lig','ven','ill','dar','thr','num','mae','mau','eto']);
+function peuTowns(f){return N.filter(n=>!n.col&&ownerN(n.i)===f&&n.size>=1)}
+function peuP(f){let p=0;for(const n of peuTowns(f))p+=n.size;return p*(PEU_WAR.has(f)?1.3:1)}
+function peuCap(f){const T=peuTowns(f).filter(n=>!S.siege[n.id]);return T.sort((a,b)=>b.size-a.size||a.i-b.i)[0]||null}
+function peuMix(f){const L=[];for(const a of S.armies)if(a.side===f&&!a.dead)for(const u of a.units)if(UT[u.t])L.push(u.t);return L.length?L:['iber']}
+function peuUnits(f,k){const M=(S.peu[f]&&S.peu[f].mix)||['iber'];const o=[];for(let j=0;j<k;j++){const t=M[(j*3+1)%M.length];o.push({t,men:UT[t].men})}return o}
+const peuField=f=>S.armies.filter(a=>a.side===f&&!a.dead&&!a.g&&!a.ship&&!a.conv);
+const peuRegs=f=>peuField(f).reduce((s,a)=>s+a.units.length,0);
+function peuName(f,lev){const n=FAC[f].n,w=n.split(' ')[0],h=lev?'Levée':'Armée';
+  if(/^(Ligue)/.test(n))return h+' de la '+n;if(/^[AEIOUÉÈ]/.test(n)&&!/s$/.test(w))return h+" de l'"+n;
+  return /s$/.test(w)&&!/^(Athènes|Rhodes|Thèbes|Syracuse)$/.test(n)?h+' des '+n:h+' de '+n}
+function peuArmy(f,n,k,lev){const a={id:S.uid++,side:f,name:peuName(f,lev),x:n.x,y:n.y,at:n.i,legs:[],units:peuUnits(f,k),scout:0,cool:0,mor:65,peu:1};a.food=armyFoodMax(a);a.inG=true;S.armies.push(a);return a}
+function peuInit(){if(!S||S.peu)return;S.peu={};
+  for(const f in S.fac){if(!FAC[f]||!FAC[f].a)continue;S.peu[f]={mix:peuMix(f),t:0};
+    const st=S.fac[f].st||'';if(st.startsWith('allie_'))continue;const P=peuP(f),k=P>=4?Math.min(10,Math.round(P*.9)):0,c=peuCap(f);
+    if(k>=3&&c)peuArmy(f,c,k,false)}}
+function peuWarOf(f){const st=(S.fac[f]&&S.fac[f].st)||'';return st.startsWith('guerre_')?st.slice(7):null}
+function peuDaily(){if(!S||!S.peu)return;const d=Math.floor(S.day);
+  for(const f in S.peu){if(!S.fac[f]||!FAC[f])continue;const e=peuWarOf(f),F=peuField(f);
+    for(const a of F)if(a.food!=null&&ownerAt(a.x,a.y)===f)a.food=armyFoodMax(a);
+    if(!e){for(const a of F)if(!a.legs.length&&a.at!=null&&ownerN(a.at)===f&&!a.inG)a.inG=true;continue}
+    const P=peuP(f);if(!P)continue;const T=Math.max(3,Math.min(16,Math.round(P*1.2)+2)),R=peuRegs(f),pu=S.peu[f];
+    if(R<T&&d>=(pu.t||0)){const c=peuCap(f);if(c){const k=Math.min(T-R,Math.max(2,Math.round(P*.6)));const h=F.find(a=>a.at===c.i&&!a.legs.length);
+      if(h)h.units.push(...peuUnits(f,k));else peuArmy(f,c,k,true);pu.t=d+45;
+      if(e==='car')log(`${FAC[f].n} lèvent ${k} régiments à ${c.n} contre vous !`)}}
+    // secours : la ville assiégée la plus proche que l'armée peut raisonnablement attaquer
+    for(const a of peuField(f)){if(a.cool>0||a.mut)continue;const men=armyMen(a);
+      const B=peuTowns(f).map(n=>({n,sg:S.siege[n.id]})).filter(x=>x.sg&&x.sg.side!==f).map(x=>{const b=S.armies.find(o=>o.id===x.sg.a&&!o.dead);return {n:x.n,b,dd:Math.hypot(x.n.x-a.x,x.n.y-a.y)}}).filter(x=>x.b&&men>=armyMen(x.b)*.55&&x.dd<700).sort((p,q)=>p.dd-q.dd)[0];
+      if(B){if(a.target!==B.n.i||!a.legs.length&&a.at!==B.n.i){if(a.at!==B.n.i&&order(a,0,0,B.n.i)){a.peuGo=B.n.i;if(e==='car'&&!a._peuLog){a._peuLog=1;log(`${a.name} marche au secours de ${B.n.n}.`)}}}continue}
+      a._peuLog=0;
+      if(!a.legs.length&&(a.at==null||ownerN(a.at)!==f)){const c=peuCap(f);if(c)order(a,0,0,c.i)}
+      else if(!a.legs.length&&a.at!=null&&ownerN(a.at)===f)a.inG=true}}}
+{const _dP=daily;daily=function(d){const r=_dP.apply(this,arguments);try{peuInit();peuDaily()}catch(e){console.error(e)}return r}}
+{const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);try{if(S&&S.day>=1)peuInit()}catch(e){console.error(e)}return r}}
+window.__genie={peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
@@ -11522,7 +11559,4 @@ window.__camp={get SRC(){return SRC},get SRCR(){return SRCR},visAt,visAtR,vsOf,v
 </script>
 </body>
 </html>
-
-</body></html>
-</body></html>
 </body></html>
