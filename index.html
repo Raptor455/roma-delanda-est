@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v167</span>
+ <span class="chg-ver">v168</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -11585,7 +11585,7 @@ function siegeTab(){const el=$('side'),or=el&&el.querySelector('.ua-pane[data-k=
   for(const pane of el.querySelectorAll('.ua-pane')){const kids=[...pane.children];for(let i=0;i<kids.length;i++){const k=kids[i],t=(k.textContent||'').trim();if(!SIEGE_RX.test(t))continue;const g=[k];
     while(i+1<kids.length&&kids[i+1].classList.contains('row')){g.push(kids[++i])}got.push({g,first:/^(La garnison|Ville sans armée|Enfermée dans)/.test(t)?0:1})}}
   if(!got.length)return;got.sort((a,b)=>a.first-b.first);const lb=document.createElement('p');lb.className='ua-lbl';lb.textContent='Siège';or.prepend(lb,...got.flatMap(x=>x.g))}
-setTimeout(()=>{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{siegeTab()}catch(e){console.error(e)}return r};try{if(sel&&sel.a)renderSide()}catch(e){}},80);
+setTimeout(()=>{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{siegeTab()}catch(e){console.error(e)}try{uiPieces()}catch(e){console.error(e)}return r};try{if(sel&&sel.a)renderSide()}catch(e){}},80);
 /* ---- PEUPLES EN ARMES (9 nov., choix de Baptiste « levée en guerre + armée de départ ») : les grands peuples neutres
    ont une armée de campagne en garnison dans leur capitale ; un peuple en guerre lève une armée tribale (tous les 45 jours
    s'il est en dessous de sa cible) qui marche secourir ses villes assiégées, puis rentre. S.peu[f]={mix,t,cap}. ---- */
@@ -11623,7 +11623,48 @@ function peuDaily(){if(!S||!S.peu)return;const d=Math.floor(S.day);
       else if(!a.legs.length&&a.at!=null&&ownerN(a.at)===f)a.inG=true}}}
 {const _dP=daily;daily=function(d){const r=_dP.apply(this,arguments);try{peuInit();peuDaily()}catch(e){console.error(e)}return r}}
 {const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);try{if(S&&S.day>=1)peuInit()}catch(e){console.error(e)}return r}}
-window.__genie={peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- PANNEAU D'ARMÉE (9 nov., demande de Baptiste) : grand portrait du général, régiments dessinés comme en bataille :
+   chaque régiment = ses 5 carrés de bataille (3 pour les éléphants), pièces à cadre sombre et plaque bombée, symbole gravé ;
+   les carrés perdus restent en creux. Noms en entier sur deux lignes, 4 régiments par rangée. ---- */
+(function(){const st=document.createElement('style');st.textContent=`
+#side.ua{width:392px!important;max-height:min(84%,calc(100% - 76px))!important}
+#side.ua .ui-head{gap:12px;align-items:center;margin-bottom:6px}
+#side.ua .ui-hcol{display:flex;flex-direction:column;gap:5px;min-width:0}
+#side.ua .ui-hcol .ua-gen{margin:0}
+#side.ua .ui-head .ui-med{width:92px!important;height:92px!important;border-radius:50%;box-shadow:0 0 0 3px var(--bzD),0 0 0 5px var(--bz),0 6px 14px rgba(0,0,0,.5)}
+#side.ua .ui-head .ui-med img{width:100%;height:100%;object-fit:cover;display:block}
+#side.ua .ui-head h2{font-size:22px}
+#side.ua .ui-tiles{grid-template-columns:repeat(4,1fr)!important;gap:5px!important}
+#side.ua .ui-tile.pc{height:auto!important;min-height:66px;padding:13px 3px 9px!important;align-content:start;gap:2px}
+#side.ua .ui-tile.pc .ui-pcs{display:block;margin:0 auto 1px;filter:drop-shadow(1px 2px 0 rgba(10,6,2,.45))}
+#side.ua .ui-tile.pc .n{white-space:normal;overflow:visible;font-size:10px;line-height:1.05;min-height:2.1em;display:flex;align-items:center;justify-content:center}
+#side.ua .ui-tile.pc b{font-size:11.5px}
+@media (max-width:700px){#side.ua{width:auto!important;max-height:60%!important}#side.ua .ui-head .ui-med{width:64px!important;height:64px!important}#side.ua .ui-tiles{grid-template-columns:repeat(3,1fr)!important}}`;document.head.appendChild(st)})();
+const PC_DEF=new Set();
+function pcDefs(side){const id='pcg_'+side;if(PC_DEF.has(id))return id;PC_DEF.add(id);const c=(FAC[side]&&FAC[side].c)||[160,120,200];
+  const sh=(k)=>`rgb(${c.map(v=>Math.max(0,Math.min(255,Math.round(v*k)))).join(',')})`;
+  let d=document.getElementById('pcDefs');if(!d){d=document.createElementNS('http://www.w3.org/2000/svg','svg');d.id='pcDefs';d.setAttribute('width','0');d.setAttribute('height','0');d.style.position='absolute';d.innerHTML='<defs></defs>';document.body.appendChild(d)}
+  d.querySelector('defs').insertAdjacentHTML('beforeend',`<radialGradient id="${id}" cx="40%" cy="38%" r="70%"><stop offset="0" stop-color="${sh(1.42)}"/><stop offset=".5" stop-color="${sh(1.05)}"/><stop offset="1" stop-color="${sh(.52)}"/></radialGradient>`);
+  d.querySelector('defs').insertAdjacentHTML('beforeend',`<radialGradient id="${id}w" cx="40%" cy="38%" r="70%"><stop offset="0" stop-color="${sh(1.05)}"/><stop offset=".5" stop-color="${sh(.75)}"/><stop offset="1" stop-color="${sh(.38)}"/></radialGradient>`);
+  PC_DEF[id+'t']=sh(.38);return id}
+function pcSym(k,x,y,z,col){const m=z*.08,w=Math.max(.9,z*.11);
+  if(k==='inf'||k==='eleph')return `<path d="M${x+m} ${y+m}L${x+z-m} ${y+z-m}M${x+z-m} ${y+m}L${x+m} ${y+z-m}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`+(k==='eleph'?`<circle cx="${x+z/2}" cy="${y+z/2}" r="${z*.2}" fill="none" stroke="${col}" stroke-width="${w}"/>`:'');
+  if(k==='cav'||k==='lcav')return `<path d="M${x+z-m} ${y+m}L${x+m} ${y+z-m}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`+(k==='lcav'?`<circle cx="${x+z*.7}" cy="${y+z*.7}" r="${z*.1}" fill="${col}"/>`:'');
+  return [[.3,.33],[.7,.33],[.5,.7]].map(([a,b])=>`<circle cx="${x+z*a}" cy="${y+z*b}" r="${z*.12}" fill="${col}"/>`).join('')}
+function pcSVG(u,side){const T=UT[u.t];if(!T)return '';const k=T.k==='skirm'?'skirm':T.k,n=k==='eleph'?3:5,max=T.men||1,fr=Math.max(0,Math.min(1,u.men/max));
+  const up=Math.max(0,Math.ceil(fr*n-1e-6)),loc=1-(fr*n-(up-1)),id=pcDefs(side),tint=PC_DEF[id+'t'],z=13,g=1.8,W=n*z+(n-1)*g;
+  let s=`<svg class="ui-pcs" viewBox="-.5 -.5 ${W+1} ${z+1.5}" width="${W+1}" height="${z+1.5}" aria-hidden="true">`;
+  for(let j=0;j<n;j++){const x=j*(z+g);if(j>=up){s+=`<rect x="${x+.5}" y=".5" width="${z-1}" height="${z-1}" fill="rgba(0,0,0,.28)" stroke="rgba(210,174,108,.28)" stroke-width=".8" stroke-dasharray="1.6 1.2"/>`;continue}
+    const worn=j===up-1&&fr<1&&loc>.35,b=1.4,pz=z-2*b;
+    s+=`<rect x="${x}" y="0" width="${z}" height="${z}" fill="#16110c"/><rect x="${x+b}" y="${b}" width="${pz}" height="${pz}" fill="url(#${id}${worn?'w':''})"/>`+
+      `<path d="M${x+b} ${z-b}V${b}H${z-b+x}" fill="none" stroke="rgba(0,0,0,.35)" stroke-width=".7"/>`+pcSym(k,x+b,b,pz,tint);
+    if(worn)s+=`<path d="M${x+z} ${z*.45}L${x+z*.62} ${z*.62}L${x+z*.5} ${z}L${x+z} ${z}Z" fill="#16110c" opacity=".9"/>`}
+  return s+'</svg>'}
+function uiPieces(){const a=sel&&sel.a;if(!a||!a.units)return;const side=document.getElementById('side');if(!side)return;
+  {const hd=side.querySelector('.ua-head .ui-head'),gn=side.querySelector('.ua-head > .ua-gen');if(hd&&!hd.querySelector('.ui-hcol')){const h2=hd.querySelector('h2');if(h2){const c=document.createElement('div');c.className='ui-hcol';hd.insertBefore(c,h2);c.appendChild(h2);if(gn)c.appendChild(gn)}}}
+  side.querySelectorAll('.ui-tile input[data-k]').forEach(inp=>{const t=inp.closest('.ui-tile'),u=a.units[+inp.dataset.k];if(!t||!u||t.classList.contains('pc'))return;
+    const sv=t.querySelector('svg.ui-sym');const h=pcSVG(u,a.side);if(!h)return;if(sv)sv.outerHTML=h;else t.insertAdjacentHTML('afterbegin',h);t.classList.add('pc')})}
+window.__genie={uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
@@ -12480,8 +12521,4 @@ window.__camp={get SRC(){return SRC},get SRCR(){return SRCR},visAt,visAtR,vsOf,v
 </script>
 </body>
 </html>
-</body></html>
-</body></html>
-</body></html>
-
 </body></html>
