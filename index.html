@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v166</span>
+ <span class="chg-ver">v167</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -3149,14 +3149,16 @@ function drawStatic(w,h,T){
   if(texPat&&s>=5){ctx.save();ctx.clip(landSmooth);const m=new DOMMatrix().scale(.08);texPat.setTransform(m);ctx.fillStyle=texPat;ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.restore()}
   // territoires
   ctx.save();ctx.clip(landSmooth);if(!NOTERR){
-  const tA=.45;for(const o in ownerPaths){if(o==='_')continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.16:.3)*tA);ctx.fill(ownerPaths[o])}
+  /*TERR-LISIBLE*/const tA=s>4?.55:s>2.5?.7:s>1?.85:1;for(const o in ownerPaths){if(o==='_')continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.3:.5)*tA);ctx.fill(ownerPaths[o])}
+  const bandW=14*z,bandBy={};
   // frontières : entre maîtres différents, plus discrètes entre villes d'un même maître quand on zoome
   for(const B of BORDER){if(!B.bb){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of B.pts){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}B.bb=[a,b,c,d]}if(B.bb[2]<vx0||B.bb[0]>vx1||B.bb[3]<vy0||B.bb[1]>vy1)continue;const oa=ownerN(B.a),ob=ownerN(B.b);
     if(oa===ob){if(s<1.4)continue;ctx.strokeStyle='rgba(70,50,30,.22)';ctx.lineWidth=1*z;ctx.setLineDash([4*z,4*z])}
     else{ctx.setLineDash([]);ctx.strokeStyle='rgba(40,28,16,.75)';ctx.lineWidth=Math.max(1.4*z,.35)}
     ctx.beginPath();B.pts.forEach(([x,y],k)=>k?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();
-    if(oa!==ob&&s>2){for(const [o,side] of [[oa,1],[ob,-1]]){if(!o)continue;ctx.strokeStyle=rgb(FAC[o].c,.55);ctx.lineWidth=.5;ctx.save();ctx.clip(CELL[o===oa?B.a:B.b].path);ctx.beginPath();B.pts.forEach(([x,y],k)=>k?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();ctx.restore()}}
+    if(oa!==ob){for(const o of [oa,ob]){if(!o||o==='_'||!ownerPaths[o])continue;const P=bandBy[o]||(bandBy[o]=new Path2D());B.pts.forEach(([x,y],k)=>k?P.lineTo(x,y):P.moveTo(x,y))}}
   }
+  ctx.setLineDash([]);ctx.lineJoin='round';for(const o in bandBy){const neutral=!!FAC[o].a;ctx.save();ctx.clip(ownerPaths[o]);ctx.strokeStyle=rgb(FAC[o].c,neutral?.75:.95);ctx.lineWidth=bandW;ctx.stroke(bandBy[o]);ctx.restore()}
   }ctx.setLineDash([]);
   ctx.restore();
   // côtes
