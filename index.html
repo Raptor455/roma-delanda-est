@@ -10669,6 +10669,7 @@ window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
 //    redessiner la barre ; on surveille l'état et on montre la raison sous l'étiquette PAUSE.
+// 3) Itinéraires : plus de grands détours (voir plus bas).
 // 2) Journal : élisions (« de Ilorci » → « d'Ilorci »), « pillent Ilici, près d'Ilici », convoi « (0 rations) ».
 (function(){
   const FIN_CSS=document.createElement('style');
@@ -10704,6 +10705,50 @@ window.__genie={matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear
     finTop=top;
   }catch(e){}},200);
 })();
+/* --- 3) Itinéraires : moins de détours (demande de Baptiste, 9 nov.) ---
+   Avant : une armée hors d'une route devait d'abord rejoindre un lieu (ville, col) ; un point visé près d'une route
+   imposait la route même quand couper à travers champs était bien plus court. On ajoute deux possibilités, retenues
+   seulement si elles coûtent moins de jours : rejoindre à travers champs la route la plus proche, et marcher droit sur la cible. */
+{
+  const FIN_DIRECT=70,FIN_JOIN=12;
+  const _finS0=startsOf0;
+  startsOf0=function(a){
+    const s=_finS0.apply(this,arguments);
+    try{
+      if(a.at!=null&&!a.legs.length)return s;               // dans une ville : le réseau part déjà d'ici
+      if(a.legs.length&&a.legs[0].e!=null)return s;          // déjà sur une route
+      const R=nearestRoad(a.x,a.y,FIN_JOIN);if(!R||R.d<.05||edgeSnow(EDGES[R.k]))return s;
+      const h=horsLegs(a.x,a.y,R.x,R.y);if(!h)return s;
+      const e=EDGES[R.k];
+      for(const end of [e.a,e.b]){const L2=[...h.map(L=>({...L})),...toEnd(R,end)];if(!legsBlocked(a.x,a.y,L2))s.push([end,legsCost(a,a.x,a.y,L2),L2])}
+    }catch(err){}
+    return s;
+  };
+  const _finPlan=plan;
+  plan=function(a,tx,ty,node){
+    const r0=_finPlan.apply(this,arguments);
+    try{
+      let best=r0;
+      const cand=legs=>{if(!legs||!legs.length||legsBlocked(a.x,a.y,legs))return;const c=legsCost(a,a.x,a.y,legs);if(!best||c<best.days-.05)best={days:c,legs}};
+      const X=node!=null?N[node].x:tx,Y=node!=null?N[node].y:ty,d=Math.hypot(X-a.x,Y-a.y);
+      // marcher droit sur la cible (contourne les hauteurs et ne passe les fleuves qu'aux ponts)
+      if(d<FIN_DIRECT&&d>.05){const h=horsLegs(a.x,a.y,X,Y);if(h){if(node!=null)h[h.length-1].n=node;cand(h)}}
+      // point visé sur une route : la rejoindre à travers champs puis la suivre
+      if(node==null){
+        const snap=nearestRoad(tx,ty,Math.max(1.2,Math.min(25,16/view.s)));
+        if(snap&&!edgeSnow(EDGES[snap.k])){
+          const e=EDGES[snap.k],tip={x:snap.x,y:snap.y,n:null,type:e.type,tf:e.tf,e:snap.k};
+          const J=nearestRoad(a.x,a.y,FIN_JOIN,snap.k);
+          if(J&&Math.hypot(J.x-a.x,J.y-a.y)>.05){const h=horsLegs(a.x,a.y,J.x,J.y);
+            if(h){const pa=J.j+J.t,pt=snap.j+snap.t;
+              const mid=pt>=pa?(snap.j>=J.j+1?cvLegs(snap.k,J.j+1,snap.j):[]):(J.j>=snap.j+1?cvLegs(snap.k,J.j,snap.j+1):[]);
+              cand([...h,...mid,tip])}}
+        }
+      }
+      return best;
+    }catch(err){return r0}
+  };
+}
 /* ================= FIN FINITIONS ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
