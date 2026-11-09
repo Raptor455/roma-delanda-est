@@ -2290,11 +2290,11 @@ if(!V3D){
   const NSQ=5;
   function srand(seed){let s=(seed*9301+49297)%233280||1;return ()=>(s=(s*16807)%2147483647)/2147483647}
   // fissures de chaque carré (coordonnées du carré unité -0,5..0,5), tirées une fois par régiment
-  function cracksOf(u){if(u._cr)return u._cr;const R=srand(u.id*31+7),C=[];
-    for(let k=0;k<NSQ;k++){const L=[];for(let c=0;c<7;c++){const side=Math.floor(R()*4),t=R()-.5,p=[side===0?-.5:side===1?.5:t,side===2?-.5:side===3?.5:t],pts=[p];
+  function cracksOf(u){const N=gridOf(u).N;if(u._cr&&u._cr.length===N)return u._cr;const R=srand(u.id*31+7),C=[];
+    for(let k=0;k<N;k++){const L=[];for(let c=0;c<6;c++){const side=Math.floor(R()*4),t=R()-.5,p=[side===0?-.5:side===1?.5:t,side===2?-.5:side===3?.5:t],pts=[p];
         let x=p[0],y=p[1];const tx=(R()-.5)*.5,ty=(R()-.5)*.5;for(let s=1;s<=3;s++){x+=(tx-x)*.45+(R()-.5)*.18;y+=(ty-y)*.45+(R()-.5)*.18;pts.push([x,y])}L.push(pts)}
       C.push({L,chip:Math.floor(R()*4)})}
-    const ord=[0,4,1,3,2];if(R()<.5)ord.reverse();u._ord=ord;return u._cr=C}
+    return u._cr=C}
   // particules : éclats, poussière de mêlée, impacts de tir
   const FXP=[];let fxT=0;
   function fx(type,x,y,o){if(FXP.length>500)FXP.shift();FXP.push(Object.assign({type,x,y,t:0,life:1,vx:0,vy:0,r:1,rot:0,vr:0},o))}
@@ -2303,8 +2303,6 @@ if(!V3D){
     if(p.type==='dust'){const r=Math.max(2,(p.r+k*p.r*1.2)*s2);g2.fillStyle=`rgba(${p.c||'120,98,70'},${(1-k)*(p.a||.32)})`;g2.beginPath();g2.arc(sx,sy,r,0,6.283);g2.fill()}
     else if(p.type==='shard'){const z=p.r*(1-k*.4);g2.save();g2.translate(sx,sy);g2.rotate(p.rot);g2.globalAlpha=1-k;g2.fillStyle=p.c;g2.beginPath();g2.moveTo(-z,-z*.6);g2.lineTo(z,-z*.2);g2.lineTo(-z*.2,z);g2.closePath();g2.fill();g2.strokeStyle=INK;g2.lineWidth=1;g2.stroke();g2.restore()}
     else if(p.type==='spark'){g2.strokeStyle=`rgba(255,${210+40*Math.random()|0},150,${1-k})`;g2.lineWidth=1.6;g2.beginPath();const l=4+6*(1-k);g2.moveTo(sx,sy);g2.lineTo(sx+Math.cos(p.rot)*l,sy+Math.sin(p.rot)*l);g2.stroke()}}}
-  function sqSize(u){return Math.max(10,Math.min(34,u.w*s2/NSQ*.8))}
-  function sqPos(u,k,sz){const sp=Math.max(sz*1.22,u.w*s2/NSQ),sk=u.T.kind==='skirm';return [sk?(k%2?-sz*.45:sz*.45):0,(k-(NSQ-1)/2)*sp*(sk?1.15:1)]}
   function symbol(k,x0,y0,z,P){const m=z*.2;g2.lineWidth=Math.max(1.2,z/9);g2.strokeStyle=INK;g2.beginPath();
     if(k==='inf'){g2.moveTo(x0+m,y0+m);g2.lineTo(x0+z-m,y0+z-m);g2.moveTo(x0+z-m,y0+m);g2.lineTo(x0+m,y0+z-m);g2.stroke()}
     else if(k==='cav'||k==='lcav'){g2.moveTo(x0+z,y0);g2.lineTo(x0,y0+z);g2.stroke();if(k==='lcav'){g2.beginPath();g2.arc(x0+z*.7,y0+z*.7,z*.1,0,6.283);g2.fillStyle=INK;g2.fill()}}
@@ -2328,7 +2326,7 @@ if(!V3D){
   function drawClashes(){
     for(const [u,e] of CLASH){if(u.dead||e.dead)continue;
       const [ax,ay]=scr(u.x,u.y),[bx,by]=scr(e.x,e.y);let dx=bx-ax,dy=by-ay;const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
-      const L=Math.max(13,Math.min(30,Math.min(u.w,e.w)/NSQ*s2*1.1)),n=Math.max(2,Math.min(6,Math.round(Math.min(u.w,e.w)*s2/20))),wa=weaponOf(u),wb=weaponOf(e);
+      const L=Math.max(11,Math.min(22,Math.min(u.w,e.w)/NSQ*s2*.9)),n=Math.max(1,Math.min(4,Math.round(Math.min(u.w,e.w)*s2/34))),wa=weaponOf(u),wb=weaponOf(e);
       const [mx,my]=scr((u.x+e.x)/2,(u.y+e.y)/2),span=Math.min(u.w,e.w)*s2*.85;
       for(let i=0;i<n;i++){const h=Math.sin(u.id*12.9+e.id*7.3+i*4.1)*43758.5,hr=h-Math.floor(h),o=(n>1?(i/(n-1)-.5)*span:0)+(hr-.5)*span*.12,dep=(hr-.5)*L*.5,cx=mx-dy*o+dx*dep,cy=my+dx*o+dy*dep;
         // cycle : on arme, on frappe, les fers se croisent, on recule
@@ -2343,74 +2341,88 @@ if(!V3D){
         // éclat de métal quand les fers se touchent
         if(f>.5&&f<.62){const k=1-Math.abs(f-.56)/.06;g2.fillStyle=`rgba(255,250,235,${.85*k})`;g2.beginPath();g2.arc(cx,cy,2+2*k,0,6.283);g2.fill()}}}
   }
-  // place de chaque carré, en mètres dans le repère du régiment (+x = front, y = largeur) : les 5 carrés couvrent toute la largeur
-  function sqTarget(u,k){const m=u.w/NSQ,sk=u.T.kind==='skirm';return [sk?(k%2?-m*.35:m*.35):0,(k-(NSQ-1)/2)*m*(sk?1.12:1)]}
+  // ---- régiment en bloc serré : 5 files de front, plusieurs rangs (infanterie 3, phalange 4, cavalerie 2) ----
+  function gridOf(u){if(u._gd)return u._gd;const k=u.T.kind;let C=5,R=k==='inf'?(u.T.d>=30?4:3):k==='eleph'?1:2;if(k==='eleph')C=3;return u._gd={C,R,N:C*R}}
+  // place d'une case, en mètres dans le repère du régiment (+x = front, y = largeur) ; rang 0 = premier rang
+  function sqTarget(u,t){const {C,R}=gridOf(u),m=u.w/C,sk=u.T.kind==='skirm',col=t%C,row=Math.floor(t/C);
+    return [((R-1)/2-row)*m*(sk?1.3:1),(col-(C-1)/2+(sk&&row%2?.5:0))*m*(sk?1.12:1)]}
   const scrAng=a=>{const fx=Math.cos(a),fy=Math.sin(a);return Math.atan2(M[1]*fx+M[3]*fy,M[0]*fx+M[2]*fy)};
   let FDT=0;
-  // chaque carré suit sa place avec son propre retard : la ligne ondule, se tend dans les virages, pousse en mêlée
+  // chaque case suit sa place avec son propre retard et une petite dérive au hasard ; en mêlée le premier rang
+  // avance, recule, se mêle à celui de l'ennemi, et les rangs de derrière poussent
   function updSquares(u){
-    const dt=FDT;if(!u._sq)u._sq=[];const c=Math.cos(u.ang),s=Math.sin(u.ang),m=u.w/NSQ,fight=u.contacts.length>0;
+    const dt=FDT,{C,R,N}=gridOf(u);if(!u._sq)u._sq=[];const c=Math.cos(u.ang),s=Math.sin(u.ang),m=u.w/C,fight=u.contacts.length>0;
     if(u._lx==null){u._lx=u.x;u._ly=u.y}let dux=(u.x-u._lx)*.8,duy=(u.y-u._ly)*.8;u._lx=u.x;u._ly=u.y;if(Math.abs(dux)+Math.abs(duy)>u.w){dux=0;duy=0}
-    for(let k=0;k<NSQ;k++){let [lx,ly]=sqTarget(u,k);const q=u._sq[k]||(u._sq[k]={x:NaN,y:0,a:u.ang,r:Math.random()});
-      // dérive aléatoire propre à chaque carré : un nouveau but tous les 0,5 à 2 s, rejoint en douceur
-      if(q.gx==null){q.gx=q.gy=q.nx=q.ny=0;q.nt=0;q.sp=1}
-      q.nt-=dt;if(q.nt<=0){const amp=fight?.22:u.moving?.2:.08;q.gx=(Math.random()-.5)*2*m*amp;q.gy=(Math.random()-.5)*2*m*amp*.8;
-        q.nt=.5+Math.random()*1.5;q.sp=u.moving?.55+Math.random()*.9:1}
-      const kn=1-Math.exp(-dt*1.6);q.nx+=(q.gx-q.nx)*kn;q.ny+=(q.gy-q.ny)*kn;lx+=q.nx;ly+=q.ny;
-      if(fight)lx+=m*.3;                                                        // pousse contre l'ennemi
-      if(u.routing){const t=Math.min(3,u.routeT||0);lx+=Math.sin(k*2.1+u.id)*m*.8*t;ly+=Math.cos(k*1.7+u.id)*m*.6*t}
+    for(let t=0;t<N;t++){let [lx,ly]=sqTarget(u,t);const row=Math.floor(t/C),q=u._sq[t]||(u._sq[t]={x:NaN,y:0,a:u.ang,r:Math.random(),gx:0,gy:0,nx:0,ny:0,nt:0,sp:1});
+      q.nt-=dt;if(q.nt<=0){const front=fight&&row===0,amp=front?.2:fight?.1:u.moving?.09:.035;
+        q.gx=(Math.random()-.5)*2*m*amp+(front?m*(.15+Math.random()*.35):0);q.gy=(Math.random()-.5)*2*m*amp*.5;
+        q.nt=front?.25+Math.random()*.6:.6+Math.random()*1.4;q.sp=u.moving?.6+Math.random()*.8:1}
+      const kn=1-Math.exp(-dt*(fight&&row===0?5:1.6));q.nx+=(q.gx-q.nx)*kn;q.ny+=(q.gy-q.ny)*kn;lx+=q.nx;ly+=q.ny;
+      if(fight)lx+=row===0?m*.25:m*.12;                                          // les rangs se serrent vers l'ennemi
+      if(u.routing){const k2=Math.min(3,u.routeT||0),h=Math.sin(t*12.9+u.id*7.7)*43758.5,hr=h-Math.floor(h);lx+=(hr-.5)*m*1.6*k2;ly+=(Math.cos(t*3.1+u.id)*.5)*m*1.2*k2}
       const tx=u.x+lx*c-ly*s,ty=u.y+lx*s+ly*c;
       if(!(q.x===q.x)||Math.hypot(tx-q.x,ty-q.y)>u.w*2.5){q.x=tx;q.y=ty;q.a=u.ang;continue}
-      q.x+=dux;q.y+=duy;const ox=q.x,oy=q.y,kf=1-Math.exp(-dt*(1.8+q.r*1.8)*(q.sp||1));q.x+=(tx-q.x)*kf;q.y+=(ty-q.y)*kf;
+      q.x+=dux;q.y+=duy;const ox=q.x,oy=q.y,kf=1-Math.exp(-dt*(2.2+q.r*1.6)*q.sp);q.x+=(tx-q.x)*kf;q.y+=(ty-q.y)*kf;
       const vx=q.x-ox+dux,vy=q.y-oy+duy,sp=dt>0?Math.hypot(vx,vy)/dt:0;let want=u.ang;
-      if(sp>1.5&&!fight){const d=angDiff(Math.atan2(vy,vx),u.ang);if(Math.abs(d)<1.6)want+=d*.55*Math.min(1,sp/8)}
-      if(fight)want+=q.ny/m*.5;
-      if(u.routing)want+=Math.sin(k*3+u.id)*.6;
+      if(sp>1.5&&!fight){const d=angDiff(Math.atan2(vy,vx),u.ang);if(Math.abs(d)<1.6)want+=d*.4*Math.min(1,sp/8)}
+      if(fight)want+=q.ny/m*.3;
+      if(u.routing)want+=Math.sin(t*3+u.id)*.7;
       q.a+=angDiff(want,q.a)*(1-Math.exp(-dt*4))}
   }
+  // ordre de chute des cases : les rangs de derrière d'abord, le premier rang tient jusqu'au bout
+  function fallOrder(u){if(u._ord&&u._ord.length===gridOf(u).N)return u._ord;const {C,R}=gridOf(u),Rn=srand(u.id*17+3),o=[];
+    for(let r=R-1;r>=0;r--){const row=[];for(let c=0;c<C;c++)row.push(r*C+c);row.sort(()=>Rn()-.5);o.push(...row)}return u._ord=o}
   function drawUnit(u){
-    const [px,py]=scr(u.x,u.y);if(px<-120||py<-120||px>SW+120||py>SH+120){u._sq=null;return}
+    const [px,py]=scr(u.x,u.y);if(px<-160||py<-160||px>SW+160||py>SH+160){u._sq=null;return}
     updSquares(u);
-    const k=u.T.kind,P=PAL[u.side],sel=selected.has(u),hov=u===hover,fr=frac(u),C=cracksOf(u),ord=u._ord;
-    const z=Math.max(7,u.w/NSQ*1.04*s2)*(k==='skirm'?.8:1);
-    // carrés encore debout ; celui qui va céder porte les fissures les plus profondes
-    const nA=Math.max(0,Math.ceil(fr*NSQ-1e-6)),local=1-(fr*NSQ-(nA-1)),gen=(1-fr)*.55;
-    const gone=new Set(ord.slice(0,NSQ-nA)),next=ord[NSQ-nA];
+    const {C,R,N}=gridOf(u),k=u.T.kind,P=PAL[u.side],E=PAL[1-u.side],sel=selected.has(u),hov=u===hover,fr=frac(u),CR=cracksOf(u),ord=fallOrder(u);
+    const z=Math.max(6,u.w/C*s2*.9)*(k==='skirm'?.78:1);
+    // cases encore debout ; celle qui va tomber porte les fissures les plus profondes
+    const nA=Math.max(0,Math.ceil(fr*N-1e-6)),local=1-(fr*N-(nA-1)),gen=(1-fr)*.5;
+    const gone=new Set(ord.slice(0,N-nA)),next=ord[N-nA];
     if(u._nA==null)u._nA=nA;
-    if(nA<u._nA){for(let j=nA;j<u._nA;j++){const q=u._sq[ord[NSQ-1-j]];if(!q)continue;
-        for(let i=0;i<10;i++){const an=Math.random()*6.283,sp=(40+Math.random()*60)/s2;fx('shard',q.x,q.y,{vx:Math.cos(an)*sp,vy:Math.sin(an)*sp,life:.9+Math.random()*.6,r:Math.max(2,z*.18)*(.6+Math.random()*.8),c:P.blk,rot:an,vr:(Math.random()-.5)*12})}
-        fx('dust',q.x,q.y,{life:1.3,r:u.w/NSQ*.6,a:.3})}}
+    if(nA<u._nA){for(let j=nA;j<u._nA;j++){const q=u._sq[ord[N-1-j]];if(!q)continue;
+        for(let i=0;i<8;i++){const an=Math.random()*6.283,sp=(40+Math.random()*60)/s2;fx('shard',q.x,q.y,{vx:Math.cos(an)*sp,vy:Math.sin(an)*sp,life:.8+Math.random()*.6,r:Math.max(1.6,z*.17)*(.6+Math.random()*.8),c:P.blk,rot:an,vr:(Math.random()-.5)*12})}
+        fx('dust',q.x,q.y,{life:1.2,r:u.w/C*.5,a:.28})}}
     u._nA=nA;
-    if(u._men==null)u._men=u.men;if(u.men<u._men-.5)u._hit=rt;u._men=u.men;
-    const hit=u._hit!=null?Math.max(0,1-(rt-u._hit)/.25):0,fight=u.contacts.length>0,shot=u.shotT!=null&&rt-u.shotT<.5?1-(rt-u.shotT)/.5:0;
-    for(let kk=0;kk<NSQ;kk++){if(gone.has(kk))continue;const q=u._sq[kk];if(!q)continue;
+    // touché : quelques cases du premier rang clignotent, pas tout le bloc
+    if(u._men==null)u._men=u.men;if(u.men<u._men-.5){u._hit=rt;u._hk=Math.floor(Math.random()*C)}u._men=u.men;
+    const hit=u._hit!=null?Math.max(0,1-(rt-u._hit)/.3):0,fight=u.contacts.length>0,shot=u.shotT!=null&&rt-u.shotT<.5?1-(rt-u.shotT)/.5:0;
+    const x0=-z/2,y0=-z/2,lw=Math.max(1,Math.min(2,z/12));
+    const grads={};const grad=c=>{const key=Math.round(c*20);return grads[key]||(grads[key]=(()=>{const g=g2.createLinearGradient(x0,y0,x0+z,y0+z);g.addColorStop(0,shade(P.lt||P.blk,1.08-c*.3));g.addColorStop(.45,shade(P.blk,1.05-c*.25));g.addColorStop(1,shade(P.blk,.62-c*.2));return g})())};
+    let mix=null;if(fight){mix=g2.createLinearGradient(x0+z*.35,0,x0+z*1.05,0);mix.addColorStop(0,'rgba(0,0,0,0)');mix.addColorStop(1,shade(E.blk,1).replace('rgb','rgba').replace(')',',.78)'))}
+    // ombres portées d'abord, en un seul passage
+    g2.fillStyle='rgba(15,10,4,.32)';
+    for(let t=0;t<N;t++){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const [sx,sy]=scr(q.x,q.y);g2.save();g2.translate(sx+1.5,sy+2);g2.rotate(scrAng(q.a));g2.fillRect(x0,y0,z,z);g2.restore()}
+    for(let t=R*C-1;t>=0;t--){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const row=Math.floor(t/C),col=t%C;
       let [sx,sy]=scr(q.x,q.y);const a=scrAng(q.a);
-      if(shot){const r=z*.15*shot*Math.sin(kk+1);sx-=Math.cos(a)*r;sy-=Math.sin(a)*r}
-      if(hit){sx+=(Math.random()-.5)*z*.15*hit;sy+=(Math.random()-.5)*z*.15*hit}
-      const x0=-z/2,y0=-z/2,c=kk===next?Math.max(gen,local):gen,cr=C[kk];
-      g2.save();g2.translate(sx,sy);g2.rotate(a);if(u.routing)g2.globalAlpha=.55+.25*Math.sin(rt*9+kk);
-      // forme : un coin arraché quand le carré est très entamé
+      if(shot&&row===0){const r=z*.12*shot*Math.sin(t+1);sx-=Math.cos(a)*r;sy-=Math.sin(a)*r}
+      const hk=hit&&row===0&&Math.abs(col-(u._hk||0))<=1?hit:0;
+      if(hk){sx+=(Math.random()-.5)*z*.18*hk;sy+=(Math.random()-.5)*z*.18*hk}
+      const c=t===next?Math.max(gen,local):gen,cr=CR[t];
+      g2.save();g2.translate(sx,sy);g2.rotate(a);if(u.routing)g2.globalAlpha=.55+.25*Math.sin(rt*9+t);
       const chip=c>.6?z*.32*(c-.6)/.4:0,co=cr.chip,pts=[[x0,y0],[x0+z,y0],[x0+z,y0+z],[x0,y0+z]];
       const shape=()=>{g2.beginPath();pts.forEach((p,i)=>{if(i===co&&chip){const n=pts[(i+1)%4],pv=pts[(i+3)%4];g2.lineTo(p[0]+(pv[0]-p[0])/z*chip,p[1]+(pv[1]-p[1])/z*chip);g2.lineTo(p[0]+(n[0]-p[0])/z*chip,p[1]+(n[1]-p[1])/z*chip)}else g2.lineTo(p[0],p[1])});g2.closePath()};
-      shape();g2.save();g2.translate(1.5,2);g2.fillStyle='rgba(15,10,4,.38)';g2.fill();g2.restore();
-      const gr=g2.createLinearGradient(x0,y0,x0+z,y0+z);gr.addColorStop(0,shade(P.blk,1.22-c*.25));gr.addColorStop(1,shade(P.blk,.8-c*.2));g2.fillStyle=gr;g2.fill();
-      if(k==='cav'||k==='lcav'){g2.save();g2.clip();g2.beginPath();g2.moveTo(x0,y0);g2.lineTo(x0+z,y0);g2.lineTo(x0,y0+z);g2.closePath();g2.fillStyle=k==='lcav'?'rgba(255,255,255,.5)':'rgba(255,255,255,.28)';g2.fill();g2.restore()}
-      if(hit){g2.fillStyle=`rgba(255,70,40,${.45*hit})`;g2.fill()}
-      g2.fillStyle=P.str;g2.fillRect(x0+z-Math.max(1.5,z*.12),y0,Math.max(1.5,z*.12),z); // front
+      shape();g2.fillStyle=grad(c);g2.fill();
+      if(k==='cav'||k==='lcav'){g2.save();g2.clip();g2.beginPath();g2.moveTo(x0,y0);g2.lineTo(x0+z,y0);g2.lineTo(x0,y0+z);g2.closePath();g2.fillStyle=k==='lcav'?'rgba(255,255,255,.4)':'rgba(255,255,255,.2)';g2.fill();g2.restore()}
+      // premier rang au contact : les couleurs des deux camps se mêlent
+      if(mix&&row===0){g2.fillStyle=mix;g2.fill()}
+      if(hk){g2.fillStyle=`rgba(255,90,50,${.5*hk})`;g2.fill()}
       symbol(k,x0,y0,z,P);
-      // fissures : de plus en plus nombreuses et profondes
-      const nc=Math.ceil(c*cr.L.length*1.1);if(nc>0){g2.save();g2.clip();
-        for(let i=0;i<Math.min(nc,cr.L.length);i++){const L=cr.L[i],deep=Math.min(1,c*1.6);g2.beginPath();g2.moveTo(L[0][0]*z,L[0][1]*z);const m=1+Math.ceil(deep*(L.length-1));for(let j=1;j<m&&j<L.length;j++)g2.lineTo(L[j][0]*z,L[j][1]*z);
-          g2.lineWidth=1.6;g2.strokeStyle='rgba(255,240,210,.35)';g2.stroke();g2.lineWidth=1;g2.strokeStyle='rgba(20,12,6,.95)';g2.stroke()}
+      if(c>.08){const nc=Math.ceil(c*cr.L.length*1.1);g2.save();g2.clip();
+        for(let i=0;i<Math.min(nc,cr.L.length);i++){const L=cr.L[i],deep=Math.min(1,c*1.6);g2.beginPath();g2.moveTo(L[0][0]*z,L[0][1]*z);const mm=1+Math.ceil(deep*(L.length-1));for(let j=1;j<mm&&j<L.length;j++)g2.lineTo(L[j][0]*z,L[j][1]*z);
+          g2.lineWidth=1.4;g2.strokeStyle='rgba(255,240,210,.3)';g2.stroke();g2.lineWidth=.9;g2.strokeStyle='rgba(20,12,6,.95)';g2.stroke()}
         g2.restore()}
-      shape();g2.lineWidth=Math.max(1.2,Math.min(2.2,z/12));g2.strokeStyle=INK;g2.stroke();
-      if(sel||hov){g2.lineWidth=sel?2.2:1.2;g2.strokeStyle=sel?'#fff2c0':'rgba(255,250,230,.7)';g2.strokeRect(x0-2.5,y0-2.5,z+5,z+5)}
+      // biseau clair comme une pièce de jeu, puis contour
+      shape();g2.lineWidth=lw;g2.strokeStyle='rgba(255,255,255,.55)';g2.stroke();
+      g2.beginPath();g2.rect(x0+lw,y0+lw,z-2*lw,z-2*lw);g2.lineWidth=Math.max(.6,lw*.6);g2.strokeStyle='rgba(20,14,8,.35)';g2.stroke();
+      if(sel||hov){g2.lineWidth=sel?2:1;g2.strokeStyle=sel?'#fff2c0':'rgba(255,250,230,.7)';g2.strokeRect(x0-2,y0-2,z+4,z+4)}
       g2.restore()}
     // mêlée : poussière, et paires de régiments au contact pour les armes qui s'affrontent (une fois par paire)
     if(fight)for(const e of u.contacts){if(e.id<u.id)continue;const mx=(u.x+e.x)/2,my=(u.y+e.y)/2;
-      if(Math.random()<.12)fx('dust',mx+(Math.random()-.5)*u.w*.6,my+(Math.random()-.5)*u.w*.3,{life:1.4+Math.random(),r:6+Math.random()*6,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,c:'110,86,58',a:.16});
+      if(Math.random()<.15)fx('dust',mx+(Math.random()-.5)*u.w*.8,my+(Math.random()-.5)*u.w*.3,{life:1.4+Math.random(),r:6+Math.random()*6,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,c:'110,86,58',a:.15});
       CLASH.push([u,e])}
-    if(u.moving&&(k==='cav'||k==='lcav'||k==='eleph')&&Math.random()<.15)fx('dust',u.x-Math.cos(u.ang)*u.dd*.6+(Math.random()-.5)*u.w*.5,u.y-Math.sin(u.ang)*u.dd*.6+(Math.random()-.5)*u.w*.5,{life:1.2,r:5,c:'150,128,92',a:.14});
+    if(u.moving&&(k==='cav'||k==='lcav'||k==='eleph')&&Math.random()<.15)fx('dust',u.x-Math.cos(u.ang)*u.dd*.8+(Math.random()-.5)*u.w*.5,u.y-Math.sin(u.ang)*u.dd*.8+(Math.random()-.5)*u.w*.5,{life:1.2,r:5,c:'150,128,92',a:.14});
   }
   function drawOrders(){
     for(const u of units){
@@ -2424,17 +2436,27 @@ if(!V3D){
       const an=Math.atan2(by-ay,bx-ax);g2.beginPath();g2.moveTo(bx,by);g2.lineTo(bx-10*Math.cos(an-.45),by-10*Math.sin(an-.45));g2.lineTo(bx-10*Math.cos(an+.45),by-10*Math.sin(an+.45));g2.closePath();g2.fillStyle=g2.strokeStyle;g2.fill();g2.restore();
     }
   }
+  // volées : chaque tir part en l'air en cloche (flèches haut, javelots tendus), avec sa traînée et son ombre au sol
   function drawProjs(){
-    for(const p of projs){const k=Math.min(1,p.t/p.dur),x=p.x0+(p.tx-p.x0)*k,y=p.y0+(p.ty-p.y0)*k,[sx,sy]=scr(x,y),[ax,ay]=scr(p.x0,p.y0),[bx,by]=scr(p.tx,p.ty);
-      const L=Math.hypot(bx-ax,by-ay),h=Math.min(60,L*.28+6)*4*k*(1-k),dh=Math.min(60,L*.28+6)*4*(1-2*k);
-      const vx=(bx-ax),vy=(by-ay)-dh,an=Math.atan2(vy,vx),ty=p.k||'fleche',R=srand(Math.floor(p.seed*1e6));
-      g2.fillStyle='rgba(20,14,8,.18)';g2.beginPath();g2.arc(sx,sy,1.6,0,6.283);g2.fill(); // ombre
-      for(let i=0;i<4;i++){const ox=(R()-.5)*9,oy=(R()-.5)*9,qx=sx+ox,qy=sy+oy-h;g2.save();g2.translate(qx,qy);g2.rotate(an);
-        if(ty==='pierre'){g2.fillStyle='#3a3026';g2.beginPath();g2.arc(0,0,1.6,0,6.283);g2.fill()}
-        else{const l=ty==='javelot'?11:7;g2.strokeStyle=ty==='javelot'?'#4a3420':'#2a2016';g2.lineWidth=ty==='javelot'?1.6:1.1;g2.beginPath();g2.moveTo(-l,0);g2.lineTo(0,0);g2.stroke();
-          g2.fillStyle='#bfc4c8';g2.beginPath();g2.moveTo(2.5,0);g2.lineTo(-1,-1.5);g2.lineTo(-1,1.5);g2.closePath();g2.fill();
-          if(ty==='fleche'){g2.strokeStyle='#e8dcc0';g2.lineWidth=1;g2.beginPath();g2.moveTo(-l,0);g2.lineTo(-l-2,-2);g2.moveTo(-l,0);g2.lineTo(-l-2,2);g2.stroke()}}
-        g2.restore()}}
+    const f=Math.max(.9,Math.min(2.2,s2*1.1));
+    for(const p of projs){const ty=p.k||'fleche',R=srand(Math.floor(p.seed*1e6)),k=Math.min(1,p.t/p.dur);
+      const [ax,ay]=scr(p.x0,p.y0),[bx,by]=scr(p.tx,p.ty),L=Math.hypot(bx-ax,by-ay);
+      const H=Math.max(18,Math.min(260,L*(ty==='fleche'?.55:ty==='pierre'?.35:.28))),n=ty==='javelot'?6:ty==='pierre'?8:9,sp=Math.max(6,Math.min(40,8*s2));
+      const at=(kk,ox,oy)=>[ax+(bx-ax)*kk+ox,ay+(by-ay)*kk+oy-H*4*kk*(1-kk)];
+      for(let i=0;i<n;i++){const ox=(R()-.5)*sp*2,oy=(R()-.5)*sp,dk=(R()-.5)*.08,kk=Math.max(0,Math.min(1,k+dk));
+        // ombre au sol
+        g2.fillStyle='rgba(20,14,8,.16)';g2.beginPath();g2.ellipse(ax+(bx-ax)*kk+ox,ay+(by-ay)*kk+oy,1.8*f,1.1*f,0,0,6.283);g2.fill();
+        const [qx,qy]=at(kk,ox,oy),[px,py]=at(Math.max(0,kk-.03),ox,oy),an=Math.atan2(qy-py,qx-px);
+        // traînée
+        const [tx0,ty0]=at(Math.max(0,kk-.14),ox,oy);g2.strokeStyle='rgba(250,244,225,.28)';g2.lineWidth=1;g2.beginPath();g2.moveTo(tx0,ty0);g2.quadraticCurveTo(px,py,qx,qy);g2.stroke();
+        g2.save();g2.translate(qx,qy);g2.rotate(an);g2.scale(f,f);
+        if(ty==='pierre'){g2.fillStyle='#3a3026';g2.beginPath();g2.arc(0,0,1.7,0,6.283);g2.fill()}
+        else{const l=ty==='javelot'?12:8;g2.strokeStyle=ty==='javelot'?'#4a3420':'#2a2016';g2.lineWidth=ty==='javelot'?1.6:1.1;g2.beginPath();g2.moveTo(-l,0);g2.lineTo(0,0);g2.stroke();
+          g2.fillStyle='#d4d8dc';g2.strokeStyle='#2a2016';g2.lineWidth=.5;g2.beginPath();g2.moveTo(3,0);g2.lineTo(-1,-1.6);g2.lineTo(-1,1.6);g2.closePath();g2.fill();g2.stroke();
+          if(ty==='fleche'){g2.strokeStyle='#efe4c8';g2.lineWidth=1.1;g2.beginPath();g2.moveTo(-l,0);g2.lineTo(-l-2.5,-2.2);g2.moveTo(-l+1.5,0);g2.lineTo(-l-1,-2.2);g2.moveTo(-l,0);g2.lineTo(-l-2.5,2.2);g2.moveTo(-l+1.5,0);g2.lineTo(-l-1,2.2);g2.stroke()}}
+        g2.restore()}
+      // départ : petit nuage au-dessus du régiment qui tire
+      if(p.t<.08&&!p._puff){p._puff=1;fx('dust',p.x0,p.y0,{life:.6,r:3,c:'200,190,160',a:.18})}}
   }
   // type de projectile selon l'arme de jet du régiment
   function projKind(u){const g=typeof gearOf==='function'?gearOf(u):{},j=g&&g.jet;return j==='arc'?'fleche':j==='fronde'||u.type==='sling'?'pierre':j==='javelots'||j==='soliferrum'||j==='pilum'?'javelot':u.T.kind==='lcav'?'javelot':'fleche'}
@@ -2876,6 +2898,51 @@ window.__son=SON;
   try{const b=$('bPause');SW.ui(b&&b.parentNode,null)}catch(e){}
 }
 /* ================= FIN SONS ET MUSIQUE ================= */
+/* ================= RÉGIMENTS LÉGENDAIRES (champ de bataille) =================
+   Les régiments légendaires de la campagne arrivent avec leur surnom et leur étendard (c.leg={n,c,svg}) :
+   moral +20 %, étendard dessiné au-dessus du régiment ; leur déroute ébranle les voisins.
+   Chaque régiment compte les morts qu'il inflige (mêlée et traits) ; le compte part vers la campagne
+   (message « exploits ») juste avant le résultat. Source : /mnt/project-files/futur/legendes-bataille.js. */
+{
+  let CURA=null;
+  {const _m=melee;melee=function(u){const p=CURA;CURA=u;try{return _m.apply(this,arguments)}finally{CURA=p}}}
+  {const _s=shoot;shoot=function(u){const n=projs.length,r=_s.apply(this,arguments);for(let i=n;i<projs.length;i++)if(!projs[i].srcU)projs[i].srcU=u;return r}}
+  {const _l=landProj;landProj=function(p){const q=CURA;CURA=p&&p.srcU||null;try{return _l.apply(this,arguments)}finally{CURA=q}}}
+  {const _h=hurt;hurt=function(e,cas){const a=CURA,m0=e&&e.men;const r=_h.apply(this,arguments);if(a&&e&&a.side!==e.side&&m0>e.men)a.kills=(a.kills||0)+(m0-e.men);return r}}
+  // déroute d'un régiment légendaire : les voisins vacillent
+  {const _r=rout;rout=function(u){const was=u&&u.routing;const r=_r.apply(this,arguments);
+    if(u&&u.leg&&!was){for(const o of units)if(o!==u&&o.side===u.side&&!o.dead&&!o.routing&&Math.hypot(o.x-u.x,o.y-u.y)<260*G)o.morale-=6;
+      try{if(typeof banner==='function')banner(u.side===0?`${u.leg.n} plient ! Leur étendard recule.`:`${u.leg.n} plient devant vous !`,u.side===0?'#e0a060':'#e8c46a')}catch(e){}}
+    return r}}
+  // surnom, moral et étendard à l'arrivée
+  const imgs=new Map();
+  function legImg(L){if(!L||!L.svg)return null;let im=imgs.get(L.svg);if(im)return im;im=new Image();
+    let svg=L.svg;if(!/xmlns=/.test(svg))svg=svg.replace('<svg ','<svg xmlns="http://www.w3.org/2000/svg" ');im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);imgs.set(L.svg,im);return im}
+  // appelé juste après le déploiement, avant que l'invité d'une bataille à deux n'inverse les camps : camp 0 = CAMP.b.p
+  function tagLeg(){if(!CAMP||!CAMP.b||!units)return;
+    for(const u of units){if(u.leg||u.ci==null)continue;const c=(u.side===0?CAMP.b.p:CAMP.b.e||[])[u.ci];if(!c||!c.leg||c.t!==u.type)continue;
+      u.leg=c.leg;u.T=Object.assign({},u.T,{morale:u.T.morale*1.2});u.morale=Math.max(u.morale,u.T.morale);legImg(c.leg)}}
+  {const _d=deployCamp;deployCamp=function(){const r=_d.apply(this,arguments);try{tagLeg()}catch(e){console.warn(e)}return r}}
+  // étendards au-dessus des régiments (vue de carte)
+  function drawBanners(){const cv=document.getElementById('map2d');if(!cv||cv.style.display==='none'||!units)return;const B=window.__brume;
+    let g=null,DPR=1;
+    for(const u of units){if(!u.leg)continue;if(!u._lgl){u._lgl=1;if(!String(u.label).includes(u.leg.n))u.label=u.leg.n+(/^Garde de /.test(u.label)?` (${u.label.replace(/^G/,'g')})`:'');u.dirty=true}
+      if(u.dead||u.fled||u.pend)continue;if(B&&B.on&&u.side!==0&&B.seenBy&&!B.seenBy(0,u))continue;
+      const im=legImg(u.leg);if(!im||!im.complete||!im.naturalWidth)continue;
+      if(!g){g=cv.getContext('2d');DPR=cv.width/(cv.clientWidth||1);g.save();g.setTransform(DPR,0,0,DPR,0,0)}
+      const hx=-Math.sin(u.ang)*u.w*.5,hy=Math.cos(u.ang)*u.w*.5,e1=toScreen(u.x+hx,u.y+hy,0),e2=toScreen(u.x-hx,u.y-hy,0),p=e1.x>e2.x?e1:e2;if(p.ok===false)continue;const h=Math.max(30,Math.min(48,32*Math.sqrt(900*Math.sqrt(G)/Math.max(300,cam.dist)))),w=h/1.4;
+      g.globalAlpha=u.routing?.55:1;g.drawImage(im,p.x-w*.5+4,p.y-h+4,w,h)}
+    if(g){g.globalAlpha=1;g.restore()}}
+  {const _rr=renderer.render;renderer.render=function(){const r=_rr.apply(this,arguments);try{drawBanners()}catch(e){}return r}}
+  // morts infligés, envoyés à la campagne avant le résultat
+  {const _cr=campReturn;campReturn=function(win){try{if(CAMP&&CAMP.b&&window.parent!==window&&!(CAMP.pvp&&CAMP.pvp.role==='g')){
+      const p=(CAMP.b.p||[]).map(()=>0),e=(CAMP.b.e||[]).map(()=>0);
+      for(const u of units){if(u.ci==null)continue;const L=u.side===0?p:e;if(u.ci<L.length)L[u.ci]=Math.round(u.kills||0)}
+      window.parent.postMessage({bellum:'exploits',p,e},'*')}}catch(e){console.warn(e)}
+    return _cr.apply(this,arguments)}}
+  window.__lege={drawBanners,tagLeg,pos:u=>toScreen(u.x,u.y,0)};
+}
+/* ================= FIN RÉGIMENTS LÉGENDAIRES (champ de bataille) ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   GROUND=await groundP;
