@@ -2293,7 +2293,8 @@ if(!V3D){
   function cracksOf(u){const N=gridOf(u).N;if(u._cr&&u._cr.length===N)return u._cr;const R=srand(u.id*31+7),C=[];
     for(let k=0;k<N;k++){const L=[];for(let c=0;c<6;c++){const side=Math.floor(R()*4),t=R()-.5,p=[side===0?-.5:side===1?.5:t,side===2?-.5:side===3?.5:t],pts=[p];
         let x=p[0],y=p[1];const tx=(R()-.5)*.5,ty=(R()-.5)*.5;for(let s=1;s<=3;s++){x+=(tx-x)*.45+(R()-.5)*.18;y+=(ty-y)*.45+(R()-.5)*.18;pts.push([x,y])}L.push(pts)}
-      C.push({L,chip:Math.floor(R()*4)})}
+      const fo=[0,1,2,3].sort(()=>R()-.5),fs=[0,1,2,3].map(()=>.3+R()*.2),fe=[0,1,2,3].map(()=>.35+R()*.5);
+      C.push({L,chip:fo[0],fo,fs,fe})}
     return u._cr=C}
   // particules : éclats, poussière de mêlée, impacts de tir
   const FXP=[];let fxT=0;
@@ -2372,14 +2373,14 @@ if(!V3D){
         q.nt=front?.25+Math.random()*.6:.6+Math.random()*1.4;q.sp=u.moving?.6+Math.random()*.8:1}
       const kn=1-Math.exp(-dt*(fight&&row===0?5:1.6));q.nx+=(q.gx-q.nx)*kn;q.ny+=(q.gy-q.ny)*kn;lx+=q.nx;ly+=q.ny;
       if(fight)lx+=N>1?(row===0?m*.25:m*.12):m*.1;                                          // les rangs se serrent vers l'ennemi
-      if(u.routing){const k2=Math.min(3,u.routeT||0),h=Math.sin(t*12.9+u.id*7.7)*43758.5,hr=h-Math.floor(h);lx+=(hr-.5)*m*1.6*k2;ly+=(Math.cos(t*3.1+u.id)*.5)*m*1.2*k2}
+      if(u.routing&&N>1){const k2=Math.min(3,u.routeT||0),h=Math.sin(t*12.9+u.id*7.7)*43758.5,hr=h-Math.floor(h);lx+=(hr-.5)*m*1.6*k2;ly+=(Math.cos(t*3.1+u.id)*.5)*m*1.2*k2}
       const tx=u.x+lx*c-ly*s,ty=u.y+lx*s+ly*c;
       if(!(q.x===q.x)||Math.hypot(tx-q.x,ty-q.y)>u.w*2.5){q.x=tx;q.y=ty;q.a=u.ang;continue}
       q.x+=dux;q.y+=duy;const ox=q.x,oy=q.y,kf=1-Math.exp(-dt*(2.2+q.r*1.6)*q.sp);q.x+=(tx-q.x)*kf;q.y+=(ty-q.y)*kf;
       const vx=q.x-ox+dux,vy=q.y-oy+duy,sp=dt>0?Math.hypot(vx,vy)/dt:0;let want=u.ang;
       if(sp>1.5&&!fight){const d=angDiff(Math.atan2(vy,vx),u.ang);if(Math.abs(d)<1.6)want+=d*.4*Math.min(1,sp/8)}
       if(fight)want+=q.ny/m*.3;
-      if(u.routing)want+=Math.sin(t*3+u.id)*.7;
+      if(u.routing&&N>1)want+=Math.sin(t*3+u.id)*.7;
       q.a+=angDiff(want,q.a)*(1-Math.exp(-dt*4))}
   }
   // ordre de chute des cases : les rangs de derrière d'abord, le premier rang tient jusqu'au bout
@@ -2406,9 +2407,7 @@ if(!V3D){
     const b=Math.max(1.3,z*.13),pz=z-2*b,tint=shade(P.blk,.38);
     const grads={};const grad=c=>{const key=Math.round(c*20);return grads[key]||(grads[key]=(()=>{const g=g2.createRadialGradient(-z*.1,-z*.12,z*.04,0,0,z*.66);
       g.addColorStop(0,shade(P.blk,1.42-c*.4));g.addColorStop(.5,shade(P.blk,1.05-c*.3));g.addColorStop(1,shade(P.blk,.52-c*.15));return g})())};
-    // ombres portées d'abord, en un seul passage
-    g2.fillStyle='rgba(12,8,3,.42)';
-    for(let t=0;t<N;t++){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const [sx,sy]=scr(q.x,q.y);g2.save();g2.translate(sx+Math.max(1.5,z*.1),sy+Math.max(2,z*.13));g2.rotate(scrAng(q.a));g2.fillRect(x0,y0,z,z);g2.restore()}
+    const shX=Math.max(1.5,z*.1),shY=Math.max(2,z*.13);
     for(let t=R*C-1;t>=0;t--){if(gone.has(t))continue;const q=u._sq[t];if(!q)continue;const row=Math.floor(t/C),col=t%C;
       let [sx,sy]=scr(q.x,q.y);const a=scrAng(q.a);
       if(shot&&row===0){const r=z*.12*shot*Math.sin(t+1);sx-=Math.cos(a)*r;sy-=Math.sin(a)*r}
@@ -2416,9 +2415,16 @@ if(!V3D){
       if(hk){sx+=(Math.random()-.5)*z*.18*hk;sy+=(Math.random()-.5)*z*.18*hk}
       const c=t===next?Math.max(gen,local):gen,cr=CR[t];
       g2.save();g2.translate(sx,sy);g2.rotate(a);if(u.routing)g2.globalAlpha=.55+.25*Math.sin(rt*9+t);
-      const chip=c>.6?z*.32*(c-.6)/.4:0,co=cr.chip,pts=[[x0,y0],[x0+z,y0],[x0+z,y0+z],[x0,y0+z]];
-      const shape=()=>{g2.beginPath();pts.forEach((p,i)=>{if(i===co&&chip){const n=pts[(i+1)%4],pv=pts[(i+3)%4];g2.lineTo(p[0]+(pv[0]-p[0])/z*chip,p[1]+(pv[1]-p[1])/z*chip);g2.lineTo(p[0]+(n[0]-p[0])/z*chip,p[1]+(n[1]-p[1])/z*chip)}else g2.lineTo(p[0],p[1])});g2.closePath()};
-      // cadre
+      // morceaux arrachés : un coin à 30 %, puis 50, 68 et 85 % d'usure ; chaque coin part en éclats quand il cède
+      const nf=c>.85?4:c>.68?3:c>.5?2:c>.3?1:0,gonec=new Set(cr.fo.slice(0,nf)),pts=[[x0,y0],[x0+z,y0],[x0+z,y0+z],[x0,y0+z]];
+      if(q.nf==null)q.nf=nf;if(nf>q.nf){for(let j=q.nf;j<nf;j++)for(let i=0;i<5;i++){const an=Math.random()*6.283,sp=(25+Math.random()*45)/s2;fx('shard',q.x+(Math.random()-.5)*u.w*.6,q.y+(Math.random()-.5)*u.w*.6,{vx:Math.cos(an)*sp,vy:Math.sin(an)*sp,life:.7+Math.random()*.5,r:Math.max(1.4,z*.13)*(.6+Math.random()*.7),c:i%2?'#16110c':P.blk,rot:an,vr:(Math.random()-.5)*14})}q.nf=nf}
+      const shape=()=>{g2.beginPath();pts.forEach((p,i)=>{if(gonec.has(i)){const k=cr.fs[i]*z,e=cr.fe[i],n=pts[(i+1)%4],pv=pts[(i+3)%4];
+          // coupe en dents : le bord arraché n'est pas droit
+          g2.lineTo(p[0]+(pv[0]-p[0])/z*k,p[1]+(pv[1]-p[1])/z*k);
+          const mx=p[0]+((pv[0]-p[0])+(n[0]-p[0]))/z*k*.5*e+((pv[0]-p[0])+(n[0]-p[0]))/z*k*.2,my=p[1]+((pv[1]-p[1])+(n[1]-p[1]))/z*k*.5*e+((pv[1]-p[1])+(n[1]-p[1]))/z*k*.2;g2.lineTo(mx,my);
+          g2.lineTo(p[0]+(n[0]-p[0])/z*k*(.7+e*.4),p[1]+(n[1]-p[1])/z*k*(.7+e*.4))}else g2.lineTo(p[0],p[1])});g2.closePath()};
+      // ombre portée (vers le bas à droite de l'écran), puis cadre
+      {const ca=Math.cos(-a),sa=Math.sin(-a);g2.save();g2.translate(shX*ca-shY*sa,shX*sa+shY*ca);shape();g2.fillStyle='rgba(12,8,3,.42)';g2.fill();g2.restore()}
       shape();g2.fillStyle='#16110c';g2.fill();
       g2.save();g2.clip();
       // plaque
@@ -2428,9 +2434,11 @@ if(!V3D){
       g2.strokeStyle=shade(P.lt||P.blk,.95).replace('rgb','rgba').replace(')',',.45)');g2.beginPath();g2.moveTo(x0+z-b,y0+b);g2.lineTo(x0+z-b,y0+z-b);g2.lineTo(x0+b,y0+z-b);g2.stroke();
       if(hk){g2.fillStyle=`rgba(255,90,50,${.5*hk})`;g2.fillRect(x0,y0,z,z)}
       sym2(k,x0+b,y0+b,pz,tint);
-      if(c>.08){const nc=Math.ceil(c*cr.L.length*1.1);
+      if(c>.05){const nc=Math.ceil(c*cr.L.length*1.4);
         for(let i=0;i<Math.min(nc,cr.L.length);i++){const L=cr.L[i],deep=Math.min(1,c*1.6);g2.beginPath();g2.moveTo(L[0][0]*z,L[0][1]*z);const mm=1+Math.ceil(deep*(L.length-1));for(let j=1;j<mm&&j<L.length;j++)g2.lineTo(L[j][0]*z,L[j][1]*z);
-          g2.lineWidth=1.3;g2.strokeStyle='rgba(255,240,210,.28)';g2.stroke();g2.lineWidth=.85;g2.strokeStyle='rgba(14,9,4,.95)';g2.stroke()}}
+          g2.lineJoin='round';g2.lineWidth=Math.max(1.8,z*.06*(.6+deep*.7));g2.strokeStyle='rgba(255,236,200,.32)';g2.stroke();g2.lineWidth=Math.max(1.1,z*.034*(.6+deep*.9));g2.strokeStyle='rgba(10,6,2,.97)';g2.stroke()}
+        // la plaque s'assombrit avec l'usure
+        g2.fillStyle=`rgba(20,10,4,${c*.28})`;g2.fillRect(x0,y0,z,z)}
       g2.restore();
       // arête claire très fine autour du cadre
       shape();g2.lineWidth=.7;g2.strokeStyle='rgba(255,245,220,.18)';g2.stroke();
@@ -2497,7 +2505,7 @@ if(!V3D){
       g2.restore()}
   }
   function draw2d(){
-    view();g2.setTransform(1,0,0,1,0,0);drawGround();
+    view();g2.setTransform(1,0,0,1,0,0);drawGround();try{window.__sol2d&&window.__sol2d(g2,M,DPR,s2)}catch(e){}
     g2.save();g2.scale(DPR,DPR);
     drawOrders();
     const order=units.filter(u=>!u.dead&&!u.pend).sort((a,b)=>(a.routing?0:1)-(b.routing?0:1));
@@ -2513,8 +2521,8 @@ if(!V3D){
   /* -- carrés indépendants : chaque régiment se partage en 5 carrés (1/5 des hommes, 1/5 du front) que l'on sélectionne
         et déplace un à un. C'est au joueur (et à l'IA) d'échelonner ses rangs pour relever les carrés qui faiblissent.
         Le régiment reste un tout pour la campagne (pertes additionnées), les cartes d'unités et les corps. -- */
-  const NSPL=5;
-  const T5=new Map();const tOf=T=>{let t=T5.get(T);if(!t){t=Object.assign({},T,{men:T.men/NSPL,w:T.w/NSPL,d:Math.max(T.w/NSPL,Math.min(T.d,T.w/NSPL*1.1))});T5.set(T,t);T5.set(t,t)}return t};
+  const NSPL=5,SQ=16; // tous les carrés ont la même taille (m)
+  const T5=new Map();const tOf=T=>{let t=T5.get(T);if(!t){t=Object.assign({},T,{men:T.men/NSPL,w:SQ,d:SQ});T5.set(T,t);T5.set(t,t)}return t};
   const KIDS=new Map(); // id du régiment → ses carrés (le premier est l'unité d'origine)
   const regOf=u=>KIDS.get(u.reg!=null?u.reg:u.id)||[u];
   window.__carres={regOf,get regs(){return KIDS}};
@@ -2522,7 +2530,7 @@ if(!V3D){
     if(units._split)return;units._split=true;KIDS.clear();
     const list=units.slice();
     for(const u of list){if(u.reg!=null)continue;
-      const T0=u.T,men=u.men,w5=T0.w/NSPL,c=Math.cos(u.ang),s=Math.sin(u.ang),px=-s,py=c,leg=u.leg;
+      const T0=u.T,men=u.men,w5=SQ,c=Math.cos(u.ang),s=Math.sin(u.ang),px=-s,py=c,leg=u.leg;
       const ai=u.side===1&&T0.kind==='inf';                  // l'IA aligne 3 carrés et en garde 2 en relève derrière
       const slots=ai?[[-1,0],[-.5,-1],[0,0],[.5,-1],[1,0]]:[[-2,0],[-1,0],[0,0],[1,0],[2,0]];
       const T1=tOf(T0),grp=[];
@@ -2539,11 +2547,44 @@ if(!V3D){
       u.order=u.order&&u.order.type==='move'?Object.assign({},u.order,{x:u.order.x+(u.x-u.x)}):u.order;
       KIDS.set(u.id,grp)}
     // corps de l'armée : tous les carrés du régiment en font partie
+    try{for(let i=0;i<30;i++)separate()}catch(e){}
     try{for(const s of [0,1])for(const o of (window.__echelle&&window.__echelle.corps||[[],[]])[s]){const add=[];for(const u of o.us)for(const v of regOf(u))if(v!==u)add.push(v);o.us.push(...add)}}catch(e){}
   }
   // la première construction des effets du déploiement déclenche le partage, puis on construit ceux des nouveaux carrés
   {const _mf=makeFx;makeFx=function(u){if(units&&!units._split&&!REVUE&&!REVUE_P){splitAll();const r=_mf.apply(this,arguments);for(const v of units)if(v.reg!=null&&v.rk>0&&!v._fx){v._fx=1;_mf(v)}return r}return _mf.apply(this,arguments)}}
   {const _st=setup;setup=function(){KIDS.clear();return _st.apply(this,arguments)}}
+  // 1. les carrés ne se superposent pas : séparation par axes (deux carrés orientés), amis avec un petit jeu, ennemis au contact
+  function sepPair(a,b,gap){const dx=b.x-a.x,dy=b.y-a.y,h=SQ/2;if(Math.abs(dx)>SQ*1.5+gap||Math.abs(dy)>SQ*1.5+gap)return;
+    let best=1e9,bx=0,by=0;
+    for(const an of [a.ang,a.ang+1.5708,b.ang,b.ang+1.5708]){const ax=Math.cos(an),ay=Math.sin(an),d=dx*ax+dy*ay;
+      const ea=h*(Math.abs(Math.cos(an-a.ang))+Math.abs(Math.sin(an-a.ang))),eb=h*(Math.abs(Math.cos(an-b.ang))+Math.abs(Math.sin(an-b.ang)));
+      const ov=ea+eb+gap-Math.abs(d);if(ov<=0)return;if(ov<best){best=ov;const sg=d<0?-1:1;bx=ax*sg;by=ay*sg}}
+    // celui qui se bat ou qui ne bouge pas cède moins
+    const wa=(a.contacts.length?.3:1)*(a.moving?1:.6),wb=(b.contacts.length?.3:1)*(b.moving?1:.6),t=wa+wb||1;
+    a.x-=bx*best*wa/t;a.y-=by*best*wa/t;b.x+=bx*best*wb/t;b.y+=by*best*wb/t}
+  const CELL=SQ*2;
+  function separate(){const L=units.filter(u=>!u.dead&&!u.pend&&!u.routing&&u.reg!=null);if(L.length<2)return;const grid=new Map();
+    for(const u of L){const k=Math.floor(u.x/CELL)+','+Math.floor(u.y/CELL);let c=grid.get(k);if(!c)grid.set(k,c=[]);c.push(u)}
+    for(const u of L){const cx=Math.floor(u.x/CELL),cy=Math.floor(u.y/CELL);
+      for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const c=grid.get((cx+i)+','+(cy+j));if(!c)continue;
+        for(const v of c)if(v.id>u.id)sepPair(u,v,u.side===v.side?.8:-1.5)}}}
+  {const _sp=step;step=function(dt){const r=_sp.apply(this,arguments);try{for(let i=0;i<2;i++)separate()}catch(e){}return r}}
+  // 4. déroute : le carré fait demi-tour sur place, puis fuit tout droit
+  flee=function(u,dt){
+    u.routeT+=dt;
+    const foes=units.filter(e=>e.side!==u.side&&!e.dead&&!e.routing);
+    let ax=0,ay=(u.side===0?H+80:-80)-u.y;const l=Math.hypot(ax,ay)||1;ax/=l;ay/=l;
+    const n=nearest(u,foes);
+    if(n){const dx=u.x-n.x,dy=u.y-n.y,d=Math.hypot(dx,dy)||1;if(d<250*G){ax+=dx/d*.8;ay+=dy/d*.8}}
+    if(u._fh==null)u._fh=Math.atan2(ay,ax);
+    if(!u._ft){ // d'abord le demi-tour sur place
+      if(Math.abs(angDiff(u._fh,u.ang))>.12){rotateToward(u,u._fh,Math.max(3,u.T.turn*5),dt);u.moving=false}else{u.ang=u._fh;u._ft=1}}
+    if(u._ft){ // puis la fuite droit devant, en corrigeant doucement le cap
+      rotateToward(u,Math.atan2(ay,ax),u.T.turn*.6,dt);const sp=u.T.speed*RUN*1.1;u.x+=Math.cos(u.ang)*sp*dt;u.y+=Math.sin(u.ang)*sp*dt;u.moving=true}
+    const nd=n?Math.hypot(n.x-u.x,n.y-u.y):1e9;
+    if(!u.rallied&&u.routeT>14&&nd>420*G&&frac(u)>.3){u.routing=false;u.rallied=true;u.morale=u.T.morale*.4;u.dirty=true;u.ang=u.side===0?-Math.PI/2:Math.PI/2;u._fh=null;u._ft=0}
+    if(u.y<-60||u.y>H+60){u.fled=true;u.dead=true;selected.delete(u)}
+  };
   // pertes : chaque carré ne compte que pour 1/5 du régiment (mêlée comme traits)
   {const _h=hurt;hurt=function(e,cas){return _h.call(this,e,e&&e.reg!=null?cas/NSPL:cas)}}
   // une déroute n'ébranle les voisins que comme un cinquième de régiment

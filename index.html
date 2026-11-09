@@ -10552,7 +10552,11 @@ function buildDef(i,k,a){const sg=S.siege[N[i].id],D=DEF[k];if(!sg||sg[k])return
   if(ownerN(i)==='car'||sg.side==='car')log(ownerN(i)==='car'?`${N[i].n} : ${k==='cmur'?'on élève un contre-mur':'on creuse des contre-mines'} (${d} jours).`:`Les assiégés de ${N[i].n} ${k==='cmur'?'élèvent un contre-mur':'creusent des contre-mines'}.`);return true}
 // contre-mur : l'assaut compte des murs plus forts (résolution automatique et bataille)
 {const _od=odds;odds=function(b){const p=_od.apply(this,arguments);try{if(b&&b.assault!=null&&defOk(S.siege[N[b.assault].id],'cmur')){const q=Math.min(.999,Math.max(.001,p)),r=q/(1-q)/(1.2*1.2);return r/(1+r)}}catch(e){}return p}}
-{const _dv=dive;dive=function(payload){try{const b=S.cur;if(b&&b.assault!=null&&payload&&payload.b&&payload.b.walls&&defOk(S.siege[N[b.assault].id],'cmur')){payload.b.walls.k=Math.round(payload.b.walls.k*1.2*100)/100;payload.b.desc=(payload.b.desc||'')+' Un contre-mur renforce les remparts (×1,2).'}}catch(e){}return _dv.apply(this,arguments)}}
+{const _dv=dive;dive=function(payload){try{const b=S.cur;if(b&&b.assault!=null&&payload&&payload.b&&payload.b.walls){const sg=S.siege[N[b.assault].id],W=payload.b.walls;
+  if(defOk(sg,'cmur')){W.k=Math.round(W.k*1.2*100)/100;payload.b.desc=(payload.b.desc||'')+' Un contre-mur renforce les remparts (×1,2).'}
+  // pour la carte d'assaut (module villes du fil Terrains) : machines prêtes et nombre de brèches (0 à 3)
+  W.eng={rams:engOk(sg,'rams'),tow:engOk(sg,'tow'),lad:engOk(sg,'lad'),cat:engOk(sg,'cat')};
+  const f=sg&&sg.need?sg.d/sg.need:0;let br=f>=.7?(W.eng.cat?3:2):f>=.4?1:0;if(sg&&sg.breach)br=Math.max(br,1);if(defOk(sg,'cmur'))br=Math.max(0,br-1);W.br=Math.min(3,br)}}catch(e){}return _dv.apply(this,arguments)}}
 // ---- chaque jour ----
 {const _dG=daily;daily=function(d){
   try{if(S&&!S.cur&&!S.over){S.gb=S.gb||[];
