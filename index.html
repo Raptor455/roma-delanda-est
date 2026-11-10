@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v197</span>
+ <span class="chg-ver">v198</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -7305,7 +7305,7 @@ function aiPick(side,n){const r=realSide(side),x=Math.random();
 function aiAfford(side,t){const r=income(side),net=r.inc-r.up-(UT[t].cost/12),res=realSide(side)==='car'&&S.pol&&!S.mirror?150:0;return S.gold[side]-UT[t].cost>=Math.max(res,-net*12)&&(net>-25||S.gold[side]>900)}
 // banqueroute : congédier les troupes les plus chères plutôt que de laisser le Sénat s'effondrer
 function aiTrim(side){const r=income(side);if(S.gold[side]>60||r.inc-r.up>=0)return;let over=r.up-r.inc;
-  const L=[];S.armies.forEach(a=>{if(a.side===side&&!a.dead&&!a.ship&&a.units.length>1)a.units.forEach(u=>L.push([a,u]))});L.sort((x,y)=>uCost(y[1])-uCost(x[1]));
+  const L=[];S.armies.forEach(a=>{if(a.side===side&&!a.dead&&!a.ship&&a.units.length>1)a.units.forEach(u=>{if(!u.gm)L.push([a,u])})});L.sort((x,y)=>uCost(y[1])-uCost(x[1]));
   for(const [a,u] of L){if(over<=0||a.units.length<=2)continue;a.units.splice(a.units.indexOf(u),1);over-=uCost(u)/12}}
 function aiRecruit(side){const cap0=capOf(side),cap=side==='pun'&&S.armies.some(a=>a.side==='pun'&&!a.g&&a.at===cap0&&a.units.length>=10)?-1:cap0;if(S.gold[side]<220||Math.floor(S.day)%10)return;
   const spots=N.filter(n=>!n.col&&ownerN(n.i)===side&&n.size>=1&&!S.q[n.id]&&(n.i===cap||S.armies.some(a=>a.side===side&&!a.g&&a.at===n.i&&!a.legs.length&&a.units.length<MAXU)));
@@ -8518,7 +8518,31 @@ const _afterLoadG=afterLoad;afterLoad=function(){const r=_afterLoadG.apply(this,
     const I={bGen:['<circle cx="12" cy="7" r="4"/><path d="M4 21c0-5 4-8 8-8s8 3 8 8z"/><path d="M9 3l3-2 3 2" fill="none" stroke-width="1.6"/>','Généraux'],
       bSea:['<path d="M3 15h18l-3 5H6z"/><path d="M11 3h2v11h-2z"/><path d="M13 4c3 1 5 4 5 8h-5z"/><path d="M11 6c-2 1-4 3-4 6h4z"/>','Commerce']};
     for(const id in I){const b=$(id);if(b&&!b.querySelector('.ui-i'))b.innerHTML=svg(I[id][0],I[id][1])}}catch(e){}},0)}
-window.__meca2={daily:d=>daily(d),popMax,popGet,popTake,popAvail,popHome,popRegen,raiseLevy,levyInfo,levyDesign,mercFill,mercFillCost,get POPV(){return popVil()},rgcShow,rgcClose,dipOpenFac,get RGC(){return RGC},openCoord,cdAsk,cdRegions,cdMonthly,cdInit,mxDaily,MX,inSard,mxLand,openTreaty,pzScore,pzSign,pzRegions,PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
+/* ---------- 18. GARNISONS MINIMALES (10 nov., Baptiste : « un minimum acceptable, 5-6 régiments ») ----------
+   Chaque bourg, ville et capitale tenus par quelqu'un garde au moins 5 régiments (6 pour une capitale).
+   Les régiments ajoutés sont la milice de la ville (u.gm) : payés par la ville (pas d'entretien), jamais congédiés par l'IA.
+   Au début de la partie (ou au premier jour d'une partie chargée), toutes les garnisons sont complétées ;
+   ensuite, chaque mois, une ville qui n'est pas assiégée en relève un de plus si elle est sous le minimum. */
+const GARMIN=n=>!n||n.col?0:n.size>=3?6:n.size>=1?5:0;
+function garArmy(n,o){return S.armies.find(a=>a.g&&!a.dead&&a.at===n.i&&a.side===o)}
+function garTypes(o,a){const ok=t=>UT[t]&&(UT[t].k==='inf'||UT[t].k==='skirm');
+  let L=a?a.units.map(u=>u.t).filter(ok):[];
+  if(!L.length)for(const b of S.armies)if(b.side===o&&!b.dead&&!b.ship)for(const u of b.units)if(ok(u.t))L.push(u.t);
+  if(!L.length){const r=realSide(o);L=r==='rom'?['legion','legion','velites']:r==='car'?['lib','iber','sling']:['iber','iber','sling']}
+  return L}
+function garFill(n,max){const o=ownerN(n.i);if(!o)return 0;const m=GARMIN(n);if(!m)return 0;let a=garArmy(n,o),k=0;
+  const T=garTypes(o,a);
+  if(!a){a={id:S.uid++,side:o,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
+  while(a.units.length<m&&k<max){const t=T[(a.units.length*2+1)%T.length];a.units.push({t,men:UT[t].men,gm:1});k++}
+  return k}
+function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;if(S.siege&&S.siege[n.id])continue;
+  const o=ownerN(n.i);if(S.armies.some(a=>{if(a.dead||a.g||a.side===o||Math.hypot(a.x-n.x,a.y-n.y)>6)return false;try{return hostile(a,{side:o,units:[]})}catch(e){return true}}))continue;k+=garFill(n,max)}return k}
+{const _dGM=daily;daily=function(d){const r=_dGM.apply(this,arguments);try{if(S&&!S.over&&!S.cur){
+  if(!S.garMin){S.garMin=1;garAll(99)}else if(Math.floor(d)%30===15)garAll(1)}}catch(e){console.error(e)}return r}}
+// la milice ne coûte rien : on retire son entretien (la moitié est déjà retirée pour une armée à l'abri des murs)
+{const _incG=income;income=function(side){const r=_incG.apply(this,arguments);try{let x=0;for(const a of S.armies)if(a.side===side&&!a.dead)for(const u of a.units)if(u.gm)x+=uCost(u)/12*(a.inG?.5:1);
+  if(x&&r&&typeof r.up==='number')r.up=Math.max(0,Math.round(r.up-x))}catch(e){}return r}}
+window.__meca2={daily:d=>daily(d),garAll,garFill,GARMIN,popMax,popGet,popTake,popAvail,popHome,popRegen,raiseLevy,levyInfo,levyDesign,mercFill,mercFillCost,get POPV(){return popVil()},rgcShow,rgcClose,dipOpenFac,get RGC(){return RGC},openCoord,cdAsk,cdRegions,cdMonthly,cdInit,mxDaily,MX,inSard,mxLand,openTreaty,pzScore,pzSign,pzRegions,PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
   aiSide,applyScen,startScen,openScen,autoRun,autoTxt,openAutoTest,showAuto,mirrorGame,openPolRome,romElectPlayer,warScore:()=>warScore(),victoryCheck:d=>victoryCheck(d),SCEN,realSide,routeState,get S(){return S}};
 /* ================= FIN MÉCANIQUES II ================= */
 /* ================= INTERFACE BRONZE (fil « Refaire l'interface ») =================
