@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v199</span>
+ <span class="chg-ver">v200</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -8533,7 +8533,7 @@ function garTypes(o,a){const ok=t=>UT[t]&&(UT[t].k==='inf'||UT[t].k==='skirm');
 function garFill(n,max){const o=ownerN(n.i);if(!o)return 0;const m=GARMIN(n);if(!m)return 0;let a=garArmy(n,o),k=0;
   const T=garTypes(o,a);
   if(!a){a={id:S.uid++,side:o,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
-  while(a.units.length<m&&k<max){const t=T[(a.units.length*2+1)%T.length];a.units.push({t,men:UT[t].men,gm:1});k++}
+  while(a.units.length<m&&k<max){const t=T[(a.units.length*2+1)%T.length];a.units.push({t,men:UT[t].men,gm:1});try{const c={};c[t]=a.units.filter(x=>x.t===t).length-1;depOne(a,a.units[a.units.length-1],c)}catch(e){}k++}
   return k}
 function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;if(S.siege&&S.siege[n.id])continue;
   const o=ownerN(n.i);if(S.armies.some(a=>{if(a.dead||a.g||a.side===o||Math.hypot(a.x-n.x,a.y-n.y)>6)return false;try{return hostile(a,{side:o,units:[]})}catch(e){return true}}))continue;k+=garFill(n,max)}return k}
@@ -8542,7 +8542,78 @@ function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;
 // la milice ne coûte rien : on retire son entretien (la moitié est déjà retirée pour une armée à l'abri des murs)
 {const _incG=income;income=function(side){const r=_incG.apply(this,arguments);try{let x=0;for(const a of S.armies)if(a.side===side&&!a.dead)for(const u of a.units)if(u.gm)x+=uCost(u)/12*(a.inG?.5:1);
   if(x&&r&&typeof r.up==='number')r.up=Math.max(0,Math.round(r.up-x))}catch(e){}return r}}
-window.__meca2={daily:d=>daily(d),garAll,garFill,GARMIN,popMax,popGet,popTake,popAvail,popHome,popRegen,raiseLevy,levyInfo,levyDesign,mercFill,mercFillCost,get POPV(){return popVil()},rgcShow,rgcClose,dipOpenFac,get RGC(){return RGC},openCoord,cdAsk,cdRegions,cdMonthly,cdInit,mxDaily,MX,inSard,mxLand,openTreaty,pzScore,pzSign,pzRegions,PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
+/* ---------- 19. ARMÉES DE DÉPART DES PEUPLES JOUABLES (10 nov., Baptiste : « re travaille les armées de base, l'équipement des unités surtout ») ----------
+   Au début de la partie, chaque régiment des armées et garnisons de Carthage, Rome et des peuples jouables reçoit une troupe
+   historique, nommée et équipée (modèle d'atelier). Les troupes du camp du joueur sont des modèles visibles dans l'atelier
+   (on peut les relever) ; celles des autres camps sont cachées (del). Les régiments d'un même type alternent les troupes de la liste. */
+const DEP_T={car:'pourpre',rom:'rouge',mac:'bronze',syr:'bleu',ath:'blanc',num:'ocre',ins:'vert',per:'bleu',mas:'blanc'};
+const DEP_HOP=(o)=>Object.assign({helm:'corinthien',crest:'crin',armor:'lin',jamb:'cnemides',shield:'hoplon',arm:'lance',jet:'aucune'},o||{});
+const DEP_THU=(o)=>Object.assign({helm:'pilos',crest:'rien',armor:'lin',jamb:'aucune',shield:'ovale',arm:'lance',jet:'javelots'},o||{});
+const DEP_CRE=['Archers crétois',{helm:'nu',armor:'tunique',shield:'pelte',arm:'dague',jet:'arc'}];
+const DEP_ROM={hastati:{helm:'bronze',crest:'plumes',armor:'pect',jamb:'une',shield:'scutum',arm:'glaive',jet:'pilum',train:'reg'},
+  principes:{helm:'bronze',crest:'plumes',armor:'maille',jamb:'une',shield:'scutum',arm:'glaive',jet:'pilum',train:'vet'},
+  triarii:{helm:'bronze',crest:'noire',armor:'maille',jamb:'une',shield:'scutum',arm:'lance',jet:'aucune',train:'vet'},
+  socii:{helm:'attique',crest:'crete',armor:'pect',jamb:'une',shield:'scutum',arm:'glaive',jet:'pilum',teinte:'blanc'}};
+const DEP_R={
+  car:{lib:[['Lanciers libyens',{helm:'attique',crest:'rien',armor:'lin',jamb:'aucune',shield:'hoplon',arm:'lance',jet:'aucune',train:'vet'}]],
+    iber:[['Scutarii ibères',{helm:'bronze',crest:'crete',armor:'tunique',jamb:'aucune',shield:'ovale',arm:'epee',jet:'soliferrum',tenue:'blanc'}],
+      ['Guerriers celtibères',{helm:'bronze',crest:'crin',armor:'cuir',jamb:'bandes',shield:'ovale',arm:'epee',jet:'soliferrum'}]],
+    gaul:[['Guerriers gaulois',{helm:'nu',armor:'tunique',shield:'ovale',arm:'longue',jet:'javelots'}]],
+    sling:[['Frondeurs baléares',{helm:'nu',armor:'tunique',shield:'aucun',arm:'dague',jet:'fronde'}],['Caetrati ibères',{helm:'cuir',armor:'tunique',shield:'parma',arm:'epee',jet:'javelots',tenue:'blanc'}]],
+    hcav:[['Cavalerie ibère',{helm:'bronze',armor:'cuir',shield:'rond',arm:'epee',jet:'javelots'}],['Cavalerie libyphénicienne',{helm:'attique',crest:'crin',armor:'lin',shield:'rond',arm:'lance',jet:'aucune',train:'vet'}]],
+    ncav:[['Cavalerie numide',{helm:'nu',armor:'tunique',shield:'peau',arm:'lance',jet:'javelots'}]]},
+  rom:{legion:[['Hastati',DEP_ROM.hastati],['Principes',DEP_ROM.principes],['Fantassins alliés',DEP_ROM.socii],['Triarii',DEP_ROM.triarii]],
+    velites:[['Vélites',{helm:'cuir',armor:'tunique',shield:'parma',arm:'glaive',jet:'javelots',train:'levee'}]],
+    rcav:[['Equites',{helm:'attique',crest:'crete',armor:'pect',shield:'rond',arm:'lance',jet:'javelots'}]],
+    acav:[['Cavalerie alliée',{helm:'bronze',armor:'lin',shield:'rond',arm:'lance',jet:'javelots',teinte:'blanc'}]]},
+  mac:{phalange:[['Chalkaspides',{helm:'thrace',crest:'rien',armor:'lin',jamb:'cnemides',shield:'macedonien',arm:'sarisse',jet:'aucune'}],['Leukaspides',{helm:'thrace',crest:'rien',armor:'tunique',jamb:'aucune',shield:'macedonien',arm:'sarisse',jet:'aucune',teinte:'blanc'}]],
+    hypasp:[['Peltastes royaux',{helm:'attique',crest:'crin',armor:'lin',jamb:'cnemides',shield:'macedonien',arm:'lance',jet:'aucune',train:'vet'}]],
+    peltaste:[['Peltastes thraces',{helm:'thrace',armor:'tunique',shield:'pelte',arm:'kopis',jet:'javelots',manteau:'ocre'}]],
+    cretois:[DEP_CRE],
+    compagnons:[['Escadron royal',{helm:'beotien',crest:'crin',armor:'lin',shield:'aucun',arm:'xyston',jet:'aucune',manteau:'pourpre',train:'vet'}]],
+    thessal:[['Cavalerie thessalienne',{helm:'petase',armor:'cuir',shield:'aucun',arm:'xyston',jet:'javelots',manteau:'pourpre'}]]},
+  syr:{athoplites:[['Hoplites syracusains',DEP_HOP({helm:'attique'})]],thureo:[['Mercenaires de Hiéron',DEP_THU()]],
+    athpelt:[['Peltastes siciliotes',{helm:'pilos',armor:'tunique',shield:'pelte',arm:'epee',jet:'javelots'}]],cretois:[DEP_CRE],
+    hippeis:[['Cavaliers syracusains',{helm:'beotien',armor:'lin',shield:'aucun',arm:'lance',jet:'javelots'}]]},
+  ath:{athoplites:[['Hoplites athéniens',DEP_HOP()],['Éphèbes',DEP_HOP({helm:'attique',armor:'tunique',jamb:'aucune',train:'levee'})]],thureo:[['Thuréophores athéniens',DEP_THU()]],
+    athpelt:[['Peltastes athéniens',{helm:'pilos',armor:'tunique',shield:'pelte',arm:'epee',jet:'javelots'}]],
+    scythes:[['Archers scythes',{helm:'phrygien',armor:'tunique',shield:'aucun',arm:'dague',jet:'arc'}]],cretois:[DEP_CRE],
+    hippeis:[['Hippeis athéniens',{helm:'beotien',armor:'lin',shield:'aucun',arm:'lance',jet:'javelots',manteau:'bleu'}]]},
+  num:{ncav:[['Cavaliers numides',{helm:'nu',armor:'tunique',shield:'peau',arm:'lance',jet:'javelots'}],['Garde de Massinissa',{helm:'cuir',armor:'cuir',shield:'rond',arm:'lance',jet:'javelots',train:'vet'}],['Cavaliers numides',{helm:'nu',armor:'tunique',shield:'peau',arm:'lance',jet:'javelots'}]],
+    lib:[['Fantassins numides',{helm:'nu',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots',tenue:'blanc'}]],
+    sling:[['Javeliniers numides',{helm:'nu',armor:'tunique',shield:'peau',arm:'dague',jet:'javelots',tenue:'blanc'}]]},
+  ins:{gaul:[['Guerriers insubres',{helm:'nu',armor:'tunique',shield:'ovale',arm:'longue',jet:'javelots',motif:'sanglier'}],['Guerriers boïens',{helm:'bronze',armor:'tunique',shield:'ovale',arm:'longue',jet:'javelots',motif:'triskel'}],
+      ['Nobles gaulois',{helm:'fer',crest:'cornes',armor:'maille',shield:'ovale',arm:'longue',jet:'aucune',motif:'triskel',train:'vet'}],['Gésates',{helm:'nu',armor:'tunique',shield:'ovale',arm:'lance',jet:'javelots',motif:'sanglier'}]],
+    hcav:[['Cavaliers gaulois',{helm:'fer',armor:'maille',shield:'ovale',arm:'longue',jet:'javelots',motif:'triskel'}]],
+    sling:[['Javeliniers gaulois',{helm:'nu',armor:'tunique',shield:'aucun',arm:'dague',jet:'javelots'}]]},
+  per:{athoplites:[['Hoplites pergaméniens',DEP_HOP({helm:'attique'})]],thureo:[['Thuréophores mysiens',DEP_THU()]],
+    gaul:[['Galates tolistobogiens',{helm:'bronze',crest:'roue',armor:'maille',shield:'ovale',arm:'longue',jet:'javelots',motif:'triskel'}]],
+    athpelt:[['Peltastes mysiens',{helm:'pilos',armor:'tunique',shield:'pelte',arm:'epee',jet:'javelots'}]],cretois:[DEP_CRE],
+    hippeis:[['Cavaliers pergaméniens',{helm:'beotien',armor:'lin',shield:'rond',arm:'lance',jet:'javelots'}]]},
+  mas:{athoplites:[['Hoplites massaliotes',DEP_HOP()]],thureo:[['Thuréophores massaliotes',DEP_THU()]],
+    gaul:[['Mercenaires celto-ligures',{helm:'nu',armor:'tunique',shield:'ovale',arm:'longue',jet:'javelots'}]],
+    athpelt:[['Peltastes massaliotes',{helm:'pilos',armor:'tunique',shield:'pelte',arm:'epee',jet:'javelots'}]],cretois:[DEP_CRE],
+    hippeis:[['Cavaliers massaliotes',{helm:'beotien',armor:'lin',shield:'aucun',arm:'lance',jet:'javelots'}]]}};
+// quel peuple représente une armée de ce camp
+function depPeo(side){if(side==='pun')return 'car';if(side==='car'){const k=S.peo;if(k&&k!=='car'&&k!=='rom'&&DEP_R[k])return k;return realSide('car')}
+  if(side==='rom')return realSide('rom');return DEP_R[side]?side:null}
+function depDesign(side,peo,base,e){if(!CORPS[base])return null;const mine=side==='car',key='dep:'+side+':'+peo+':'+base+':'+e[0];
+  S.designs=S.designs||[];let d=S.designs.find(x=>x.sys==='dep'&&x.k===key);if(d)return d;
+  d=Object.assign({id:null,base,name:'',helm:'bronze',crest:'rien',armor:'lin',jamb:'aucune',shield:'rond',motif:'peuple',teinte:DEP_T[peo]||'ocre',tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'reg'},BDEF[base]||{},{teinte:DEP_T[peo]||'ocre'},e[1]);
+  dFix(d);d.base=base;d.name=e[0];d.sys='dep';d.k=key;if(!mine)d.del=true;d.id=S.duid=(S.duid||0)+1;S.designs.push(d);return d}
+const depOwn=u=>{if(u.d==null)return u.ds==null;const d=desOf(u.d);return !!(d&&(d.sys==='dep'||d.sys==='ia'))};
+function depOne(a,u,cnt){if(!a||!u||!UT[u.t]||!CORPS[u.t]||!depOwn(u))return;const peo=depPeo(a.side),R=peo&&DEP_R[peo],L=R&&R[u.t];if(!L||!L.length)return;
+  cnt=cnt||{};const j=cnt[u.t]=(cnt[u.t]||0)+1;const d=depDesign(a.side,peo,u.t,L[(j-1)%L.length]);if(d)u.d=d.id}
+const depTag=a=>a.side+':'+depPeo(a.side);
+function depArmy(a){a._dep=depTag(a);const cnt={};for(const u of a.units)depOne(a,u,cnt)}
+function depSweep(){for(const a of S.armies)if(!a.dead&&depPeo(a.side)&&a._dep!==depTag(a))try{depArmy(a)}catch(e){console.error(e)}}
+// au départ (jour 0 à 3) : garnisons minimales puis troupes équipées ; refait après l'échange des camps (jouer Rome)
+function depStart(){if(!S||!S.armies||S.day>3)return;if(!S.garMin){S.garMin=1;garAll(99)}depSweep();S.depArm=1}
+{const _ngD=newGame;newGame=function(){const r=_ngD.apply(this,arguments);try{depStart()}catch(e){console.error(e)}return r}}
+{const _alD=afterLoad;afterLoad=function(){const r=_alD.apply(this,arguments);try{depStart()}catch(e){console.error(e)}return r}}
+{const _mgD=mirrorGame;mirrorGame=function(){const r=_mgD.apply(this,arguments);try{depStart()}catch(e){console.error(e)}return r}}
+{const _dDA=daily;daily=function(d){const r=_dDA.apply(this,arguments);try{if(S&&!S.depArm){S.depArm=1;if(S.day<=3)depSweep()}else if(S&&S.day<=3)depSweep()}catch(e){console.error(e)}return r}}
+window.__meca2={daily:d=>daily(d),depSweep,depPeo,DEP_R,garAll,garFill,GARMIN,popMax,popGet,popTake,popAvail,popHome,popRegen,raiseLevy,levyInfo,levyDesign,mercFill,mercFillCost,get POPV(){return popVil()},rgcShow,rgcClose,dipOpenFac,get RGC(){return RGC},openCoord,cdAsk,cdRegions,cdMonthly,cdInit,mxDaily,MX,inSard,mxLand,openTreaty,pzScore,pzSign,pzRegions,PX,pxStatic,pxMonthly,buildEng,rationGar,repairWall,burnEng,engW,openStart,startPeo218,peoWar,startAth,athMonthly,athDaily,income:s=>income(s),startMac,macMonthly,isMac,startSyr,syrMonthly,genInit,genYearly,genMonthly,openGens,addRival,killGen:(g,w)=>killGen(g,w),scorch,exhDaily,campSickDaily,buyGrain,tradeInit,tradeMonthly,tradeIncome,openTrade,openRoute,corsairDaily,pirHunt,
   aiSide,applyScen,startScen,openScen,autoRun,autoTxt,openAutoTest,showAuto,mirrorGame,openPolRome,romElectPlayer,warScore:()=>warScore(),victoryCheck:d=>victoryCheck(d),SCEN,realSide,routeState,get S(){return S}};
 /* ================= FIN MÉCANIQUES II ================= */
 /* ================= INTERFACE BRONZE (fil « Refaire l'interface ») =================
