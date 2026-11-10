@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v202</span>
+ <span class="chg-ver">v203</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -9005,7 +9005,7 @@ function uaGen(gb,top,gg,P,stash){
     if(n.nodeType!==1){if(cur!=='gen'&&n.textContent.trim())P[cur].appendChild(n);continue}
     if(cur==='gen'&&(n.matches('.stars,.tr')||n.tagName==='BR'||n.tagName==='B')){if(n.tagName!=='BR'&&n.tagName!=='B')top.appendChild(n);continue}
     if(n.querySelector('.mbar')){gg.appendChild(uaGauge(n));continue}
-    if(n.classList.contains('sub')&&/\d\s*hommes/.test(n.textContent)){const m=n.textContent.match(/^([\d\s  ]+)\s*hommes/);
+    if(n.classList.contains('sub')&&/\d\s*hommes/.test(n.textContent)){const m=n.textContent.match(/(\d[\d\s  ]*)\s*hommes/);/* armée nommée : le nombre n'est plus en tête */
       const c=uaCell('Hommes',m?m[1].trim():'?','',  '100%','',n.textContent.trim());c.dataset.men='1';gg.prepend(c);continue}
     if(n.classList.contains('sub')&&!n.textContent.trim()&&!n.children.length)continue;
     if(n.querySelector('#aOrg')){stash.appendChild(n);continue}
@@ -13659,6 +13659,30 @@ function eqStart218(){if(!S||S.day>3||S.eqStart)return;S.eqStart=1;
     eqAdd(a,P.add);if(P.gold)S.gold.car=(S.gold.car||0)+P.gold}eqMilAll()}catch(e){console.error(e)}return r}}
 window.__equi={EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ_ADD,EQ_PEO};
 /* ================= FIN ÉQUILIBRAGE ================= */
+/* ================= LIEUTENANTS (campagne ; multijoueur) =================
+   Baptiste (10 nov.) : « rentrer dans la bataille d'un ami même si je n'ai pas d'armée à côté, je pourrais alors contrôler
+   certaines unités qu'il me donnerait ». Pendant une bataille livrée sur le terrain, un allié de celui qui la livre (même camp)
+   peut la rejoindre sans armée : bouton dans le bandeau de rejoindre-campagne.js. L'hôte de la partie note b.jn['w'+id]={p,arr:0,w:1},
+   ce qui ouvre le champ de bataille chez ce joueur (rôle 'j', même chemin qu'une armée engagée). Sur le terrain, celui qui livre
+   la bataille lui confie des régiments (lieutenant-bataille.js). Source : /mnt/project-files/multijoueur/lieutenant-campagne.js. */
+{
+  const sideOf=id=>S&&S.mpP&&S.mpP[id]&&S.mpP[id].side;
+  const L=()=>window.__lb;
+  function canWatch(b,pid){const l=L();if(!MP.role||!l||!b||!b.mp||!l.live(b))return false;const mp=b.mp;
+    if(!mp.bh||pid===mp.bh||pid===mp.bg)return false;if(b.jn&&Object.values(b.jn).some(j=>j&&j.p===pid))return false;
+    const s=sideOf(pid);return !!s&&s===sideOf(mp.bh)}
+  function doWatch(pid){const b=S.cur;if(MP.role!=='host'||!canWatch(b,pid))return;b.jn=b.jn||{};b.jn['w'+pid]={p:pid,arr:0,w:1};
+    log(`${esc(mpName(pid))} rejoint la ${battleTitle(b).replace(/^B/,'b')} aux côtés de ${esc(mpName(b.mp.bh))}, qui peut lui confier des régiments.`);save();mpKfSoon(0)}
+  {const _h=mpOnHost;mpOnHost=function(d){if(d&&d.t==='bwatch'){try{if(MP.gs[d.f])doWatch(d.f)}catch(e){console.warn(e)}return}return _h.apply(this,arguments)}}
+  function ask(){if(MP.role==='host')doWatch(MP.me);else mpSend({t:'bwatch',k:S.cur?mpBKey(S.cur):''});const bt=$('ltGo');if(bt){bt.disabled=true;bt.textContent='Demande envoyée…'}}
+  setInterval(()=>{try{const bar=$('lbBar'),b=S&&S.cur;if(!bar)return;let e=bar.querySelector('[data-lt]');
+      if(!canWatch(b,MP.me)){if(e)e.remove();return}
+      if(!e){e=document.createElement('div');e.dataset.lt='1';e.style.cssText='margin-top:6px;pointer-events:auto';
+        e.innerHTML=`<button type="button" id="ltGo">Rejoindre la bataille sans armée</button> <span class="sub">${esc(mpName(b.mp.bh))} pourra vous confier des régiments à commander.</span>`;
+        bar.appendChild(e);e.querySelector('#ltGo').onclick=ev=>{ev.stopPropagation();ask()}}}catch(err){console.warn(err)}},500);
+  window.__lt={canWatch,doWatch};
+}
+/* ================= FIN LIEUTENANTS (campagne) ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
