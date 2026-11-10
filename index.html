@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v198</span>
+ <span class="chg-ver">v199</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -4913,7 +4913,7 @@ const RAID_KM=12,RAID_KMD=30,SCOUT_KMD=40,SCOUT_VIS=45;
 function newPar(a,k,extra){const p=Object.assign({id:S.uid++,side:a.side,k,a:a.id,x:a.x,y:a.y,at:null,legs:[],units:[],cool:0,scout:0,par:k},extra||{});S.par.push(p);return p}
 const parArmy=p=>S.armies.find(x=>x.id===p.a&&!x.dead);
 function goStraight(p,x,y){p.legs=[{x,y,n:null,type:'hors',tf:1}];p.at=null}
-function killPar(p,why,foe){S.par=S.par.filter(x=>x!==p);const a=parArmy(p);if(a){const loss=p.k==='raid'?90:30;let left=loss;for(const u of a.units){if(left<=0)break;const l=Math.min(left,u.men*.08);u.men-=l;left-=l}cleanArmy(a)}
+function killPar(p,why,foe){S.par=S.par.filter(x=>x!==p);const a=parArmy(p);if(a){const loss=p.k==='raid'?360:120;let left=loss;for(const u of a.units){if(left<=0)break;const l=Math.min(left,u.men*.08);u.men-=l;left-=l}cleanArmy(a)}
   if(p.side==='car')log(why);else if(foe&&foe.side==='car')log(why)}
 function pickVillage(a){
   const taken=new Set(S.par.filter(p=>p.k==='raid'&&p.v!=null).map(p=>p.v));
@@ -4947,7 +4947,7 @@ function movePars(dd){
     moveObj(p,dd);
     if(p.blk){p.blk=false;if(p.state==='back'){S.par=S.par.filter(x=>x!==p);continue}p.state='back'}
     // ennemis tout près : les fourrageurs sont taillés en pièces, les éclaireurs une fois sur deux
-    const foe=S.armies.find(o=>!o.dead&&!o.ship&&hostile(o,{side:p.side})&&Math.hypot(o.x-p.x,o.y-p.y)<(p.k==='raid'?3:2.5));
+    const foe=S.armies.find(o=>!o.dead&&!o.ship&&!((o.inG||o.g)&&o.at!=null&&S.siege&&S.siege[N[o.at].id])/*FOUR-SIEGE*/&&hostile(o,{side:p.side})&&Math.hypot(o.x-p.x,o.y-p.y)<(p.k==='raid'?3:2.5));
     if(foe&&!(p._ev||[]).includes(foe.id)){(p._ev=p._ev||[]).push(foe.id);
       if(p.k==='raid'||Math.random()<.5){killPar(p,p.k==='raid'?(p.side==='car'?`Des fourrageurs de ${a.name} sont surpris par ${foe.name} et taillés en pièces.`:`${foe.name} surprend et massacre des fourrageurs ennemis.`):`Une patrouille d'éclaireurs de ${a.name} est interceptée par ${foe.name}.`,foe);continue}}
     if(p.k==='raid'){
