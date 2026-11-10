@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v179</span>
+ <span class="chg-ver">v180</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -3023,7 +3023,7 @@ function aiTurn(){
   if(S.gold.rom>220&&Math.floor(S.day)%10===0){
     const spots=N.filter(n=>ownerN(n.i)==='rom'&&n.size>=1&&!S.q[n.id]&&(n.id==='roma'||S.armies.some(a=>a.side==='rom'&&!a.g&&a.at===n.i&&!a.legs.length&&a.units.length<MAXU)));
     const n=spots.sort((a,b)=>(b.id==='roma')-(a.id==='roma'))[0];
-    if(n){const x=Math.random(),t=n.cul==='ita'?(x<.5?'legion':x<.72?'velites':x<.86?'rcav':'acav'):(x<.6?'velites':'acav');S.gold.rom-=UT[t].cost;S.q[n.id]={t,d:TRAIN[UT[t].k],side:'rom'}}
+    if(n){const t=aiPick('rom',n)/*IA-COMPO*/;S.gold.rom-=UT[t].cost;S.q[n.id]={t,d:TRAIN[UT[t].k],side:'rom'}}
   }
   aiFleets();
   const threat=foes.some(f=>Math.hypot(f.x-N[roma].x,f.y-N[roma].y)<380);
@@ -13084,6 +13084,121 @@ function caraDraw(s,inV){if(!S.cara||!S.cara.length||s<(HUBV?.45:.9))return;cons
   if(mine.length)leg.insertAdjacentHTML('beforebegin',`<div class="sub">Caravanes en route : ${mine.length}. Une armée ennemie à moins de 5 km les enlève si vous ne les escortez pas.</div>`)}catch(e){}}}
 window.__hubs={caraDaily,caraSend,moveCara,resAdd,resEff,vilFrac,hinterLoss,peageOf,relaisOf,resOf,resIncome,resMonthly,resCost,resHas,resPay,resLinked,resBuy,resInit,resWhy,regOf:n=>regOf(n),addRecruit:(i,s,t)=>addRecruit(i,s,t),get N(){return N},get S(){return S},get sel(){return sel},set sel(v){sel=v},renderAll:()=>renderAll(),centerOn:(x,y,s)=>centerOn(x,y,s),capture:(i,s)=>capture(i,s),hubNet,hubLvl,hubDebit,hubProd,hubCap,hubInit,hubSupply,hubConvoy,hubToggle,hubNearest,hubHinter,lineOf:a=>lineOf(a),get HUBV(){return HUBV},HUB_R,HUB_D,HUB_N};
 /* ================= FIN HUBS ================= */
+/* ================= IA : COMPOSITION DES ARMÉES (10 nov., demande de Baptiste) =================
+   « Des compositions d'armée différentes avec des unités différentes, logiques pour chaque peuple. »
+   - Chaque peuple a ses proportions (ligne, tirailleurs, cavalerie, éléphants) et ses troupes, nommées et équipées à sa façon
+     (modèles de l'atelier cachés : sys:'ia', del:true ; le régiment garde son type de base t et porte d = le modèle).
+   - Les armées de secours des peuples (peuUnits) ne répètent plus une seule unité : elles comblent ce qui manque à leur peuple.
+   - Les garnisons des peuples (départ, révoltes, scénarios) sont refaites une fois avec leurs vraies troupes.
+   - Rome et Carthage (IA) recrutent ce qui manque à l'armée qui recevra la recrue, au lieu de tirer au sort ;
+     Rome lève aussi des fantassins alliés (socii) hors de Rome. ---- */
+const IAC_R=['inf','skirm','cav','eleph'];
+const iacRole=t=>{const k=UT[t]&&UT[t].k;return k==='lcav'?'cav':k||'inf'};
+// adjectif de chaque peuple (pour nommer ses troupes)
+const IAC_ADJ={num:'numides',mae:'masaesyles',mau:'maures',cyr:'cyrénéens',ibe:'ibères',cel:'celtibères',lus:'lusitaniens',carp:'carpétans',olc:'olcades',vac:'vaccéens',
+  bal:'baléares',mas:'massaliotes',gau:'gaulois',lig:'ligures',ins:'cisalpins',ven:'vénètes',syr:'syracusains',ill:'illyriens',dar:'dardaniens',epi:'épirotes',
+  mac:'macédoniens',thr:'thraces',eto:'étoliens',ach:'achéens',ath:'athéniens',cre:'crétois',per:'pergaméniens',ion:'ioniens',byz:'byzantins',bit:'bithyniens',
+  sel:'séleucides',rho:'rhodiens',les:'lesbiens'};
+// troupes de chaque famille de peuples : rôle -> [type de base, poids, nom (% = adjectif ; null = nom du type), équipement (null = type tel quel)]
+const IAC_ROS={
+  num:{mix:[.25,.25,.5,0],
+    inf:[['lib',1,'Fantassins %',{helm:'nu',crest:'rien',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots',tenue:'blanc'}]],
+    skirm:[['sling',1,'Javeliniers %',{helm:'nu',armor:'tunique',shield:'peau',arm:'dague',jet:'javelots',tenue:'blanc'}]],
+    cav:[['ncav',3,'Cavaliers %',{helm:'nu',armor:'tunique',shield:'peau',arm:'lance',jet:'javelots'}],['ncav',1,'Cavaliers de la garde',{helm:'cuir',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots',train:'vet'}]]},
+  ibe:{mix:[.55,.25,.2,0],
+    inf:[['iber',3,'Scutarii %',{helm:'cuir',armor:'tunique',shield:'ovale',arm:'epee',jet:'soliferrum',tenue:'blanc'}],['iber',1,'Guerriers %',{helm:'bronze',crest:'crete',armor:'tunique',shield:'rond',arm:'epee',jet:'javelots',tenue:'blanc'}]],
+    skirm:[['sling',2,'Caetrati %',{helm:'cuir',armor:'tunique',shield:'pelte',arm:'epee',jet:'javelots',tenue:'blanc'}],['sling',1,'Frondeurs %',{helm:'nu',armor:'tunique',shield:'aucun',arm:'dague',jet:'fronde'}]],
+    cav:[['hcav',2,'Cavaliers %',{helm:'bronze',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots'}],['ncav',1,'Cavaliers légers %',{helm:'cuir',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots'}]]},
+  bal:{mix:[.3,.7,0,0],
+    inf:[['iber',1,'Guerriers %',{helm:'nu',armor:'tunique',shield:'peau',arm:'epee',jet:'javelots'}]],
+    skirm:[['sling',1,'Frondeurs %',{helm:'nu',armor:'tunique',shield:'aucun',arm:'dague',jet:'fronde'}]]},
+  gau:{mix:[.6,.15,.25,0],
+    inf:[['gaul',3,'Guerriers %',{helm:'nu',armor:'tunique',shield:'ovale',arm:'longue',motif:'sanglier'}],['gaul',1,'Nobles %',{helm:'fer',crest:'cornes',armor:'maille',shield:'ovale',arm:'longue',motif:'triskel',train:'vet'}]],
+    skirm:[['sling',1,'Javeliniers %',{helm:'nu',armor:'tunique',shield:'aucun',arm:'dague',jet:'javelots'}]],
+    cav:[['hcav',1,'Cavaliers %',{helm:'fer',armor:'maille',shield:'ovale',arm:'longue',jet:'javelots',motif:'triskel'}]]},
+  ita:{mix:[.5,.2,.3,0],
+    inf:[['thureo',1,'Lanciers %',{helm:'bronze',armor:'pect',shield:'rond',arm:'lance',jet:'javelots'}]],
+    skirm:[['sling',1,'Javeliniers %',{helm:'cuir',armor:'tunique',shield:'parma',arm:'dague',jet:'javelots'}]],
+    cav:[['acav',1,'Cavaliers %',{helm:'bronze',armor:'lin',shield:'rond',arm:'lance',jet:'javelots'}]]},
+  gre:{mix:[.6,.25,.15,0],
+    inf:[['athoplites',3,'Hoplites %',{helm:'corinthien',crest:'crin'}],['thureo',2,'Thuréophores %',{}]],
+    skirm:[['athpelt',2,'Peltastes %',{}],['cretois',1,null,null]],
+    cav:[['hippeis',1,'Cavaliers %',{}]]},
+  mac:{mix:[.6,.2,.2,0],
+    inf:[['phalange',3,null,null],['hypasp',1,null,null]],skirm:[['peltaste',1,null,null],['cretois',1,null,null]],cav:[['compagnons',1,null,null],['thessal',1,null,null]]},
+  thr:{mix:[.35,.4,.25,0],
+    inf:[['thureo',1,'Porteurs de rhomphaia %',{helm:'thrace',armor:'tunique',shield:'aucun',arm:'longue',jet:'aucune'}]],
+    skirm:[['peltaste',1,'Peltastes %',{}]],
+    cav:[['thessal',1,'Cavaliers %',{helm:'phrygien',armor:'cuir',arm:'lance',jet:'javelots'}]]},
+  ill:{mix:[.55,.3,.15,0],
+    inf:[['thureo',1,'Guerriers %',{helm:'beotien',armor:'tunique',shield:'rond',arm:'kopis',jet:'javelots'}]],
+    skirm:[['peltaste',1,'Javeliniers %',{helm:'nu',armor:'tunique',shield:'pelte',arm:'kopis',jet:'javelots'}]],
+    cav:[['hcav',1,'Cavaliers %',{helm:'beotien',armor:'cuir',shield:'rond',arm:'lance',jet:'javelots'}]]},
+  cre:{mix:[.25,.75,0,0],
+    inf:[['thureo',1,'Mercenaires %',{helm:'pilos',armor:'lin',shield:'ovale',arm:'lance',jet:'javelots'}]],skirm:[['cretois',1,null,null]]},
+  sel:{mix:[.5,.15,.25,.1],
+    inf:[['phalange',3,'Phalangites %',{}],['hypasp',1,'Argyraspides',{teinte:'blanc'}]],
+    skirm:[['scythes',1,'Archers asiatiques',{}],['athpelt',1,'Peltastes asiatiques',{}]],
+    cav:[['compagnons',1,'Cavaliers de la garde',{}],['hippeis',1,'Cavaliers mèdes',{helm:'phrygien'}]],
+    eleph:[['eleph',1,null,null]]}};
+// peuples à part : famille, proportions propres, troupes en plus
+const IAC_FAC={cel:{mix:[.55,.15,.3,0]},lus:{mix:[.4,.4,.2,0]},lig:{mix:[.6,.35,.05,0]},dar:{mix:[.45,.25,.3,0]},eto:{mix:[.35,.4,.25,0]},ach:{mix:[.65,.2,.15,0]},
+  mas:{mix:[.65,.25,.1,0]},ven:{ros:'ita'},thr:{ros:'thr'},bit:{ros:'thr'},sel:{ros:'sel'},mac:{ros:'mac'},
+  epi:{add:{inf:[['phalange',2,'Phalangites %',{}]]}},
+  per:{add:{inf:[['gaul',1,'Galates',{helm:'bronze',crest:'roue',shield:'ovale',arm:'longue',motif:'triskel'}]]}},
+  rho:{add:{skirm:[['sling',2,'Frondeurs %',{helm:'nu',armor:'tunique',shield:'aucun',arm:'dague',jet:'fronde'}]]}},
+  syr:{add:{skirm:[['athpelt',1,'Peltastes siciliotes',null]]}}};
+const IAC_CUL={num:'num',ibe:'ibe',bal:'bal',gau:'gau',ita:'ita',gre:'gre',mac:'mac',thr:'thr',ill:'ill',cre:'cre',afr:'num'};
+function iacRos(f){const F=FAC[f]||{},X=IAC_FAC[f]||{},base=IAC_ROS[X.ros||IAC_CUL[F.cul]||'gre']||IAC_ROS.gre,R={mix:X.mix||base.mix};
+  for(const r of IAC_R){R[r]=(base[r]||[]).concat((X.add&&X.add[r])||[]).filter(e=>UT[e[0]])}
+  for(let j=0;j<4;j++)if(!R[IAC_R[j]].length)R.mix=R.mix.map((v,i)=>i===j?0:v);return R}
+// couleur du bouclier la plus proche de celle du peuple
+const IAC_TEINTE={pourpre:[107,63,159],rouge:[155,42,34],noir:[40,34,30],blanc:[226,220,204],ocre:[190,140,70],bleu:[70,100,170],vert:[90,130,70],bronze:[170,130,70],jaune:[210,180,70]};
+function iacTeinte(f){const c=(FAC[f]&&FAC[f].c)||[150,120,90];let b='ocre',bd=1e9;for(const k in IAC_TEINTE){const t=IAC_TEINTE[k],d=(t[0]-c[0])**2+(t[1]-c[1])**2+(t[2]-c[2])**2;if(d<bd){bd=d;b=k}}return b}
+// modèle caché pour une troupe d'un peuple (créé une fois, gardé dans S.designs)
+function iacDesign(f,e){if(!e[3]||!CORPS[e[0]])return null;S.designs=S.designs||[];const name=(e[2]||UT[e[0]].n).replace('%',IAC_ADJ[f]||'').trim(),key=f+':'+name;
+  let d=S.designs.find(x=>x.sys==='ia'&&x.k===key);if(d)return d;
+  d=Object.assign({id:null,base:e[0],name:'',helm:'bronze',crest:'rien',armor:'lin',jamb:'aucune',shield:'rond',motif:'peuple',teinte:iacTeinte(f),tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'reg'},BDEF[e[0]]||{},{teinte:iacTeinte(f)},e[3]);
+  dFix(d);d.base=e[0];d.name=name;d.sys='ia';d.k=key;d.del=true;d.id=S.duid=(S.duid||0)+1;S.designs.push(d);return d}
+// combien de régiments de chaque rôle ajouter à « have » pour se rapprocher des proportions
+function iacPlan(mix,k,have){const out={inf:0,skirm:0,cav:0,eleph:0};have=have||{};let tot=k;for(const r of IAC_R)tot+=have[r]||0;
+  for(let n=0;n<k;n++){let b='inf',bv=-1e9;for(let j=0;j<4;j++){if(!mix[j])continue;const r=IAC_R[j],v=mix[j]*tot-(have[r]||0)-out[r];if(v>bv){bv=v;b=r}}out[b]++}return out}
+function iacPick(L,used){const tw=L.reduce((s,e)=>s+e[1],0),n=L.reduce((s,e)=>s+(used[e[0]+e[2]]||0),0)+1;let best=L[0],bv=-1e9;
+  for(const e of L){const v=e[1]/tw*n-(used[e[0]+e[2]]||0)+Math.random()*.4;if(v>bv){bv=v;best=e}}used[best[0]+best[2]]=(used[best[0]+best[2]]||0)+1;return best}
+function iacUnit(f,e){const u={t:e[0],men:UT[e[0]].men},d=iacDesign(f,e);if(d)u.d=d.id;return u}
+const iacHave=units=>{const h={};for(const u of units||[]){const r=iacRole(u.t);h[r]=(h[r]||0)+1}return h};
+// k régiments pour le peuple f, en complétant « units » ; gar : garnison (moitié moins de cavalerie, pas d'éléphants)
+function iacUnits(f,k,units,gar){const R=iacRos(f);let mix=R.mix.slice();if(gar){mix[0]+=mix[2]*.5+mix[3];mix[2]*=.5;mix[3]=0}
+  const P=iacPlan(mix,k,iacHave(units)),used={},out=[];for(const u of units||[]){const e=IAC_R.flatMap(r=>R[r]).find(e=>e[0]===u.t);if(e)used[e[0]+e[2]]=(used[e[0]+e[2]]||0)+1}
+  for(const r of IAC_R)for(let j=0;j<P[r];j++){const L=R[r].length?R[r]:R.inf;if(!L.length)continue;out.push(iacUnit(f,iacPick(L,used)))}
+  // ligne d'abord, puis tirailleurs, cavalerie, éléphants (ordre de la carte d'armée)
+  return out.sort((a,b)=>IAC_R.indexOf(iacRole(a.t))-IAC_R.indexOf(iacRole(b.t)))}
+// armées de secours et levées des peuples : on complète l'ensemble de leurs armées de campagne
+peuUnits=function(f,k){try{const have=peuField(f).flatMap(a=>a.units);return iacUnits(f,k,have,false)}catch(e){console.error(e);return Array.from({length:k},()=>({t:'iber',men:UT.iber.men}))}};
+// garnisons et armées des peuples créées avant ce module (départ, révoltes, scénarios, vieilles sauvegardes) : refaites une fois
+function iacFix(a){a._iac=1;const f=a.side;if(!FAC[f]||!FAC[f].a||f==='car'||f==='rom'||f==='pun'||!a.units.length||a.units.some(u=>u.d!=null))return;
+  const keep=a.units.map(u=>Math.max(.05,Math.min(1,u.men/((UT[u.t]&&UT[u.t].men)||1)))),NU=iacUnits(f,a.units.length,null,!!a.g);
+  NU.forEach((u,j)=>{u.men=Math.round(u.men*(keep[j]==null?1:keep[j]))});a.units=NU;if(a.food!=null&&typeof armyFoodMax==='function')a.food=Math.min(a.food,armyFoodMax(a))}
+function iacSweep(){if(!S||!S.armies)return;for(const a of S.armies)if(!a._iac&&!a.dead&&!a.ship&&(a.g||a.peu))try{iacFix(a)}catch(e){console.error(e)}}
+{const _ng=newGame;newGame=function(){const r=_ng.apply(this,arguments);try{iacSweep()}catch(e){console.error(e)}return r}}
+{const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);try{iacSweep()}catch(e){console.error(e)}return r}}
+// ---- Rome et Carthage sous l'IA : recruter ce qui manque ----
+const IAC_MIXS={rom:[.55,.22,.23,0],car:[.5,.2,.25,.05]};
+const iacAI=side=>{try{return aiCtl(side)}catch(e){return side==='rom'}};
+{const _ap=aiPick;aiPick=function(side,n){try{const r=realSide(side);if(r!=='rom'&&r!=='car'&&side!=='pun')return _ap.apply(this,arguments);
+  const a=S.armies.find(x=>x.side===side&&!x.g&&!x.dead&&x.at===n.i&&!x.legs.length&&x.units.length<MAXU),
+    L=a?a.units:S.armies.filter(x=>x.side===side&&!x.g&&!x.dead&&!x.ship).flatMap(x=>x.units);
+  let opts;if(r==='rom')opts=n.cul==='ita'?{inf:['legion'],skirm:['velites'],cav:['rcav','acav']}:{skirm:['velites'],cav:['acav']};
+  else{const P=(POOL_CAR0[n.cul]||['iber']).concat(['sling']);opts={};for(const t of P){if(!UT[t])continue;const ro=iacRole(t);(opts[ro]=opts[ro]||[]).push(t)}if(n.id==='carthago')opts.eleph=['eleph']}
+  const mix=(r==='rom'?IAC_MIXS.rom:IAC_MIXS.car).map((v,j)=>opts[IAC_R[j]]?v:0);if(!mix.some(v=>v>0))return _ap.apply(this,arguments);
+  const P=iacPlan(mix,1,iacHave(L)),role=IAC_R.find(x=>P[x]>0),T=opts[role];return T[Math.floor(Math.random()*T.length)]}catch(e){console.error(e);return _ap.apply(this,arguments)}}}
+// fantassins alliés de Rome (socii) : la moitié des légions levées hors de Rome
+const IAC_SOCII=['legion',1,'Fantassins alliés',{helm:'attique',crest:'crete',armor:'pect',shield:'scutum',arm:'glaive',jet:'pilum',teinte:'blanc'}];
+function iacQueue(){if(!S||!S.q)return;for(const id in S.q){const q=S.q[id];if(!q||q._ia||q.ds!=null)continue;q._ia=1;
+  if(q.t==='legion'&&id!=='roma'&&realSide(q.side)==='rom'&&iacAI(q.side)&&Math.random()<.5){const d=iacDesign(q.side,IAC_SOCII);if(d)q.ds=d.id}}}
+{const _dI=daily;daily=function(d){try{iacQueue()}catch(e){console.error(e)}const r=_dI.apply(this,arguments);try{iacQueue();iacSweep()}catch(e){console.error(e)}return r}}
+window.__iac={iacUnits,iacRos,iacPlan,iacFix,iacSweep,iacDesign,iacQueue,get S(){return S},get N(){return N},get NI(){return NI},FAC,UT,uName:u=>uName(u),aiPick:(s,n)=>aiPick(s,n),newGame:()=>newGame(),peuInit:()=>peuInit(),peuDaily:()=>peuDaily(),daily:d=>daily(d),realSide:s=>realSide(s)};
+/* ================= FIN IA COMPOSITION ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
