@@ -2839,7 +2839,67 @@ if(!V3D){
   {const _ck=click;click=function(cx,cy,btn,add){if(btn===0){try{const p=groundAt(cx,cy),u=pick(p,cx,cy);if(u&&!u.dead)fiche(u);else if(!add)hideFiche()}catch(e){console.warn('fiche',e)}}return _ck.apply(this,arguments)}}
   // tenue à jour une fois par seconde
   {const _ht2=hudTick;hudTick=function(){const r=_ht2.apply(this,arguments);try{if(FU){const b=document.getElementById('fiche');if(regOf(FU).every(v=>v.dead||v.fled))hideFiche();else if(b&&performance.now()-b._t>1000)fiche(FU)}}catch(e){}return r}}
-  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
+  /* -- v17x : batailles de campagne : pas de réglages de test à l'accueil, et une phase de déploiement avant le combat.
+        Pendant le déploiement, le temps est arrêté : les ordres de marche posent aussitôt les régiments (dans la zone de départ),
+        on peut aussi glisser un régiment à la souris ; « Au combat ! » lance la bataille. -- */
+  let DEP=false,DZ=null,GRAB=null;
+  const ISCAMP=()=>!!(CAMP&&CAMP.b);
+  function zoneOf(){const P=units.filter(u=>u.side===0&&!u.dead&&!u.pend),E=units.filter(u=>u.side===1&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
+    const pc=cen(P),ec=cen(E),dx=pc.x-ec.x,dy=pc.y-ec.y,dist=Math.hypot(dx,dy)||1,n={x:dx/dist,y:dy/dist},mid={x:(pc.x+ec.x)/2,y:(pc.y+ec.y)/2};
+    const pr=P.map(u=>(u.x-mid.x)*n.x+(u.y-mid.y)*n.y),mn=Math.min(...pr),mx=Math.max(...pr);
+    return {n,mid,gap:Math.max(20,Math.min(dist*.2,mn-SQ)),back:Math.max(mx+SQ*4,dist*.5+SQ*6)}}
+  function clampZ(x,y){x=Math.max(RIVER+20,Math.min(W-20,x));y=Math.max(20,Math.min(H-20,y));if(!DZ)return{x,y};
+    const {n,mid,gap,back}=DZ,d=(x-mid.x)*n.x+(y-mid.y)*n.y;if(d<gap){x+=n.x*(gap-d);y+=n.y*(gap-d)}else if(d>back){x-=n.x*(d-back);y-=n.y*(d-back)}
+    return{x:Math.max(RIVER+20,Math.min(W-20,x)),y:Math.max(20,Math.min(H-20,y))}}
+  function place(u,x,y,a){const q=clampZ(x,y);u.x=q.x;u.y=q.y;if(a!=null)u.ang=a;u._sq=null;u._lx=null;u.dirty=true;u.order=null;u.preview=null;u.v=0}
+  // un régiment reste d'un bloc : on le décale tout entier pour qu'il rentre dans la zone (sans écraser ses rangs sur la limite)
+  function placeAll(L){if(!DZ){for(const [u,x,y,a] of L)place(u,x,y,a);return}const {n,mid,gap,back}=DZ,G=new Map();
+    for(const e of L){const k=rkey(e[0]);if(!G.has(k))G.set(k,[]);G.get(k).push(e)}
+    for(const g of G.values()){let lo=0,hi=0;for(const [u,x,y] of g){const d=(x-mid.x)*n.x+(y-mid.y)*n.y;lo=Math.max(lo,gap+SQ/2-d);hi=Math.max(hi,d-back)}
+      const sh=lo>0?lo:hi>0?-hi:0;for(const [u,x,y,a] of g)place(u,x+n.x*sh,y+n.y*sh,a)}}
+  function settle(){for(let i=0;i<10;i++){try{separate()}catch(e){}placeAll(units.filter(u=>u.side===0&&!u.dead&&!u.pend).map(u=>[u,u.x,u.y,null]))}}
+  function depTick(){if(!DEP)return;if(started){endDep();return}let any=false;
+    const L=[];for(const u of units){if(u.side!==0||u.dead||u.pend||!u.order)continue;const o=u.order;
+      if(o.type==='move'){L.push([u,o.x,o.y,o.face]);any=true}else{u.order=null;u.preview=null}}
+    placeAll(L)
+    if(any)settle()}
+  function depBar(){let b=document.getElementById('depBar');if(b)return b;b=document.createElement('div');b.id='depBar';b.className='hud';
+    b.innerHTML=`<div><b>Déploiement</b> · placez vos régiments dans la zone claire : clic droit pour les poser, glissez-les à la souris, ou tracez une ligne au clic droit. Le temps est arrêté.</div><button type="button" class="go" id="bDepGo">Au combat !</button>`;
+    (document.getElementById('app')||document.body).appendChild(b);b.querySelector('#bDepGo').onclick=()=>{endDep();begin()};
+    for(const k of ['pointerdown','wheel'])b.addEventListener(k,e=>e.stopPropagation());
+    const st=document.createElement('style');st.textContent=`#depBar{position:absolute;left:50%;transform:translateX(-50%);top:84px;z-index:7;display:flex;gap:14px;align-items:center;max-width:min(760px,calc(100% - 32px));
+  padding:9px 12px 9px 16px;background:rgba(28,20,12,.94);border:1px solid rgba(214,184,120,.55);border-radius:6px;color:#efe3c6;font:13px/1.4 Georgia,serif;box-shadow:0 6px 22px rgba(0,0,0,.45)}
+#depBar b{color:#e8c77e;font-weight:normal;letter-spacing:.06em;text-transform:uppercase;font-size:12px}#depBar button{flex:none;white-space:nowrap}
+@media (max-width:760px){#depBar{top:auto;bottom:12px;flex-direction:column;align-items:stretch}}`;document.head.appendChild(st);return b}
+  function startDep(){if(started||!ISCAMP())return;DZ=zoneOf();DEP=true;paused=true;$('start').hidden=true;depBar().hidden=false;updatePauseBtn();renderSel()}
+  function endDep(){DEP=false;GRAB=null;const b=document.getElementById('depBar');if(b)b.hidden=true}
+  // la zone de départ, sous les régiments
+  function drawZone(){if(!DEP||!DZ)return;const {n,mid,gap,back}=DZ,t={x:-n.y,y:n.x},L=(W+H)*2,P=PAL[0];
+    const pt=(d,s)=>scr(mid.x+n.x*d+t.x*s,mid.y+n.y*d+t.y*s),m=[scr(RIVER,0),scr(W,0),scr(W,H),scr(RIVER,H)];
+    g2.save();g2.beginPath();m.forEach((p,i)=>i?g2.lineTo(p[0],p[1]):g2.moveTo(p[0],p[1]));g2.closePath();g2.clip();
+    const a=pt(gap,-L),b=pt(gap,L),c=pt(back,L),d=pt(back,-L);
+    g2.beginPath();g2.moveTo(a[0],a[1]);g2.lineTo(b[0],b[1]);g2.lineTo(c[0],c[1]);g2.lineTo(d[0],d[1]);g2.closePath();g2.fillStyle='rgba(255,244,214,.2)';g2.fill();
+    g2.setLineDash([10,7]);g2.lineWidth=2.5;g2.strokeStyle=P.lt||'#d6b878';g2.beginPath();g2.moveTo(a[0],a[1]);g2.lineTo(b[0],b[1]);g2.stroke();
+    g2.setLineDash([]);g2.globalAlpha=.25;g2.strokeStyle='#000';g2.beginPath();g2.moveTo(d[0],d[1]);g2.lineTo(c[0],c[1]);g2.stroke();g2.restore()}
+  {const _do=drawOrders;drawOrders=function(){try{depTick();drawZone()}catch(e){console.warn('déploiement',e)}return _do.apply(this,arguments)}}
+  // glisser un régiment (ou la sélection) à la souris pendant le déploiement
+  try{host.addEventListener('pointerdown',e=>{GRAB=null;if(!DEP||e.button!==0||e.shiftKey||e.ctrlKey)return;const p=groundAt(e.clientX,e.clientY),u=pick(p,e.clientX,e.clientY);
+      if(!p||!u||u.side!==0||u.dead||u.pend)return;let L=selected.has(u)?mine():null;
+      if(!L||!L.length){selected.clear();ALT=!!e.altKey;for(const v of (e.altKey?[u]:regOf(u)))if(okSel(v))selected.add(v);renderSel();L=mine()}
+      GRAB={sx:e.clientX,sy:e.clientY,p0:p,L,o:L.map(v=>[v.x,v.y]),moved:false}},true);
+    host.addEventListener('pointermove',e=>{if(!GRAB)return;if(!GRAB.moved&&Math.hypot(e.clientX-GRAB.sx,e.clientY-GRAB.sy)<6)return;const p=groundAt(e.clientX,e.clientY);if(!p)return;
+      GRAB.moved=true;e.stopPropagation();const dx=p.x-GRAB.p0.x,dy=p.y-GRAB.p0.y;placeAll(GRAB.L.map((v,i)=>[v,GRAB.o[i][0]+dx,GRAB.o[i][1]+dy,null]))},true);
+    host.addEventListener('pointerup',e=>{if(!GRAB)return;const g=GRAB;GRAB=null;if(g.moved){settle();if(drag){drag.moved=true;drag.mode=null}}},true)}catch(e){console.warn('déploiement',e)}
+  // accueil des batailles de campagne : sans les réglages de test, et « Déployer mes troupes » d'abord
+  function campStart(){if(!ISCAMP())return;try{
+    for(const id of ['taille','bRevue','bPeuples','bCamp','bPrep'])(function(el){if(el)el.style.display='none'})($(id));
+    for(const p of document.querySelectorAll('#start p'))if(/Modèles Beelim/.test(p.textContent))p.style.display='none';
+    if(!document.getElementById('campStartCss')){const st=document.createElement('style');st.id='campStartCss';st.textContent='#start{z-index:30}#start .card{max-height:calc(100% - 8px);overflow:auto;max-width:560px}';document.head.appendChild(st)}
+    const go=$('bGo');if(go&&!go._dep){go._dep=1;go.textContent='Déployer mes troupes';
+      const now=document.createElement('button');now.type='button';now.id='bGoNow';now.textContent='Combattre sans déployer';now.style.alignSelf='flex-start';now.onclick=()=>begin();go.after(now)}}catch(e){console.warn(e)}}
+  document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#bGo')||!ISCAMP()||started||DEP)return;e.stopImmediatePropagation();e.preventDefault();startDep()},true);
+  {const _su2=setup;setup=function(){const r=_su2.apply(this,arguments);endDep();DZ=null;campStart();return r}}
+  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
