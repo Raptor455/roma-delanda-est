@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v195</span>
+ <span class="chg-ver">v197</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -8360,8 +8360,7 @@ function rgcShow(mx,my){if(!S)return;const wx=(mx-view.ox)/view.s,wy=(my-view.oy
   c.style.cssText='position:fixed;z-index:30;max-width:330px;min-width:220px;background:var(--pan2,#231b14);color:var(--tx,#efe4cc);border:1px solid var(--bz,#8a6a3c);border-radius:6px;padding:8px 12px 10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45)';
   c.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-family:Marcellus,Georgia,serif;font-size:16px;letter-spacing:.04em">Territoire ${esc(deN(t.n))}</b><button type="button" id="rgX" title="Fermer" style="padding:0 6px">×</button></div><div class="sub" style="font-size:12px;margin-bottom:4px">${esc(kind)}${r?' · '+esc(r):''}</div><div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin:5px 0"><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};margin-right:6px;vertical-align:-1px"></i><b>${esc(rgcOwnerName(o))}</b></span><span style="white-space:nowrap">${btn}</span></div>`;
   try{const pl=popLine(t);if(pl)c.insertAdjacentHTML('beforeend',pl.replace('<p class="sub">','<p class="sub" style="margin:4px 0 0;font-size:12px">'))}catch(e){}
-  const rc=cv.getBoundingClientRect(),W=window.innerWidth,H=window.innerHeight;let x=rc.left+mx+14,y=rc.top+my+14;
-  const bw=c.offsetWidth,bh=c.offsetHeight;if(x+bw>W-8)x=Math.max(8,rc.left+mx-bw-14);if(y+bh>H-8)y=Math.max(8,H-bh-8);c.style.left=x+'px';c.style.top=y+'px';
+  rgcPlace();
   $('rgX').onclick=rgcClose;
   c.querySelectorAll('[data-rgf]').forEach(b=>b.onclick=()=>{const f=b.dataset.rgf;rgcClose();dipOpenFac(f)});
   c.querySelectorAll('[data-rgs]').forEach(b=>b.onclick=()=>{const g=b.dataset.rgs;rgcClose();dipOpenFac(null,g)})}
@@ -8369,8 +8368,20 @@ function rgcShow(mx,my){if(!S)return;const wx=(mx-view.ox)/view.s,wy=(my-view.oy
 {let pd=null;cv.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,b:e.button,t:e.pointerType}},true);
   cv.addEventListener('pointerup',e=>{const d=pd;pd=null;if(!d||d.b!==0||e.shiftKey||Math.hypot(e.clientX-d.x,e.clientY-d.y)>6)return;
     const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
-    setTimeout(()=>{try{if(sel&&(sel.a||sel.f)){rgcClose();return}if(typeof GRP!=='undefined'&&GRP&&GRP.length>1){rgcClose();return}rgcShow(mx,my)}catch(x){console.error(x)}},0)})}
+    setTimeout(()=>{try{if(sel&&sel.f){rgcClose();return}if(typeof GRP!=='undefined'&&GRP&&GRP.length>1){rgcClose();return}rgcShow(mx,my)}catch(x){console.error(x)}},0)})}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')rgcClose()});
+/* 10 nov. (Baptiste) : plus de liste « Vos armées / Vos flottes » en bas à gauche quand rien n'est choisi ;
+   la fiche de territoire se range en bas à gauche, au-dessus du panneau ouvert s'il y en a un. */
+function rgcPlace(){const c=$('rgCard');if(!c)return;const sd=$('side'),H=window.innerHeight;
+  const r=sd&&sd.style.display!=='none'&&sd.offsetHeight>0?sd.getBoundingClientRect():null;
+  const left=r?r.left:10,bottom=r?Math.max(10,H-r.top+8):10;
+  c.style.left=left+'px';c.style.top='auto';c.style.bottom=bottom+'px';c.style.width=(r?Math.max(240,r.width):330)+'px';c.style.maxWidth='none';
+  c.style.maxHeight=Math.max(120,H-bottom-90)+'px';c.style.overflowY='auto'}
+function sideIdle(){const sd=$('side');if(!sd)return;const idle=!sel&&!(typeof GRP!=='undefined'&&GRP&&GRP.length>1);
+  sd.style.display=idle?'none':'';rgcPlace()}
+setTimeout(()=>{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{sideIdle()}catch(e){console.error(e)}return r};try{sideIdle()}catch(e){}},150);
+window.addEventListener('resize',()=>{try{rgcPlace()}catch(e){}});
+try{const sd=$('side');if(sd&&window.ResizeObserver)new ResizeObserver(()=>{try{rgcPlace()}catch(e){}}).observe(sd)}catch(e){}
 // contour du territoire cliqué : la cellule de la ville (CELL, coupée à la terre), teinte claire et bord
 function drawRegionHL(s){if(!RGC||RGC.i==null||!CELL||!CELL[RGC.i]||!CELL[RGC.i].path)return;const P=new Path2D();P.addPath(CELL[RGC.i].path);
   ctx.save();ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);const land=s<5?landPath:landSmooth;
@@ -9456,7 +9467,7 @@ window.__mp=MP;window.__mpf={mpOwner,mpCan,mpLeader};
    « affiché » (celui du commandement du joueur) ; l'hôte attribue chaque variation au bon commandement (mpdSync). */
 const MPD_DEF={
   car:[{k:'suf',n:'Les suffètes',t:"Carthage et l'Afrique",c:'#8a5fc0'},{k:'han',n:'Hannibal',t:"Nouvelle-Carthage, l'est de l'Ibérie et ses conquêtes",c:'#c9a24a'},{k:'has',n:'Hasdrubal',t:"L'ouest de l'Ibérie",c:'#4f8f86'}],
-  rom:[{k:'sen',n:'Le Sénat',t:"Rome et l'Italie",c:'#b8433a'},{k:'sci',n:'Les Scipions',t:"La guerre d'Ibérie et de Gaule",c:'#c9a24a'},{k:'sem',n:'Sempronius',t:"La Sicile, la Sardaigne et l'Afrique",c:'#4f8f86'}]};
+  rom:[{k:'sen',n:'Le Sénat',t:"Rome et l'Italie",c:'#b8433a'},{k:'sci',n:'Les Scipions',t:"Pise, puis la guerre d'Ibérie et de Gaule",c:'#c9a24a'},{k:'sem',n:'Sempronius',t:"La Sicile, la Sardaigne et l'Afrique",c:'#4f8f86'}]};
 const MPD_ALL={};for(const s in MPD_DEF)for(const d of MPD_DEF[s])MPD_ALL[d.k]=d;
 MP.dv={};MP.dl={};
 const mpdReal=X=>realSide(X);
@@ -9495,7 +9506,7 @@ function mpdWith(k,fn){if(!k||!S.mpD||!S.mpD[k]||MP.role==='guest')return fn();m
   S.gold[X]=S.mpD[k].g;try{return fn()}finally{S.mpD[k].g=Math.max(0,S.gold[X]);S.gold[X]=S.mpD[MP.dv[X]].g;MP.dl[X]=S.gold[X]}}
 function mpdInit(X){const defs=MPD_DEF[mpdReal(X)];if(!defs||S.peo)return;S.mpD=S.mpD||{};S.mpCity=S.mpCity||{};
   const w={};for(const d of defs){S.mpD[d.k]={s:X,p:null,g:0};w[d.k]=0}
-  for(const n of N)if(!n.col&&ownerN(n.i)===X){const k=mpdGeo(n.lon,n.lat,X);S.mpCity[n.id]=k;w[k]+=Math.max(1,townIncome(n))}
+  for(const n of N)if(!n.col&&ownerN(n.i)===X){let k=mpdGeo(n.lon,n.lat,X);if(n.id==='pisae'&&mpdReal(X)==='rom')k='sci';/* Baptiste 10 nov. : les Scipions commencent avec Pise */S.mpCity[n.id]=k;w[k]+=Math.max(1,townIncome(n))}
   for(const a of S.armies)if(a.side===X)a.dm=mpdGuessArmy(a);for(const f of S.fleets||[])if(f.side===X)f.dm=mpdGuessArmy(f);
   let tw=0;for(const k in w){w[k]=Math.max(w[k],1);tw+=w[k]}let left=Math.round(S.gold[X]||0);
   defs.forEach((d,i)=>{const g=i===defs.length-1?left:Math.round((S.gold[X]||0)*Math.max(.15,w[d.k]/tw));S.mpD[d.k].g=Math.min(left,g);left-=S.mpD[d.k].g});
@@ -11791,7 +11802,57 @@ function cfwdRecall(d){const p=d&&d.det&&S.armies.find(x=>x.id===d.det.p&&!x.dea
   if(a.det&&$('cGoP')&&!$('cRecall')){const g=$('cGoP');g.insertAdjacentHTML('afterend',`<button type="button" id="cRecall" class="${a._recall?'on':''}" title="Le détachement marche vers son armée et la rejoint dès qu'il l'atteint">${a._recall?'Rappel en cours…':'Rappeler'}</button>`);g.remove();
     $('cRecall').onclick=()=>{cfwdRecall(a);renderAll()}}}catch(e){console.error('[corps en avant]',e)}return r}}
 {const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{for(const x of S.armies)if(x._recall&&!x.dead&&x.det)cfwdRecall(x)}catch(e){console.error(e)}return r}}
-window.__genie={cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+
+/* ---- RECRUTER DES GÉNÉRAUX (10 nov., Baptiste : « recruter de nouveaux généraux, les faire intégrer les armées existantes ou créer de nouvelles armées ») ----
+   Dans chaque ville à soi (taille ≥ 1) : deux candidats à engager (renouvelés tous les 90 jours, mêmes listes S.cand que « Organiser l'armée »).
+   Un général sans commandement, dans la ville : second d'une armée présente, commandant d'une armée présente, ou chef d'une nouvelle armée
+   formée de régiments pris aux armées de la ville (garnison comprise). Il peut aussi partir rejoindre une armée éloignée comme second (g.trav). */
+const GR_KMD=40;
+const grCost=x=>40+30*stars(x)+(x.tr.some(k=>TRAITS[k].neg)?-15:0);
+function grCand(i){const n=N[i],k=n.id;S.cand=S.cand||{};const c=S.cand[k];
+  if(!c||S.day-c.d>90)S.cand[k]={d:Math.floor(S.day),L:[0,1].map(()=>{const x=mkGen('car',nextGen('car'));S.guid--;x.id=null;return x})};return S.cand[k].L}
+function grHere(i){return S.armies.filter(a=>!a.dead&&a.side==='car'&&a.at===i&&a.reinf==null&&isMine(a)&&!a.ship)}
+function grFree(i){return S.gens.filter(g=>g.side==='car'&&!g.dead&&g.army==null&&g.sub==null&&!g.trav&&g.at===i)}
+function grHire(i,j){const L=grCand(i),x=L[j];if(!x)return;const c=grCost(x);if(S.gold.car<c)return;
+  const go=()=>{S.gold.car-=c};if(typeof mpdWith==='function'&&N[i].dm)try{mpdWith(N[i].dm,go)}catch(e){go()}else go();
+  x.id=S.guid++;L.splice(j,1);x.army=null;x.sub=null;x.at=i;S.gens.push(x);log(`${x.name} est engagé à ${N[i].n} (${c} or).`);renderAll()}
+function grNewArmy(g,i){const A=grHere(i).filter(a=>a.units.length);if(!A.length)return;
+  let h=`<h2>Nouvelle armée de ${esc(g.name)}</h2><p class="sub">Cochez les régiments qui partent avec lui. Ils quittent leur armée ou la garnison de ${esc(N[i].n)}.</p>`;
+  for(const a of A){h+=`<h3>${esc(a.g?'Garnison de '+N[i].n:a.name)}</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px">`+
+    a.units.map((u,k)=>`<label class="unit" style="grid-template-columns:18px 1fr"><input type="checkbox" data-gra="${a.id}" data-grk="${k}"><span>${esc(typeof uName==='function'?uName(u):u.t)} <span class="sub">${Math.round(u.men)}</span></span></label>`).join('')+`</div>`}
+  h+=`<div class="row" style="margin-top:12px"><button type="button" class="go" id="grOk">Former l'armée</button><button type="button" id="grNo">Annuler</button></div>`;
+  modal(h);$('mcard').classList.add('wide');$('grNo').onclick=closeModal;
+  $('grOk').onclick=()=>{const pick=[...document.querySelectorAll('#mcard [data-gra]:checked')].map(c=>[+c.dataset.gra,+c.dataset.grk]);if(!pick.length)return;
+    const units=[];for(const a of A){const ks=pick.filter(p=>p[0]===a.id).map(p=>p[1]);if(!ks.length)continue;ks.forEach(k=>{const u=a.units[k];if(u){u.cp=0;u.gd=false;units.push(u)}});a.units=a.units.filter((u,k)=>!ks.includes(k));
+      if(!a.units.length&&!a.g){a.dead=true}if(typeof fixCorps==='function'&&!a.dead)try{fixCorps(a)}catch(e){}}
+    const n=N[i],b={id:S.uid++,side:'car',name:g.name,x:n.x+1,y:n.y+.4,at:i,legs:[],units:units.slice(0,MAXU),scout:0,cool:0,mor:70,food:0,bag:true};
+    try{b.food=armyFoodMax(b)}catch(e){}if(N[i].dm)b.dm=N[i].dm;S.armies.push(b);giveGen(b,g);syncGens();
+    log(`${g.name} prend la tête d'une nouvelle armée à ${n.n} (${b.units.length} régiments).`);closeModal();sel={a:b};renderAll()}}
+function grTravel(g,a){const n=N[g.at],km=Math.hypot(a.x-n.x,a.y-n.y);g.trav={a:a.id,t:Math.max(1,Math.ceil(km/GR_KMD))};log(`${g.name} part rejoindre ${a.name} (${g.trav.t} jour${g.trav.t>1?'s':''}).`);renderAll()}
+{const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{for(const g of S.gens||[]){if(!g.trav||g.dead)continue;if(--g.trav.t>0)continue;
+    const a=S.armies.find(x=>x.id===g.trav.a&&!x.dead);g.trav=null;
+    if(a&&(a.sub||[]).length<MAXSUB&&addSub(a,g)){try{autoCorps(a,'eq')}catch(e){}if(g.side==='car')log(`${g.name} rejoint ${a.name} comme second.`)}
+    else if(g.side==='car')log(`${g.name} n'a pas pu rejoindre son armée et attend à ${N[g.at].n}.`)}}catch(e){console.error(e)}return r}}
+{const _tb=townBlock;townBlock=function(i,main){let h=_tb.apply(this,arguments);try{const n=N[i];if(!S.gens||n.col||ownerN(i)!=='car')return h;
+  const here=grHere(i),free=grFree(i),far=S.armies.filter(a=>!a.dead&&a.side==='car'&&a.reinf==null&&!a.g&&isMine(a)&&a.at!==i&&(a.sub||[]).length<MAXSUB);
+  h=h.replace(`<p class="sub">Pour leur confier une armée : amenez-la ici, puis « Organiser l'armée… ».</p>`,'');
+  for(const g of free){h+=`<div class="row" style="margin:2px 0 8px;flex-wrap:wrap;gap:4px"><span class="sub" style="width:100%">${esc(g.name)} :</span>`;
+    for(const a of here.filter(a=>!a.g)){if((a.sub||[]).length<MAXSUB)h+=`<button type="button" data-grs="${g.id}:${a.id}" title="Il devient sous-général et prend un corps de l'armée">Second de ${esc(a.name)}</button>`;
+      h+=`<button type="button" data-grc="${g.id}:${a.id}" title="Il remplace ${esc(a.name)} à la tête de l'armée ; l'ancien chef reste en ville">Commander l'armée de ${esc(a.name)}</button>`}
+    if(here.some(a=>a.units.length))h+=`<button type="button" class="go" data-grn="${g.id}" title="Choisir des régiments présents en ville pour former une nouvelle armée">Nouvelle armée…</button>`;
+    if(far.length)h+=`<select data-grt="${g.id}" style="font:inherit;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:4px;padding:3px"><option value="">Rejoindre une armée éloignée…</option>${far.map(a=>`<option value="${a.id}">${esc(a.name)} (${Math.round(Math.hypot(a.x-n.x,a.y-n.y))} km)</option>`).join('')}</select>`;
+    h+=`</div>`}
+  const tr=S.gens.filter(g=>g.side==='car'&&!g.dead&&g.trav&&g.at===i);if(tr.length)h+=`<p class="sub">En route : ${tr.map(g=>`${esc(g.name)} → ${esc((S.armies.find(a=>a.id===g.trav.a)||{name:'?'}).name)} (${g.trav.t} j)`).join(', ')}</p>`;
+  if(n.size>=1){const L=grCand(i);h+=`<h3>Recruter un général</h3>`+(L.length?L.map((x,j)=>`<div class="rec"><span>${genHtml(x,false)}</span><button type="button" data-grh="${i}:${j}" ${S.gold.car<grCost(x)?'disabled':''}>Engager ${grCost(x)}</button></div>`).join(''):`<p class="sub">Plus de candidat ici pour le moment.</p>`)}
+}catch(e){console.error('[généraux]',e)}return h}}
+{const _bt=bindTown;bindTown=function(){const r=_bt.apply(this,arguments);try{const G=id=>S.gens.find(g=>g.id===+id),A=id=>S.armies.find(a=>a.id===+id);
+  document.querySelectorAll('[data-grh]').forEach(b=>b.onclick=()=>{const [i,j]=b.dataset.grh.split(':').map(Number);grHire(i,j)});
+  document.querySelectorAll('[data-grs]').forEach(b=>b.onclick=()=>{const [g,a]=b.dataset.grs.split(':');const x=G(g),y=A(a);if(x&&y&&addSub(y,x)){try{autoCorps(y,'eq')}catch(e){}log(`${x.name} devient le second de ${y.name}.`)}renderAll()});
+  document.querySelectorAll('[data-grc]').forEach(b=>b.onclick=()=>{const [g,a]=b.dataset.grc.split(':');const x=G(g),y=A(a);if(!x||!y)return;const old=y.name;giveGen(y,x);syncGens();log(`${x.name} prend le commandement de l'armée de ${old}.`);sel={a:y};renderAll()});
+  document.querySelectorAll('[data-grn]').forEach(b=>b.onclick=()=>{const g=G(b.dataset.grn);if(g)grNewArmy(g,g.at)});
+  document.querySelectorAll('[data-grt]').forEach(s=>s.onchange=()=>{const g=G(s.dataset.grt),a=A(s.value);if(g&&a)grTravel(g,a)});
+}catch(e){console.error('[généraux]',e)}return r}}
+window.__genie={grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
