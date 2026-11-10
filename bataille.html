@@ -2656,23 +2656,31 @@ if(!V3D){
     // second rang décalé d'une demi-maille par rapport au premier
     const row1=P.filter(p=>p.r===1);if(row1.length){const m=row1.length;row1.forEach((p,c)=>{p.x=(c-(m-1)/2)*FSP*2+(m===c0?FSP:0)})}return P}
   function ring(n){const R=Math.max(FSP*1.2,n*FSP/(2*Math.PI)),P=[];for(let i=0;i<n;i++){const f=i/n*2*Math.PI;P.push({x:Math.sin(f)*R,y:-Math.cos(f)*R,r:0,a:f})}return P}
-  function applyForm(key){
+  // formation active : tant qu'un bouton est allumé, les ordres de marche (clic droit, tracé) replacent la sélection dans cette formation
+  const formOf=arr=>{const k=arr.length>1&&arr[0]._form;return k&&arr.every(u=>u._form===k)?k:null};
+  // dest : centre d'arrivée (sinon sur place) ; face : direction (sinon la direction moyenne) ; plan : rendre les places sans donner d'ordre
+  function applyForm(key,dest,face,run,plan){
     const arr=mine();if(arr.length<2)return;const F=FORMS.find(f=>f[0]===key);if(!F)return;
-    let sx=0,sy=0;for(const u of arr){sx+=Math.cos(u.ang);sy+=Math.sin(u.ang)}const A=Math.atan2(sy,sx);
-    const cx=arr.reduce((a,u)=>a+u.x,0)/arr.length,cy=arr.reduce((a,u)=>a+u.y,0)/arr.length;
+    if(!dest&&!plan&&formOf(arr)===key){for(const u of arr)u._form=null;renderSel();return} // second clic sur le bouton allumé : formation libre
+    let sx=0,sy=0;for(const u of arr){sx+=Math.cos(u.ang);sy+=Math.sin(u.ang)}const A=face!=null?face:Math.atan2(sy,sx);
+    const cx=arr.reduce((a,u)=>a+u.x,0)/arr.length,cy=arr.reduce((a,u)=>a+u.y,0)/arr.length,ox=dest?dest.x:cx,oy=dest?dest.y:cy,out=[];
+    if(!plan)for(const u of arr)u._form=key;
     const fx=Math.cos(A),fy=Math.sin(A),rx=-fy,ry=fx;
     const P=F[3](arr.length),mx=P.reduce((a,p)=>a+p.x,0)/P.length,my=P.reduce((a,p)=>a+p.y,0)/P.length;
     // rangs : les plus frais devant ; dans un rang, chacun prend la place la plus proche de son côté (moins de croisements)
-    const G=regMode(arr);markSolo(arr,!G);
+    const G=regMode(arr);if(!plan)markSolo(arr,!G);
     const lat=u=>(u.x-cx)*rx+(u.y-cy)*ry,put=(PP,units)=>{
       const ranks=[...new Set(PP.map(p=>p.r))].sort((a,b)=>a-b),pool=[...units].sort((a,b)=>frac(b)-frac(a));
       for(const r of ranks){const S=PP.filter(p=>p.r===r).sort((a,b)=>a.x-b.x||a.y-b.y),U=pool.splice(0,S.length).sort((a,b)=>lat(a)-lat(b));
         S.forEach((p,i)=>{const u=U[i];if(!u)return;const x=p.x-mx,y=p.y-my;
-          u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,cx+rx*x-fx*y)),y:Math.max(20,Math.min(H-20,cy+ry*x-fy*y)),face:A+p.a,run:false};u.preview=null})}};
+          const X=Math.max(RIVER+20,Math.min(W-20,ox+rx*x-fx*y)),Y=Math.max(20,Math.min(H-20,oy+ry*x-fy*y));
+          if(plan){out.push({u,x:X,y:Y,face:A+p.a,f:1});return}
+          u.order={type:'move',x:X,y:Y,face:A+p.a,run:!!run};u.preview=null})}};
     if(G&&G.length>1){ // régiments entiers : chacun prend une bande de places côte à côte (ils ne se mélangent pas)
       const Ps=[...P].sort((a,b)=>a.x-b.x||a.r-b.r),gs=[...G].sort((a,b)=>lat(cen(a))-lat(cen(b)));let k=0;
       for(const g of gs){put(Ps.slice(k,k+g.length),g);k+=g.length}}
     else put(P,arr);
+    if(plan)return out;
     renderSel()}
   // petits pictogrammes : points pour les places des carrés
   function formIcon(key){const P=FORMS.find(f=>f[0]===key)[3](key==='orbe'?10:key==='colonne'?8:9);
@@ -2680,17 +2688,19 @@ if(!V3D){
     return `<svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true">${P.map(p=>`<rect x="${(15+(p.x-(x0+x1)/2)*k-1.8).toFixed(1)}" y="${(8+(p.y-(y0+y1)/2)*k-1.8).toFixed(1)}" width="3.6" height="3.6" fill="currentColor"/>`).join('')}<path d="M3 1h24" stroke="currentColor" stroke-width=".8" opacity=".45"/></svg>`}
   function formBox(){let box=document.getElementById('formBtns');if(box)return box;const sel=document.getElementById('sel');if(!sel)return null;
     box=document.createElement('div');box.id='formBtns';
-    box.innerHTML='<div class="fl">Formation</div><div class="fg">'+FORMS.map(f=>`<button type="button" data-f="${f[0]}" title="${f[2]}">${formIcon(f[0])}<span>${f[1]}</span></button>`).join('')+'</div>'+'<div class="fh">Clic : régiment entier · Alt+clic : un seul carré</div>';
+    box.innerHTML='<div class="fl">Formation</div><div class="fg">'+FORMS.map(f=>`<button type="button" data-f="${f[0]}" title="${f[2]}">${formIcon(f[0])}<span>${f[1]}</span></button>`).join('')+'</div>'+'<div class="fh fa" style="color:#e8c77e"></div><div class="fh">Clic : régiment entier · Alt+clic : un seul carré</div>';
     box.addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(b)applyForm(b.dataset.f)});
     const btns=sel.querySelector('.btns');if(btns)btns.after(box);else sel.appendChild(box);
     const st=document.createElement('style');st.textContent=`#formBtns{display:none;flex-direction:column;gap:4px;margin-top:2px}#formBtns.on{display:flex}
 #formBtns .fh{font-size:11px;color:var(--muted,#b9a98a);opacity:.85;margin-top:1px}
+#formBtns button.act{background:#d6b878;color:#1c140c;border-color:#f0dca8}
+#formBtns .fa:empty{display:none}
 #formBtns .fl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#b9a98a)}
 #formBtns .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 #formBtns button{display:flex;align-items:center;gap:4px;padding:3px 5px;font-size:12px;line-height:1.1;min-width:0;white-space:nowrap}
 #formBtns button svg{flex:none}#formBtns button span{overflow:hidden;text-overflow:ellipsis}
 @media (max-width:760px){#formBtns .fg{grid-template-columns:repeat(3,1fr)}#formBtns button span{display:none}}`;document.head.appendChild(st);return box}
-  {const _rs2=renderSel;renderSel=function(){const r=_rs2.apply(this,arguments);try{const b=formBox();if(b)b.classList.toggle('on',mine().length>=2)}catch(e){}return r}}
+  {const _rs2=renderSel;renderSel=function(){const r=_rs2.apply(this,arguments);try{const b=formBox();if(b){const m=mine(),k=formOf(m);b.classList.toggle('on',m.length>=2);for(const x of b.querySelectorAll('button[data-f]')){const on=x.dataset.f===k;x.classList.toggle('act',on);x.setAttribute('aria-pressed',on?'true':'false')}const h=b.querySelector('.fa');if(h)h.textContent=k?'Formation gardée à chaque ordre de marche. Recliquez le bouton pour la libérer.':''}}catch(e){}return r}}
   /* -- régiments pilotés (v1xx) : un clic ou un cadre choisit le régiment entier ; ses ordres le font marcher en gardant
         sa formation, et ses carrés se relèvent tout seuls au combat. Alt+clic (ou Alt+cadre) commande un carré seul. -- */
   let ALT=false,SELCLR=false,PREV=new Set(),LASTREG=false;
@@ -2717,7 +2727,9 @@ if(!V3D){
     const t=p.order&&p.order.type==='attack'&&p.order.target&&!p.contacts.length?p.order.target:null,a=t?Math.atan2(t.y-p.y,t.x-p.x):p.ang,b=FRK*(u._row||1);
     u.order={type:'move',x:Math.max(RIVER+20,Math.min(W-20,p.x-Math.cos(a)*b)),y:Math.max(20,Math.min(H-20,p.y-Math.sin(a)*b)),face:a,run:!!(p.order&&p.order.run)}}
   // marche : chaque régiment garde son dessin et pivote vers sa destination ; les rangs ne se croisent pas
-  {const _om=orderMove;orderMove=function(p,run){const arr=mine(),G=regMode(arr);markSolo(arr,!G);
+  {const _om=orderMove;orderMove=function(p,run){const arr=mine(),fk=formOf(arr);
+    if(fk&&p){const c=cen(arr),far=Math.hypot(p.x-c.x,p.y-c.y)>25;applyForm(fk,p,far?Math.atan2(p.y-c.y,p.x-c.x):null,run);return}
+    const G=regMode(arr);markSolo(arr,!G);
     if(!G||!p)return _om.apply(this,arguments);
     const c=cen(arr);if(Math.hypot(p.x-c.x,p.y-c.y)<=25)return _om.apply(this,arguments);
     let sx=0,sy=0;for(const u of arr){sx+=Math.cos(u.ang);sy+=Math.sin(u.ang)}
@@ -2744,7 +2756,9 @@ if(!V3D){
       for(const u of rest){let b=front[0],bd=1e9;for(const f of front){const q=Math.abs(la(f)-la(u));if(q<bd){bd=q;b=f}}
         u._pf=b;u._row=Math.max(1,Math.round((mx-dep(u))/FRK));follow(u)}}}}
   // tracé au clic droit en mode régiment : chaque régiment en bloc, côte à côte, la longueur fixe la largeur des blocs
-  {const _pl=planLine;planLine=function(arr,p0,p1){const G=regMode(arr);LASTREG=!!G;if(!G)return _pl.apply(this,arguments);
+  {const _pl=planLine;planLine=function(arr,p0,p1){const fk=formOf(arr);
+    if(fk){const dx=p1.x-p0.x,dy=p1.y-p0.y;if(Math.hypot(dx,dy)<12)return null;LASTREG=!!regMode(arr);return applyForm(fk,{x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2},Math.atan2(-dx,dy),false,true)}
+    const G=regMode(arr);LASTREG=!!G;if(!G)return _pl.apply(this,arguments);
     const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<12)return null;
     const ux=dx/L,uy=dy/L,face=Math.atan2(-dx,dy),bx=-Math.cos(face),by=-Math.sin(face),gap=6,n=G.length,wR=Math.max(FSP,(L-gap*(n-1))/n);
     const C=G.map(cen),ord=G.map((g,i)=>i).sort((a,b)=>(C[a].x*ux+C[a].y*uy)-(C[b].x*ux+C[b].y*uy)),out=[];
