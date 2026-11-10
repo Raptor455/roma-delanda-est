@@ -204,7 +204,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v188</span>
+ <span class="chg-ver">v189</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -11645,8 +11645,13 @@ function menPay(payload){const b=payload&&payload.b;if(b&&Array.isArray(b.p)&&!b
   for(const k of ['p','e'])for(const r of b[k]||[]){const m=menMs(r.t);r.ms=m;r.men=Math.round(r.men/m);M[k].push(m)}if(S&&S.cur)S.cur._ms=M}}
 {const _dv=dive;dive=function(payload){try{menPay(payload)}catch(e){console.error(e)}return _dv.apply(this,arguments)}}
 // retour de bataille : les hommes reviennent à l'échelle de la campagne (avant tous les autres écouteurs du retour)
-window.addEventListener('message',ev=>{const d=ev.data;if(!d||d.bellum!=='retour'||!d.res||d.res._s4||!S||!S.cur||!S.cur._ms)return;const M=S.cur._ms;d.res._s4=1;
-  for(const [k,L] of [['p',d.res.p],['e',d.res.e]])if(Array.isArray(L))L.forEach((v,i)=>{if(typeof v==='number')L[i]=Math.round(v*(M[k][i]||1))})},true);
+/* v189 : l'écouteur de retour de la campagne passait AVANT celui-ci (S.cur déjà vidé) : les hommes revenaient ÷4.
+   On remet l'échelle dans applyResult, à partir de b._ms posé au moment de plonger dans la bataille. */
+function menBack(b,res){const M=b&&b._ms;if(!M||!res)return;b._ms=null;const am=!!b.attMine;
+  for(const [L,m] of [[res.A,am?M.p:M.e],[res.D,am?M.e:M.p]])if(Array.isArray(L)&&m)L.forEach((v,i)=>{if(typeof v==='number')L[i]=Math.round(v*(m[i]||1))})}
+/* enveloppe posée après tous les scripts (multijoueur compris) pour passer en premier */
+function menWrap(){if(applyResult.__men)return;const _ar=applyResult;applyResult=function(b,res){try{menBack(b,res)}catch(e){console.error(e)}return _ar.apply(this,arguments)};applyResult.__men=1}
+if(document.readyState==='complete')setTimeout(menWrap,0);else window.addEventListener('load',menWrap);
 /* ---- SIÈGE EN TÊTE DES ORDRES (9 nov. : Baptiste ne trouvait pas « Donner l'assaut aux murs », rangé dans Intendance) ----
    Après le rangement en onglets (interface), on remonte tout ce qui concerne le siège en haut de l'onglet Ordres, sous « Siège ». */
 const SIEGE_RX=/^(La garnison|Ville sans armée|Enfermée dans|Travaux de siège|Machines de siège|À la prise de|Défense de)/;
