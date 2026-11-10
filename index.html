@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v176</span>
+ <span class="chg-ver">v177</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -538,7 +538,7 @@ const ROAD={
   col:{n:'col',m:.45,mud:{Automne:.8,Hiver:.55},snow:0,food:1,txt:"passage de montagne : très lent, dangereux l'hiver, fermé quand la neige le recouvre"},
   mer:{n:'mer'},
   hors:{n:'hors route',m:.5,mud:{Automne:.85,Hiver:.7},snow:0,food:1,txt:"à travers champs : lent ; les hauteurs sont impraticables, et la limite descend l'hiver"}};
-const SEA_KMD=55,MAXU=20,DAY_S=9; // secondes réelles par jour à ×1
+const SEA_KMD=55,MAXU=20,DAY_S=18;/*JOUR-18*/ // secondes réelles par jour à ×1
 
 /* ================= ATELIER : unités composées par le joueur ================= */
 // Un modèle = un corps de troupe (figurines, effectif, villes où l'on recrute) + un équipement choisi pièce par pièce, puis un nom.
@@ -4103,7 +4103,7 @@ function endGame(){
 }
 function openHelp(){
   modal(`<h2>Comment jouer</h2>
-  <p><b>Temps réel avec pause.</b> <kbd>Espace</kbd> met en pause ou relance ; ×1, ×2, ×4, ×10 règlent la vitesse (à ×1, un jour dure 9 secondes). Une bataille ou un siège sur vos terres met le jeu en pause.</p>
+  <p><b>Temps réel avec pause.</b> <kbd>Espace</kbd> met en pause ou relance ; ×1, ×2, ×4, ×10 règlent la vitesse (à ×1, un jour dure 18 secondes). Une bataille ou un siège sur vos terres met le jeu en pause.</p>
   <p><b>Carte.</b> Molette (ou + / −) pour zoomer de la Méditerranée entière jusqu'aux rues des villes. Pour déplacer la carte : <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> (ou WASD) et flèches (<kbd>Maj</kbd> : plus vite), ou glisser avec le clic droit ou la molette enfoncée. Le clic gauche sert à choisir ; glissé, il trace un cadre qui sélectionne plusieurs armées (<kbd>Maj</kbd> pour en ajouter), et le clic droit les fait toutes marcher. Voies romaines, routes, pistes, cols et détroits sont tracés.</p>
   <p><b>Armées.</b> Clic gauche sur un écu violet pour la choisir, <b>clic droit</b> où vous voulez pour marcher (sur téléphone : toucher). L'armée prend le chemin le plus rapide par les routes : voie romaine plus rapide, piste normale, col lent ; hors route, deux fois moins vite, et encore moins en montagne ou en forêt. Le trajet et la durée s'affichent au survol.</p>
   <p><b>Garnisons.</b> Dans une ville amie, « Entrer en garnison » met l'armée à l'abri des murs : ses régiments se refont deux fois plus vite. Une flotte peut se mettre à l'abri au port (navires désarmés, entretien réduit de moitié). Au départ, les régiments sortent un par un par les portes, les escadres une par une du port.</p>
@@ -11723,13 +11723,9 @@ function cardPiece(x,y,q,u,c){const T=UT[u.t];if(!T)return;const k=T.k==='skirm'
   else if(k==='cav'||k==='lcav'){ctx.moveTo(X0+pz-m,Y0+m);ctx.lineTo(X0+m,Y0+pz-m);ctx.stroke();if(k==='lcav'){ctx.beginPath();ctx.arc(X0+pz*.7,Y0+pz*.7,pz*.1,0,7);ctx.fill()}}
   else{for(const [a2,b2] of [[.3,.33],[.7,.33],[.5,.7]]){ctx.beginPath();ctx.arc(X0+pz*a2,Y0+pz*b2,pz*.12,0,7);ctx.fill()}}
   ctx.restore();ctx.restore()}
-/* ---- VITESSES ÷2 (10 nov., Baptiste « réduire de moitié la vitesse des flottes et des armées sur la carte ») : marche des armées
-   (toutes, IA comprise) et navigation des flottes, pirates et marchands divisées par deux. Convois et détachements gardent leur allure. ---- */
-const SPEED_K=.5;
-/* armées : remises à leur vitesse d'avant (10 nov., Baptiste « repasse comme avant pour les armées ») */
-{const _fS=fSpeed;fSpeed=function(f){return _fS.apply(this,arguments)*SPEED_K}}
-if(typeof NV==='object'&&NV&&!NV._half){NV._half=1;NV.psp*=SPEED_K;NV.mersp*=SPEED_K}
-window.__genie={SPEED_K,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- VITESSES (10 nov., Baptiste) : armées et flottes à leur vitesse d'origine ; c'est le jour qui dure deux fois plus longtemps
+   (DAY_S 9 → 18 s à ×1, retouche faite par patch.py, repère JOUR-18) : tout défile deux fois plus lentement, distances par jour intactes. ---- */
+window.__genie={cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
