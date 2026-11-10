@@ -204,7 +204,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v185</span>
+ <span class="chg-ver">v186</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -7863,7 +7863,7 @@ const P218={
     t:"Athènes reste à l'écart des guerres de Philippe V et des Étoliens ; le Pirée commerce avec tous. En 209, la cité rejoindra Rome, les Étoliens et Attale contre la Macédoine. Préparez l'Attique, ou entrez en guerre plus tôt.",
     war:"Déclarer la guerre à Philippe V",wt:"La Macédoine deviendra votre ennemie ; les Étoliens seront vos alliés."}};
 // unités d'origine (Carthage) remplacées par celles du peuple joué
-const P218_UT={mac:{inf:'phalange',cav:'thessal',sk:'peltaste'},syr:{inf:'athoplites',cav:'hippeis',sk:'athpelt'},ath:{inf:'athoplites',cav:'hippeis',sk:'athpelt'}};
+const P218_UT={mac:{inf:'phalange',cav:'thessal',sk:'peltaste'},syr:{inf:'athoplites',cav:'hippeis',sk:'athpelt'},ath:{inf:'athoplites',cav:'hippeis',sk:'athpelt'},mas:{inf:'athoplites',cav:'hippeis',sk:'athpelt'}};
 function p218Units(a,k){const M=P218_UT[k];if(!M)return;const ok=new Set(Object.values(POOL_CAR).flat());for(const u of a.units){if(ok.has(u.t)||!UT[u.t])continue;const K=UT[u.t].k;const t=K==='cav'||/cav/.test(u.t)?M.cav:K==='skirm'?M.sk:M.inf;u.t=t;u.men=UT[t].men}}
 function startPeo218(k,df){newGame();S.diff=DIFF[df]?df:'normal';try{tradeInit();genInit()}catch(e){console.error(e)}
   scenSetup=true;try{peo218Setup(k)}finally{scenSetup=false}
@@ -7898,7 +7898,7 @@ function peo218Setup(k){const P=P218[k];
   else if(PX[k])pxSetup(k);
   S.log=[];S.peace={foe:P.foe,d:P.d};S.ev=S.ev||{};S.ev.p218=1;S.pol=null;S.mirror=false;
   for(const a of S.armies){if(a.food==null||!isFinite(a.food))a.food=armyFoodMax(a)}
-  log(k==='mac'?"Printemps 218 : Philippe V marche contre les Étoliens. Hannibal a quitté Nova Carthago.":k==='syr'?"Printemps 218 : Hiéron II envoie du blé à Rome. Hannibal a quitté Nova Carthago.":k==='ath'?"Printemps 218 : Athènes reste neutre. Hannibal a quitté Nova Carthago.":k==='num'?"Printemps 218 : Gaïa règne à Cirta. Hannibal a quitté Nova Carthago.":k==='per'?"Printemps 218 : Attale Ier et ses Galates soumettent l'Éolide et la Troade. Hannibal a quitté Nova Carthago.":"Printemps 218 : les Boïens chassent les colons romains. Hannibal a quitté Nova Carthago.")}
+  log(k==='mac'?"Printemps 218 : Philippe V marche contre les Étoliens. Hannibal a quitté Nova Carthago.":k==='syr'?"Printemps 218 : Hiéron II envoie du blé à Rome. Hannibal a quitté Nova Carthago.":k==='ath'?"Printemps 218 : Athènes reste neutre. Hannibal a quitté Nova Carthago.":k==='num'?"Printemps 218 : Gaïa règne à Cirta. Hannibal a quitté Nova Carthago.":k==='per'?"Printemps 218 : Attale Ier et ses Galates soumettent l'Éolide et la Troade. Hannibal a quitté Nova Carthago.":k==='mas'?"Printemps 218 : vos ambassadeurs reviennent de Rome. Hannibal a quitté Nova Carthago et marche vers le Rhône.":"Printemps 218 : les Boïens chassent les colons romains. Hannibal a quitté Nova Carthago.")}
 // la guerre éclate : à la date historique ou quand le joueur la déclare
 function peoWar(early){if(!S||!S.peace)return;const k=S.peo;S.peace=null;
   if(k==='mac'){scenArmy('rom','brundisium',[['legion',2],['velites',1],['acav',1]],'M. Valerius Laevinus');scenGar('rom',MAC_ILL.filter(id=>NI[id]!=null&&S.own[id]==='rom'),[['legion',1],['velites',1]]);
@@ -8018,7 +8018,7 @@ var PX={
     mine:[['pergamum',[['athoplites',3],['thureo',2],['gaul',2],['cretois',1],['hippeis',2]],'Attale Ier'],['lampsacus',[['athoplites',2],['gaul',2],['cretois',1]],'Dionysodore']],
     fleet:[['elaia',{quin:2,tri:8,trans:6},'Flotte de Pergame']],
     foeA:[['pella',[['phalange',5],['hypasp',2],['peltaste',2],['compagnons',2],['thessal',1],['cretois',1]],'Philippe V'],['chalcis',[['phalange',3],['peltaste',2],['cretois',1]],'Héracleidès de Tarente']],
-    foeGens:['Philippe V','Héracleidès de Tarente','Taurion','Alexandros','Ménippe','Polyphantas','Philoclès','Nicanor','Androsthène'],foeUnits:['phalange','phalange','peltaste','thessal','hypasp'],foeCap:'pella',foeN:'Macédoniens',
+    foeGens:['Philippe V','Héracleidès de Tarente','Taurion','Alexandros','Ménippe','Polyphantas','Philoclès','Nicanor','Androsthène'],foeUnits:['phalange','phalange','peltaste','thessal','hypasp'],foeCap:'pella',foeN:'Macédoniens',foeAdj:['macédoniens','macédonien','de Philippe V'],
     warCard:['Pergame entre en guerre',"Votre flotte appareille : la guerre contre Philippe V commence.","Les Étoliens et Rome vous appellent : Attale entre en guerre contre Philippe V. Les Étoliens vous vendent Égine pour trente talents."],
     onWar:()=>{const i=NI.aegina;if(i!=null&&S.own.aegina!=='car'&&S.own.aegina!=='mac'){S.armies=S.armies.filter(a=>!(a.g&&a.at===i&&a.side!=='car'));setOwn(['aegina'],'car');scenGar('car',['aegina'],[['thureo',1]]);log("Égine est à vous : la base de votre flotte en mer Égée.")}},
     goal:"Prenez Chalcis et Démétrias, deux des « entraves de la Grèce » de Philippe V. Tenez Pergame : sa chute met fin au royaume.",
@@ -8027,13 +8027,35 @@ var PX={
     loseT:["Pergame est tombée","Les Macédoniens sont sur l'acropole ; la bibliothèque et l'autel brûlent. Le royaume d'Attale n'est plus."],
     EV:[{w:2,f:()=>{const g=40+Math.round(Math.random()*40);S.gold.car+=g;evCard('Le trésor des Attalides',`Les domaines royaux et le commerce de l'Éolide rapportent bien : +${g} or.`)}},
       {w:2,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+5);evCard('Le vainqueur des Galates',"On chante encore la victoire d'Attale sur les Galates ; vos soldats sont fiers (moral +5).")}},
-      {w:1,f:()=>{const g=Math.min(S.gold.car,25+Math.round(Math.random()*30));S.gold.car-=g;evCard('Les Galates',`Les tribus galates réclament leur tribut ; il faut les payer pour qu'elles restent chez elles (−${g} or).`)}}]}};
+      {w:1,f:()=>{const g=Math.min(S.gold.car,25+Math.round(Math.random()*30));S.gold.car-=g;evCard('Les Galates',`Les tribus galates réclament leur tribut ; il faut les payer pour qu'elles restent chez elles (−${g} or).`)}}]},
+  mas:{n:'Massalia',sub:'La cité des Phocéens',c:[44,93,158],css:'#2c5d9e',l:'Μ',adj:'bleu',
+    t:"La vieille cité grecque, alliée fidèle de Rome. Sa flotte et ses comptoirs barrent la route d'Hannibal.",
+    p218:{n:'218 : Massalia, amie de Rome',foe:'pun',d:1,gold:380,
+      t:"Massalia, fondée par les Phocéens il y a quatre siècles, tient la côte de l'Ibérie à la Ligurie : Emporion, Agathè, Nikaia. Ses ambassadeurs ont prévenu Rome : Hannibal marche vers le Rhône. Dès cette année, votre flotte accompagnera celle de Cnaeus Scipion ; au printemps 217, elle l'aidera à battre la flotte punique à l'embouchure de l'Èbre. Rome reste votre alliée pendant toute la guerre.",
+      war:"Entrer en guerre contre Carthage",wt:"Carthage deviendra votre ennemie."},
+    bonus:75,cap:'massalia',keys:['saguntum','cnova'],front:false,romPeace:true,foeAI:true,pal:'mas',foePal:'car',
+    gens:['Hermocratès','Apellis','Euthymène','Aristoxène','Protis','Cléomène','Pythéas','Démonax','Phormion','Télésarque'],
+    units:['athoplites','thureo','athpelt','gaul','hippeis','cretois'],
+    utn:{athoplites:'Hoplites massaliotes',hippeis:'Cavalerie massaliote',athpelt:'Peltastes massaliotes'},
+    mine:[['massalia',[['athoplites',3],['thureo',2],['athpelt',2],['cretois',1],['hippeis',1]],'Hermocratès'],['emporion',[['athoplites',1],['gaul',2],['athpelt',1]],'Apellis']],
+    fleet:[['massalia',{quin:1,tri:10,trans:4},'Flotte de Massalia']],
+    foeN:'Carthaginois',foeAdj:['carthaginois','carthaginois','de Carthage'],
+    warCard:['Massalia contre Carthage',"Vous déclarez la guerre à Carthage : vos trières rejoignent les Romains.","Hannibal franchit le Rhône au nord de vos murs ; vos cavaliers éclairent l'armée de Publius Scipion. Votre flotte rejoint celle de Rome, et Hannon garde le pays au nord de l'Èbre."],
+    onWar:()=>{const e=N[NI.emporion];if(!e)return;const T=['dertosa','tarraco','saguntum','akra','cnova'].map(id=>N[NI[id]]).find(n=>n&&S.own[n.id]==='pun');
+      if(T){scenArmy('pun',T.id,[['iber',4],['lib',2],['ncav',1],['sling',1]],'Hannon');log(`Hannon tient le nord de l'Èbre depuis ${T.n}.`)}},
+    goal:"Prenez Sagonte et Nova Carthago, avec l'aide des Scipions, pour chasser Carthage de l'Ibérie. Tenez Massalia : sa chute met fin à la cité.",
+    winT:["L'Ibérie libérée","Sagonte est vengée et Nova Carthago est tombée : les Barcides ont perdu l'Ibérie. Les comptoirs de Massalia commercent de Gadès à Nikaia."],
+    endT:["La cité des Phocéens","La guerre s'achève : Massalia est intacte, sa flotte maîtresse de la mer de Ligurie, et Rome n'oubliera pas sa plus vieille amie."],
+    loseT:["Massalia est tombée","Les Carthaginois sont dans le port du Lacydon. Les Phocéens ont perdu leur cité."],
+    EV:[{w:2,f:()=>{const g=40+Math.round(Math.random()*40);S.gold.car+=g;evCard('Le commerce du Rhône',`L'étain, le vin et l'huile remontent le Rhône : +${g} or.`)}},
+      {w:2,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+5);evCard('Artémis d\'Éphèse',"La fête d'Artémis rassemble la cité ; vos soldats sont fiers de leurs ancêtres phocéens (moral +5).")}},
+      {w:1,f:()=>{const g=Math.min(S.gold.car,25+Math.round(Math.random()*30));S.gold.car-=g;evCard('Les Salyens',`Les Ligures salyens pillent vos domaines ; il faut racheter les captifs (−${g} or).`)}}]}};
 const pxOn=()=>!!(S&&PX[S.peo]);
 for(const k in PX){const X=PX[k];P218[k]=Object.assign({},X.p218);
   X.PH=[[" Prendre Rome. Vous perdez si Carthage tombe."," "+X.goal],["écu violet","écu "+X.adj],["Alliance : ils rejoignent Carthage avec","Alliance : ils rejoignent "+X.n+" avec"],[" Les tributaires (soumis par les Barcides) paient"," Les tributaires de Carthage (soumis par les Barcides) paient"],["quand une armée punique est proche et tant que vous gardez leurs otages","quand une armée punique est proche et tant que Carthage garde leurs otages"]]}
 function pxStatic(k){if(peoDone===k)return;peoDone=k;macDone=true;const X=PX[k];for(const t in X.utn||{})if(UT[t])UT[t].n=X.utn[t];
   FAC.pun={n:'Carthage',c:FAC.car.c.slice(),a:[40,-100],cul:'afr'};FAC.car={n:X.n,c:X.c.slice()};
-  GEN.pun=GEN.car.slice();GEN.car=X.gens.slice();if(X.foeGens&&X.p218.foe)GEN[X.p218.foe]=X.foeGens.slice();
+  GEN.pun=GEN.car.slice();GEN.car=X.gens.slice();if(X.foeGens&&X.p218.foe&&X.p218.foe!=='pun')GEN[X.p218.foe]=X.foeGens.slice();
   const cul=new Set(Object.keys(POOL_CAR));for(const f in FAC)if(FAC[f].cul)cul.add(FAC[f].cul);['afr','ibe','gau','ita','gre','num','bal','lig','cel'].forEach(c=>cul.add(c));
   for(const c in POOL_CAR)delete POOL_CAR[c];for(const c of cul)POOL_CAR[c]=[...new Set(X.units)];
   try{document.documentElement.style.setProperty('--punic',X.css)}catch(e){}document.title='Roma Delenda Est · '+X.n}
@@ -8041,26 +8063,27 @@ function pxStatic(k){if(peoDone===k)return;peoDone=k;macDone=true;const X=PX[k];
 function peoStatic(k){if(k==='mac')macStatic();else if(k==='syr')syrStatic();else if(k==='ath')athStatic();else if(PX[k])pxStatic(k)}
 function pxSetup(k){const X=PX[k];
   for(const [id,L,g] of X.mine)if(NI[id]!=null&&S.own[id]==='car')scenArmy('car',id,L,g);
-  if(X.p218.foe!=='rom'&&S.fac[X.p218.foe]){S.fac[X.p218.foe].st='neutre';S.fac[X.p218.foe].car=-20}
+  if(X.p218.foe!=='rom'&&X.p218.foe!=='pun'&&S.fac[X.p218.foe]){S.fac[X.p218.foe].st='neutre';S.fac[X.p218.foe].car=-20}
+  if(X.p218.foe==='pun'&&S.fac.pun)S.fac.pun.car=-100;
   for(const [id,sh,nm] of X.fleet||[])if(NI[id]!=null&&S.own[id]==='car')try{newFleet('car',NI[id],sh,nm)}catch(e){console.error(e)}
   S.trade=(S.trade||[]).filter(r=>r.side!=='car');S.gi=S.gi||{};const f=X.p218.foe;if(S.gi[f]==null)S.gi[f]=0}
 function pxWar(k,early){const X=PX[k],f=X.p218.foe;
   if(f==='rom'){evCard(X.p218.n.replace(/^218 : /,'').replace(/^./,m=>m.toUpperCase()),"Les colons romains sont chassés de leurs terres ; Mutina est assiégée. Rome envoie ses légions vers le Pô.");return}
-  if(S.fac[f]){S.fac[f].st='guerre_car';S.fac[f].car=-100;S.fac[f].cd=0}
+  if(S.fac[f]&&f!=='pun'){S.fac[f].st='guerre_car';S.fac[f].car=-100;S.fac[f].cd=0}else if(S.fac[f])S.fac[f].car=-100;
   for(const [id,L,g] of X.foeA||[])if(NI[id]!=null&&S.own[id]===f)scenArmy(f,id,L,g);
   if(X.onWar)try{X.onWar(early)}catch(e){console.error(e)}
   if(X.warCard){evCard(X.warCard[0],early?X.warCard[1]:X.warCard[2]);return}
   evCard('Syphax entre en guerre',early?"Vos cavaliers franchissent l'Ampsaga : la guerre contre Syphax commence.":"Syphax s'est allié aux Scipions ; des centurions romains dressent son infanterie. Il marche sur Cirta.")}
 // IA de l'ennemi mineur (Syphax) : renforts à sa capitale, attaques des armées et des villes du joueur
 function pxDaily(d){const X=PX[S.peo],f=X.p218.foe;if(f==='rom'||S.peace||d%2)return;
-  for(const a of S.armies.filter(a=>a.side===f&&!a.dead&&!a.g&&!a.ship)){if(a.legs.length||a.units.length<5||(a.cool||0)>0)continue;const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id)continue;
+  const cap=N[NI[X.cap]];for(const a of S.armies.filter(a=>a.side===f&&!a.dead&&!a.g&&!a.ship&&(!X.foeAI||(!/^Hannibal/.test(a.name||'')&&cap&&Math.hypot(a.x-cap.x,a.y-cap.y)<700)))){if(a.legs.length||a.units.length<5||(a.cool||0)>0)continue;const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id)continue;
     if(a.qh&&season()==='Hiver')continue;const my=strength(a);
     const foe=S.armies.filter(o=>o.side==='car'&&!o.dead&&!o.ship&&!o.g&&strength(o)<my*.9&&Math.hypot(o.x-a.x,o.y-a.y)<160).sort((x,y)=>Math.hypot(x.x-a.x,x.y-a.y)-Math.hypot(y.x-a.x,y.y-a.y))[0];
     if(foe){order(a,foe.x,foe.y,null);continue}
     const t=N.filter(n=>!n.col&&S.own[n.id]==='car').map(n=>{const def=S.armies.filter(x=>x.side==='car'&&!x.dead&&Math.hypot(x.x-n.x,x.y-n.y)<6).reduce((s,x)=>s+strength(x),0);return {n,def,dd:Math.hypot(n.x-a.x,n.y-a.y)}}).filter(o=>o.def<my*.8&&o.dd<700).sort((x,y)=>x.dd-y.dd)[0];
     if(t&&t.dd>3)order(a,0,0,t.n.i)}}
 function pxMonthly(d){if(S.over)return;const X=PX[S.peo],f=X.p218.foe;
-  if(f!=='rom'&&!S.peace){const own=N.filter(n=>!n.col&&S.own[n.id]===f),inc=own.reduce((s,n)=>s+(n.inc||4),0)+25;S.gold[f]=(S.gold[f]||0)+inc*dif().ai;
+  if(f!=='rom'&&!S.peace&&!X.foeAI){const own=N.filter(n=>!n.col&&S.own[n.id]===f),inc=own.reduce((s,n)=>s+(n.inc||4),0)+25;S.gold[f]=(S.gold[f]||0)+inc*dif().ai;
     const C=X.foeCap;for(let k=0;k<1&&S.gold[f]>=60&&NI[C]!=null&&S.own[C]===f;k++){const t=X.foeUnits[Math.floor(Math.random()*X.foeUnits.length)];S.gold[f]-=UT[t].cost;
       const g=S.armies.find(a=>a.side===f&&!a.dead&&!a.g&&a.at===NI[C]&&!a.legs.length);if(g&&g.units.length<MAXU)g.units.push({t,men:UT[t].men});else scenArmy(f,C,[[t,1]],X.foeGens[Math.floor(Math.random()*X.foeGens.length)])}
     for(const a of S.armies){if(a.side!==f||a.dead||a.g||a.legs.length||a.units.length>=5)continue;const o=S.armies.find(b=>b!==a&&b.side===f&&!b.dead&&!b.g&&b.units.length+a.units.length<=MAXU&&Math.hypot(b.x-a.x,b.y-a.y)<4);if(o){o.units.push(...a.units);a.units=[];a.dead=true}}
@@ -8082,6 +8105,10 @@ function pxPol(){const X=PX[S.peo],f=X.p218.foe;const key=X.keys.map(id=>NI[id]!
 {const _chX2=cityHostile;cityHostile=function(i,side){const r=_chX2.apply(this,arguments);try{if(r&&pxOn()&&PX[S.peo].romPeace){const o=ownerN(i);if(side==='rom'&&o==='car'||side==='car'&&o==='rom')return false}}catch(e){}return r}}
 {const _logX=log;log=function(t){try{if(pxOn()&&typeof t==='string'){const f=PX[S.peo].p218.foe;if(f!=='rom'&&FAC[f])t=t.replace(/Les Romains (pillent|coupent|assiègent)/g,`Les ${PX[S.peo].foeN||FAC[f].n} $1`)}}catch(e){}return _logX.apply(this,[t].concat([].slice.call(arguments,1)))}}
 {const _dX=daily;daily=function(d){const r=_dX.apply(this,arguments);try{if(pxOn()){pxDaily(d);if(d%30===0)pxMonthly(d)}}catch(e){console.error(e)}return r}}
+// alliés de Rome (Pergame, Massalia) : les espions qui vous visent sont ceux de l'ennemi, pas de Rome
+{const _logA=log;log=function(t){try{if(pxOn()&&PX[S.peo].romPeace&&PX[S.peo].foeAdj&&typeof t==='string'){const A=PX[S.peo].foeAdj;t=t.replace(/agents romains/g,'agents '+A[0]).replace(/espion romain/g,'espion '+A[1]).replace(/secrets de Rome/g,'secrets '+A[2])}}catch(e){}return _logA.apply(this,[t].concat([].slice.call(arguments,1)))}}
+{const _hoM=hostile;hostile=function(a,b){if(S&&pxOn()&&PX[S.peo].p218.foe==='pun'&&!S.peace){const p=[a.side,b.side].sort().join();if(p==='car,pun')return true}return _hoM.apply(this,arguments)}}
+{const _chM=cityHostile;cityHostile=function(i,side){try{if(S&&pxOn()&&PX[S.peo].p218.foe==='pun'&&!S.peace){const o=ownerN(i);if(side==='pun'&&o==='car'||side==='car'&&o==='pun')return true}}catch(e){}return _chM.apply(this,arguments)}}
 
 /* ---------- 13. TRAITÉS DE PAIX NÉGOCIÉS ---------- */
 // Fenêtre Politique → « Négocier la paix » : provinces exigées ou cédées, tribut, indemnité, otages, flotte limitée.
@@ -8140,7 +8167,8 @@ const START_PEO=[
   {k:'ath',n:'Athènes',c:'#6f9a4a',l:'Α',t:"Avec les Étoliens et Attale, contre Philippe V. Libérez la Grèce."},
   {k:'num',n:'Numidie',c:'#b07a3a',l:'Ν',t:"Gaïa et Massinissa, cavaliers d'Afrique. Battez Syphax."},
   {k:'ins',n:'Gaulois cisalpins',c:'#2f8a7a',l:'G',t:"Insubres et Boïens. Chassez Rome de la plaine du Pô."},
-  {k:'per',n:'Pergame',c:'#4a56a8',l:'Π',t:"Attale Ier, allié de Rome, avec sa flotte. Brisez les entraves de Philippe V."}];
+  {k:'per',n:'Pergame',c:'#4a56a8',l:'Π',t:"Attale Ier, allié de Rome, avec sa flotte. Brisez les entraves de Philippe V."},
+  {k:'mas',n:'Massalia',c:'#2c5d9e',l:'Μ',t:"La cité des Phocéens, alliée de Rome. Chassez Carthage de l'Ibérie."}];
 const startDates=k=>P218[k]?[{k:'218',n:P218[k].n,d:P218[k].t}].concat(startDates0(k)):startDates0(k);
 const startDates0=k=>PX&&PX[k]?[]:k==='mac'?[{k:'mac',n:'215 : Philippe V et Hannibal',d:MAC_TXT}]:k==='syr'?[{k:'syr',n:'214 : Syracuse rompt avec Rome',d:SYR_TXT}]:k==='ath'?[{k:'ath',n:'209 : Athènes contre Philippe V',d:ATH_TXT}]:Object.keys(SCEN).sort((a,b)=>b-a).map(x=>({k:x,n:SCEN[x].n,d:SCEN[x].d}));
 function startCamp(){if(!S)return '';return S.peo==='mac'?'Macédoine':S.peo==='syr'?'Syracuse':S.peo==='ath'?'Athènes':PX&&PX[S.peo]?PX[S.peo].n:S.mirror?'Rome':'Carthage'}
@@ -8230,7 +8258,7 @@ const CD_CL={sub:{n:'Subsides puniques',d:'Carthage vous verse 25 or par mois.'}
   fleet:{n:'Flotte punique contre le commerce romain',d:'Rome perd 15 or par mois tant que dure la guerre.'},
   sep:{n:'Pas de paix séparée',d:'Rome vous craint davantage : +8 au score de guerre pour négocier.'},
   share:{n:'Partage des conquêtes',d:''}};
-function cdOn(){return S&&isMac()&&S.peo!=='ath'&&S.peo!=='per'&&!S.over&&S.armies.some(a=>a.side==='pun'&&!a.dead&&!a.g)}
+function cdOn(){return S&&isMac()&&S.peo!=='ath'&&S.peo!=='per'&&S.peo!=='mas'&&!S.over&&S.armies.some(a=>a.side==='pun'&&!a.dead&&!a.g)}
 function cdInit(){S.cd=S.cd||{fav:30,req:null,tr:null};return S.cd}
 function cdZone(){const k=S.peo;return k==='mac'?(n=>n.lon>=18.4):k==='syr'?(n=>inSic(n.x,n.y)):k==='ins'?(n=>n.lat>=43.9&&n.lon<13.6):k==='num'?(n=>n.lat<37.6&&n.lon<9.2):(()=>false)}
 function cdZoneTxt(){const k=S.peo;return k==='mac'?"les villes d'Illyrie et de Grèce prises par Carthage vous reviennent":k==='syr'?'les villes de Sicile prises par Carthage vous reviennent':k==='ins'?'les villes de Cisalpine prises par Carthage vous reviennent':'les villes de Numidie et de Maurétanie prises par Carthage vous reviennent'}
@@ -8254,7 +8282,7 @@ function cdReqNodes(){const C=S.cd;if(!C||!C.req)return null;return C.req.L.filt
       if(near)return {ok:(x,y)=>R.some(i=>N[i].x===x&&N[i].y===y)};
       const t=R.slice().sort((p,q)=>Math.hypot(N[p].x-a.x,N[p].y-a.y)-Math.hypot(N[q].x-a.x,N[q].y-a.y))[0];return {go:t}}}
   return _ahC.apply(this,arguments)}}
-function cdMonthly(){if(!S.cd||!isMac()||S.peo==='ath'||S.peo==='per')return;const C=S.cd;
+function cdMonthly(){if(!S.cd||!isMac()||S.peo==='ath'||S.peo==='per'||S.peo==='mas')return;const C=S.cd;
   if(!S.peace)C.fav=Math.min(100,C.fav+2);
   if(C.req){const R=cdReqNodes(),a=S.armies.find(x=>x.id===C.req.a&&!x.dead);
     if(!a){log(`L'armée chargée de l'offensive en ${C.req.r} n'existe plus.`);C.req=null}
@@ -9124,7 +9152,7 @@ function mpSendPos(){MP.lastPos=performance.now();const r=v=>Math.round(v*100)/1
   if(JSON.stringify(d).length>3800){MP.kfDue=performance.now();return}
   mpSend(d)}
 const mpKfSoon=(ms)=>{if(MP.role==='host'&&mpAnyOn()){const t=performance.now()+(ms==null?150:ms);if(!MP.kfDue||t<MP.kfDue)MP.kfDue=t}};
-const MP_PEO={mac:'Macédoine',syr:'Syracuse',ath:'Athènes',num:'Numidie',ins:'Gaulois cisalpins',per:'Pergame'};
+const MP_PEO={mac:'Macédoine',syr:'Syracuse',ath:'Athènes',num:'Numidie',ins:'Gaulois cisalpins',per:'Pergame',mas:'Massalia'};
 const mpSideTxt=s=>s==='rom'?'Rome':(S&&MP_PEO[S.peo]&&!(MP.role==='guest'&&MP.rs==='rom')?MP_PEO[S.peo]:'Carthage');
 function mpOnHost(d,m){
   let g=MP.gs[d.f];
