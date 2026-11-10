@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v180</span>
+ <span class="chg-ver">v181</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -8151,7 +8151,7 @@ function openStart(){let peo=S&&(S.peo||(S.mirror?'rom':'car'))||'car',date='218
     ${canGo?`<div class="rec" style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:10px 0"><span><b>Continuer la partie</b><br><span class="sub">${startCamp()} · ${c.season.toLowerCase()} ${c.year} av. J.-C.</span></span><button class="go" id="stCont" type="button">Continuer</button></div>`:''}
     <div class="stH">Votre pays</div>
     <div id="stPeo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">${START_PEO.map(p=>`<button type="button" data-peo="${p.k}" style="display:flex;gap:10px;align-items:center;text-align:left;padding:10px;min-height:64px;${peo===p.k?`border-color:${p.c};background:${p.c}33;box-shadow:inset 0 0 0 1px ${p.c}`:''}">
-      <span style="flex:none;width:40px;height:40px;border-radius:50%;background:${p.c};display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:22px;color:#f4ead2;border:2px solid #d6b878">${p.l}</span>
+      ${PEO_EMB(p.k,56)}
       <span><b style="font-size:16px">${p.n}</b><br><span class="sub">${p.t}</span></span></button>`).join('')}</div>
     <div class="stH">La date</div>
     <div id="stDate">${D.map(x=>`<button type="button" data-date="${x.k}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:8px 10px;${date===x.k?'border-color:var(--gold);background:rgba(214,184,120,.22)':''}"><b>${x.n}</b><br><span class="sub">${x.d}</span></button>`).join('')}</div>
@@ -13199,6 +13199,115 @@ function iacQueue(){if(!S||!S.q)return;for(const id in S.q){const q=S.q[id];if(!
 {const _dI=daily;daily=function(d){try{iacQueue()}catch(e){console.error(e)}const r=_dI.apply(this,arguments);try{iacQueue();iacSweep()}catch(e){console.error(e)}return r}}
 window.__iac={iacUnits,iacRos,iacPlan,iacFix,iacSweep,iacDesign,iacQueue,get S(){return S},get N(){return N},get NI(){return NI},FAC,UT,uName:u=>uName(u),aiPick:(s,n)=>aiPick(s,n),newGame:()=>newGame(),peuInit:()=>peuInit(),peuDaily:()=>peuDaily(),daily:d=>daily(d),realSide:s=>realSide(s)};
 /* ================= FIN IA COMPOSITION ================= */
+/* ================= EMBLÈMES ================= */
+/* ---------- EMBLÈMES DES PEUPLES (fil Interface, v180) ---------- */
+// Médaillon de bronze, champ à la couleur du peuple, emblème tiré des monnaies et enseignes antiques.
+// PEO_EMB(k, taille) -> chaîne SVG. Remplace les lettres de l'écran « Votre pays » et décore les choix de camp.
+const PEO_EMB_D=(()=>{
+  const rays=(n,r0,r1,w)=>{let d='';for(let i=0;i<n;i++){const a=i/n*Math.PI*2-Math.PI/2,h=Math.PI/n*w;
+    const p=(ang,r)=>(50+Math.cos(ang)*r).toFixed(1)+' '+(52+Math.sin(ang)*r).toFixed(1);
+    d+=`M${p(a-h,r0)} L${p(a,r1)} L${p(a+h,r0)} Z `}return d};
+  const leg='M6 -7 L30 -10 Q36 -9 36 -3 L38 14 L47 15 Q50 18 47 21 L34 21 Q30 20 30 16 L28.5 0 L6 3 Z';
+  return {
+    // Carthage : signe de Tanit sous le croissant et le disque
+    car:`<path d="M34 15 A16 16 0 0 0 66 15 A16 12 0 0 1 34 15 Z"/><circle cx="50" cy="35" r="8"/>
+      <path d="M27 42 h5 v5 h36 v-5 h5 v10 h-46 Z"/><path d="M50 49 L71 84 H29 Z"/>`,
+    // Rome : l'aigle des légions sur son foudre
+    rom:`<path d="M46 45 C38 41 31 35 26 21 L23 30 L18 23 L17 34 L12 29 L13 41 L8 39 L14 50 C22 57 36 58 46 56 Z"/>
+      <path transform="translate(100 0) scale(-1 1)" d="M46 45 C38 41 31 35 26 21 L23 30 L18 23 L17 34 L12 29 L13 41 L8 39 L14 50 C22 57 36 58 46 56 Z"/>
+      <ellipse cx="50" cy="54" rx="8.5" ry="13"/><circle cx="50" cy="34" r="6.5"/><path d="M55 31 L63 35 L55 38 Z"/>
+      <path d="M43 63 L38 76 L45 73 L50 79 L55 73 L62 76 L57 63 Z"/>
+      <rect x="27" y="80" width="46" height="5" rx="2.5"/><path d="M30 82.5 L22 78 L25 82.5 L22 87 Z M70 82.5 L78 78 L75 82.5 L78 87 Z"/>`,
+    // Macédoine : le soleil de Vergina
+    mac:`<path d="${rays(16,12,39,.85)}"/><circle cx="50" cy="52" r="10.5"/><circle cx="50" cy="52" r="6" class="peH"/><circle cx="50" cy="52" r="3.4"/>`,
+    // Syracuse : la triskèle sicilienne autour de la Gorgone
+    syr:`<g transform="translate(50 52)">${[0,120,240].map(r=>`<path transform="rotate(${r-90}) scale(.84)" d="${leg}"/>`).join('')}</g>
+      <circle cx="50" cy="52" r="11"/><circle cx="50" cy="52" r="7" fill="none" stroke-width="1.8" class="peHs"/><circle cx="50" cy="52" r="3"/>`,
+    // Athènes : la chouette d'Athéna et le rameau d'olivier
+    ath:`<path d="M35 31 L38 19 L45 27 Q50 25.5 55 27 L62 19 L65 31 Q71 45 66 62 Q62 77 50 81 Q38 77 34 62 Q29 45 35 31 Z"/>
+      <circle cx="43" cy="38" r="6.2" class="peH"/><circle cx="57" cy="38" r="6.2" class="peH"/><circle cx="43" cy="38" r="2.6"/><circle cx="57" cy="38" r="2.6"/>
+      <path d="M50 43 L47.5 48.5 L52.5 48.5 Z" class="peH"/>
+      <path d="M40 56 q5 5 10 0 q5 5 10 0 M42 63 q4 4 8 0 q4 4 8 0 M45 70 q5 4 10 0" fill="none" stroke-width="1.8" class="peHs"/>
+      <path d="M44 80 v5 M50 81 v5 M56 80 v5" stroke-width="2.2" class="peFs"/>
+      <path d="M17 74 Q19 58 27 46" fill="none" stroke-width="2" class="peFs"/>
+      <ellipse cx="14.5" cy="64" rx="2.3" ry="5.5" transform="rotate(35 14.5 64)"/><ellipse cx="23.5" cy="62" rx="2.3" ry="5.5" transform="rotate(-35 23.5 62)"/><ellipse cx="18" cy="54" rx="2.3" ry="5.5" transform="rotate(40 18 54)"/><ellipse cx="26.5" cy="52" rx="2.2" ry="5" transform="rotate(-30 26.5 52)"/><ellipse cx="27" cy="43" rx="2.1" ry="4.6" transform="rotate(20 27 43)"/>`,
+    // Numidie : le cheval cabré des monnaies de Massinissa
+    num:`<path d="M28 46 Q40 41 55 42 L61 33 Q65 24 71 19 L73 13 L76 19 Q82 22 86 30 Q87 34 83 34 Q77 32 72 33 Q69 39 67 46 Q67 52 63 56
+      L70 61 L75 68 L71 71 L65 64 L58 61 L57 67 L60 82 L55 82 L52 67 Q44 65 38 63 L37 71 L42 82 L37 82 L32 71
+      L30 63 L26 72 L29 82 L24 82 L21 71 L25 58 Q22 54 23 50 Q15 54 11 64 Q12 50 21 44 Q25 43 28 46 Z"/>
+      <path d="M62 32 Q64 25 70 21" fill="none" stroke-width="1.6" class="peHs"/><circle cx="77" cy="24" r="1.4" class="peH"/>`,
+    // Gaulois cisalpins : le sanglier des enseignes celtes
+    ins:`<path d="M17 60 Q15 48 23 42 L27 37 L30 41 L33 34 L36 39 L39 32 L42 38 L45 31 L48 37 L51 31 L54 37 Q64 36 70 42 L72 36 L76 43
+      Q81 47 87 53 L89 60 L82 61 Q80 64 77 63 Q74 66 70 66 L68 77 L63 77 L62 68 L58 68 L57 77 L52 77 L51 67 Q42 70 32 67
+      L31 77 L26 77 L25 66 L22 65 L21 75 L16 75 Z"/>
+      <path d="M79 62 Q85 58 82 52" fill="none" stroke-width="2.6" stroke-linecap="round" class="peHs"/><circle cx="76" cy="49" r="1.6" class="peH"/>
+      <path d="M18 50 Q9 49 11 42 Q13 38 16 41" fill="none" stroke-width="2.4" class="peFs"/>`,
+    // Pergame : le bâton d'Asclépios
+    per:`<rect x="46.5" y="18" width="7" height="70" rx="3.5"/>
+      <path d="M38 82 C22 75 72 71 61 62 C51 55 29 57 38 46 C46 38 68 42 62 32 C58 25 48 28 53 22" fill="none" stroke-width="9" class="peHs"/>
+      <path d="M38 82 C22 75 72 71 61 62 C51 55 29 57 38 46 C46 38 68 42 62 32 C58 25 48 28 53 22" fill="none" stroke-width="5.5" class="peFs" stroke-linecap="round"/>
+      <ellipse cx="57" cy="20" rx="7.2" ry="5" transform="rotate(-20 57 20)" class="peH"/><ellipse cx="57" cy="20" rx="5.6" ry="3.4" transform="rotate(-20 57 20)"/><path d="M62.5 17.5 L67 14.5 M63 18.5 L67.5 19" stroke-width="1.2" class="peFs"/>`
+  }})();
+function PEO_EMB(k,sz){const P=(typeof START_PEO!=='undefined'&&START_PEO.find(p=>p.k===k))||{c:'#7a6a50'};const c=P.c,d=PEO_EMB_D[k];sz=sz||48;
+  if(!d)return `<span style="display:inline-block;width:${sz}px;height:${sz}px;border-radius:50%;background:${c}"></span>`;
+  const id='pe'+k;
+  const fr=d.replace(/class="peH"/g,`style="fill:${c};stroke:none"`).replace(/class="peHs"/g,`style="stroke:${c};fill:none"`).replace(/class="peFs"/g,'style="stroke:#f6ecd0;fill:none"');
+  const sh=d.replace(/class="peH"/g,'style="fill:none"').replace(/class="peHs"/g,'style="stroke:none;fill:none"').replace(/class="peFs"/g,'style="stroke:rgba(10,6,2,.6);fill:none"');
+  return `<svg class="peEmb" viewBox="0 0 100 100" width="${sz}" height="${sz}" aria-hidden="true" style="flex:none;display:block;overflow:visible">
+  <defs><radialGradient id="${id}F" cx=".42" cy=".36" r=".75"><stop offset="0" stop-color="${c}" stop-opacity=".95"/><stop offset=".7" stop-color="${c}"/><stop offset="1" stop-color="#1a120a"/></radialGradient>
+  <linearGradient id="${id}B" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="#f6dfa4"/><stop offset=".45" stop-color="#c79a4e"/><stop offset="1" stop-color="#6b4a1e"/></linearGradient>
+  <linearGradient id="${id}E" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6dc"/><stop offset="1" stop-color="#e3cc96"/></linearGradient>
+  <clipPath id="${id}C"><circle cx="50" cy="50" r="40"/></clipPath></defs>
+  <circle cx="50" cy="51.5" r="49" fill="rgba(0,0,0,.45)"/>
+  <circle cx="50" cy="50" r="48" fill="url(#${id}B)"/>
+  <circle cx="50" cy="50" r="48" fill="none" stroke="#3a2610" stroke-width="1.2"/>
+  <circle cx="50" cy="50" r="44.5" fill="none" stroke="#fbe9bd" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="2.2 2.4"/>
+  <circle cx="50" cy="50" r="41" fill="url(#${id}F)" stroke="#2a1a0a" stroke-width="2"/>
+  <g clip-path="url(#${id}C)"><g transform="translate(50 50) scale(.86) translate(-50 -52)">
+   <g transform="translate(0 2.6)" fill="rgba(10,6,2,.6)" stroke="none">${sh}</g>
+   <g fill="url(#${id}E)" stroke="none">${fr}</g>
+  </g></g>
+  </svg>`}
+/* ---------- MENU ÉCHAP ET MÉDAILLONS DU PEUPLE (fil Interface, v180) ---------- */
+// Échap : ferme la fenêtre ouverte ; sinon désélectionne ; sinon ouvre le menu « Partie » (le jeu est en pause tant qu'il est ouvert).
+const peoCur=()=>{try{return S&&(S.peo&&PEO_EMB_D[S.peo]?S.peo:S.mirror?'rom':'car')||'car'}catch(e){return 'car'}};
+{let escBusy=false;
+  // phase de capture : on note l'état AVANT que les autres écouteurs (fermeture de fenêtre, désélection…) ne le changent
+  window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;escBusy=true;try{
+    const t=e.target,typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
+    escBusy=typing||e.repeat||!$('modal').hidden||!!$('chg')||!!$('rgCard')||!!$('battle3d')||(typeof mkMode!=='undefined'&&mkMode)||
+      !!(S&&(S.cur||S.over))||!!(typeof sel!=='undefined'&&sel)}catch(err){escBusy=true}},true);
+  window.addEventListener('keydown',e=>{if(e.key!=='Escape'||escBusy)return;escBusy=true;
+    try{openMenu()}catch(err){console.error(err)}});
+}
+// le menu : médaillon du peuple, rappel de la pause, « Comment jouer » et « Écran de départ »
+{const _omE=openMenu;openMenu=function(){const r=_omE.apply(this,arguments);try{
+  const h=document.querySelector('#mcard h2');
+  if(h&&h.textContent.trim()==='Partie'){let c='';try{const d=cal(S.day);c=`${d.season} ${d.year} av. J.-C.`}catch(e){}
+    h.style.cssText+=';display:flex;align-items:center;gap:12px';
+    h.innerHTML=`${PEO_EMB(peoCur(),46)}<span style="display:flex;flex-direction:column;line-height:1.2">Partie en pause<span class="sub" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-top:2px">${typeof startCamp==='function'?startCamp():''}${c?' · '+c:''}</span></span>`}
+  const close=$('mClose');if(close&&!$('mHelpE')){
+    const hb=document.createElement('button');hb.type='button';hb.id='mHelpE';hb.textContent='Comment jouer';hb.onclick=openHelp;close.parentNode.insertBefore(hb,close);
+    if(typeof openStart==='function'){const sb=document.createElement('button');sb.type='button';sb.id='mStartE';sb.textContent='Écran de départ';sb.title='Choisir un autre pays, une autre date ou la difficulté';sb.onclick=()=>openStart();close.parentNode.insertBefore(sb,close)}
+    close.title='Reprendre la partie (Échap)'}
+  const p=document.querySelector('#mcard > p');if(p&&!p.dataset.esc){p.dataset.esc='1';p.insertAdjacentHTML('beforeend',' <span class="sub">Appuyez sur <kbd>Échap</kbd> pour ouvrir ou fermer ce menu.</span>')}
+}catch(e){console.error(e)}return r}}
+// médaillon du peuple dans la barre du haut et dans la tablette (quand rien n'est sélectionné)
+function peoMedFix(){try{if(!S)return;const k=peoCur();
+  const top=document.querySelector('.ui-fac .ui-med');if(top&&top.dataset.emb!==k){top.dataset.emb=k;top.dataset.mir='1';top.classList.add('peMed');top.innerHTML=PEO_EMB(k,44)}
+  const sd=(typeof sel==='undefined'||!sel)&&document.querySelector('#side .ui-head .ui-med');
+  if(sd&&!sd.querySelector('img,canvas')&&sd.dataset.emb!==k){sd.dataset.emb=k;sd.dataset.mir='1';sd.classList.add('peMed');sd.innerHTML=PEO_EMB(k,50)}}catch(e){}}
+{const st=document.createElement('style');st.textContent=`.ui-med.peMed{background:none!important;border:0!important;box-shadow:none!important;overflow:visible}
+.ui-med.peMed>svg{width:100%!important;height:100%!important}
+#stPeo .peEmb{transition:transform .15s}#stPeo button:hover .peEmb{transform:scale(1.07)}`;document.head.appendChild(st)}
+if(typeof renderTop==='function'){const _rtE=renderTop;renderTop=function(){const r=_rtE.apply(this,arguments);peoMedFix();return r}}
+if(typeof renderSide==='function'){const _rsE=renderSide;renderSide=function(){const r=_rsE.apply(this,arguments);peoMedFix();return r}}
+setInterval(peoMedFix,800);
+// choix du camp de « Nouvelle campagne » (menu Partie) : petit médaillon devant chaque nom ; openScen se redessine à chaque clic
+function scenDeco(){const M={sdC:'car',sdR:'rom',sdM:'mac',sdS:'syr'};for(const id in M){const b=$(id);if(b&&!b.querySelector('.peEmb')){b.style.cssText+=';display:inline-flex;align-items:center;gap:7px';b.insertAdjacentHTML('afterbegin',PEO_EMB(M[id],22))}}}
+if(typeof openScen==='function'){const _osE=openScen;openScen=function(){const r=_osE.apply(this,arguments);scenDeco();return r}}
+document.addEventListener('click',()=>{if($('sdC'))setTimeout(scenDeco,0)},true);
+/* ================= FIN EMBLÈMES ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
