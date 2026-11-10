@@ -181,6 +181,9 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 .chgB-h small{font-size:13px;letter-spacing:.3em;text-transform:uppercase;color:#d8c39a;text-shadow:0 1px 2px #000}
 .chgB-h h2{margin:6px 0 4px;font-family:"Marcellus",Georgia,serif;font-weight:400;font-size:clamp(28px,4.4vw,58px);letter-spacing:.04em;
  background:linear-gradient(180deg,#fff1c8,#e6c27a 50%,#a8783a);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 rgba(20,10,8,.85)) drop-shadow(0 0 18px rgba(0,0,0,.6))}
+.chgB-t{display:flex;align-items:center;justify-content:center;gap:clamp(12px,2.4vw,32px)}.chgB-t h2{font-size:clamp(26px,3.9vw,54px);text-wrap:balance}.chgB-bl{flex:none;filter:drop-shadow(0 4px 10px rgba(0,0,0,.7))}.chgB-bl svg,.chgB-bl span{width:clamp(56px,7vw,96px)!important;height:clamp(56px,7vw,96px)!important}
+#chgBl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;opacity:0;transition:opacity 1s}#chgBl.on{opacity:1}#chgBl span{display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+@media (max-width:700px){.chgB-bl{display:none}#chgBl svg{width:30px;height:30px}}
 .chgB-h p{margin:0;color:#e9d6ae;letter-spacing:.1em;text-shadow:0 1px 3px #000}
 .chgB-p{position:absolute;left:50%;bottom:5vh;transform:translateX(-50%);width:min(860px,92vw);padding:16px 20px 14px;background:linear-gradient(180deg,rgba(43,34,25,.9),rgba(22,17,13,.94));
  border:1px solid #8a6a3c;box-shadow:0 0 0 1px #0d0a07,0 16px 40px rgba(0,0,0,.6);text-align:center}
@@ -204,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v192</span>
+ <span class="chg-ver">v194</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -316,6 +319,9 @@ window.CHGP=(()=>{
   function vfig(c,k,x,y,h,dir,dim){if(!ok(k))return false;const F=IMG[k],s=h/160*(F.sc||1),[vx,vy,vw,vh]=F.vb;
     c.save();c.translate(x,y);if(dir<0)c.scale(-1,1);if(dim>0.02)c.filter=`brightness(${(1-dim).toFixed(2)}) saturate(${(1-dim*.5).toFixed(2)})`;
     c.drawImage(F.img,(vx-F.gx)*s,(vy-F.gy)*s,vw*s,vh*s);c.restore();return true}
+  // un blason rond (image) cerclé d'or, centré en x,y
+  function blason(c,k,x,y,r){if(!k||!ok(k)||r<3)return;c.save();c.beginPath();c.arc(x,y,r*1.14,0,7);c.fillStyle='#c79a4e';c.fill();c.lineWidth=Math.max(1,r*.06);c.strokeStyle='#2a1a0a';c.stroke();
+    c.beginPath();c.arc(x,y,r,0,7);c.clip();c.drawImage(IMG[k].img,x-r,y-r,r*2,r*2);c.restore()}
   const pickW=(L,R)=>{if(!L||!L.length)return null;let t=0;for(const e of L)t+=e.w;let r=R()*t;for(const e of L){r-=e.w;if(r<=0)return e.k}return L[L.length-1].k};
   // un rang de la fresque : des groupes de 3 à 7 hommes du même corps, à la suite
   function vRang(c,x0,x1,at,R,ros,dir,dim,gapK){let x=x0+R()*12;
@@ -457,10 +463,11 @@ window.CHGP=(()=>{
       sea:[[0,'#5a5a62'],[.2,'#2a3a4a'],[1,'#0a1018']],glint:'#ffd29a'};
     sky(c,W,H,hz,P);clouds(c,W,hz,R,P,14);sun(c,W*.55,hz-H*.03,H*.05,P);sea(c,W,H,hz,P,W*.55,R);
     const ec=mix(o.ecol||'#7a2a22','#000000',.6),pc=mix(o.pcol||'#4b2a75','#000000',.75);
-    for(let i=0;i<7;i++){c.fillStyle=c.strokeStyle=mix(ec,'#000000',.3);galley(c,W*(.08+i*.13+R()*.04),hz+H*(.01+R()*.02),W*(.04+R()*.02),{dir:-1,sailCol:mix(o.ecol||'#7a2a22','#000000',.4)})}
-    c.fillStyle=c.strokeStyle=pc;galley(c,W*.3,H*.82,W*.38,{dir:1,oars:26,sailCol:mix(o.pcol||'#4b2a75','#000000',.45)});
+    for(let i=0;i<7;i++){const gx=W*(.08+i*.13+R()*.04),gy=hz+H*(.01+R()*.02),gw=W*(.04+R()*.02);c.fillStyle=c.strokeStyle=mix(ec,'#000000',.3);galley(c,gx,gy,gw,{dir:-1,sailCol:mix(o.ecol||'#7a2a22','#000000',.4)});
+      if(o.er)blason(c,o.er.med,gx,gy-gw*.33,gw*.085)}
+    c.fillStyle=c.strokeStyle=pc;galley(c,W*.3,H*.82,W*.38,{dir:1,oars:26,sailCol:mix(o.pcol||'#4b2a75','#000000',.45)});if(o.pr)blason(c,o.pr.med,W*.3,H*.82-W*.38*.33,W*.38*.085);c.fillStyle=c.strokeStyle=pc;
     if(o.pr){const dk=H*.82-W*.38*.12*.8+1,hh=Math.min(H*.12,W*.07);let x=W*.3-W*.38*.32;const seq=['p','p','std','p','p','p','p'];
-      for(const t of seq){vfig(c,t==='std'?o.pr.std:pickW(o.pr.pied,R),x,dk,hh,1,.15);x+=hh*.4}}galley(c,W*.8,H*.7,W*.2,{dir:1,oars:18,sailCol:mix(o.pcol||'#4b2a75','#000000',.5)});
+      for(const t of seq){vfig(c,t==='std'?o.pr.std:pickW(o.pr.pied,R),x,dk,hh,1,.15);x+=hh*.4}}c.fillStyle=c.strokeStyle=pc;galley(c,W*.8,H*.7,W*.2,{dir:1,oars:18,sailCol:mix(o.pcol||'#4b2a75','#000000',.5)});if(o.pr)blason(c,o.pr.med,W*.8,H*.7-W*.2*.33,W*.2*.085);
     vignette(c,W,H,.65);grain(c,W,H,R)}
   function paint(cv,kind,o){const dpr=Math.min(2,window.devicePixelRatio||1),W=cv.clientWidth||innerWidth,H=cv.clientHeight||innerHeight;
     cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
@@ -537,7 +544,7 @@ const ROAD={
   col:{n:'col',m:.45,mud:{Automne:.8,Hiver:.55},snow:0,food:1,txt:"passage de montagne : très lent, dangereux l'hiver, fermé quand la neige le recouvre"},
   mer:{n:'mer'},
   hors:{n:'hors route',m:.5,mud:{Automne:.85,Hiver:.7},snow:0,food:1,txt:"à travers champs : lent ; les hauteurs sont impraticables, et la limite descend l'hiver"}};
-const SEA_KMD=55,MAXU=20,DAY_S=18;/*JOUR-18*/ // secondes réelles par jour à ×1
+const SEA_KMD=55,MAXU=40/*MAXU-40*/,DAY_S=18;/*JOUR-18*/ // secondes réelles par jour à ×1
 
 /* ================= ATELIER : unités composées par le joueur ================= */
 // Un modèle = un corps de troupe (figurines, effectif, villes où l'on recrute) + un équipement choisi pièce par pièce, puis un nom.
@@ -11769,7 +11776,22 @@ function pilSend(v,a,mk){if(!v||!a)return;const p=newPar(a,'raid',{state:'out',v
   if(p){vBurn(v,a.side);p._rl=1;if(a.side==='car')log(`${a.name} a brûlé les champs ${deN(v.n)} : l'ennemi n'y trouvera rien.`);return {got:0,g:0}}
   if(S.par&&S.par.some(q=>q.k==='raid'&&q.v===(v&&v.id)&&q.state==='burn'&&q.mk==='pil'))a._rl=0;return _vp.apply(this,arguments)}}
 {const _lg=log;log=function(t){if(typeof t==='string'&&/pillent et brûlent .*\(0 rations, 0 or\)/.test(t))return;return _lg.apply(this,arguments)}}
-window.__genie={pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+
+/* ---- CORPS EN AVANT (10 nov., Baptiste : « l'option pour envoyer un corps plus en avant et le rappeler a disparu ») ----
+   Le détachement existait encore (Registre › Corps et garde › « Détacher en mission »), mais caché. On le remet dans l'onglet Corps
+   du panneau, à côté de chaque second, et le détachement reçoit « Rappeler » : il marche vers son armée et la rejoint seul. */
+function cfwdSend(a,k){const d=splitCorps(a,k,'det');if(!d)return;sel={a:d};if(a.side==='car'||isMine(a))log(`${corpsN(k).replace(/^./,m=>m.toUpperCase())} part en avant : donnez-lui sa destination.`);renderAll()}
+function cfwdRecall(d){const p=d&&d.det&&S.armies.find(x=>x.id===d.det.p&&!x.dead);if(!p)return;
+  if(rejoin(d)){d._recall=0;if(sel&&sel.a===d)sel={a:p};log(`${esc(genOf(p)?genOf(p).name:p.name)} : le détachement a rejoint l'armée.`);renderAll();return true}
+  d._recall=1;try{order(d,p.x+.6,p.y+.3,null)}catch(e){}return false}
+{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{const a=sel&&sel.a;if(!a||a.dead||!isMine(a))return r;const side=$('side');
+  side.querySelectorAll('[data-csub]').forEach(x=>{if(x.previousElementSibling&&x.previousElementSibling.dataset&&x.previousElementSibling.dataset.cfwd)return;const k=+x.dataset.csub,n=a.units.filter(u=>(u.cp||0)===k).length;
+    const ok=n&&n<a.units.length&&!a.ship;x.insertAdjacentHTML('beforebegin',`<button type="button" data-cfwd="${k}" ${ok?'':'disabled'} style="min-height:24px;font-size:12px;padding:0 8px;margin-left:auto" title="Le corps quitte l'armée avec son général (avant-garde, flanc-garde, poursuite) ; vous lui donnez sa destination, puis vous le rappelez">Envoyer en avant</button>`)});
+  side.querySelectorAll('[data-cfwd]').forEach(x=>x.onclick=()=>cfwdSend(a,+x.dataset.cfwd));
+  if(a.det&&$('cGoP')&&!$('cRecall')){const g=$('cGoP');g.insertAdjacentHTML('afterend',`<button type="button" id="cRecall" class="${a._recall?'on':''}" title="Le détachement marche vers son armée et la rejoint dès qu'il l'atteint">${a._recall?'Rappel en cours…':'Rappeler'}</button>`);g.remove();
+    $('cRecall').onclick=()=>{cfwdRecall(a);renderAll()}}}catch(e){console.error('[corps en avant]',e)}return r}}
+{const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{for(const x of S.armies)if(x._recall&&!x.dead&&x.det)cfwdRecall(x)}catch(e){console.error(e)}return r}}
+window.__genie={cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
@@ -12392,215 +12414,6 @@ try{if(typeof dipOpenFac==='function'){const _dofDV=dipOpenFac;dipOpenFac=functi
 if(typeof TT!=='undefined'&&TT.bDip)TT.bDip=['Diplomatie','Fiches des peuples, négociations, promesses et demandes ; carte diplomatique.'];
 window.__dv={get S(){return S},DVS,dvEval,dvRender,dvSend,dvArrive,dvReqMonthly,dvReqCard,dvPromDaily,dvPromMonthly,dvAnswer,dvMapToggle,dvDisp,dvWants,dvNewOffer,daily:d=>daily(d),openDip:f=>openDip(f),aiDiplomacy:()=>aiDiplomacy(),capture:(i,s)=>capture(i,s),NI:()=>NI,N:()=>N,dipOpenFac:(f,g)=>dipOpenFac(f,g)};
 /* ================= FIN DIPLOMATIE VIVANTE ================= */
-/* ================= ÉCRANS DE CHARGEMENT ================= */
-/* Source : /mnt/project-files/chargement/ecrans.js, injecté avant « BOUCLE » par chargement/patch.py (relançable).
-   1. Lancement : #chg (posé dès le début du <body>) montre le tableau peint et une barre de chargement,
-      puis devient l'écran d'accueil (Continuer, Nouvelle campagne, À plusieurs, Comment jouer).
-   2. Bataille : #chgB recouvre la plongée vers le champ de bataille ; « Au combat ! » quand la bataille est prête.
-   3. Bataille navale : le même écran, tableau de mer, avant naval.html. */
-const CHG={mode:'charge',keep:false,t0:(window.__chgT0||performance.now())};
-const CHG_FAITS=[
-  "Hannibal franchit les Alpes à l'automne 218 av. J.-C. avec trente-sept éléphants ; presque tous meurent dans l'hiver qui suit.",
-  "À Cannes, le 2 août 216 av. J.-C., Hannibal laisse plier son centre et referme ses ailes : l'armée de Varron et de Paul Émile est encerclée.",
-  "Fabius Maximus refuse la bataille rangée et harcèle Hannibal : Rome le surnomme Cunctator, « le Temporisateur ».",
-  "Le port militaire de Carthage était circulaire : des cales couvertes tout autour, et l'amirauté sur l'îlot central.",
-  "Pendant deux ans, Archimède tient en échec la flotte de Marcellus devant Syracuse avec ses machines.",
-  "En 209 av. J.-C., Scipion prend Nova Carthago d'un coup de main : ses soldats traversent la lagune à pied quand l'eau se retire.",
-  "Au Métaure, en 207 av. J.-C., Hasdrubal tombe ; sa tête est jetée devant les avant-postes de son frère Hannibal.",
-  "À Zama, en 202 av. J.-C., les légions ouvrent des couloirs entre les manipules et laissent passer les éléphants d'Hannibal.",
-  "Au lac Trasimène, en 217 av. J.-C., le consul Flaminius s'engage dans le brouillard du matin : l'armée punique l'attend sur les hauteurs.",
-  "Sagonte, alliée de Rome, résiste huit mois au siège d'Hannibal avant de tomber : c'est le début de la guerre.",
-  "La légion de la République combat sur trois lignes : hastati devant, principes derrière, triarii en dernier recours.",
-  "Philippe V de Macédoine signe un traité avec Hannibal en 215 av. J.-C. ; Rome lui fait la guerre en Illyrie et en Grèce.",
-  "Le prince numide Massinissa combat d'abord pour Carthage en Hispanie, puis passe à Rome et lui donne sa cavalerie à Zama.",
-  "Un demi-siècle après Zama, Caton l'Ancien finit chacun de ses discours par « Carthago delenda est ».",
-  "Conseil : la touche Espace met le temps en pause ; donnez vos ordres, puis relancez.",
-  "Conseil : une armée affamée ou épuisée se bat mal. Surveillez les vivres et la fatigue avant d'engager la bataille."];
-const CHG_ETAPES=['Tracé des côtes et des fleuves','Relief et cols des Alpes','Routes, villes et villages','Levée des armées','Messagers et ambassades'];
-const chgShuf=a=>{const b=a.slice();for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b};
-const chgE=id=>document.getElementById(id);
-function chgFaits(el){let L=chgShuf(CHG_FAITS),i=0;const put=()=>{if(!el.isConnected)return;el.classList.remove('on');setTimeout(()=>{el.textContent=L[i++%L.length];el.classList.add('on')},350)};put();return setInterval(put,6500)}
-/* ---------- 0. la fresque : chaque peuple a ses soldats en figure noire (dessinés par vaseSVG, l'aperçu de l'atelier) ---------- */
-// [corps de base, équipement] ; t : types d'unités qu'ils représentent (sinon la catégorie)
-const FRQ_D={
-  rom:{c:'rouge',tn:'rouge',e:'aigle',top:'aigle',
-    inf:[['legion',{helm:'bronze',crest:'plumes',armor:'pect',motif:'aigle'}],['legion',{helm:'fer',crest:'noire',armor:'maille',motif:'aigle'}],['legion',{helm:'attique',crest:'crete',armor:'maille',arm:'lance',jet:'aucune',motif:'aigle',train:'vet'}]],
-    skirm:[['velites',{motif:'loup'}]],cav:[['rcav',{manteau:'rouge',motif:'aigle'}],['acav',{teinte:'blanc',motif:'sanglier'}]],gen:['rcav',{helm:'attique',crest:'crete',armor:'bronze',manteau:'rouge',motif:'aigle',train:'vet'}]},
-  car:{c:'pourpre',tn:'pourpre',e:'tanit',top:'tanit',el:1,
-    inf:[['lib',{helm:'attique',crest:'crin',armor:'lin',jamb:'cnemides',shield:'hoplon',arm:'lance',motif:'tanit'},['lib']],['lib',{helm:'bronze',crest:'crete',armor:'maille',shield:'ovale',arm:'epee',jet:'javelots',motif:'palmier'},['lib']],
-      ['iber',{helm:'cuir',armor:'tunique',shield:'ovale',arm:'epee',jet:'soliferrum',teinte:'blanc',motif:'rings',tenue:'blanc'},['iber']],['gaul',{helm:'fer',crest:'cornes',shield:'ovale',arm:'longue',teinte:'vert',motif:'triskel',manteau:'vert'},['gaul']]],
-    skirm:[['sling',{helm:'nu',shield:'aucun',arm:'dague',jet:'fronde'},['sling']]],
-    cav:[['ncav',{helm:'nu',shield:'peau',arm:'lance',jet:'javelots'},['ncav']],['hcav',{helm:'beotien',armor:'lin',shield:'rond',arm:'lance',motif:'cheval'},['hcav']]],
-    gen:['hcav',{helm:'attique',crest:'crin',armor:'bronze',shield:'rond',arm:'lance',motif:'tanit',manteau:'pourpre',train:'vet'}]},
-  ath:{c:'blanc',tn:'bleu',e:'chouette',top:'chouette',
-    inf:[['athoplites',{helm:'corinthien',crest:'crin',motif:'chouette'}],['athoplites',{helm:'attique',crest:'aigrette',armor:'bronze',motif:'chouette',teinte:'bleu'}],['thureo',{motif:'chouette',teinte:'blanc'}]],
-    skirm:[['athpelt',{motif:'chouette',teinte:'blanc'}],['scythes',{}]],cav:[['hippeis',{manteau:'bleu'}]],gen:['hippeis',{helm:'attique',crest:'crin',armor:'bronze',manteau:'bleu',train:'vet'}]},
-  syr:{c:'jaune',tn:'rouge',e:'triskel',top:'gorgone',
-    inf:[['athoplites',{helm:'beotien',crest:'crete',armor:'lin',motif:'triskel'}],['athoplites',{helm:'corinthien',crest:'noire',armor:'bronze',motif:'gorgone'}],['thureo',{helm:'pilos',motif:'triskel'}]],
-    skirm:[['cretois',{}],['athpelt',{motif:'triskel'}]],cav:[['hippeis',{helm:'beotien',manteau:'jaune'}]],gen:['hippeis',{helm:'beotien',crest:'crete',armor:'bronze',manteau:'rouge',train:'vet'}]},
-  per:{c:'vert',tn:'vert',e:'serpent',top:'serpent',
-    inf:[['athoplites',{helm:'thrace',crest:'crete',armor:'bronze',motif:'serpent'}],['thureo',{helm:'pilos',motif:'serpent'}],['gaul',{helm:'bronze',crest:'roue',shield:'ovale',arm:'longue',motif:'triskel',manteau:'ocre'}]],
-    skirm:[['cretois',{}],['athpelt',{motif:'serpent'}]],cav:[['hippeis',{helm:'attique',manteau:'vert'}],['acav',{teinte:'vert',motif:'serpent'}]],gen:['hippeis',{helm:'attique',crest:'crin',armor:'bronze',manteau:'pourpre',train:'vet'}]},
-  mac:{c:'bronze',tn:'rouge',e:'etoile',top:'etoile',
-    inf:[['phalange',{motif:'etoile'},['phalange']],['phalange',{motif:'etoile',helm:'beotien'},['phalange']],['hypasp',{motif:'etoile'},['hypasp']]],
-    skirm:[['peltaste',{},['peltaste']],['cretois',{},['cretois']]],cav:[['compagnons',{},['compagnons']],['thessal',{},['thessal']]],gen:['compagnons',{crest:'plumes',helm:'beotien',manteau:'pourpre',train:'vet'}]},
-  num:{c:'ocre',tn:'blanc',e:'moon',top:'moon',
-    inf:[['lib',{helm:'nu',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots',motif:'moon',teinte:'ocre',tenue:'blanc'}]],
-    skirm:[['sling',{helm:'nu',shield:'peau',arm:'dague',jet:'javelots'}]],cav:[['ncav',{helm:'nu',shield:'peau',arm:'lance',jet:'javelots'}],['ncav',{helm:'cuir',shield:'rond',arm:'lance',jet:'javelots',motif:'moon',teinte:'ocre'}]],gen:['ncav',{helm:'bronze',shield:'rond',arm:'lance',manteau:'pourpre',motif:'moon',teinte:'ocre',train:'vet'}]},
-  gau:{c:'vert',tn:'ocre',e:'triskel',top:'sanglier',
-    inf:[['gaul',{helm:'fer',crest:'cornes',shield:'ovale',arm:'longue',motif:'triskel',manteau:'vert'}],['gaul',{helm:'nu',armor:'tunique',shield:'ovale',arm:'longue',motif:'sanglier',teinte:'ocre'}],['gaul',{helm:'bronze',crest:'roue',armor:'maille',shield:'ovale',arm:'longue',motif:'bandes',teinte:'rouge'}]],
-    skirm:[['sling',{helm:'nu',shield:'aucun',arm:'dague',jet:'javelots'}]],cav:[['hcav',{helm:'fer',armor:'maille',shield:'ovale',arm:'longue',motif:'triskel',teinte:'vert',manteau:'ocre'}]],gen:['hcav',{helm:'fer',crest:'cornes',armor:'maille',shield:'ovale',arm:'longue',motif:'sanglier',teinte:'vert',manteau:'rouge',train:'vet'}]},
-  ibe:{c:'blanc',tn:'blanc',e:'rings',top:'loup',
-    inf:[['iber',{helm:'cuir',armor:'tunique',shield:'ovale',arm:'epee',jet:'soliferrum',teinte:'blanc',motif:'rings',tenue:'blanc'}],['iber',{helm:'bronze',crest:'crete',shield:'rond',arm:'epee',jet:'javelots',teinte:'rouge',motif:'loup',tenue:'blanc'}]],
-    skirm:[['sling',{helm:'nu',shield:'aucun',arm:'dague',jet:'fronde'}]],cav:[['hcav',{helm:'bronze',shield:'rond',arm:'lance',jet:'javelots',teinte:'blanc',motif:'rings'}]],gen:['hcav',{helm:'bronze',crest:'crete',armor:'ecailles',shield:'rond',arm:'lance',teinte:'rouge',motif:'loup',manteau:'noir',train:'vet'}]},
-  gre:{c:'bronze',tn:'bleu',e:'gorgone',top:'gorgone',
-    inf:[['athoplites',{helm:'corinthien',crest:'crin',motif:'gorgone'}],['thureo',{helm:'pilos',motif:'gorgone'}]],
-    skirm:[['athpelt',{}],['cretois',{}]],cav:[['hippeis',{}]],gen:['hippeis',{helm:'attique',crest:'crin',armor:'bronze',manteau:'rouge',train:'vet'}]}};
-const FRQ_EL=tc=>`<g><path d="M30 150 Q20 90 80 70 Q150 45 215 70 Q245 82 252 110 L262 100 Q280 72 272 40 Q268 20 285 14 Q298 12 296 26 Q284 32 288 54 Q296 100 268 128 Q258 140 250 150 L250 220 L230 222 L226 168 Q200 176 170 172 L168 222 L148 224 L144 170 Q110 170 92 160 L90 222 L70 224 L66 160 Q50 158 46 166 L48 222 L28 224 Q24 190 30 150Z" fill="#1d130c"/><path d="M206 86 Q236 84 240 116 Q236 146 208 142 Q218 116 206 86Z" fill="none" stroke="#c8763d" stroke-width="2"/><path d="M246 100 q6 -3 10 1" stroke="#c8763d" stroke-width="2" fill="none"/><circle cx="250" cy="96" r="2.6" fill="#c8763d"/><path d="M262 124 Q290 128 304 112 Q296 126 266 132Z" fill="#ecdcbc"/><path d="M276 50 h10 M274 64 h12 M272 78 h12 M268 92 h10 M60 182 q8 4 16 0 M156 186 q8 4 16 0 M236 186 q8 4 14 0 M36 186 q8 4 14 0" stroke="#c8763d" stroke-width="1.6" fill="none"/><path d="M30 140 Q14 150 12 178 L18 178 Q20 156 32 150Z" fill="#1d130c"/><path d="M100 74 h92 v-58 h-92z" fill="#1d130c"/><path d="M104 70 h84 v-50 h-84z" fill="${tc}"/><path d="M104 20 v-8 h10 v8 h10 v-8 h10 v8 h10 v-8 h10 v8 h10 v-8 h10 v8 h14 v-8 h-84z" fill="#1d130c"/><circle cx="126" cy="46" r="13" fill="#1d130c"/><circle cx="126" cy="46" r="9" fill="#ecdcbc"/><circle cx="166" cy="46" r="13" fill="#1d130c"/><circle cx="166" cy="46" r="9" fill="#ecdcbc"/><path d="M122 46 h8 M126 42 v8 M162 46 h8 M166 42 v8" stroke="#1d130c" stroke-width="2"/><path d="M140 12 L150 -40 M160 10 L184 -30" stroke="#1d130c" stroke-width="3" fill="none"/><path d="M150 -40 l-4 10 l8 1z M184 -30 l-8 7 l7 4z" fill="#1d130c"/><path d="M140 0 q0 -14 10 -14 q10 0 10 14z" fill="#1d130c"/><path d="M218 74 q-4 -22 10 -26 q12 2 10 18 l-4 10z" fill="#1d130c"/><circle cx="230" cy="40" r="8" fill="#1d130c"/><path d="M90 92 q40 -10 100 0 M80 120 q60 -14 130 0" stroke="#c8763d" stroke-width="1.6" fill="none" stroke-dasharray="6 5"/></g>`;
-// la figure, sans médaillon, prête à être dessinée sur la toile
-function frqSvg(base,eq,P){const d=dFix(Object.assign({base,train:'reg',tenue:P.tn,manteau:'aucun',motif:P.e,teinte:P.c,name:'·'},BDEF[base]||{},{teinte:P.c,motif:P.e},eq||{}));
-  let s=vaseSVG(d);
-  s=s.replace(/<path d="[^"]*"[^>]*translate\(100 5\)"\/>/g,'').replace(/<circle cx="100" cy="100" r="9[58]"[^>]*\/>/g,'').replace(/<g clip-path="url\(#[^)]*\)">/,'<g>')
-     .replace(/<path d="M[\d.]+ [\d.]+ H[\d.]+" stroke="#1d130c"[^>]*\/>/,'');
-  return s}
-// enseigne : hampe, traverse, étoffe aux couleurs du peuple et emblème au sommet, portée par un fantassin
-function frqStd(P,fig){const T=SH_TINT[P.c]||SH_TINT.pourpre,B=VZ.blk,cloth=P.c==='bronze'?VZ.red:T[0],ec=P.c==='blanc'?B:VZ.wht;
-  const top=P.top==='aigle'?`<path d="M70 -28 h28" stroke="${B}" stroke-width="3"/><path d="${EMB_P.foudre}" transform="translate(84 -31) rotate(90) scale(.55 1.3)" fill="${B}"/><path d="${EMB_P.aigle}" transform="translate(84 -50) scale(2.3)" fill="${B}" stroke="${VZ.wht}" stroke-width=".35"/><circle cx="84.6" cy="-67" r="1.1" fill="${VZ.wht}"/>`:
-    `<circle cx="84" cy="-40" r="13" fill="${B}"/><circle cx="84" cy="-40" r="10" fill="${T[0]}"/>${embSVG(P.top,84,-40,8,ec)}`;
-  const pole=`<g><path d="M84 160 V-28" stroke="${B}" stroke-width="3.2"/><path d="M68 -12 h32" stroke="${B}" stroke-width="3"/><path d="M70 -12 h28 v34 l-7 -5 l-7 5 l-7 -5 l-7 5 z" fill="${cloth}" stroke="${B}" stroke-width="1.6"/>${embSVG(P.e,84,3,8,ec)}${top}</g>`;
-  return fig.replace(/(<svg[^>]*>)/,'$1'+pole)}
-// l'emblème du peuple, en blanc sur la pastille de couleur de l'écran de bataille
-const frqPastille=pk=>{const P=FRQ_D[pk];if(!P)return '';try{return `<svg viewBox="-12 -12 24 24" width="100%" height="100%">${embSVG(P.e,0,0,9,'#f4ead2')}</svg>`}catch(e){return ''}};
-const FRQ_IMG={};
-function frqImg(k,svg,vb,gx,gy,sc){if(FRQ_IMG[k])return FRQ_IMG[k];
-  svg=svg.replace(/<svg[^>]*?viewBox="[^"]*"/,`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}"`).replace(/ class="[^"]*"/,'').replace(/ role="img"/,'').replace(/ aria-label="[^"]*"/,'');
-  if(!/xmlns=/.test(svg))svg=svg.replace('<svg ','<svg xmlns="http://www.w3.org/2000/svg" ');
-  // l'image SVG est lue en XML : un attribut répété (toléré en HTML) la casserait, on garde le premier comme le ferait la page
-  svg=svg.replace(/<[a-zA-Z][^>]*>/g,t=>{const vu=new Set();return t.replace(/\s([a-zA-Z:-]+)="[^"]*"/g,(m,n)=>vu.has(n)?'':(vu.add(n),m))});
-  const img=new Image();CHGP.IMG[k]={img,vb,gx,gy,sc:sc||1};
-  return FRQ_IMG[k]=new Promise(res=>{img.onload=img.onerror=()=>res();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)})}
-// peuple d'un camp, d'après son nom ou ses troupes
-function frqPeo(name,L){const n=(name||'')+'';
-  if(/numid|massyl|masaesyl|maures/i.test(n))return 'num';if(/rom/i.test(n))return 'rom';if(/carthag|punique/i.test(n))return 'car';if(/ath[eè]n/i.test(n))return 'ath';if(/syracus/i.test(n))return 'syr';
-  if(/pergam/i.test(n))return 'per';if(/mac[eé]doin/i.test(n))return 'mac';if(/gaul|insubr|bo[iï]en|cisalp|ligur|v[eé]n[eè]t/i.test(n))return 'gau';
-  if(/ib[eè]r|celtib|lusitan|bal[eé]ar|sagont/i.test(n))return 'ibe';if(/grec|[eé]tol|ach[eé]en|[eé]pir|cr[eé]t|massalia|cyr[eè]ne/i.test(n))return 'gre';
-  const t=(L||[]).map(u=>u.t);if(t.filter(x=>CHG_ROM.has(x)).length>t.length*.45)return 'rom';if(t.includes('phalange'))return 'mac';if(t.includes('athoplites'))return 'gre';return 'car'}
-function frqMoi(){const k=(typeof S!=='undefined'&&S&&(S.peo||(S.mirror?'rom':'car')))||'car';return k==='ins'?'gau':FRQ_D[k]?k:'car'}
-// prépare les figures d'un peuple et dit lesquelles peindre, pondérées par la composition de l'armée (L : ses régiments)
-function frqPrep(pk,L){const P=FRQ_D[pk]||FRQ_D.car,ps=[],box=[10,-8,192,182],sbox=[10,-80,192,254];
-  const mk=(cat,i,[base,eq])=>{const k=`frq_${pk}_${cat}${i}`;try{ps.push(frqImg(k,frqSvg(base,eq,P),box,108,cat==='cav'||cat==='gen'?173:163))}catch(e){console.warn(e)}return k};
-  const kt=t=>(UT[t]||CORPS[t]||{}).k,cats={inf:{},skirm:{},cav:{}};let el=0;
-  for(const u of (L||[])){const k=kt(u.t),c=k==='lcav'?'cav':k==='eleph'?'el':k;if(c==='el'){el++;continue}if(cats[c])cats[c][u.t]=(cats[c][u.t]||0)+1}
-  const ros={pied:[],cav:[],lourd:[],leg:[]};
-  for(const cat of ['inf','skirm','cav']){const L2=P[cat]||[],have=cats[cat],nT=Object.values(have).reduce((a,b)=>a+b,0);
-    const cover=new Set(L2.flatMap(e=>e[2]||[])),libre=Object.keys(have).filter(t=>!cover.has(t)).reduce((a,t)=>a+have[t],0);
-    L2.forEach((e,i)=>{const k=mk(cat,i,e),ts=e[2];
-      // poids : nombre de régiments de ces types dans l'armée ; les figures « génériques » prennent les autres
-      const w=!nT?1:ts?ts.reduce((a,t)=>a+(have[t]||0),0)||.04:Math.max(.04,libre/Math.max(1,L2.filter(x=>!x[2]).length));
-      (cat==='cav'?ros.cav:ros.pied).push({k,w,cat});if(cat!=='cav')(cat==='inf'?ros.lourd:ros.leg).push({k,w:1})})}
-  // l'infanterie et les tirailleurs gardent leur part de l'armée ; sans renseignement, peu de tirailleurs
-  const n=c=>Object.values(cats[c]).reduce((a,b)=>a+b,0),nI=n('inf'),nS=n('skirm'),nC=n('cav'),nA=nI+nS+nC;
-  const tot=c=>ros.pied.filter(e=>e.cat===c).reduce((a,e)=>a+e.w,0)||1;
-  const part=nI+nS?{inf:nI/(nI+nS),skirm:nS/(nI+nS)}:{inf:.82,skirm:.18};const ti=tot('inf'),tsk=tot('skirm');
-  ros.pied.forEach(e=>{e.w=e.w/(e.cat==='inf'?ti:tsk)*part[e.cat]});ros.pc=nA?nC/nA*.5:.12;
-  ros.gen=`frq_${pk}_gen`;ps.push(frqImg(ros.gen,frqSvg(P.gen[0],P.gen[1],P),box,108,173));
-  ros.std=`frq_${pk}_std`;try{const [b,e]=P.inf[0];ps.push(frqImg(ros.std,frqStd(P,frqSvg(b,Object.assign({},e,{arm:'glaive',jet:'aucune',shield:'aucun'}),P)),sbox,108,163))}catch(e){console.warn(e)}
-  if(P.el||el){ros.el=`frq_${pk}_el`;const tc=(SH_TINT[P.c]||SH_TINT.pourpre)[0];
-    ps.push(frqImg(ros.el,`<svg viewBox="0 -60 320 290">${FRQ_EL(tc)}</svg>`,[0,-60,320,290],160,224,.8))}
-  return Promise.all(ps).then(()=>ros)}
-/* ---------- 1. lancement et accueil ---------- */
-function chgAccueil(){const R=chgE('chg');if(!R)return;CHG.mode='accueil';R.classList.remove('charge');R.classList.add('accueil');
-  const canGo=S&&(S.started||S.day>0)&&!S.over,c=canGo?cal(S.day):null;
-  chgE('chgMenu').innerHTML=(canGo?`<button type="button" class="go" id="chgCont"><b>Continuer la campagne</b><small>${esc(startCamp())} · ${c.season.toLowerCase()} ${c.year} av. J.-C.</small></button>`:'')+
-    `<button type="button" id="chgNew" class="${canGo?'':'go'}"><b>Nouvelle campagne</b><small>Votre pays, la date, la difficulté</small></button>`+
-    ($('mpTag')?`<button type="button" id="chgMp"><b>Jouer à plusieurs</b><small>Héberger ou rejoindre des amis</small></button>`:'')+
-    `<button type="button" id="chgHelp"><b>Comment jouer</b><small>Commandes et règles</small></button>`;
-  if(chgE('chgCont'))chgE('chgCont').onclick=()=>{chgFin();const h=S.armies.find(a=>a.side==='car'&&!a.g&&!a.dead);if(h)centerOn(h.x,h.y,1.1)};
-  chgE('chgNew').onclick=()=>{CHG.keep=false;_chgOpenStart()};
-  if(chgE('chgMp'))chgE('chgMp').onclick=()=>{$('mpTag').click()};
-  chgE('chgHelp').onclick=()=>{CHG.keep=true;openHelp()}}
-function chgFin(){const R=chgE('chg');if(!R||CHG.mode==='fin')return;CHG.mode='fin';R.classList.add('part');clearInterval(CHG.fi);setTimeout(()=>R.remove(),900)}
-CHG.fi=chgE('chgFait')?chgFaits(chgE('chgFait')):0;
-// la colonne romaine de la fresque apparaît sur la crête dès que ses figures sont prêtes
-function chgTitreFigs(){const cv=document.querySelector('#chg canvas');if(!cv||!CHG.ros)return;let F=document.querySelector('#chg canvas.chgF');
-  if(!F){F=document.createElement('canvas');F.className='chgF';cv.after(F)}CHGP.paint(F,'titreFigs',{ros:CHG.ros});requestAnimationFrame(()=>F.classList.add('on'))}
-try{frqPrep('rom').then(r=>{CHG.ros=r;chgTitreFigs()}).catch(e=>console.warn(e))}catch(e){console.warn(e)}
-{let k=0;const st=chgE('chgEtape');if(st){const nx=()=>{if(CHG.mode!=='charge')return;st.textContent=CHG_ETAPES[Math.min(k++,CHG_ETAPES.length-1)]+'…';if(k<CHG_ETAPES.length)setTimeout(nx,700+Math.random()*500)};nx()}}
-const _chgOpenStart=openStart;
-openStart=function(){if(CHG.mode==='charge'&&chgE('chg')){const wait=Math.max(0,1600-(performance.now()-CHG.t0));
-    const R=chgE('chg');R.classList.add('plein');setTimeout(chgAccueil,wait+450);return}
-  return _chgOpenStart.apply(this,arguments)};
-// retour de bataille, rechargement de scénario, bataille en cours : l'écran de chargement s'efface quand la carte est prête
-{let first=true;const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);if(first){first=false;
-    if(BOOT_SKIP||S.cur){let pend=false;try{pend=!!sessionStorage.getItem('bellum.scenPend')}catch(e){}
-      const wait=Math.max(pend?1500:300,1200-(performance.now()-CHG.t0));setTimeout(()=>{if(CHG.mode==='charge')chgFin()},wait)}}return r}}
-// depuis l'accueil, l'écran de départ a un bouton Retour ; son « Comment jouer » revient aussi à l'accueil
-{const _md=modal;modal=function(){const r=_md.apply(this,arguments);try{if(CHG.mode==='accueil'&&$('stGo')){const h=$('stHelp');
-    if(h&&!$('chgBack')){const b=document.createElement('button');b.type='button';b.id='chgBack';b.textContent='Retour';b.onclick=()=>{CHG.keep=true;closeModal()};h.parentNode.insertBefore(b,h.parentNode.firstChild)}
-    if(h)h.addEventListener('click',()=>{CHG.keep=true})}}catch(e){}return r}}
-// une fenêtre ouverte depuis l'accueil (aide) y revient ; les autres (partie lancée, à plusieurs) le referment
-{const _cm=closeModal;closeModal=function(){const r=_cm.apply(this,arguments);if(CHG.mode==='accueil')setTimeout(()=>{if(CHG.mode!=='accueil'||!$('modal').hidden)return;
-    if(CHG.keep&&!CHG.started){CHG.keep=false;return}chgFin()},40);return r}}
-{const _sg=scenGo;scenGo=function(){CHG.started=true;const r=_sg.apply(this,arguments);if(CHG.mode==='accueil'){const R=chgE('chg');if(R){R.classList.remove('accueil');R.classList.add('charge','lance');chgE('chgEtape').textContent='La campagne commence…'}
-    CHG.mode='charge';setTimeout(chgFin,1300)}return r}}
-// repeindre le tableau si la fenêtre change de taille
-addEventListener('resize',()=>{const c=document.querySelector('#chg canvas');if(c&&window.CHGP){clearTimeout(CHG.rz);CHG.rz=setTimeout(()=>{CHGP.paint(c,'titre');chgTitreFigs()},200)}
-  const b=document.querySelector('#chgB canvas');if(b&&window.CHGP&&CHG.bo){clearTimeout(CHG.rzb);CHG.rzb=setTimeout(()=>CHGP.paint(b,CHG.bo.k,CHG.bo.o),200)}});
-/* ---------- 2. avant la bataille ---------- */
-const CHG_ROM=new Set(['legion','velites','rcav','acav']);
-function chgLook(L){const n=L.length||1,rom=L.filter(u=>CHG_ROM.has(u.t)).length/n>.45,k=t=>(UT[t]||{}).k;
-  return {shield:rom?'scutum':'oval',crest:rom?'plume':null,flag:rom?'eagle':'banner',eleph:Math.min(3,L.filter(u=>k(u.t)==='eleph').length),cav:L.some(u=>k(u.t)==='cav'||k(u.t)==='lcav')}}
-function chgCount(L){const k=t=>(UT[t]||{}).k,men=L.reduce((s,u)=>s+(u.men||0),0),inf=L.filter(u=>['inf','skirm'].includes(k(u.t))).length,cav=L.filter(u=>['cav','lcav'].includes(k(u.t))).length,el=L.filter(u=>k(u.t)==='eleph').length;
-  return `<b>${L.length}</b> régiment${L.length>1?'s':''} · <b>${Math.round(men).toLocaleString('fr-FR')}</b> hommes<br><span>${inf} d'infanterie · ${cav} de cavalerie${el?` · ${el} d'éléphants`:''}</span>`}
-function chgCols(eName){let pc='#7d4fb8',ec='#bf3b31';try{const me=START_PEO.find(p=>p.k===(S.peo||(S.mirror?'rom':'car')));if(me)pc=me.c}catch(e){}
-  try{const f=Object.values(FAC).find(f=>f.n===eName);if(f&&f.c)ec='rgb('+f.c.join(',')+')';if(/^Rome|romain/i.test(eName||''))ec='#bf3b31'}catch(e){}
-  if(ec===pc)ec='#bf3b31';return [pc,ec]}
-const chgTxt=h=>{const d=document.createElement('div');d.innerHTML=h||'';return d.textContent};
-function chgBataille(o){chgBFin(true);const R=document.createElement('div');R.id='chgB';R.className='chgB charge';
-  R.innerHTML=`<canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
-    <div class="chgB-h"><small>${esc(o.sur||'Bataille')}</small><h2>${esc(o.titre)}</h2><p>${esc(o.lieu||'')}</p></div>
-    <div class="chgB-p"><div class="chgB-vs">
-      <div class="chgB-c" style="--c:${o.pc}"><i>${frqPastille(o.pp)}</i><div><h4>${esc(o.pn)}</h4><p class="g">${esc(o.pg||'')}</p><p>${o.pl}</p></div></div>
-      <div class="chgB-x">contre</div>
-      <div class="chgB-c e" style="--c:${o.ec}"><i>${frqPastille(o.ep)}</i><div><h4>${esc(o.en)}</h4><p class="g">${esc(o.eg||'')}</p><p>${o.el}</p></div></div></div>
-      ${o.desc?`<p class="chgB-d">${esc(o.desc)}</p>`:''}
-      <p class="chg-fait" id="chgBFait"></p>
-      <div class="chgB-go"><div class="chg-bar"><i></i></div><span class="chg-et" id="chgBEt">${esc(o.attente||'Les armées se déploient…')}</span><button type="button" class="go" id="chgBGo">${esc(o.bouton||'Au combat !')}</button></div></div>`;
-  document.body.appendChild(R);CHG.bo={k:o.k,o:o.paint};
-  // on attend les figures de la fresque (un instant), sinon le tableau part en ombres chinoises
-  const peins=()=>{if(R.__p||!R.isConnected)return;R.__p=1;try{CHGP.paint(R.querySelector('canvas'),o.k,o.paint)}catch(e){}R.classList.add('vu')};
-  if(o.prep){o.prep.then(peins,peins);setTimeout(peins,1200)}else requestAnimationFrame(peins);
-  CHG.bf=chgFaits(chgE('chgBFait'));CHG.b={t0:performance.now(),ready:false,go:false,f:null};
-  const goNow=()=>{const B=CHG.b;if(!B||!B.ready||B.go)return;B.go=true;try{B.f&&B.f()}catch(e){console.error(e)}chgBFin()};
-  chgE('chgBGo').onclick=goNow;CHG.bk=e=>{if((e.key==='Enter'||e.key===' ')&&CHG.b&&CHG.b.ready){e.preventDefault();e.stopPropagation();goNow()}};addEventListener('keydown',CHG.bk,true);
-  // filet de sécurité : si la bataille ne répond pas, on laisse passer
-  CHG.b.safe=setTimeout(()=>{if(CHG.b&&!CHG.b.ready)chgBPret(null)},25000)}
-function chgBPret(f){const B=CHG.b;if(!B)return f&&f();B.f=f||B.f;const wait=Math.max(0,2200-(performance.now()-B.t0));
-  setTimeout(()=>{if(CHG.b!==B||B.ready)return;B.ready=true;const R=chgE('chgB');if(R){R.classList.remove('charge');R.classList.add('pret');try{chgE('chgBGo').focus()}catch(e){}}
-    // à plusieurs, on ne fait pas attendre les autres joueurs
-    if(typeof MP!=='undefined'&&MP&&MP.role&&(MP.role==='guest'||(typeof MPH==='function'&&MPH())))setTimeout(()=>chgE('chgBGo')&&chgE('chgBGo').click(),1200)},wait)}
-function chgBFin(now){const R=chgE('chgB');if(CHG.b)clearTimeout(CHG.b.safe);CHG.b=null;CHG.bo=null;clearInterval(CHG.bf);if(CHG.bk)removeEventListener('keydown',CHG.bk,true);if(!R)return;
-  if(now){R.remove();return}R.classList.add('part');setTimeout(()=>R.remove(),800)}
-{const _dv=dive;dive=function(payload){const r=_dv.apply(this,arguments);try{const b=payload&&payload.b;if(b){const [pc,ec]=chgCols(b.enemy);const c=cal(Math.floor(S.day));let P=b.p||[],E=b.e||[];try{const B=S.cur,am=B.attMine;P=bFlat(am?B.att:B.def);E=bFlat(am?B.def:B.att)}catch(e){}
-    const po={terrain:b.terrain,winter:c.season==='Hiver',pcol:pc,ecol:ec,p:chgLook(P),e:chgLook(E),seed:Math.floor(S.day)+7};
-    const pp=frqMoi(),ep=frqPeo(b.enemy,E);
-    chgBataille({k:'bataille',pp,ep,prep:Promise.all([frqPrep(pp,P),frqPrep(ep,E)]).then(([pr,er])=>{po.pr=pr;po.er=er}),sur:b.walls?'Assaut':'Bataille',titre:b.title||'Bataille',lieu:`Terrain : ${(TERR[b.terrain]||TERR.plaine).n.toLowerCase()}`,desc:b.desc,
-      pn:startCamp()||'Vos troupes',pg:b.cmd?chgTxt(b.cmd.p):'',pl:chgCount(P),en:b.enemy||'L’ennemi',eg:b.cmd?chgTxt(b.cmd.e):'',el:chgCount(E),pc,ec,
-      paint:po})}}catch(e){console.warn(e)}
-  return r}}
-{const _rv=reveal;reveal=function(){const D=DIVE;if(!D||!D.zoomed||!D.shown)return;if(CHG.b&&!CHG.b.go){chgBPret(()=>_rv.apply(this,arguments));return}return _rv.apply(this,arguments)}}
-// la bataille annulée ou terminée avant d'avoir commencé : l'écran s'en va aussi
-addEventListener('message',ev=>{const d=ev.data;if(d&&typeof d.bellum==='string'&&/fermer|retour|fin/.test(d.bellum)&&chgE('chgB'))chgBFin(true)});
-/* ---------- 3. avant la bataille navale ---------- */
-if(typeof nv3Open==='function'){const _nv=nv3Open;nv3Open=function(me,foe){let o=null;try{const cfg=nv3Cfg(me,foe),[A,B]=cfg.sides,en=B.name||cap1(pName(foe)),[pc,ec]=chgCols(B.natDef?B.natDef.name:en),
-        nb=X=>{const n=(X.sq||[]).reduce((t,q)=>t+(q.k||0),0);return `<b>${n}</b> navire${n>1?'s':''}`};
-      o={k:'mer',sur:'Bataille navale',titre:`${cfg.place}, ${cfg.year}`,lieu:'',pn:A.name||'Votre flotte',pg:'',pl:nb(A),en,eg:'',el:nb(B),pc,ec,
-        attente:'Les escadres se rangent en ligne…',bouton:'À l’abordage !',paint:{pcol:pc,ecol:ec,seed:Math.floor(S.day)}};
-      const po=o.paint;o.pp=frqMoi();o.ep=foe&&foe.o&&FRQ_D[foe.o.side]?foe.o.side:frqPeo(en,null);o.prep=frqPrep(o.pp,null).then(r=>{po.pr=r})}catch(e){console.warn(e)}
-    const r=_nv.apply(this,arguments);
-    if(o&&NV3&&NV3.fr){const fr=NV3.fr;chgBataille(o);fr.style.opacity='0';fr.onload=()=>chgBPret(()=>{fr.style.opacity='1';try{fr.focus()}catch(e){}})}
-    return r}}
-/* ================= FIN ÉCRANS DE CHARGEMENT ================= */
 /* ================= BATAILLES RANGÉES : terrain généré (fil « Concevoir les terrains de bataille rangée ») =================
    Le champ de bataille n'est plus recentré à 1,3 km d'un fleuve redressé contre le bord ouest : on garde l'endroit réel
    et l'on envoie le vrai tracé des fleuves (avec méandres), les gués, les ponts (coupés ou non), les marais et le relief.
@@ -13369,6 +13182,225 @@ if(typeof chgBataille==='function'){const _cbE=chgBataille;chgBataille=function(
   cs.forEach((el,i)=>{const k=ks[i];if(k&&(PEO_EMB_D[k]||PEO_IMG[k])){el.classList.add('peMed');el.innerHTML=PEO_EMB(k,48)}})}catch(e){}return r}}
 {const st=document.createElement('style');st.textContent='.chgB-c i.peMed{background:none!important;border:0!important;box-shadow:none!important;width:52px!important;height:52px!important}.chgB-c i.peMed svg{padding:0!important;width:100%;height:100%}';document.head.appendChild(st)}
 /* ================= FIN EMBLÈMES ================= */
+/* ================= ÉCRANS DE CHARGEMENT ================= */
+/* Source : /mnt/project-files/chargement/ecrans.js, injecté avant « BOUCLE » par chargement/patch.py (relançable).
+   1. Lancement : #chg (posé dès le début du <body>) montre le tableau peint et une barre de chargement,
+      puis devient l'écran d'accueil (Continuer, Nouvelle campagne, À plusieurs, Comment jouer).
+   2. Bataille : #chgB recouvre la plongée vers le champ de bataille ; « Au combat ! » quand la bataille est prête.
+   3. Bataille navale : le même écran, tableau de mer, avant naval.html. */
+const CHG={mode:'charge',keep:false,t0:(window.__chgT0||performance.now())};
+const CHG_FAITS=[
+  "Hannibal franchit les Alpes à l'automne 218 av. J.-C. avec trente-sept éléphants ; presque tous meurent dans l'hiver qui suit.",
+  "À Cannes, le 2 août 216 av. J.-C., Hannibal laisse plier son centre et referme ses ailes : l'armée de Varron et de Paul Émile est encerclée.",
+  "Fabius Maximus refuse la bataille rangée et harcèle Hannibal : Rome le surnomme Cunctator, « le Temporisateur ».",
+  "Le port militaire de Carthage était circulaire : des cales couvertes tout autour, et l'amirauté sur l'îlot central.",
+  "Pendant deux ans, Archimède tient en échec la flotte de Marcellus devant Syracuse avec ses machines.",
+  "En 209 av. J.-C., Scipion prend Nova Carthago d'un coup de main : ses soldats traversent la lagune à pied quand l'eau se retire.",
+  "Au Métaure, en 207 av. J.-C., Hasdrubal tombe ; sa tête est jetée devant les avant-postes de son frère Hannibal.",
+  "À Zama, en 202 av. J.-C., les légions ouvrent des couloirs entre les manipules et laissent passer les éléphants d'Hannibal.",
+  "Au lac Trasimène, en 217 av. J.-C., le consul Flaminius s'engage dans le brouillard du matin : l'armée punique l'attend sur les hauteurs.",
+  "Sagonte, alliée de Rome, résiste huit mois au siège d'Hannibal avant de tomber : c'est le début de la guerre.",
+  "La légion de la République combat sur trois lignes : hastati devant, principes derrière, triarii en dernier recours.",
+  "Philippe V de Macédoine signe un traité avec Hannibal en 215 av. J.-C. ; Rome lui fait la guerre en Illyrie et en Grèce.",
+  "Le prince numide Massinissa combat d'abord pour Carthage en Hispanie, puis passe à Rome et lui donne sa cavalerie à Zama.",
+  "Un demi-siècle après Zama, Caton l'Ancien finit chacun de ses discours par « Carthago delenda est ».",
+  "Conseil : la touche Espace met le temps en pause ; donnez vos ordres, puis relancez.",
+  "Conseil : une armée affamée ou épuisée se bat mal. Surveillez les vivres et la fatigue avant d'engager la bataille."];
+const CHG_ETAPES=['Tracé des côtes et des fleuves','Relief et cols des Alpes','Routes, villes et villages','Levée des armées','Messagers et ambassades'];
+const chgShuf=a=>{const b=a.slice();for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b};
+const chgE=id=>document.getElementById(id);
+function chgFaits(el){let L=chgShuf(CHG_FAITS),i=0;const put=()=>{if(!el.isConnected)return;el.classList.remove('on');setTimeout(()=>{el.textContent=L[i++%L.length];el.classList.add('on')},350)};put();return setInterval(put,6500)}
+/* ---------- 0. la fresque : chaque peuple a ses soldats en figure noire (dessinés par vaseSVG, l'aperçu de l'atelier) ---------- */
+// [corps de base, équipement] ; t : types d'unités qu'ils représentent (sinon la catégorie)
+const FRQ_D={
+  rom:{c:'rouge',tn:'rouge',e:'aigle',top:'aigle',
+    inf:[['legion',{helm:'bronze',crest:'plumes',armor:'pect',motif:'aigle'}],['legion',{helm:'fer',crest:'noire',armor:'maille',motif:'aigle'}],['legion',{helm:'attique',crest:'crete',armor:'maille',arm:'lance',jet:'aucune',motif:'aigle',train:'vet'}]],
+    skirm:[['velites',{motif:'loup'}]],cav:[['rcav',{manteau:'rouge',motif:'aigle'}],['acav',{teinte:'blanc',motif:'sanglier'}]],gen:['rcav',{helm:'attique',crest:'crete',armor:'bronze',manteau:'rouge',motif:'aigle',train:'vet'}]},
+  car:{c:'pourpre',tn:'pourpre',e:'tanit',top:'tanit',el:1,
+    inf:[['lib',{helm:'attique',crest:'crin',armor:'lin',jamb:'cnemides',shield:'hoplon',arm:'lance',motif:'tanit'},['lib']],['lib',{helm:'bronze',crest:'crete',armor:'maille',shield:'ovale',arm:'epee',jet:'javelots',motif:'palmier'},['lib']],
+      ['iber',{helm:'cuir',armor:'tunique',shield:'ovale',arm:'epee',jet:'soliferrum',teinte:'blanc',motif:'rings',tenue:'blanc'},['iber']],['gaul',{helm:'fer',crest:'cornes',shield:'ovale',arm:'longue',teinte:'vert',motif:'triskel',manteau:'vert'},['gaul']]],
+    skirm:[['sling',{helm:'nu',shield:'aucun',arm:'dague',jet:'fronde'},['sling']]],
+    cav:[['ncav',{helm:'nu',shield:'peau',arm:'lance',jet:'javelots'},['ncav']],['hcav',{helm:'beotien',armor:'lin',shield:'rond',arm:'lance',motif:'cheval'},['hcav']]],
+    gen:['hcav',{helm:'attique',crest:'crin',armor:'bronze',shield:'rond',arm:'lance',motif:'tanit',manteau:'pourpre',train:'vet'}]},
+  ath:{c:'bleu',tn:'blanc',e:'chouette',top:'chouette',
+    inf:[['athoplites',{helm:'corinthien',crest:'crin',motif:'chouette'}],['athoplites',{helm:'attique',crest:'aigrette',armor:'bronze',motif:'chouette',teinte:'bleu'}],['thureo',{motif:'chouette',teinte:'blanc'}]],
+    skirm:[['athpelt',{motif:'chouette',teinte:'blanc'}],['scythes',{}]],cav:[['hippeis',{manteau:'bleu'}]],gen:['hippeis',{helm:'attique',crest:'crin',armor:'bronze',manteau:'bleu',train:'vet'}]},
+  syr:{c:'jaune',tn:'rouge',e:'triskel',top:'gorgone',
+    inf:[['athoplites',{helm:'beotien',crest:'crete',armor:'lin',motif:'triskel'}],['athoplites',{helm:'corinthien',crest:'noire',armor:'bronze',motif:'gorgone'}],['thureo',{helm:'pilos',motif:'triskel'}]],
+    skirm:[['cretois',{}],['athpelt',{motif:'triskel'}]],cav:[['hippeis',{helm:'beotien',manteau:'jaune'}]],gen:['hippeis',{helm:'beotien',crest:'crete',armor:'bronze',manteau:'rouge',train:'vet'}]},
+  per:{c:'rouge',tn:'blanc',e:'serpent',top:'serpent',
+    inf:[['athoplites',{helm:'thrace',crest:'crete',armor:'bronze',motif:'serpent'}],['thureo',{helm:'pilos',motif:'serpent'}],['gaul',{helm:'bronze',crest:'roue',shield:'ovale',arm:'longue',motif:'triskel',manteau:'ocre'}]],
+    skirm:[['cretois',{}],['athpelt',{motif:'serpent'}]],cav:[['hippeis',{helm:'attique',manteau:'rouge'}],['acav',{teinte:'rouge',motif:'serpent'}]],gen:['hippeis',{helm:'attique',crest:'crin',armor:'bronze',manteau:'pourpre',train:'vet'}]},
+  mac:{c:'bronze',tn:'pourpre',e:'soleil',top:'soleil',
+    inf:[['phalange',{motif:'soleil'},['phalange']],['phalange',{motif:'soleil',helm:'beotien'},['phalange']],['hypasp',{motif:'soleil'},['hypasp']]],
+    skirm:[['peltaste',{},['peltaste']],['cretois',{},['cretois']]],cav:[['compagnons',{},['compagnons']],['thessal',{},['thessal']]],gen:['compagnons',{crest:'plumes',helm:'beotien',manteau:'pourpre',train:'vet'}]},
+  num:{c:'ocre',tn:'blanc',e:'cheval',top:'cheval',
+    inf:[['lib',{helm:'nu',armor:'tunique',shield:'rond',arm:'lance',jet:'javelots',motif:'cheval',teinte:'ocre',tenue:'blanc'}]],
+    skirm:[['sling',{helm:'nu',shield:'peau',arm:'dague',jet:'javelots'}]],cav:[['ncav',{helm:'nu',shield:'peau',arm:'lance',jet:'javelots'}],['ncav',{helm:'cuir',shield:'rond',arm:'lance',jet:'javelots',motif:'cheval',teinte:'ocre'}]],gen:['ncav',{helm:'bronze',shield:'rond',arm:'lance',manteau:'pourpre',motif:'cheval',teinte:'ocre',train:'vet'}]},
+  gau:{c:'vert',tn:'ocre',e:'sanglier',top:'sanglier',
+    inf:[['gaul',{helm:'fer',crest:'cornes',shield:'ovale',arm:'longue',motif:'triskel',manteau:'vert'}],['gaul',{helm:'nu',armor:'tunique',shield:'ovale',arm:'longue',motif:'sanglier',teinte:'ocre'}],['gaul',{helm:'bronze',crest:'roue',armor:'maille',shield:'ovale',arm:'longue',motif:'bandes',teinte:'rouge'}]],
+    skirm:[['sling',{helm:'nu',shield:'aucun',arm:'dague',jet:'javelots'}]],cav:[['hcav',{helm:'fer',armor:'maille',shield:'ovale',arm:'longue',motif:'triskel',teinte:'vert',manteau:'ocre'}]],gen:['hcav',{helm:'fer',crest:'cornes',armor:'maille',shield:'ovale',arm:'longue',motif:'sanglier',teinte:'vert',manteau:'rouge',train:'vet'}]},
+  ibe:{c:'blanc',tn:'blanc',e:'rings',top:'loup',
+    inf:[['iber',{helm:'cuir',armor:'tunique',shield:'ovale',arm:'epee',jet:'soliferrum',teinte:'blanc',motif:'rings',tenue:'blanc'}],['iber',{helm:'bronze',crest:'crete',shield:'rond',arm:'epee',jet:'javelots',teinte:'rouge',motif:'loup',tenue:'blanc'}]],
+    skirm:[['sling',{helm:'nu',shield:'aucun',arm:'dague',jet:'fronde'}]],cav:[['hcav',{helm:'bronze',shield:'rond',arm:'lance',jet:'javelots',teinte:'blanc',motif:'rings'}]],gen:['hcav',{helm:'bronze',crest:'crete',armor:'ecailles',shield:'rond',arm:'lance',teinte:'rouge',motif:'loup',manteau:'noir',train:'vet'}]},
+  gre:{c:'bronze',tn:'bleu',e:'gorgone',top:'gorgone',
+    inf:[['athoplites',{helm:'corinthien',crest:'crin',motif:'gorgone'}],['thureo',{helm:'pilos',motif:'gorgone'}]],
+    skirm:[['athpelt',{}],['cretois',{}]],cav:[['hippeis',{}]],gen:['hippeis',{helm:'attique',crest:'crin',armor:'bronze',manteau:'rouge',train:'vet'}]}};
+const FRQ_EL=tc=>`<g><path d="M30 150 Q20 90 80 70 Q150 45 215 70 Q245 82 252 110 L262 100 Q280 72 272 40 Q268 20 285 14 Q298 12 296 26 Q284 32 288 54 Q296 100 268 128 Q258 140 250 150 L250 220 L230 222 L226 168 Q200 176 170 172 L168 222 L148 224 L144 170 Q110 170 92 160 L90 222 L70 224 L66 160 Q50 158 46 166 L48 222 L28 224 Q24 190 30 150Z" fill="#1d130c"/><path d="M206 86 Q236 84 240 116 Q236 146 208 142 Q218 116 206 86Z" fill="none" stroke="#c8763d" stroke-width="2"/><path d="M246 100 q6 -3 10 1" stroke="#c8763d" stroke-width="2" fill="none"/><circle cx="250" cy="96" r="2.6" fill="#c8763d"/><path d="M262 124 Q290 128 304 112 Q296 126 266 132Z" fill="#ecdcbc"/><path d="M276 50 h10 M274 64 h12 M272 78 h12 M268 92 h10 M60 182 q8 4 16 0 M156 186 q8 4 16 0 M236 186 q8 4 14 0 M36 186 q8 4 14 0" stroke="#c8763d" stroke-width="1.6" fill="none"/><path d="M30 140 Q14 150 12 178 L18 178 Q20 156 32 150Z" fill="#1d130c"/><path d="M100 74 h92 v-58 h-92z" fill="#1d130c"/><path d="M104 70 h84 v-50 h-84z" fill="${tc}"/><path d="M104 20 v-8 h10 v8 h10 v-8 h10 v8 h10 v-8 h10 v8 h10 v-8 h10 v8 h14 v-8 h-84z" fill="#1d130c"/><circle cx="126" cy="46" r="13" fill="#1d130c"/><circle cx="126" cy="46" r="9" fill="#ecdcbc"/><circle cx="166" cy="46" r="13" fill="#1d130c"/><circle cx="166" cy="46" r="9" fill="#ecdcbc"/><path d="M122 46 h8 M126 42 v8 M162 46 h8 M166 42 v8" stroke="#1d130c" stroke-width="2"/><path d="M140 12 L150 -40 M160 10 L184 -30" stroke="#1d130c" stroke-width="3" fill="none"/><path d="M150 -40 l-4 10 l8 1z M184 -30 l-8 7 l7 4z" fill="#1d130c"/><path d="M140 0 q0 -14 10 -14 q10 0 10 14z" fill="#1d130c"/><path d="M218 74 q-4 -22 10 -26 q12 2 10 18 l-4 10z" fill="#1d130c"/><circle cx="230" cy="40" r="8" fill="#1d130c"/><path d="M90 92 q40 -10 100 0 M80 120 q60 -14 130 0" stroke="#c8763d" stroke-width="1.6" fill="none" stroke-dasharray="6 5"/></g>`;
+// la figure, sans médaillon, prête à être dessinée sur la toile
+function frqSvg(base,eq,P){const d=dFix(Object.assign({base,train:'reg',tenue:P.tn,manteau:'aucun',motif:P.e,teinte:P.c,name:'·'},BDEF[base]||{},{teinte:P.c,motif:P.e},eq||{}));
+  let s=vaseSVG(d);
+  s=s.replace(/<path d="[^"]*"[^>]*translate\(100 5\)"\/>/g,'').replace(/<circle cx="100" cy="100" r="9[58]"[^>]*\/>/g,'').replace(/<g clip-path="url\(#[^)]*\)">/,'<g>')
+     .replace(/<path d="M[\d.]+ [\d.]+ H[\d.]+" stroke="#1d130c"[^>]*\/>/,'');
+  return s}
+// enseigne : hampe, traverse, étoffe aux couleurs du peuple et emblème au sommet, portée par un fantassin
+function frqStd(P,fig,pk){const med=frqMed(pk);const T=SH_TINT[P.c]||SH_TINT.pourpre,B=VZ.blk,cloth=P.c==='bronze'?VZ.red:T[0],ec=P.c==='blanc'?B:VZ.wht;
+  const top=P.top==='aigle'?`<path d="M70 -28 h28" stroke="${B}" stroke-width="3"/><path d="${EMB_P.foudre}" transform="translate(84 -31) rotate(90) scale(.55 1.3)" fill="${B}"/><path d="${EMB_P.aigle}" transform="translate(84 -50) scale(2.3)" fill="${B}" stroke="${VZ.wht}" stroke-width=".35"/><circle cx="84.6" cy="-67" r="1.1" fill="${VZ.wht}"/>`:
+    med?`<clipPath id="fsc"><circle cx="84" cy="-42" r="13.5"/></clipPath><circle cx="84" cy="-42" r="16" fill="${B}"/><circle cx="84" cy="-42" r="14.6" fill="#c79a4e"/><image href="${med}" x="70.5" y="-55.5" width="27" height="27" clip-path="url(#fsc)" preserveAspectRatio="xMidYMid slice"/>`:
+    `<circle cx="84" cy="-40" r="13" fill="${B}"/><circle cx="84" cy="-40" r="10" fill="${T[0]}"/>${embSVG(P.top,84,-40,8,ec)}`;
+  const pole=`<g><path d="M84 160 V-28" stroke="${B}" stroke-width="3.2"/><path d="M68 -12 h32" stroke="${B}" stroke-width="3"/><path d="M70 -12 h28 v34 l-7 -5 l-7 5 l-7 -5 l-7 5 z" fill="${cloth}" stroke="${B}" stroke-width="1.6"/>${embSVG(P.e,84,3,8,ec)}${top}</g>`;
+  return fig.replace(/(<svg[^>]*>)/,'$1'+pole)}
+// l'emblème du peuple, en blanc sur la pastille de couleur de l'écran de bataille
+const frqPastille=pk=>{const P=FRQ_D[pk];if(!P)return '';try{return `<svg viewBox="-12 -12 24 24" width="100%" height="100%">${embSVG(P.e,0,0,9,'#f4ead2')}</svg>`}catch(e){return ''}};
+// les blasons (médaillons tirés des drapeaux de Baptiste, bloc EMBLÈMES) : PEO_IMG est déclaré après ce bloc, on le lit au moment de peindre
+const FRQ_PK={gau:'ins'};
+function frqMed(pk){try{return (typeof PEO_IMG!=='undefined'&&PEO_IMG[FRQ_PK[pk]||pk])||null}catch(e){return null}}
+function frqBlason(pk,sz){try{if(typeof PEO_EMB==='function'&&frqMed(pk))return PEO_EMB(FRQ_PK[pk]||pk,sz)}catch(e){}return frqPastille(pk)}
+const FRQ_IMG={};
+function frqImg(k,svg,vb,gx,gy,sc){if(FRQ_IMG[k])return FRQ_IMG[k];
+  svg=svg.replace(/<svg[^>]*?viewBox="[^"]*"/,`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}"`).replace(/ class="[^"]*"/,'').replace(/ role="img"/,'').replace(/ aria-label="[^"]*"/,'');
+  if(!/xmlns=/.test(svg))svg=svg.replace('<svg ','<svg xmlns="http://www.w3.org/2000/svg" ');
+  // l'image SVG est lue en XML : un attribut répété (toléré en HTML) la casserait, on garde le premier comme le ferait la page
+  svg=svg.replace(/<[a-zA-Z][^>]*>/g,t=>{const vu=new Set();return t.replace(/\s([a-zA-Z:-]+)="[^"]*"/g,(m,n)=>vu.has(n)?'':(vu.add(n),m))});
+  const img=new Image();CHGP.IMG[k]={img,vb,gx,gy,sc:sc||1};
+  return FRQ_IMG[k]=new Promise(res=>{img.onload=img.onerror=()=>res();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)})}
+// peuple d'un camp, d'après son nom ou ses troupes
+function frqPeo(name,L){const n=(name||'')+'';
+  if(/numid|massyl|masaesyl|maures/i.test(n))return 'num';if(/rom/i.test(n))return 'rom';if(/carthag|punique/i.test(n))return 'car';if(/ath[eè]n/i.test(n))return 'ath';if(/syracus/i.test(n))return 'syr';
+  if(/pergam/i.test(n))return 'per';if(/mac[eé]doin/i.test(n))return 'mac';if(/gaul|insubr|bo[iï]en|cisalp|ligur|v[eé]n[eè]t/i.test(n))return 'gau';
+  if(/ib[eè]r|celtib|lusitan|bal[eé]ar|sagont/i.test(n))return 'ibe';if(/grec|[eé]tol|ach[eé]en|[eé]pir|cr[eé]t|massalia|cyr[eè]ne/i.test(n))return 'gre';
+  const t=(L||[]).map(u=>u.t);if(t.filter(x=>CHG_ROM.has(x)).length>t.length*.45)return 'rom';if(t.includes('phalange'))return 'mac';if(t.includes('athoplites'))return 'gre';return 'car'}
+function frqMoi(){const k=(typeof S!=='undefined'&&S&&(S.peo||(S.mirror?'rom':'car')))||'car';return k==='ins'?'gau':FRQ_D[k]?k:'car'}
+// prépare les figures d'un peuple et dit lesquelles peindre, pondérées par la composition de l'armée (L : ses régiments)
+function frqPrep(pk,L){const P=FRQ_D[pk]||FRQ_D.car,ps=[],box=[10,-8,192,182],sbox=[10,-80,192,254];
+  const mk=(cat,i,[base,eq])=>{const k=`frq_${pk}_${cat}${i}`;try{ps.push(frqImg(k,frqSvg(base,eq,P),box,108,cat==='cav'||cat==='gen'?173:163))}catch(e){console.warn(e)}return k};
+  const kt=t=>(UT[t]||CORPS[t]||{}).k,cats={inf:{},skirm:{},cav:{}};let el=0;
+  for(const u of (L||[])){const k=kt(u.t),c=k==='lcav'?'cav':k==='eleph'?'el':k;if(c==='el'){el++;continue}if(cats[c])cats[c][u.t]=(cats[c][u.t]||0)+1}
+  const ros={pied:[],cav:[],lourd:[],leg:[]};
+  for(const cat of ['inf','skirm','cav']){const L2=P[cat]||[],have=cats[cat],nT=Object.values(have).reduce((a,b)=>a+b,0);
+    const cover=new Set(L2.flatMap(e=>e[2]||[])),libre=Object.keys(have).filter(t=>!cover.has(t)).reduce((a,t)=>a+have[t],0);
+    L2.forEach((e,i)=>{const k=mk(cat,i,e),ts=e[2];
+      // poids : nombre de régiments de ces types dans l'armée ; les figures « génériques » prennent les autres
+      const w=!nT?1:ts?ts.reduce((a,t)=>a+(have[t]||0),0)||.04:Math.max(.04,libre/Math.max(1,L2.filter(x=>!x[2]).length));
+      (cat==='cav'?ros.cav:ros.pied).push({k,w,cat});if(cat!=='cav')(cat==='inf'?ros.lourd:ros.leg).push({k,w:1})})}
+  // l'infanterie et les tirailleurs gardent leur part de l'armée ; sans renseignement, peu de tirailleurs
+  const n=c=>Object.values(cats[c]).reduce((a,b)=>a+b,0),nI=n('inf'),nS=n('skirm'),nC=n('cav'),nA=nI+nS+nC;
+  const tot=c=>ros.pied.filter(e=>e.cat===c).reduce((a,e)=>a+e.w,0)||1;
+  const part=nI+nS?{inf:nI/(nI+nS),skirm:nS/(nI+nS)}:{inf:.82,skirm:.18};const ti=tot('inf'),tsk=tot('skirm');
+  ros.pied.forEach(e=>{e.w=e.w/(e.cat==='inf'?ti:tsk)*part[e.cat]});ros.pc=nA?nC/nA*.5:.12;
+  ros.gen=`frq_${pk}_gen`;ps.push(frqImg(ros.gen,frqSvg(P.gen[0],P.gen[1],P),box,108,173));
+  ros.std=`frq_${pk}_std`;try{const [b,e]=P.inf[0];ps.push(frqImg(ros.std,frqStd(P,frqSvg(b,Object.assign({},e,{arm:'glaive',jet:'aucune',shield:'aucun'}),P),pk),sbox,108,163))}catch(e){console.warn(e)}
+  if(P.el||el){ros.el=`frq_${pk}_el`;const tc=(SH_TINT[P.c]||SH_TINT.pourpre)[0];
+    ps.push(frqImg(ros.el,`<svg viewBox="0 -60 320 290">${FRQ_EL(tc)}</svg>`,[0,-60,320,290],160,224,.8))}
+  const med=frqMed(pk);if(med){ros.med=`frq_${pk}_med`;if(!FRQ_IMG[ros.med]){const im=new Image();CHGP.IMG[ros.med]={img:im,vb:[0,0,100,100],gx:50,gy:100};
+    FRQ_IMG[ros.med]=new Promise(res=>{im.onload=im.onerror=()=>res();im.src=med})}ps.push(FRQ_IMG[ros.med])}
+  return Promise.all(ps).then(()=>ros)}
+/* ---------- 1. lancement et accueil ---------- */
+function chgAccueil(){const R=chgE('chg');if(!R)return;CHG.mode='accueil';R.classList.remove('charge');R.classList.add('accueil');
+  const canGo=S&&(S.started||S.day>0)&&!S.over,c=canGo?cal(S.day):null;
+  chgE('chgMenu').innerHTML=(canGo?`<button type="button" class="go" id="chgCont"><b>Continuer la campagne</b><small>${esc(startCamp())} · ${c.season.toLowerCase()} ${c.year} av. J.-C.</small></button>`:'')+
+    `<button type="button" id="chgNew" class="${canGo?'':'go'}"><b>Nouvelle campagne</b><small>Votre pays, la date, la difficulté</small></button>`+
+    ($('mpTag')?`<button type="button" id="chgMp"><b>Jouer à plusieurs</b><small>Héberger ou rejoindre des amis</small></button>`:'')+
+    `<button type="button" id="chgHelp"><b>Comment jouer</b><small>Commandes et règles</small></button>`;
+  if(chgE('chgCont'))chgE('chgCont').onclick=()=>{chgFin();const h=S.armies.find(a=>a.side==='car'&&!a.g&&!a.dead);if(h)centerOn(h.x,h.y,1.1)};
+  chgE('chgNew').onclick=()=>{CHG.keep=false;_chgOpenStart()};
+  if(chgE('chgMp'))chgE('chgMp').onclick=()=>{$('mpTag').click()};
+  chgE('chgHelp').onclick=()=>{CHG.keep=true;openHelp()}}
+function chgFin(){const R=chgE('chg');if(!R||CHG.mode==='fin')return;CHG.mode='fin';R.classList.add('part');clearInterval(CHG.fi);setTimeout(()=>R.remove(),900)}
+CHG.fi=chgE('chgFait')?chgFaits(chgE('chgFait')):0;
+// la colonne romaine de la fresque apparaît sur la crête dès que ses figures sont prêtes
+function chgTitreFigs(){const cv=document.querySelector('#chg canvas');if(!cv||!CHG.ros)return;let F=document.querySelector('#chg canvas.chgF');
+  if(!F){F=document.createElement('canvas');F.className='chgF';cv.after(F)}CHGP.paint(F,'titreFigs',{ros:CHG.ros});requestAnimationFrame(()=>F.classList.add('on'))}
+setTimeout(()=>{try{frqPrep('rom').then(r=>{CHG.ros=r;chgTitreFigs()}).catch(e=>console.warn(e))}catch(e){console.warn(e)}
+  // les blasons de tous les peuples, en frise sous le titre
+  try{const T=document.querySelector('#chg .chg-tt hr');if(T&&typeof START_PEO!=='undefined'&&typeof PEO_EMB==='function'&&!chgE('chgBl')){const d=document.createElement('div');d.id='chgBl';
+    d.innerHTML=START_PEO.map(p=>`<span title="${esc(p.n)}">${PEO_EMB(p.k,40)}</span>`).join('');T.after(d);requestAnimationFrame(()=>d.classList.add('on'))}}catch(e){console.warn(e)}},0);
+{let k=0;const st=chgE('chgEtape');if(st){const nx=()=>{if(CHG.mode!=='charge')return;st.textContent=CHG_ETAPES[Math.min(k++,CHG_ETAPES.length-1)]+'…';if(k<CHG_ETAPES.length)setTimeout(nx,700+Math.random()*500)};nx()}}
+const _chgOpenStart=openStart;
+openStart=function(){if(CHG.mode==='charge'&&chgE('chg')){const wait=Math.max(0,1600-(performance.now()-CHG.t0));
+    const R=chgE('chg');R.classList.add('plein');setTimeout(chgAccueil,wait+450);return}
+  return _chgOpenStart.apply(this,arguments)};
+// retour de bataille, rechargement de scénario, bataille en cours : l'écran de chargement s'efface quand la carte est prête
+{let first=true;const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);if(first){first=false;
+    if(BOOT_SKIP||S.cur){let pend=false;try{pend=!!sessionStorage.getItem('bellum.scenPend')}catch(e){}
+      const wait=Math.max(pend?1500:300,1200-(performance.now()-CHG.t0));setTimeout(()=>{if(CHG.mode==='charge')chgFin()},wait)}}return r}}
+// depuis l'accueil, l'écran de départ a un bouton Retour ; son « Comment jouer » revient aussi à l'accueil
+{const _md=modal;modal=function(){const r=_md.apply(this,arguments);try{if(CHG.mode==='accueil'&&$('stGo')){const h=$('stHelp');
+    if(h&&!$('chgBack')){const b=document.createElement('button');b.type='button';b.id='chgBack';b.textContent='Retour';b.onclick=()=>{CHG.keep=true;closeModal()};h.parentNode.insertBefore(b,h.parentNode.firstChild)}
+    if(h)h.addEventListener('click',()=>{CHG.keep=true})}}catch(e){}return r}}
+// une fenêtre ouverte depuis l'accueil (aide) y revient ; les autres (partie lancée, à plusieurs) le referment
+{const _cm=closeModal;closeModal=function(){const r=_cm.apply(this,arguments);if(CHG.mode==='accueil')setTimeout(()=>{if(CHG.mode!=='accueil'||!$('modal').hidden)return;
+    if(CHG.keep&&!CHG.started){CHG.keep=false;return}chgFin()},40);return r}}
+{const _sg=scenGo;scenGo=function(){CHG.started=true;const r=_sg.apply(this,arguments);if(CHG.mode==='accueil'){const R=chgE('chg');if(R){R.classList.remove('accueil');R.classList.add('charge','lance');chgE('chgEtape').textContent='La campagne commence…'}
+    CHG.mode='charge';setTimeout(chgFin,1300)}return r}}
+// repeindre le tableau si la fenêtre change de taille
+addEventListener('resize',()=>{const c=document.querySelector('#chg canvas');if(c&&window.CHGP){clearTimeout(CHG.rz);CHG.rz=setTimeout(()=>{CHGP.paint(c,'titre');chgTitreFigs()},200)}
+  const b=document.querySelector('#chgB canvas');if(b&&window.CHGP&&CHG.bo){clearTimeout(CHG.rzb);CHG.rzb=setTimeout(()=>CHGP.paint(b,CHG.bo.k,CHG.bo.o),200)}});
+/* ---------- 2. avant la bataille ---------- */
+const CHG_ROM=new Set(['legion','velites','rcav','acav']);
+function chgLook(L){const n=L.length||1,rom=L.filter(u=>CHG_ROM.has(u.t)).length/n>.45,k=t=>(UT[t]||{}).k;
+  return {shield:rom?'scutum':'oval',crest:rom?'plume':null,flag:rom?'eagle':'banner',eleph:Math.min(3,L.filter(u=>k(u.t)==='eleph').length),cav:L.some(u=>k(u.t)==='cav'||k(u.t)==='lcav')}}
+function chgCount(L){const k=t=>(UT[t]||{}).k,men=L.reduce((s,u)=>s+(u.men||0),0),inf=L.filter(u=>['inf','skirm'].includes(k(u.t))).length,cav=L.filter(u=>['cav','lcav'].includes(k(u.t))).length,el=L.filter(u=>k(u.t)==='eleph').length;
+  return `<b>${L.length}</b> régiment${L.length>1?'s':''} · <b>${Math.round(men).toLocaleString('fr-FR')}</b> hommes<br><span>${inf} d'infanterie · ${cav} de cavalerie${el?` · ${el} d'éléphants`:''}</span>`}
+function chgCols(eName){let pc='#7d4fb8',ec='#bf3b31';try{const me=START_PEO.find(p=>p.k===(S.peo||(S.mirror?'rom':'car')));if(me)pc=me.c}catch(e){}
+  try{const f=Object.values(FAC).find(f=>f.n===eName);if(f&&f.c)ec='rgb('+f.c.join(',')+')';if(/^Rome|romain/i.test(eName||''))ec='#bf3b31'}catch(e){}
+  if(ec===pc)ec='#bf3b31';return [pc,ec]}
+const chgTxt=h=>{const d=document.createElement('div');d.innerHTML=h||'';return d.textContent};
+function chgBataille(o){chgBFin(true);const R=document.createElement('div');R.id='chgB';R.className='chgB charge';
+  R.innerHTML=`<canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
+    <div class="chgB-h"><small>${esc(o.sur||'Bataille')}</small><div class="chgB-t">${o.pp?`<span class="chgB-bl">${frqBlason(o.pp,92)}</span>`:''}<h2>${esc(o.titre).replace(/ (av\. J\.-C\.)/,'<span style="white-space:nowrap">&nbsp;$1</span>')}</h2>${o.ep?`<span class="chgB-bl">${frqBlason(o.ep,92)}</span>`:''}</div><p>${esc(o.lieu||'')}</p></div>
+    <div class="chgB-p"><div class="chgB-vs">
+      <div class="chgB-c" style="--c:${o.pc}"><i>${frqPastille(o.pp)}</i><div><h4>${esc(o.pn)}</h4><p class="g">${esc(o.pg||'')}</p><p>${o.pl}</p></div></div>
+      <div class="chgB-x">contre</div>
+      <div class="chgB-c e" style="--c:${o.ec}"><i>${frqPastille(o.ep)}</i><div><h4>${esc(o.en)}</h4><p class="g">${esc(o.eg||'')}</p><p>${o.el}</p></div></div></div>
+      ${o.desc?`<p class="chgB-d">${esc(o.desc)}</p>`:''}
+      <p class="chg-fait" id="chgBFait"></p>
+      <div class="chgB-go"><div class="chg-bar"><i></i></div><span class="chg-et" id="chgBEt">${esc(o.attente||'Les armées se déploient…')}</span><button type="button" class="go" id="chgBGo">${esc(o.bouton||'Au combat !')}</button></div></div>`;
+  document.body.appendChild(R);CHG.bo={k:o.k,o:o.paint};
+  // on attend les figures de la fresque (un instant), sinon le tableau part en ombres chinoises
+  const peins=()=>{if(R.__p||!R.isConnected)return;R.__p=1;try{CHGP.paint(R.querySelector('canvas'),o.k,o.paint)}catch(e){}R.classList.add('vu')};
+  if(o.prep){o.prep.then(peins,peins);setTimeout(peins,1200)}else requestAnimationFrame(peins);
+  CHG.bf=chgFaits(chgE('chgBFait'));CHG.b={t0:performance.now(),ready:false,go:false,f:null};
+  const goNow=()=>{const B=CHG.b;if(!B||!B.ready||B.go)return;B.go=true;try{B.f&&B.f()}catch(e){console.error(e)}chgBFin()};
+  chgE('chgBGo').onclick=goNow;CHG.bk=e=>{if((e.key==='Enter'||e.key===' ')&&CHG.b&&CHG.b.ready){e.preventDefault();e.stopPropagation();goNow()}};addEventListener('keydown',CHG.bk,true);
+  // filet de sécurité : si la bataille ne répond pas, on laisse passer
+  CHG.b.safe=setTimeout(()=>{if(CHG.b&&!CHG.b.ready)chgBPret(null)},25000)}
+function chgBPret(f){const B=CHG.b;if(!B)return f&&f();B.f=f||B.f;const wait=Math.max(0,2200-(performance.now()-B.t0));
+  setTimeout(()=>{if(CHG.b!==B||B.ready)return;B.ready=true;const R=chgE('chgB');if(R){R.classList.remove('charge');R.classList.add('pret');try{chgE('chgBGo').focus()}catch(e){}}
+    // à plusieurs, on ne fait pas attendre les autres joueurs
+    if(typeof MP!=='undefined'&&MP&&MP.role&&(MP.role==='guest'||(typeof MPH==='function'&&MPH())))setTimeout(()=>chgE('chgBGo')&&chgE('chgBGo').click(),1200)},wait)}
+function chgBFin(now){const R=chgE('chgB');if(CHG.b)clearTimeout(CHG.b.safe);CHG.b=null;CHG.bo=null;clearInterval(CHG.bf);if(CHG.bk)removeEventListener('keydown',CHG.bk,true);if(!R)return;
+  if(now){R.remove();return}R.classList.add('part');setTimeout(()=>R.remove(),800)}
+{const _dv=dive;dive=function(payload){const r=_dv.apply(this,arguments);try{const b=payload&&payload.b;if(b){const [pc,ec]=chgCols(b.enemy);const c=cal(Math.floor(S.day));let P=b.p||[],E=b.e||[];try{const B=S.cur,am=B.attMine;P=bFlat(am?B.att:B.def);E=bFlat(am?B.def:B.att)}catch(e){}
+    const po={terrain:b.terrain,winter:c.season==='Hiver',pcol:pc,ecol:ec,p:chgLook(P),e:chgLook(E),seed:Math.floor(S.day)+7};
+    const pp=frqMoi(),ep=frqPeo(b.enemy,E);
+    chgBataille({k:'bataille',pp,ep,prep:Promise.all([frqPrep(pp,P),frqPrep(ep,E)]).then(([pr,er])=>{po.pr=pr;po.er=er}),sur:b.walls?'Assaut':'Bataille',titre:b.title||'Bataille',lieu:`Terrain : ${(TERR[b.terrain]||TERR.plaine).n.toLowerCase()}`,desc:b.desc,
+      pn:startCamp()||'Vos troupes',pg:b.cmd?chgTxt(b.cmd.p):'',pl:chgCount(P),en:b.enemy||'L’ennemi',eg:b.cmd?chgTxt(b.cmd.e):'',el:chgCount(E),pc,ec,
+      paint:po})}}catch(e){console.warn(e)}
+  return r}}
+{const _rv=reveal;reveal=function(){const D=DIVE;if(!D||!D.zoomed||!D.shown)return;if(CHG.b&&!CHG.b.go){chgBPret(()=>_rv.apply(this,arguments));return}return _rv.apply(this,arguments)}}
+// la bataille annulée ou terminée avant d'avoir commencé : l'écran s'en va aussi
+addEventListener('message',ev=>{const d=ev.data;if(d&&typeof d.bellum==='string'&&/fermer|retour|fin/.test(d.bellum)&&chgE('chgB'))chgBFin(true)});
+/* ---------- 3. avant la bataille navale ---------- */
+if(typeof nv3Open==='function'){const _nv=nv3Open;nv3Open=function(me,foe){let o=null;try{const cfg=nv3Cfg(me,foe),[A,B]=cfg.sides,en=B.name||cap1(pName(foe)),[pc,ec]=chgCols(B.natDef?B.natDef.name:en),
+        nb=X=>{const n=(X.sq||[]).reduce((t,q)=>t+(q.k||0),0);return `<b>${n}</b> navire${n>1?'s':''}`};
+      o={k:'mer',sur:'Bataille navale',titre:`${cfg.place}, ${cfg.year}`,lieu:'',pn:A.name||'Votre flotte',pg:'',pl:nb(A),en,eg:'',el:nb(B),pc,ec,
+        attente:'Les escadres se rangent en ligne…',bouton:'À l’abordage !',paint:{pcol:pc,ecol:ec,seed:Math.floor(S.day)}};
+      const po=o.paint;o.pp=frqMoi();o.ep=foe&&foe.o&&FRQ_D[foe.o.side]?foe.o.side:frqPeo(en,null);o.prep=Promise.all([frqPrep(o.pp,null),frqPrep(o.ep,null)]).then(([r,e])=>{po.pr=r;po.er=e})}catch(e){console.warn(e)}
+    const r=_nv.apply(this,arguments);
+    if(o&&NV3&&NV3.fr){const fr=NV3.fr;chgBataille(o);fr.style.opacity='0';fr.onload=()=>chgBPret(()=>{fr.style.opacity='1';try{fr.focus()}catch(e){}})}
+    return r}}
+/* ================= FIN ÉCRANS DE CHARGEMENT ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
