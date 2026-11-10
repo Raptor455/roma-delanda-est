@@ -2898,7 +2898,10 @@ if(!V3D){
     const go=$('bGo');if(go&&!go._dep){go._dep=1;go.textContent='Déployer mes troupes';
       const now=document.createElement('button');now.type='button';now.id='bGoNow';now.textContent='Combattre sans déployer';now.style.alignSelf='flex-start';now.onclick=()=>begin();go.after(now)}}catch(e){console.warn(e)}}
   document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#bGo')||!ISCAMP()||started||DEP)return;e.stopImmediatePropagation();e.preventDefault();startDep()},true);
-  {const _su2=setup;setup=function(){const r=_su2.apply(this,arguments);endDep();DZ=null;campStart();return r}}
+  // en campagne, la vue de départ est plus proche (carrés d'environ 25 px) et centrée sur votre armée
+  function campView(){if(!ISCAMP())return;const P=units.filter(u=>u.side===0&&!u.dead&&!u.pend),E=units.filter(u=>u.side===1&&!u.dead&&!u.pend);if(!P.length)return;
+    const pc=cen(P),ec=E.length?cen(E):pc,d=Math.hypot(ec.x-pc.x,ec.y-pc.y)||1,k=-45;cam.tx=pc.x+(ec.x-pc.x)/d*k;cam.ty=pc.y+(ec.y-pc.y)/d*k;cam.dist=640*Math.sqrt(G)}
+  {const _su2=setup;setup=function(){const r=_su2.apply(this,arguments);endDep();DZ=null;campStart();try{campView()}catch(e){}return r}}
   window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
