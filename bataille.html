@@ -4914,6 +4914,45 @@ for(const k in T){const t=T[k];if(!t||t._eff)continue;t._eff=1;t.m0=t.men;t.men=
 function effK(e){const t=e&&e.T;return t&&t.kind==='eleph'?EFF_ELE/16:EFF_K}
 {const _h=hurt;hurt=function(e,cas){return _h.call(this,e,cas*effK(e))}}
 /* ================= FIN EFFECTIFS RÉELS ================= */
+/* ================= ÉQUILIBRAGE BATAILLE (fil Équilibrage, 10 nov.) : les forces des peuples =================
+   Source : /mnt/project-files/equilibrage/bat.js, injecté avant BOUCLE par equilibrage/patch.py (relançable).
+   Doctrine du régiment (x.doc envoyé par la campagne, sinon d'après son type) :
+   - rom « bloc compact » : la cohésion réduit le moral perdu sous les pertes ; épaulé par deux carrés amis, l'effet compte double ;
+   - car « mobilité » : les traits des tirailleurs et cavaliers légers ébranlent davantage le moral (harcèlement) ;
+   - gre « défense et usure » : arrêté au contact, le carré se défend mieux (+15 %) ; les hommes se fatiguent moins vite (Romains : un peu moins vite, relève des manipules).
+   Pour tous : fatigue au corps à corps (u._fa 0..1, selon l'endurance) : jusqu'à −30 % d'attaque et −20 % de défense ; on récupère hors du contact. */
+const EQB_DOC={legion:'rom',velites:'rom',rcav:'rom',acav:'rom',lib:'car',iber:'car',gaul:'car',sling:'car',hcav:'car',ncav:'car',eleph:'car',
+  phalange:'gre',hypasp:'gre',peltaste:'gre',cretois:'gre',compagnons:'gre',thessal:'gre',athoplites:'gre',thureo:'gre',athpelt:'gre',hippeis:'gre',scythes:'gre'};
+const EQB_COH={lib:60,legion:75,phalange:68,hypasp:70,athoplites:68,compagnons:60,velites:45,gaul:45};
+function eqInfo(u){if(u._eq)return u._eq;let c=null;try{if(CAMP&&CAMP.b&&u.ci!=null)c=(u.side===0?CAMP.b.p:CAMP.b.e)[u.ci]||null}catch(e){}
+  const X=c&&c.x,base=(c&&c.t)||u.type,doc=(X&&X.doc)||EQB_DOC[base]||null;
+  const coh=X&&X.cohesion!=null?X.cohesion:(EQB_COH[base]||50),end=X&&X.endurance!=null?X.endurance:70;
+  // le soldat de Gaule s'épuise vite ; le Grec tient ; le Romain relève ses manipules
+  const fr=(base==='gaul'?1.25:1)*(doc==='gre'?.7:doc==='rom'?.8:1);
+  u._eq={doc,base,coh,end,fr};return u._eq}
+const eqbNear=u=>{if(u._supT!=null&&time-u._supT<.5)return u._sup;let n=0;const r=(u.w||16)*1.9;
+  for(const o of units){if(o===u||o.side!==u.side||o.dead||o.routing||o.pend)continue;if(Math.abs(o.x-u.x)>r||Math.abs(o.y-u.y)>r)continue;if(Math.hypot(o.x-u.x,o.y-u.y)<r&&++n>=2)break}
+  u._supT=time;u._sup=n;return n};
+function eqCohK(e){const q=eqInfo(e);let k=Math.max(.6,Math.min(1.2,1.5-q.coh/100));
+  if(eqbNear(e)>=2)k*=q.doc==='rom'?.75:.9;return k}
+const eqDefK=e=>{const q=eqInfo(e);let k=1-.2*(e._fa||0);if(q.doc==='gre'&&e.contacts&&e.contacts.length&&!e.moving&&!e.routing)k*=1.15;return k};
+{const _h=hurt;hurt=function(e,cas){if(!e||e.dead||e.routing||!(cas>0))return _h.apply(this,arguments);
+  const m0=e.morale;let c=cas;try{c=cas/eqDefK(e)}catch(x){}
+  const r=_h.call(this,e,c);
+  try{if(!e.dead&&!e.routing){const d=m0-e.morale;if(d>0){e.morale=m0-d*eqCohK(e);if(e.morale<=0)rout(e)}}}catch(x){}
+  return r}}
+{const _m=melee;melee=function(u,dt){const T=u.T,a0=T&&T.atk,f=u._fa||0;if(!T||!f)return _m.apply(this,arguments);
+  T.atk=a0*(1-.3*f);try{return _m.apply(this,arguments)}finally{T.atk=a0}}}
+{const _l=landProj;landProj=function(p){const e=p&&p.target,m0=e&&e.morale;const r=_l.apply(this,arguments);
+  try{const s=p&&p.srcU;if(s&&e&&!e.dead&&!e.routing&&m0>e.morale&&eqInfo(s).doc==='car'&&(s.T.kind==='lcav'||s.T.kind==='skirm')){e.morale-=.3;if(e.morale<=0)rout(e)}}catch(x){}return r}}
+{const _st=step;step=function(dt){const r=_st.apply(this,arguments);
+  try{if(units)for(const u of units){if(u.dead||u.pend)continue;const q=eqInfo(u);
+    if(u.contacts&&u.contacts.length&&!u.routing){const dur=180*(.5+q.end/100)/q.fr;u._fa=Math.min(1,(u._fa||0)+dt/dur)}
+    else if(u.moving&&u.order&&u.order.run)u._fa=Math.min(1,(u._fa||0)+dt/300);
+    else if(u._fa)u._fa=Math.max(0,u._fa-dt/40)}}catch(x){}
+  return r}}
+window.__equiB={eqInfo,eqCohK,eqDefK};
+/* ================= FIN ÉQUILIBRAGE BATAILLE ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   GROUND=await groundP;

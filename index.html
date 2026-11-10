@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v201</span>
+ <span class="chg-ver">v202</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -13591,6 +13591,74 @@ if(typeof nv3Open==='function'){const _nv=nv3Open;nv3Open=function(me,foe){let o
     if(o&&NV3&&NV3.fr){const fr=NV3.fr;chgBataille(o);fr.style.opacity='0';fr.onload=()=>chgBPret(()=>{fr.style.opacity='1';try{fr.focus()}catch(e){}})}
     return r}}
 /* ================= FIN ÉCRANS DE CHARGEMENT ================= */
+/* ================= ÉQUILIBRAGE (fil Équilibrage, 10 nov., Baptiste : « applique toutes tes recommandations, et que chaque pays joue vraiment sur ses forces ») =================
+   Source : /mnt/project-files/equilibrage/camp.js, injecté avant BOUCLE par equilibrage/patch.py (relançable).
+   1. Milice des garnisons (u.gm) : modèle « levée » propre (… (milice)), demi-effectif. Les parties en cours sont converties une fois (S.eqMil).
+   2. Départ 218 : Rome plus fournie (Scipion, Sempronius), Athènes et Syracuse renforcées.
+   3. Tir à l'arc (6 dégâts / 1,7 s), javelots des cavaliers légers (4 / 2 s), Gaulois (+0,4 → 0 d'attaque), cavaliers grecs au bouclier rond.
+   4. Forces des peuples (doctrines, par corps de troupe) : EQ_DOC. Rome = bloc compact (cohésion, défense) ; Carthage et ses alliés
+      d'Afrique, d'Ibérie et de Gaule = mobilité (vitesse, marche) ; Grecs et Macédoniens = défense et usure (cohésion, défense).
+      En bataille (equilibrage/bat.js) : la cohésion réduit le moral perdu sous les pertes, le soutien des voisins compte double pour Rome,
+      l'endurance règle la fatigue au corps à corps (les Grecs s'usent moins vite), les Grecs qui tiennent leur terrain se défendent mieux,
+      les tirailleurs et cavaliers légers carthaginois harcèlent (moral). */
+const EQ_DOC={
+  rom:{n:'Bloc compact',txt:'Rangs serrés et relève des manipules : la ligne encaisse les pertes sans se briser.',corps:['legion','velites','rcav','acav']},
+  car:{n:'Mobilité',txt:'Troupes variées et rapides : on frappe aux ailes, on harcèle, on enveloppe.',corps:['lib','iber','gaul','sling','hcav','ncav','eleph']},
+  gre:{n:'Défense et usure',txt:'Boucliers serrés, hommes endurants : la phalange tient son terrain et use l\'adversaire.',corps:['phalange','hypasp','peltaste','cretois','compagnons','thessal','athoplites','thureo','athpelt','hippeis','scythes']}};
+const eqDocOf=base=>{for(const k in EQ_DOC)if(EQ_DOC[k].corps.includes(base))return k;return null};
+// ---- 3. armes ----
+try{GEAR.jet.o.arc.m.ranged={range:220,dmg:6,cd:1.7};
+  GEAR.jet.o.javelots.mk.lcav.ranged={range:130,dmg:4,cd:2};
+  CORPS.gaul.m.atk=0;CORPS.gaul.txt='Charge furieuse, moral fragile, bon marché ; s\'épuisent vite dans une longue mêlée.';
+  for(const p of ['syr','ath','mas'])for(const e of (DEP_R[p]&&DEP_R[p].hippeis)||[])e[1].shield='rond';
+}catch(e){console.error(e)}
+// ---- 4. doctrines : corps de troupe ----
+try{
+  // Rome : cohésion et défense de la légion
+  COH_CORPS.legion=25;CORPS.legion.m.def=.06;COH_CORPS.velites=5;
+  // Grecs : hoplites et phalange plus cohérents, défense accrue
+  COH_CORPS.athoplites=18;CORPS.athoplites.m.def=.08;COH_CORPS.phalange=18;COH_CORPS.hypasp=20;COH_CORPS.thureo=8;CORPS.thureo.m.def=.03;
+  // Carthage : mobilité
+  CORPS.iber.m.spd=1.2;CORPS.ncav.m.spd=3;CORPS.hcav.m.spd=1.5;CORPS.sling.m.spd=1;CORPS.lib.m.spd=.5;
+  for(const k in EQ_DOC)for(const c of EQ_DOC[k].corps)if(CORPS[c])CORPS[c].txt=(CORPS[c].txt||'').replace(/ Doctrine :.*$/,'')+' Doctrine : '+EQ_DOC[k].n.toLowerCase()+'.';
+}catch(e){console.error(e)}
+{const _ds=dStats;dStats=function(d){const s=_ds.apply(this,arguments);try{const k=eqDocOf(d.base);s.doc=k;
+    if(k==='car'){s.km+=1}
+    else if(k==='gre'){s.end=Math.min(100,s.end+12)}}catch(e){}return s}}
+{const _u3=u3D;u3D=function(u){const x=_u3.apply(this,arguments);try{if(x){const d=desOf(u.d);x.doc=d?eqDocOf(d.base):null}}catch(e){}return x}}
+// ---- 1. milice des garnisons ----
+const EQ_MIL_K=.5; // effectif de la milice (part d'un régiment)
+function eqMilDesign(u,side){const src=desOf(u.d),base=u.t;if(!CORPS[base])return null;
+  const nm=(src?src.name.replace(/ \(milice\)$/,''):(CORPS[base].n))+' (milice)',key='mil:'+side+':'+base+':'+nm;
+  S.designs=S.designs||[];let d=S.designs.find(x=>x.sys==='mil'&&x.k===key);if(d)return d;
+  const k=CORPS[base].k;
+  d=Object.assign({id:null,base,name:'',helm:'cuir',crest:'rien',armor:'tunique',jamb:'aucune',shield:'rond',motif:'peuple',teinte:'ocre',tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'levee'},
+    BDEF[base]||{},src?{shield:src.shield,arm:src.arm,jet:src.jet,motif:src.motif,teinte:src.teinte,tenue:src.tenue}:{},
+    {helm:src&&src.helm==='nu'?'nu':'cuir',crest:'rien',armor:'tunique',jamb:'aucune',manteau:'aucun',train:'levee',aux:[]});
+  if(k==='inf'&&d.jet!=='aucune')d.jet='aucune';
+  dFix(d);d.base=base;d.name=nm;d.sys='mil';d.k=key;d.del=true;d.id=S.duid=(S.duid||0)+1;S.designs.push(d);return d}
+function eqMilUnit(u,side){if(!u||!u.gm)return;if(u._mil){const d0=desOf(u.d);if(d0&&d0.base===u.t&&d0.sys==='mil')return;u._mil=0;if(d0&&d0.sys==='mil')u.d=null}const d=eqMilDesign(u,side);if(d)u.d=d.id;
+  const cap=Math.round(UT[u.t].men*EQ_MIL_K);if(u.men>cap)u.men=cap;u._mil=1}
+function eqMilAll(){if(!S||!S.armies)return 0;let n=0;for(const a of S.armies)if(!a.dead)for(const u of a.units)if(u.gm){const d0=u._mil&&desOf(u.d);if(u._mil&&d0&&d0.base===u.t)continue;try{if(!u.d||!d0||d0.base!==u.t){u.d=null;depOne(a,u,{})}}catch(e){}eqMilUnit(u,a.side);n++}return n}
+{const _gf=garFill;garFill=function(n,max){const r=_gf.apply(this,arguments);try{if(r)eqMilAll()}catch(e){console.error(e)}return r}}
+// une milice qui reçoit des recrues ne dépasse pas son effectif
+{const _dEM=daily;daily=function(d){const r=_dEM.apply(this,arguments);try{if(S&&!S.over){if(!S.eqMil){S.eqMil=1;eqMilAll()}
+    if(Math.floor(d)%10===3)for(const a of S.armies)if(!a.dead&&a.g)for(const u of a.units)if(u.gm&&u._mil){const cap=Math.round(UT[u.t].men*EQ_MIL_K);if(u.men>cap)u.men=cap}}}catch(e){console.error(e)}return r}}
+// ---- 2. armées de départ ----
+const EQ_ADD={
+  'P. Cornelius Scipio':[['legion',2]],'Ti. Sempronius Longus':[['legion',2],['acav',1]]};
+const EQ_PEO={ath:{army:'Eurycléidès',add:[['athoplites',1],['thureo',1],['cretois',1]],gold:100},
+  syr:{army:'Hiéron II',add:[['athoplites',1],['athpelt',1]],gold:0}};
+function eqAdd(a,spec){if(!a||!spec)return;for(const [t,k] of spec)for(let j=0;j<k;j++)if(UT[t]&&a.units.length<MAXU)a.units.push({t,men:UT[t].men});
+  try{a._dep=null;depArmy(a);if(typeof fixCorps==='function')fixCorps(a)}catch(e){console.error(e)}try{a.food=armyFoodMax(a)}catch(e){}}
+function eqStart218(){if(!S||S.day>3||S.eqStart)return;S.eqStart=1;
+  for(const a of S.armies)if(!a.dead&&!a.g&&EQ_ADD[a.name])eqAdd(a,EQ_ADD[a.name])}
+{const _ngE=newGame;newGame=function(){const r=_ngE.apply(this,arguments);try{eqStart218();eqMilAll();S.eqMil=1}catch(e){console.error(e)}return r}}
+{const _psE=peo218Setup;peo218Setup=function(k){const r=_psE.apply(this,arguments);try{const P=EQ_PEO[k];if(P&&!S.eqPeo){S.eqPeo=1;
+    const L=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g);const a=L.find(x=>x.name===P.army)||L.sort((p,q)=>q.units.length-p.units.length)[0];
+    eqAdd(a,P.add);if(P.gold)S.gold.car=(S.gold.car||0)+P.gold}eqMilAll()}catch(e){console.error(e)}return r}}
+window.__equi={EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ_ADD,EQ_PEO};
+/* ================= FIN ÉQUILIBRAGE ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
