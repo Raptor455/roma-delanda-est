@@ -204,7 +204,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v190</span>
+ <span class="chg-ver">v191</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -7542,7 +7542,11 @@ function mirObserve(){if(_mirObs||typeof MutationObserver==='undefined')return;_
   ['side','top','mcard'].forEach(id=>{const e=$(id);if(e)_mirObs.observe(e,{childList:true,subtree:true})})}
 try{mirObserve()}catch(e){}
 // bataille 3D : couleurs et noms du peuple joué
-{const _diveM=dive;dive=function(payload){try{if(payload&&payload.b)payload.b.pk=S&&S.peo==='mac'?['mac','rom']:S&&S.peo==='syr'?['syr','rom']:S&&S.peo==='ath'?['ath','mac']:S&&PX&&PX[S.peo]?[PX[S.peo].pal,PX[S.peo].foePal]:S&&S.mirror?['rom','car']:['car','rom']}catch(e){}return _diveM.apply(this,arguments)}}
+{const _diveM=dive;dive=function(payload){try{if(payload&&payload.b)payload.b.pk=S&&S.peo==='mac'?['mac','rom']:S&&S.peo==='syr'?['syr','rom']:S&&S.peo==='ath'?['ath','mac']:S&&PX&&PX[S.peo]?[PX[S.peo].pal,PX[S.peo].foePal]:S&&S.mirror?['rom','car']:['car','rom'];
+    // l'adversaire réel (un peuple neutre, une tribu, Carthage pour Massalia…) : ses couleurs et son nom, pas ceux de l'ennemi principal
+    const b=S&&S.cur,ea=b&&S.armies.find(x=>x.id===(b.attMine?b.def[0]:b.att[0])),es=ea&&ea.side;
+    if(es&&payload.b.pk){const k=es==='pun'||(S.mirror&&es==='rom')?'car':es==='car'?payload.b.pk[0]:es;const F=FAC[es]||{};
+      if(k!==payload.b.pk[1]){payload.b.pk=[payload.b.pk[0],k];payload.b.pkx=[null,{n:sideName(es),c:F.c||[120,120,120]}]}}}catch(e){}return _diveM.apply(this,arguments)}}
 function mirrorStatic(){if(typeof mpSwapStatic==='function')mpSwapStatic();const t=AUX.car;AUX.car=AUX.rom;AUX.rom=t;document.title='Roma Delenda Est · Rome'}
 const _afterLoadR=afterLoad;afterLoad=function(){if(S&&S.mirror&&!(typeof MP!=='undefined'&&MP.swapped))mirrorStatic();if(S&&S.mirror)mirObserve();return _afterLoadR.apply(this,arguments)};
 // la politique romaine : Sénat, consuls, prorogation, levées, jeux
