@@ -205,7 +205,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v172</span>
+ <span class="chg-ver">v174</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -5988,7 +5988,7 @@ function devastDraw(s,z,x0,y0,x1,y1){const t=performance.now()/1000,inV=(x,y,m)=
     gr.addColorStop(0,`rgba(150,110,60,${Math.min(.3,(e-30)/200)})`);gr.addColorStop(1,'rgba(150,110,60,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(n.x,n.y,R,0,7);ctx.fill()}
   if(s>=1.2&&VIL.length)for(const v of villagesIn(x0-2,y0-2,x1+2,y1+2)){if(!vRuined(v))continue;const st=S.vil[v.id],age=S.day-(st.pd||0),R=v.k==='bourg'?1.4:v.k==='village'?1:.6;
     // champs noircis, et la ligne de feu qui court sur les blés les premiers jours
-    for(let k=0;k<4;k++){const an=hash(v.id,k+11)*6.28,dd=R*(1.3+hash(k+5,v.id)*1.2),cx=v.x+Math.cos(an)*dd,cy=v.y+Math.sin(an)*dd,w=R*(.6+hash(v.id,k)*.6),h=R*(.35+hash(k,v.id+3)*.3);
+    if(0/*SANS-CHAMPS*/)for(let k=0;k<4;k++){const an=hash(v.id,k+11)*6.28,dd=R*(1.3+hash(k+5,v.id)*1.2),cx=v.x+Math.cos(an)*dd,cy=v.y+Math.sin(an)*dd,w=R*(.6+hash(v.id,k)*.6),h=R*(.35+hash(k,v.id+3)*.3);
       ctx.save();ctx.translate(cx,cy);ctx.rotate(an);ctx.fillStyle='rgba(35,28,22,.55)';ctx.fillRect(-w/2,-h/2,w,h);
       if(age<8){const fl=.5+.5*Math.sin(t*7+k*2),fx=-w/2+((age/8+t*.05+k*.25)%1)*w;ctx.fillStyle=`rgba(255,${120+Math.floor(80*fl)},40,.85)`;ctx.fillRect(fx-Math.max(.06,2*z),-h/2,Math.max(.12,3*z),h);
         ctx.fillStyle=`rgba(80,70,60,${.35*fl})`;ctx.beginPath();ctx.arc(fx,-h*.8,Math.max(.15,6*z),0,7);ctx.fill()}
@@ -10617,7 +10617,7 @@ function farmRaidDraw(R,u,t,s,SX,SY,c){const ox=SX(R.ox),oy=SY(R.oy),fx=SX(R.fx)
       ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}
   if(u>=.4&&u<.65){const fl=Math.sin(t*14)*.5+.5;ctx.fillStyle=`rgba(255,${150+fl*80|0},50,.95)`;ctx.beginPath();ctx.arc(fx+e*.8,fy-e*1.4,Math.max(1.5,e*.25),0,7);ctx.fill()}}
 // ferme brûlée : parcelle noircie, bâtiments en cendres, fumée les premiers jours
-function farmBurntDraw(k,x,y,a,day,t,s,SX,SY){if(s<3)return;const X=SX(x),Y=SY(y),co=Math.cos(a),si=Math.sin(a),age=S.day-day;
+function farmBurntDraw(k,x,y,a,day,t,s,SX,SY){return;/*SANS-FERMES*/if(s<3)return;const X=SX(x),Y=SY(y),co=Math.cos(a),si=Math.sin(a),age=S.day-day;
   ctx.save();ctx.translate(X,Y);ctx.rotate(a);const w=.9*s,h=.6*s;ctx.fillStyle=`rgba(38,30,24,${age<30?.72:Math.max(0,.72-(age-30)/40)})`;ctx.fillRect(-w/2,-h/2,w,h);
   ctx.strokeStyle='rgba(20,16,12,.6)';ctx.lineWidth=1;ctx.beginPath();for(let m=1;m<5;m++){const yy=-h/2+h*m/5;ctx.moveTo(-w*.44,yy);ctx.lineTo(w*.44,yy)}ctx.stroke();
   ctx.fillStyle='rgba(30,22,16,.9)';for(const [hx,hy,hq] of [[.28,-.2,.13],[.42,-.12,.1]])ctx.fillRect((hx-hq/2)*s,(hy-hq/2)*s,hq*s,hq*s);ctx.restore();
@@ -10683,7 +10683,7 @@ function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/10
       if(!vs.length)vs=[[p[0]+(p[0]-f.x)*.4,p[1]+(p[1]-f.y)*.4]]}f._rsc={x:f.x,y:f.y,p,vs,fm:p?farmsNear(p[0],p[1],7).slice(0,3).map(q=>[q.x,q.y]):[]}}
     const R=f._rsc;if(!R.p)continue;try{raidScene({tx:R.p[0],ty:R.p[1],vs:R.vs,fm:R.fm,side:f.side,big:f.cargo.length?1:0},SX(f.x),SY(f.y),(t/22+f.id*.37)%1,t,s,SX,SY,true)}catch(e){}}
   // fermes : brûlées (décor) et détachements de fourrageurs qui vont les piller
-  if(S.par)for(const p of S.par){if(p.k!=='raid'||p.state!=='burn'||p._fr)continue;p._fr=1;const v=VIL[p.v];if(v)farmRaid(v.x,v.y,p.side,2,3.5,S.day,.6+.15*Math.random())}
+  /*SANS-FERMES : plus de détachements vers les fermes autour d'un village pillé*/
   for(let i=FR.length-1;i>=0;i--){const R=FR[i],u=(S.day-R.t0)/R.dur;if(u>=1){FB[R.k]=R.t0+R.dur*.55;FR.splice(i,1);continue}if(u>.55&&FB[R.k]==null)FB[R.k]=S.day;
     if(u<0||(R.side!=='car'&&visAt(R.fx,R.fy)<1)||s<1.5||!inS(SX(R.fx),SY(R.fy),200))continue;try{farmRaidDraw(R,u,t,s,SX,SY,FAC[R.side].c)}catch(e){}}
   if(s>=3)for(const k in FB){const [i,j]=k.split(':').map(Number),cell=2.5,fx=(i+hash(j,i))*cell,fy=(j+hash(i+7,j))*cell;if(S.day-FB[k]>70||S.day<FB[k]-2){delete FB[k];continue}if(S.day<FB[k]||!inS(SX(fx),SY(fy),60))continue;try{farmBurntDraw(k,fx,fy,hash(i,j)*9,FB[k],t,s,SX,SY)}catch(e){}}
@@ -11706,36 +11706,6 @@ function uiPieces(){const a=sel&&sel.a;if(!a||!a.units)return;const side=documen
   {const hd=side.querySelector('.ua-head .ui-head'),gn=side.querySelector('.ua-head > .ua-gen');if(hd&&!hd.querySelector('.ui-hcol')){const h2=hd.querySelector('h2');if(h2){const c=document.createElement('div');c.className='ui-hcol';hd.insertBefore(c,h2);c.appendChild(h2);if(gn)c.appendChild(gn)}}}
   side.querySelectorAll('.ui-tile input[data-k]').forEach(inp=>{const t=inp.closest('.ui-tile'),u=a.units[+inp.dataset.k];if(!t||!u||t.classList.contains('pc'))return;
     const sv=t.querySelector('svg.ui-sym');const h=pcSVG(u,a.side);if(!h)return;if(sv)sv.outerHTML=h;else t.insertAdjacentHTML('afterbegin',h);t.classList.add('pc')})}
-/* ---- PILLARDS À TERRE (9 nov., Baptiste : « les animations de pillage des armées ») : les fourrageurs qui pillent ne sont plus
-   un carré mais une bande de petits pillards comme les descentes de la flotte : course, sac du village (bras qui frappent,
-   flammes, villageois et troupeau qui fuient), retour chargés de butin et de captifs. Carré gardé quand on est trop loin. ---- */
-function pilDraw(p,s,T){const a=parArmy(p);if(!a)return;const c=FAC[p.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,X=view.ox+p.x*s,Y=view.oy+p.y*s,e=Math.max(3.5,Math.min(14,s*.2)),t=performance.now()/1000,m=4;
-  const v=VIL[p.v],vx=v?view.ox+v.x*s:X,vy=v?view.oy+v.y*s:Y,L=p.legs[0],hx=L?L.x-p.x:vx-X,hy=L?L.y-p.y:vy-Y,hl=Math.hypot(hx,hy)||1,dx=hx/hl,dy=hy/hl;
-  ctx.save();ctx.lineCap='round';
-  if(L){for(let k=1;k<=2;k++){ctx.fillStyle=`rgba(170,150,110,${.28-k*.08})`;ctx.beginPath();ctx.arc(X-dx*e*1.6*k,Y-dy*e*1.6*k,e*(.9+k*.4),0,7);ctx.fill()}}
-  if(p.state==='burn'&&v){const ax=view.ox+a.x*s,ay=view.oy+a.y*s,R=Math.max(8,.25*s);
-    // flammes et fumée sur le village
-    flFlame(vx,vy,e*1.1,t,p.id,1);
-    for(let k=0;k<4;k++){const ph=(T*.3+k/4)%1;ctx.fillStyle=`rgba(50,45,40,${.45*(1-ph)})`;ctx.beginPath();ctx.arc(vx+ph*R*.6,vy-R*.6-ph*R*2.2,R*.35*(1+ph*1.5),0,7);ctx.fill()}
-    // pillards autour du village : ils frappent, portent des torches
-    for(let q=0;q<m;q++){const an=q*1.57+p.id,jx=Math.cos(an)*e*1.7,jy=Math.sin(an)*e*1.1,sw=(t*2.2+q*.4)%1;
-      flMan(vx+jx,vy+jy,e,col,-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5,0);
-      if(q%2===0){ctx.fillStyle=`rgba(255,${170+Math.floor(60*Math.sin(t*14+q))},50,.95)`;ctx.beginPath();ctx.arc(vx+jx+e*.9,vy+jy-e*1.6,Math.max(1.4,e*.22),0,7);ctx.fill()}}
-    // villageois et troupeau qui fuient à l'opposé de l'armée
-    const ph=(t*.35+p.id*.13)%1,fx=vx-ax,fy=vy-ay,fl=Math.hypot(fx,fy)||1;ctx.globalAlpha=1-ph;
-    for(let q=0;q<4;q++){const sp=(q-1.5)*.5,ddx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),ddy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=e*(2+ph*(8+q*2));
-      if(q===3){ctx.fillStyle='#e9e1cc';ctx.beginPath();ctx.ellipse(vx+ddx*r,vy+ddy*r,e*.55,e*.35,0,0,7);ctx.fill()}else flMan(vx+ddx*r,vy+ddy*r,e*.85,'#cbbf9c',null,t*15+q)}
-    ctx.globalAlpha=1}
-  else{const back=p.state==='back',px=-dy,py=dx;
-    for(let q=0;q<m;q++){const o=(q-(m-1)/2)*e*1.25,bk=(q%2)*e*.9,x=X+px*o-dx*bk+(flH(q+p.id)-.5)*e*.6,y=Y+py*o-dy*bk+(flH(q*3+p.id)-.5)*e*.5;
-      flMan(x,y,e,col,back?null:Math.atan2(dy,dx)-.6,t*(back?11:14)+q);
-      if(back){if(q===m-1){const cx=x-dx*e*1.4,cy=y-dy*e*1.4;flMan(cx,cy,e*.9,'#d8ccb0',null,t*11+q);ctx.strokeStyle='rgba(40,28,14,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y-e*.6);ctx.lineTo(cx,cy-e*.6);ctx.stroke()}
-        else{ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}}}
-  ctx.restore()}
-{const _dfP=drawFleets;drawFleets=function(s,z,inV){if(!S||!S.par||!S.par.length||s<1.2||typeof flMan!=='function')return _dfP.apply(this,arguments);
-  const all=S.par,T=S.day*DAY_S,mine=[];
-  for(const p of all){if(p.k!=='raid')continue;const vis=p.side==='car'||visAt(p.x,p.y)===2;if(!vis||!inV(p.x,p.y,20)){mine.push(p);continue}try{pilDraw(p,s,T);mine.push(p)}catch(e){console.error(e)}}
-  S.par=all.filter(p=>!mine.includes(p));try{return _dfP.apply(this,arguments)}finally{S.par=all}}}
 /* ---- CARTOUCHE DE L'ARMÉE (9 nov., Baptiste « règle aussi ce menu ») : patch.py retouche genCard (repère CARTE-PC) :
    médaillon/portrait 27 px de rayon au lieu de 18, régiments dessinés comme les pièces de bataille (cadre sombre, plaque bombée,
    symbole gravé), coin arraché puis plaque assombrie selon les pertes. ---- */
@@ -11753,7 +11723,7 @@ function cardPiece(x,y,q,u,c){const T=UT[u.t];if(!T)return;const k=T.k==='skirm'
   else if(k==='cav'||k==='lcav'){ctx.moveTo(X0+pz-m,Y0+m);ctx.lineTo(X0+m,Y0+pz-m);ctx.stroke();if(k==='lcav'){ctx.beginPath();ctx.arc(X0+pz*.7,Y0+pz*.7,pz*.1,0,7);ctx.fill()}}
   else{for(const [a2,b2] of [[.3,.33],[.7,.33],[.5,.7]]){ctx.beginPath();ctx.arc(X0+pz*a2,Y0+pz*b2,pz*.12,0,7);ctx.fill()}}
   ctx.restore();ctx.restore()}
-window.__genie={cardPiece,pilDraw,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+window.__genie={cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,menPay,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
