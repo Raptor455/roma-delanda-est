@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v200</span>
+ <span class="chg-ver">v201</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -9266,8 +9266,12 @@ async function mpSendKf(){if(MP.kfBusy||!mpAnyOn())return;MP.kfBusy=true;MP.kfDu
 function mpSendPos(){MP.lastPos=performance.now();const r=v=>Math.round(v*100)/100,d={t:'p',day:S.day,pa:S.paused,sp:S.speed,acks:mpAcks()};
   for(const k of MP_POS){const L=S[k];if(!Array.isArray(L))continue;d[k]=L.filter(o=>o&&o.id!=null&&o.x!=null&&(o.legs&&o.legs.length||o.wp||k==='tpat'||k==='par'||k==='conv')).map(o=>[o.id,r(o.x),r(o.y),o.legs?o.legs.length:-1])}
   if(S.nav&&Array.isArray(S.nav.bands))d.nb=S.nav.bands.filter(o=>o&&o.id!=null&&o.x!=null).map(o=>[o.id,r(o.x),r(o.y),o.legs?o.legs.length:-1]); // pirates (naval vivant)
-  if(JSON.stringify(d).length>3800){MP.kfDue=performance.now();return}
-  mpSend(d)}
+  if(JSON.stringify(d).length<=3800){mpSend(d);return}
+  // trop gros pour un message : plusieurs paquets 'p' plutôt qu'une image complète (Baptiste 10 nov. : saccades chez l'invité)
+  const head={t:'p',day:d.day,pa:d.pa,sp:d.sp,acks:d.acks},all=[];for(const k of [...MP_POS,'nb'])for(const e of d[k]||[])all.push([k,e]);
+  let cur=null,n=0;const flush=()=>{if(cur)mpSend(cur);cur=null;n=0};
+  for(const [k,e] of all){if(!cur){cur=Object.assign({},head);n=JSON.stringify(cur).length}const l=JSON.stringify(e).length+1;if(n+l>3600&&n>200)flush();if(!cur){cur=Object.assign({},head);n=JSON.stringify(cur).length}(cur[k]=cur[k]||[]).push(e);n+=l+(cur[k].length===1?k.length+6:0)}
+  flush()}
 const mpKfSoon=(ms)=>{if(MP.role==='host'&&mpAnyOn()){const t=performance.now()+(ms==null?150:ms);if(!MP.kfDue||t<MP.kfDue)MP.kfDue=t}};
 const MP_PEO={mac:'Macédoine',syr:'Syracuse',ath:'Athènes',num:'Numidie',ins:'Gaulois cisalpins',per:'Pergame',mas:'Massalia'};
 const mpSideTxt=s=>s==='rom'?'Rome':(S&&MP_PEO[S.peo]&&!(MP.role==='guest'&&MP.rs==='rom')?MP_PEO[S.peo]:'Carthage');
@@ -9320,7 +9324,8 @@ function mpGuestKf(o){
   const peo=MP_PEO[ns.peo]?ns.peo:null;
   if(first&&typeof peoDone!=='undefined'&&peoDone&&peoDone!==(peo||(VR?'rom':null))){mpSS('bellum.mp.autoJoin',JSON.stringify({code:MP.code,side:MP.rs}));try{if(typeof SAVE!=='undefined')localStorage.removeItem(SAVE)}catch(e){}const tr=MP.tr;MP.tr=null;MP.role=null;try{tr.leave()}catch(e){}location.reload();return}
   if(peo&&R)delete ns.peo;
-  if(first){if(peo&&typeof peoStatic==='function')peoStatic(peo);else if(peo==='syr'&&typeof syrStatic==='function')syrStatic();else if(peo==='ath'&&typeof athStatic==='function')athStatic();else if(peo&&typeof macStatic==='function')macStatic();if(VR){if(typeof mirrorStatic==='function')mirrorStatic();else mpSwapStatic()}S=ns}else mpMerge(S,ns);
+  const smD=first?null:mpSmBefore();
+  if(first){if(peo&&typeof peoStatic==='function')peoStatic(peo);else if(peo==='syr'&&typeof syrStatic==='function')syrStatic();else if(peo==='ath'&&typeof athStatic==='function')athStatic();else if(peo&&typeof macStatic==='function')macStatic();if(VR){if(typeof mirrorStatic==='function')mirrorStatic();else mpSwapStatic()}S=ns}else{mpMerge(S,ns);try{mpSmAfter(smD)}catch(e){console.warn(e)}}
   MP.ready=true;
   if(old&&R)mpGuestLog(old,S);
   if(first){MP.terr=null}mpTerrCheck();computeVis();
@@ -9329,12 +9334,31 @@ function mpGuestKf(o){
   renderTop();renderLog();if(!$('side').matches(':hover'))renderSide();
   mpBattleUI();if(S.over&&!MP.overShown){MP.overShown=true;endGame()}
 }
+/* ---- invité : mouvements lissés (Baptiste 10 nov. : « déplacements d'armée très saccadés » chez son ami).
+   L'invité ne fait pas avancer la carte : il reçoit les positions ~5 fois par seconde. Au lieu de sauter d'une position
+   à l'autre, chaque armée, flotte, patrouille ou convoi glisse vers la dernière position reçue pendant l'intervalle mesuré. */
+const MPSM={m:new Map(),pdt:220,lastP:0};
+function mpLbOn(){try{const L=window.__lb,b=S&&S.cur;return !!(L&&b&&L.live(b)&&L.othersHere(b))}catch(e){return false}}
+function mpSmDur(){return Math.max(120,Math.min(1500,MPSM.pdt*1.15))}
+function mpSmSet(k,o,x,y,now){const dx=x-o.x,dy=y-o.y,key=k+':'+o.id;
+  if(!(dx*dx+dy*dy<1600)||!isFinite(o.x)||!isFinite(o.y)){o.x=x;o.y=y;MPSM.m.delete(key);return}
+  if(dx===0&&dy===0){MPSM.m.delete(key);return}
+  MPSM.m.set(key,{o,fx:o.x,fy:o.y,tx:x,ty:y,t0:now,d:mpSmDur()})}
+function mpSmooth(){if(MP.role!=='guest'||!MPSM.m.size)return;const now=performance.now();
+  for(const [key,e] of MPSM.m){const t=Math.min(1,(now-e.t0)/e.d);e.o.x=e.fx+(e.tx-e.fx)*t;e.o.y=e.fy+(e.ty-e.fy)*t;if(t>=1)MPSM.m.delete(key)}}
+function mpSmLists(){const L=[];for(const k of MP_POS)if(Array.isArray(S[k]))L.push([k,S[k]]);if(S.nav&&Array.isArray(S.nav.bands))L.push(['nb',S.nav.bands]);return L}
+function mpSmBefore(){const disp=new Map();if(!S)return disp;for(const [k,A] of mpSmLists())for(const o of A)if(o&&o.id!=null&&o.x!=null)disp.set(k+':'+o.id,[o.x,o.y]);return disp}
+function mpSmAfter(disp){const now=performance.now();for(const [k,A] of mpSmLists())for(const o of A){if(!o||o.id==null||o.x==null)continue;const p=disp.get(k+':'+o.id);if(!p){MPSM.m.delete(k+':'+o.id);continue}
+  const x=o.x,y=o.y;o.x=p[0];o.y=p[1];mpSmSet(k,o,x,y,now)}}
+{const _dr=draw;draw=function(){try{mpSmooth()}catch(e){}return _dr.apply(this,arguments)}}
 function mpGuestPos(d){
+  {const now=performance.now(),dt=now-MPSM.lastP;if(dt>60){if(MPSM.lastP&&dt<3000)MPSM.pdt=MPSM.pdt*.7+dt*.3;MPSM.lastP=now}}
+  const now=performance.now();
   S.day=d.day;S.paused=d.pa;S.speed=d.sp;if(MP.base){MP.base.paused=d.pa;MP.base.speed=d.sp}
   if(d.nb&&S.nav&&Array.isArray(S.nav.bands)){const m=new Map(S.nav.bands.map(o=>[o.id,o]));const bb=MP.base&&MP.base.nav&&Array.isArray(MP.base.nav.bands)?new Map(MP.base.nav.bands.map(o=>[o.id,o])):null;
-    for(const [id,x,y,nl] of d.nb){const o=m.get(id);if(!o)continue;o.x=x;o.y=y;if(nl>=0&&o.legs&&o.legs.length>nl){o.legs.splice(0,o.legs.length-nl);const ob=bb&&bb.get(id);if(ob&&ob.legs&&ob.legs.length>nl)ob.legs.splice(0,ob.legs.length-nl)}}}
+    for(const [id,x,y,nl] of d.nb){const o=m.get(id);if(!o)continue;mpSmSet('nb',o,x,y,now);if(nl>=0&&o.legs&&o.legs.length>nl){o.legs.splice(0,o.legs.length-nl);const ob=bb&&bb.get(id);if(ob&&ob.legs&&ob.legs.length>nl)ob.legs.splice(0,ob.legs.length-nl)}}}
   for(const k of MP_POS){const L=d[k];if(!L||!Array.isArray(S[k]))continue;const m=new Map(S[k].map(o=>[o.id,o])),mb=MP.base&&Array.isArray(MP.base[k])?new Map(MP.base[k].map(o=>[o.id,o])):null;
-    for(const [id,x,y,nl] of L){const o=m.get(id);if(!o)continue;o.x=x;o.y=y;if(nl>=0&&o.legs&&o.legs.length>nl){o.legs.splice(0,o.legs.length-nl);const ob=mb&&mb.get(id);if(ob&&ob.legs&&ob.legs.length>nl)ob.legs.splice(0,ob.legs.length-nl)}}}
+    for(const [id,x,y,nl] of L){const o=m.get(id);if(!o)continue;mpSmSet(k,o,x,y,now);if(nl>=0&&o.legs&&o.legs.length>nl){o.legs.splice(0,o.legs.length-nl);const ob=mb&&mb.get(id);if(ob&&ob.legs&&ob.legs.length>nl)ob.legs.splice(0,ob.legs.length-nl)}}}
 }
 function mpGuestDiff(cmd){
   if(MP.role!=='guest'||!MP.ready||MP.hold||!MP.base)return;
@@ -9383,6 +9407,15 @@ startBattle=function(att,defs){
 };
 const _openBattleMP=openBattle;
 openBattle=function(){if(!MP.role||!S.cur||(!S.cur.mp&&MP.role==='host'))return _openBattleMP.apply(this,arguments);MP.bmod=null;mpBattleUI()};
+// Baptiste 10 nov. : l'armée d'un autre joueur proche (moins de 10 km, rfJoin du bloc ÉCHELLE, ou moins de 6 km du défenseur)
+// était prise dans la bataille d'un ami : figée, commandée par lui, et son joueur restait bloqué sur la carte.
+// Elle reste dehors : son joueur la garde et peut l'engager lui-même (bandeau « Engager… », rejoindre-campagne.js).
+{const _rf=rfJoin;rfJoin=function(b){if(!MP.role||!b||b.rf||!b.mp||!S.mpP)return _rf.apply(this,arguments);
+  const r=_rf.apply(this,arguments);
+  try{const lead=new Set(Object.values(b.mp.o||{})),out=[];
+    const keep=(id,i)=>{if(i===0)return true;const a=S.armies.find(x=>x.id===id);if(!a)return true;const o=mpOwner(a);if(!o||!S.mpP[o]||lead.has(o))return true;out.push(id);return false};
+    b.att=b.att.filter(keep);b.def=b.def.filter(keep);if(b.arr)for(const id of out)delete b.arr[id]}catch(e){console.warn(e)}
+  return r}}
 function mpBattleUI(){
   if(!MP.role||(MP.role==='guest'&&!MP.ready))return;
   const b=S.cur,mk=$('mcard').querySelector('[data-mpb]');
@@ -9481,8 +9514,9 @@ setInterval(()=>{
   if(MP.role==='host'){
     for(const id in MP.gs){const g=MP.gs[id];if(g.on&&now-g.lastHb>8000){g.on=false;if(S.mpP&&S.mpP[id])S.mpP[id].on=0;S.paused=true;log(`${esc(mpName(id))} ne répond plus : partie en pause.`);mpStatus();renderAll();MP.bmod=null;mpBattleUI()}}
     if(mpAnyOn()){
-      if((MP.kfDue&&now>=MP.kfDue)||now-MP.lastKf>(S.paused?4000:1500))mpSendKf();
-      else if(now-MP.lastPos>(S.paused?1000:240))mpSendPos();}
+      const pz=S.paused&&!mpLbOn();
+      if((MP.kfDue&&now>=MP.kfDue)||now-MP.lastKf>(pz?4000:1500))mpSendKf();
+      else if(now-MP.lastPos>(pz?1000:200))mpSendPos();}
   }
   if(MP.role==='guest'){
     if(now-(MP.lastDiff||0)>450){MP.lastDiff=now;mpGuestDiff();mpResendPending();if(MP.ready)mpFixText()}
