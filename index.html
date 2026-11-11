@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v219</span>
+ <span class="chg-ver">v220</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -12169,6 +12169,27 @@ function bivFormation(a,s){
 // garnison ou armée de capitaine en marche, vue rapprochée : écu sur hampe comme une armée
 {const _tk2=token;token=function(x,y,side,txt,selected,a){if(a&&a.g&&a.legs&&a.legs.length&&!a.dead&&/^\d+$/.test(txt||'')&&a._sq)return _tk2.call(this,x,y-18,side,txt,selected,{side:a.side,at:a.at,id:a.id,g:false});
   return _tk2.apply(this,arguments)}}
+/* ---- FOURRAGEURS BIEN VISIBLES (11 nov., Baptiste : « on ne voit toujours pas les petits carrés partir du camp/siège quand on pille ») ----
+   Les détachements S.par 'raid' étaient dessinés en carrés de 8 px, noyés dans le camp ou les lignes de siège. On les redessine par-dessus :
+   carré de la taille d'un régiment (12 px au moins), liseré doré, fanion, poussière, et un pointillé qui les relie à leur armée et à leur village. */
+{const _dfF=drawFleets;drawFleets=function(s,z,inV){const r=_dfF.apply(this,arguments);
+  try{if(S&&S.par&&S.par.length){const dark='rgba(26,18,10,.95)';
+    for(const p of S.par){if(p.k!=='raid')continue;const a=parArmy(p);if(!a)continue;if(!(p.side==='car'||isMine(a)||visAt(p.x,p.y)===2))continue;if(!inV(p.x,p.y,40))continue;
+      const c=FAC[p.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,X=view.ox+p.x*s,Y=view.oy+p.y*s,q=Math.max(12,UNIT_KM*s*.85),AX=view.ox+a.x*s,AY=view.oy+a.y*s;
+      ctx.save();
+      // fil d'Ariane : de l'armée au détachement, puis jusqu'au village visé
+      ctx.setLineDash([4,4]);ctx.lineWidth=1.4;ctx.strokeStyle='rgba(40,26,12,.55)';ctx.beginPath();ctx.moveTo(AX,AY);ctx.lineTo(X,Y);ctx.stroke();
+      const L=p.legs&&p.legs[0];if(L&&p.state==='out'){ctx.strokeStyle='rgba(190,60,30,.7)';ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(view.ox+L.x*s,view.oy+L.y*s);ctx.stroke()}
+      ctx.setLineDash([]);
+      if(L){const hx=L.x-p.x,hy=L.y-p.y,hl=Math.hypot(hx,hy)||1;for(let k=1;k<=3;k++){ctx.fillStyle=`rgba(170,150,110,${.4-k*.1})`;ctx.beginPath();ctx.arc(X-hx/hl*q*.8*k,Y-hy/hl*q*.8*k,q*.3*(1+k*.3),0,7);ctx.fill()}}
+      const cav=a.units.find(u=>{const k=UT[u.t].k;return k==='cav'||k==='lcav'}),u0=(p.id%3===1?null:cav)||a.units.find(u=>UT[u.t].k==='inf')||cav||a.units[0];
+      ctx.fillStyle='rgba(243,217,138,.9)';ctx.fillRect(X-q/2-2.5,Y-q/2-2.5,q+5,q+5);
+      if(u0)unitSq(X,Y,q,{t:u0.t,men:UT[u0.t].men},c,dark);
+      // fanion ; sac de butin au retour
+      ctx.strokeStyle=dark;ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(X+q/2,Y-q/2);ctx.lineTo(X+q/2,Y-q/2-9);ctx.stroke();
+      ctx.fillStyle=p.state==='back'?'#e9c46a':col;ctx.beginPath();ctx.moveTo(X+q/2,Y-q/2-9);ctx.lineTo(X+q/2+7,Y-q/2-6.5);ctx.lineTo(X+q/2,Y-q/2-4);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.restore()}}}catch(e){console.error('[fourrageurs]',e)}
+  return r}}
 window.__genie={bivFormation,bivKey,campDraw,campStill,capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
