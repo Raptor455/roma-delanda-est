@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v222</span>
+ <span class="chg-ver">v223</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -2911,8 +2911,8 @@ function tick(dd){
   tickFleets(dd);patrolsMove(dd);
   // rencontres : deux armées hostiles à moins de 6 km
   for(let i=0;i<S.armies.length;i++)for(let j=i+1;j<S.armies.length;j++){
-    const a=S.armies[i],b=S.armies[j];if(a.dead||b.dead||a.ship||b.ship||a.cool>0||b.cool>0||Math.hypot(a.x-b.x,a.y-b.y)>=6/*PERF-GA*/||!hostile(a,b))continue;
-    if(Math.hypot(a.x-b.x,a.y-b.y)<6){const att=(a.legs.length>0)>=(b.legs.length>0)?a:b,def=att===a?b:a;
+    const a=S.armies[i],b=S.armies[j];if(a.dead||b.dead||a.ship||b.ship||a.cool>0||b.cool>0||(typeof encNear==='function'?!encNear(a,b):Math.hypot(a.x-b.x,a.y-b.y)>=6)/*PERF-GA*//*ENC-COL*/||!hostile(a,b))continue;
+    {const att=typeof encAtt==='function'?encAtt(a,b):((a.legs.length>0)>=(b.legs.length>0)?a:b),def=att===a?b:a;
       const defs=S.armies.filter(o=>o.side===def.side&&!o.dead&&Math.hypot(o.x-def.x,o.y-def.y)<6);startBattle(att,defs);if(S.cur)return}
   }
   for(let k=0;k<nd;k++){daily(before+k+1);if(S.cur||S.over)return}
@@ -12190,7 +12190,34 @@ function bivFormation(a,s){
       ctx.fillStyle=p.state==='back'?'#e9c46a':col;ctx.beginPath();ctx.moveTo(X+q/2,Y-q/2-9);ctx.lineTo(X+q/2+7,Y-q/2-6.5);ctx.lineTo(X+q/2,Y-q/2-4);ctx.closePath();ctx.fill();ctx.stroke();
       ctx.restore()}}}catch(e){console.error('[fourrageurs]',e)}
   return r}}
-window.__genie={bivFormation,bivKey,campDraw,campStill,capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- CONTACT PAR LA COLONNE (11 nov., Baptiste : « oui il faut améliorer ça ») ----
+   Avant : bataille dès que deux têtes d'armées ennemies étaient à moins de 6 km, colonne ignorée.
+   Maintenant (retouche ENC-COL de tick par genie/patch.py) :
+   - chaque armée en marche laisse dans la simulation la trace de sa colonne (ENC_T, hors sauvegarde), longue de 0,37 km par régiment ;
+   - une tête qui arrive à moins de encR(a)+0,6 km de la colonne d'un ennemi l'accroche : c'est elle qui attaque ;
+   - deux têtes s'accrochent à moins de encR(a)+encR(b) : 1,5 km par armée en marche, jusqu'à 2,5 km pour une grande armée au bivouac.
+   Les autres règles (murs, délai de grâce, se dérober, flottes, neutres) ne changent pas. */
+const ENC_T=new Map(),ENC_SP=.15;
+function encLen(a){return .33+(a.units?a.units.length:1)*UNIT_KM*1.22}
+function encR(a){return a.legs&&a.legs.length?1.5:Math.min(2.5,1.5+(a.units?a.units.length:1)*.03)}
+function encTrail(){if(!S||!S.armies)return;const live=new Set();
+  for(const a of S.armies){if(a.dead||a.ship||!a.legs||!a.legs.length){ENC_T.delete(a.id);continue}live.add(a.id);
+    let T=ENC_T.get(a.id);if(!T){T=[[a.x,a.y]];ENC_T.set(a.id,T)}const l=T[T.length-1];
+    if(Math.hypot(l[0]-a.x,l[1]-a.y)>ENC_SP){T.push([a.x,a.y]);let len=0;for(let k=T.length-1;k>0;k--){len+=Math.hypot(T[k][0]-T[k-1][0],T[k][1]-T[k-1][1]);if(len>encLen(a)){T.splice(0,k-1);break}}}}
+  for(const id of ENC_T.keys())if(!live.has(id))ENC_T.delete(id)}
+// distance d'un point à la colonne de b (de sa tête vers l'arrière)
+function encCol(px,py,b){const T=ENC_T.get(b.id);if(!T||T.length<1)return 1e9;let best=1e9,ax=b.x,ay=b.y;
+  for(let k=T.length-1;k>=0;k--){const bx=T[k][0],by=T[k][1],dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));
+    best=Math.min(best,Math.hypot(px-(ax+dx*t),py-(ay+dy*t)));ax=bx;ay=by}return best}
+let ENC_ATT=null;
+function encNear(a,b){ENC_ATT=null;const d=Math.hypot(a.x-b.x,a.y-b.y);if(d>=40)return false;
+  if(d<encR(a)+encR(b)){ENC_ATT=(a.legs.length>0)>=(b.legs.length>0)?a:b;return true}
+  if(encCol(a.x,a.y,b)<encR(a)+.6){ENC_ATT=a;return true}
+  if(encCol(b.x,b.y,a)<encR(b)+.6){ENC_ATT=b;return true}
+  return false}
+function encAtt(a,b){return ENC_ATT===a||ENC_ATT===b?ENC_ATT:((a.legs.length>0)>=(b.legs.length>0)?a:b)}
+{const _tkE=tick;tick=function(dd){try{encTrail()}catch(e){}const r=_tkE.apply(this,arguments);try{encTrail()}catch(e){}return r}}
+window.__genie={encNear,encCol,encR,encLen,ENC_T,bivFormation,bivKey,campDraw,campStill,capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
