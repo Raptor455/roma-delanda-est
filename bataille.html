@@ -2770,7 +2770,7 @@ if(!V3D){
         u._pf=b;u._row=Math.max(1,Math.round((mx-dep(u))/FRK));u._auto=true;follow(u)}}}}
   // suivi des attaques (toutes les 0,8 s) : cible tombée ou en fuite → la suivante ; cible déjà submergée → un ennemi libre ; relève oisive → ennemi libre proche
   function autoTarget(){
-    const mineU=units.filter(u=>u.side===0&&!u.dead&&!u.routing&&!u.pend),foes=units.filter(e=>e.side===1&&foeOk(e));if(!foes.length)return;
+    const mineU=units.filter(u=>u.side===0&&!u.dead&&!u.routing&&!u.pend&&u._st!=='hold'&&u._st!=='back'),foes=units.filter(e=>e.side===1&&foeOk(e));if(!foes.length)return;
     const load=new Map(),inc=e=>load.set(e,(load.get(e)||0)+1);
     for(const u of mineU){for(const e of u.contacts)inc(e);const t=u.order&&u.order.type==='attack'&&u.order.target;if(t&&!u.contacts.includes(t))inc(t)}
     const pickFor=(u,R,freeOnly)=>{let b=null,bs=1e9;for(const e of foes){const d=Math.hypot(e.x-u.x,e.y-u.y);if(d>R)continue;const l=load.get(e)||0;if(freeOnly&&l>0)continue;const sc=d+38*l;if(sc<bs){bs=sc;b=e}}return b};
@@ -3089,7 +3089,54 @@ if(!V3D){
   {const _sd=startDep;startDep=function(){const r=_sd.apply(this,arguments);try{campsInit();const b=document.getElementById('depBar');if(b&&KAMP){const d=b.querySelector('div');if(d&&!d._k){d._k=1;d.innerHTML='<b>Déploiement</b> · vos troupes attendent au camp. Placez leurs places (carrés translucides) dans la zone claire : clic droit, glisser à la souris, tracé de ligne ou formations. Au lancement, elles sortiront une à une par la grande porte pour s\'y ranger. Gardez un œil sur votre camp : un camp sans défenseur peut être pillé.'}}}catch(e){console.warn('camps',e)}return r}}
   {const _bg=begin;begin=function(){if(!started){try{campsLaunch()}catch(e){console.warn('camps',e)}}return _bg.apply(this,arguments)}}
   {const _su3=setup;setup=function(){KAMP=null;return _su3.apply(this,arguments)}}
-  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
+  /* -- ORDRES DE COMBAT : tenir, pousser, se replier en ordre (u._st = 'hold' | 'push' | 'back'). Le joueur les donne au régiment
+        choisi (ou à un carré, Alt+clic). Tenir : immobile, ne poursuit pas, encaisse mieux. Pousser : avance au contact et fait reculer
+        l'ennemi (sauf s'il tient), frappe plus fort, prend plus de coups. Repli : recule face à l'ennemi qui suit (Cannes). -- */
+  const STS=[['hold','Tenir','Tenir la position : le régiment ne bouge plus, ne poursuit pas et ne se laisse pas repousser. Il encaisse nettement mieux, mais ne va pas chercher l\'ennemi.'],
+    ['push','Pousser','Pousser : le régiment avance au corps à corps et fait reculer l\'ennemi. Il frappe plus fort mais prend plus de pertes.'],
+    ['back','Repli','Se replier en ordre : le régiment recule lentement face à l\'ennemi, qui le suit. Peu de pertes des deux côtés, mais le moral s\'use.']];
+  const ST_ATK={hold:1,push:1.18,back:.65},ST_DEF={hold:.7,push:1.15,back:.85};let CURA=null;
+  {const _ml=melee;melee=function(u,dt){CURA=u;try{return _ml.apply(this,arguments)}finally{CURA=null}}}
+  {const _h3=hurt;hurt=function(e,cas){if(CURA&&e)cas*=(ST_ATK[CURA._st]||1)*(ST_DEF[e._st]||1);return _h3.call(this,e,cas)}}
+  const stOf=arr=>{if(!arr.length)return null;const k=arr[0]._st||null;return k&&arr.every(u=>u._st===k)?k:null};
+  function applyStance(key){const arr=mine();if(!arr.length)return;const cur=stOf(arr),nk=cur===key?null:key;for(const u of arr){u._st=nk;if(nk==='hold'&&u.order&&u.order.type==='attack'&&!u.contacts.includes(u.order.target))u.order=null;if(nk)u._wd=0}renderSel()}
+  function stIcon(k){const p=k==='hold'?'<rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/>':k==='push'?'<path d="M7 1.5 12 8H9v4.5H5V8H2z" fill="currentColor"/>':'<path d="M7 12.5 2 6h3V1.5h4V6h3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>';return '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">'+p+'</svg>'}
+  function stBox(){let box=document.getElementById('stBtns');if(box)return box;const sel=document.getElementById('sel');if(!sel)return null;
+    box=document.createElement('div');box.id='stBtns';
+    box.innerHTML='<div class="fl">Ordre de combat</div><div class="fg">'+STS.map(f=>`<button type="button" data-s="${f[0]}" title="${f[2]}">${stIcon(f[0])}<span>${f[1]}</span></button>`).join('')+'</div><div class="fh fa" style="color:#e8c77e"></div>';
+    box.addEventListener('click',e=>{const b=e.target.closest('button[data-s]');if(b)applyStance(b.dataset.s)});
+    const fb=document.getElementById('formBtns'),btns=sel.querySelector('.btns');if(fb)fb.before(box);else if(btns)btns.after(box);else sel.appendChild(box);
+    const st=document.createElement('style');st.textContent=`#stBtns{display:none;flex-direction:column;gap:4px;margin-top:2px}#stBtns.on{display:flex}
+#stBtns .fl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#b9a98a)}#stBtns .fh{font-size:11px}#stBtns .fa:empty{display:none}
+#stBtns .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+#stBtns button{display:flex;align-items:center;gap:4px;padding:3px 5px;font-size:12px;line-height:1.1;min-width:0;white-space:nowrap}
+#stBtns button svg{flex:none}#stBtns button span{overflow:hidden;text-overflow:ellipsis}
+#stBtns button.act{background:#d6b878;color:#1c140c;border-color:#f0dca8}`;document.head.appendChild(st);return box}
+  {const _rs4=renderSel;renderSel=function(){const r=_rs4.apply(this,arguments);try{formBox();const b=stBox();if(b){const m=mine(),k=stOf(m);b.classList.toggle('on',m.length>=1);for(const x of b.querySelectorAll('button[data-s]')){const on=x.dataset.s===k;x.classList.toggle('act',on);x.setAttribute('aria-pressed',on?'true':'false')}
+        const h=b.querySelector('.fa'),f=k&&STS.find(s=>s[0]===k);if(h)h.textContent=f?f[2].replace(/^[^:]+: /,'').replace(/^./,c=>c.toUpperCase())+' Recliquez pour revenir au comportement normal.':''}}catch(e){}return r}}
+  // effets sur le terrain, après chaque pas de simulation
+  {const _sp5=step;step=function(dt){const held=[];for(const u of units)if(u._st==='hold'&&!u.dead&&!u.routing&&u.contacts.length&&!(u.order&&u.order.type==='move'))held.push([u,u.x,u.y]);
+    const r=_sp5.apply(this,arguments);
+    for(const h of held){const u=h[0];if(!u.dead&&!u.routing){u.x=h[1];u.y=h[2]}}
+    for(const u of units){const k=u._st;if(!k||u.dead||u.pend||u.routing)continue;
+      if(k==='hold'){const o=u.order;if(o&&o.type==='attack'&&o.target&&!u.contacts.includes(o.target)&&Math.hypot(o.target.x-u.x,o.target.y-u.y)>60)u.order=null;continue}
+      if(!u.contacts.length||u._wd)continue;const c=Math.cos(u.ang),s=Math.sin(u.ang);
+      if(k==='push'){if(u.contacts.some(e=>e._st==='hold'&&!e.routing))continue;const v=u.T.speed*.13*dt;u.x+=c*v;u.y+=s*v;u.dirty=true;
+        for(const e of u.contacts){if(e.dead||e.routing)continue;if((e.x-u.x)*c+(e.y-u.y)*s>0){const kk=e._st==='push'?.5:1;e.x+=c*v*kk;e.y+=s*v*kk;e.dirty=true;try{clampMap(e)}catch(_){}}e.morale-=.7*dt;if(e.morale<=0)try{rout(e)}catch(_){}}}
+      else if(k==='back'){const v=u.T.speed*.4*dt;u.x-=c*v;u.y-=s*v;u.dirty=true;u.morale-=.2*dt;
+        // l'ennemi engagé suit, sauf s'il a ordre de tenir
+        for(const e of u.contacts){if(e.dead||e.routing||e._st==='hold')continue;if((e.x-u.x)*c+(e.y-u.y)*s>0){e.x-=c*v;e.y-=s*v;e.dirty=true}}}
+      try{clampMap(u)}catch(_){}}
+    return r}}
+  // repère sur les carrés du joueur : carré plein (tenir), flèche vers l'avant (pousser), flèche creuse vers l'arrière (repli)
+  function drawStances(){for(const u of units){const k=u._st;if(!k||u.side!==0||u.dead||u.pend||u.routing)continue;const [x,y]=scr(u.x,u.y);if(x<-20||y<-20||x>SW+20||y>SH+20)continue;
+      const z=Math.min(6.5,Math.max(3.2,2.4*s2)),[fx,fy]=scr(u.x+Math.cos(u.ang)*10,u.y+Math.sin(u.ang)*10);let dx=fx-x,dy=fy-y;const L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;if(k==='back'){dx=-dx;dy=-dy}
+      g2.save();g2.lineJoin='round';g2.lineWidth=Math.max(1.4,1.6*s2);g2.strokeStyle='rgba(16,10,6,.9)';
+      if(k==='hold'){g2.fillStyle='#f3e6c4';g2.beginPath();g2.rect(x-z*.75,y-z*.75,z*1.5,z*1.5);g2.fill();g2.stroke()}
+      else{g2.beginPath();g2.moveTo(x+dx*z*1.25,y+dy*z*1.25);g2.lineTo(x-dx*z*.7-dy*z,y-dy*z*.7+dx*z);g2.lineTo(x-dx*z*.7+dy*z,y-dy*z*.7-dx*z);g2.closePath();g2.fillStyle=k==='push'?'#ffa14a':'#9fd6ff';g2.fill();g2.stroke()}
+      g2.restore()}}
+  {const _db5=drawBanners;drawBanners=function(){try{drawStances()}catch(e){}return _db5.apply(this,arguments)}}
+  window.__pilote={stance:k=>applyStance(k),regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
