@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v212</span>
+ <span class="chg-ver">v213</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -3263,10 +3263,10 @@ function drawDynamic(w,h,s,z,inV){
   for(const id in S.intel){const it=S.intel[id],a=S.armies.find(x=>x.id==id);if(!a||S.day-it.d>60){delete S.intel[id];continue}if(visOfArmy(a)>0)continue;if(visAt(it.x,it.y)===2&&S.day-it.d>=1){delete S.intel[id];continue}if(!inV(it.x,it.y,30))continue;
     const X=view.ox+it.x*s,Y=view.oy+it.y*s-18,k=Math.floor(S.day)-it.d;ctx.globalAlpha=.45;token(X,Y,a.side,'?',false);ctx.globalAlpha=.85;ctx.font='600 10px Georgia,serif';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(20,16,12,.8)';const L=k<1?'vue à l\'instant':'vue il y a '+k+' j';ctx.strokeText(L,X,Y+22);ctx.fillStyle='rgba(240,230,205,1)';ctx.fillText(L,X,Y+22);ctx.globalAlpha=1}
   const CARD_S=UNIT_MIN_PX/UNIT_KM;
-  for(const a of S.armies){if(!a._p||a.g||a.inG)continue;if(visOfArmy(a)===2&&s>=CARD_S)formation(a,s)}
+  for(const a of S.armies){if(!a._p||(a.g&&!a.legs.length)||a.inG)continue;if(visOfArmy(a)===2&&s>=CARD_S)formation(a,s)}/*CAPT-VIS*/
   // vue dézoomée : cartouche du général (médaillon, nom, grille d'unités), les plus au sud devant
-  for(const a of S.armies.filter(a=>a._p&&!a.g&&!a.inG&&visOfArmy(a)===2&&s<CARD_S).sort((p,q)=>p._p[1]-q._p[1]))genCard(a,s);
-  for(const a of S.armies){if(!a._p)continue;const v=visOfArmy(a);if(a.inG){a._sq=null;garToken(view.ox+a._p[0]*s,view.oy+a._p[1]*s,a.side,String(a.units.length),sel&&sel.a===a,false);continue}if(!a.g&&v===2&&s<CARD_S)continue;token(view.ox+a._p[0]*s,view.oy+a._p[1]*s-(a.g?0:18),a.side,v===2?String(a.units.length):'~',sel&&sel.a===a,a)}
+  for(const a of S.armies.filter(a=>a._p&&(!a.g||a.legs.length)&&!a.inG&&visOfArmy(a)===2&&s<CARD_S).sort((p,q)=>p._p[1]-q._p[1]))genCard(a,s);
+  for(const a of S.armies){if(!a._p)continue;const v=visOfArmy(a);if(a.inG){a._sq=null;garToken(view.ox+a._p[0]*s,view.oy+a._p[1]*s,a.side,String(a.units.length),sel&&sel.a===a,false);continue}if((!a.g||a.legs.length)&&v===2&&s<CARD_S)continue;token(view.ox+a._p[0]*s,view.oy+a._p[1]*s-(a.g?0:18),a.side,v===2?String(a.units.length):'~',sel&&sel.a===a,a)}
   drawFleets(s,z,inV);drawPatrols(s,inV);
   // brouillard
   if(perfFogDirty(w,h,s)){/*PERF*/const f=fogC.getContext('2d');f.setTransform(PERF.fk,0,0,PERF.fk,0,0);f.globalCompositeOperation='source-over';f.clearRect(0,0,w,h);f.fillStyle='rgba(16,20,26,.52)';f.fillRect(0,0,w,h);
@@ -12018,7 +12018,41 @@ function grTravel(g,a){const n=N[g.at],km=Math.hypot(a.x-n.x,a.y-n.y);g.trav={a:
   document.querySelectorAll('[data-grn]').forEach(b=>b.onclick=()=>{const g=G(b.dataset.grn);if(g)grNewArmy(g,g.at)});
   document.querySelectorAll('[data-grt]').forEach(s=>s.onchange=()=>{const g=G(s.dataset.grt),a=A(s.value);if(g&&a)grTravel(g,a)});
 }catch(e){console.error('[généraux]',e)}return r}}
-window.__genie={grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+
+/* ---- CAPITAINES ET GARNISONS (11 nov., Baptiste : « une armée sans général commandée par un Capitaine, visible quand elle se déplace ;
+   changer les icônes des armées en garnison ») ----
+   Renforts en marche et garnisons qui sortent reçoivent un capitaine (g.capt : sans trait, sans renommée), qui disparaît quand son armée
+   se fond dans une autre. Une garnison en marche est dessinée comme une armée (texte retouché par genie/patch.py, repère CAPT-VIS).
+   Garnisons : tour crénelée à la couleur du camp, au pied de la ville, avec le nombre de régiments. */
+const CAP_N={car:['Bodo','Adherbal','Bostar','Himilcon','Magon','Mutin','Abdmelqart','Hannon','Giscon','Carthalon'],rom:['Caius','Lucius','Marcus','Quintus','Titus','Publius','Sextus','Aulus','Decimus','Gnaeus']};
+function capName(side){const r=typeof realSide==='function'?realSide(side):side,L=CAP_N[r]||CAP_N.car;return 'Capitaine '+L[Math.floor(Math.random()*L.length)]}
+function capNeed(a){return !a.dead&&!a.ship&&(a.reinf!=null||(a.g&&a.legs&&a.legs.length))}
+function capSync(){if(!S||!S.gens)return;
+  for(const g of S.gens){if(!g.capt||g.dead)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(!a||a.gen!==g.id||!capNeed(a)){if(a&&a.gen===g.id){a.gen=null;if(a.g&&a.at!=null)a.name='Garnison de '+N[a.at].n;else if(a.reinf!=null)a.name='Renforts'}g.dead=true;g.army=null}}
+  S.gens=S.gens.filter(g=>!(g.capt&&g.dead));
+  for(const a of S.armies){if(!capNeed(a)||(a.gen!=null&&S.gens.some(g=>g.id===a.gen&&!g.dead&&g.army===a.id)))continue;
+    const g=mkGen(a.side,capName(a.side));g.tr=[];g.xp=0;g.capt=1;g.army=a.id;g.at=null;g.lx=a.x;g.ly=a.y;S.gens.push(g);a.gen=g.id;a.name=g.name}}
+{const _sg=syncGens;syncGens=function(){try{capSync()}catch(e){console.error(e)}const r=_sg.apply(this,arguments);try{capSync()}catch(e){console.error(e)}return r}}
+{const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{capSync()}catch(e){console.error(e)}return r}}
+{const _od=order;order=function(a){const r=_od.apply(this,arguments);try{if(a&&capNeed(a))capSync()}catch(e){}return r}}
+// icône de garnison : tour crénelée, fanion du camp, nombre de régiments
+function towerIcon(x,y,side,n,selected,field){const c=FAC[side]?FAC[side].c:[120,120,120],col=`rgb(${c[0]},${c[1]},${c[2]})`,dk=`rgb(${c[0]*.55|0},${c[1]*.55|0},${c[2]*.55|0})`;
+  ctx.save();ctx.translate(x,y);const w=field?9:7.5,h=field?15:12;
+  ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(0,h*.5+1,w+3,2.2,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.moveTo(-w,h*.5);ctx.lineTo(-w*.85,-h*.5);for(let i=0;i<4;i++){const x0=-w*.85+i*(w*1.7/3.5);ctx.lineTo(x0,-h*.5-3);ctx.lineTo(x0+w*.28,-h*.5-3);ctx.lineTo(x0+w*.28,-h*.5)}ctx.lineTo(w*.85,-h*.5);ctx.lineTo(w,h*.5);ctx.closePath();
+  const gr=ctx.createLinearGradient(-w,0,w,0);gr.addColorStop(0,'#d9cba8');gr.addColorStop(.55,'#b9a77e');gr.addColorStop(1,'#8f7f5c');ctx.fillStyle=gr;ctx.fill();
+  ctx.lineWidth=selected?2.4:1.2;ctx.strokeStyle=selected?'#fff3c4':'#2a2014';ctx.stroke();
+  ctx.fillStyle=col;ctx.fillRect(-w*.85+1,-h*.5+1.5,w*1.7-2,3);
+  ctx.fillStyle='#2a2014';ctx.beginPath();ctx.moveTo(-2.6,h*.5);ctx.lineTo(-2.6,h*.5-4.5);ctx.arc(0,h*.5-4.5,2.6,Math.PI,0);ctx.lineTo(2.6,h*.5);ctx.fill();
+  ctx.strokeStyle='#2a2014';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,-h*.5-3);ctx.lineTo(0,-h*.5-11);ctx.stroke();
+  ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(0,-h*.5-11);ctx.lineTo(8,-h*.5-8.6);ctx.lineTo(0,-h*.5-6.2);ctx.fill();ctx.strokeStyle=dk;ctx.lineWidth=.8;ctx.stroke();
+  if(field){ctx.strokeStyle='#e6c27a';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(0,0,w+4.5,0,7);ctx.stroke()}
+  if(n!=null){ctx.font='700 10px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';const t=String(n),tw=ctx.measureText(t).width+6;
+    ctx.fillStyle=dk;ctx.beginPath();ctx.roundRect?ctx.roundRect(-tw/2,h*.5-1,tw,11,3):ctx.rect(-tw/2,h*.5-1,tw,11);ctx.fill();ctx.strokeStyle='#e9dcc0';ctx.lineWidth=.8;ctx.stroke();ctx.fillStyle='#fff6e0';ctx.fillText(t,0,h*.5+4.6)}
+  ctx.restore()}
+{const _tk=token;token=function(x,y,side,txt,selected,a){if(a&&a.g&&!(a.legs&&a.legs.length)&&!a.dead){try{towerIcon(x+13,y-4,side,/^\d+$/.test(txt||'')?txt:null,selected,false);return}catch(e){}}return _tk.apply(this,arguments)}}
+{const _gt=garToken;garToken=function(x,y,side,txt,selected,ship){if(ship)return _gt.apply(this,arguments);try{towerIcon(x+16,y-6,side,txt,selected,true)}catch(e){return _gt.apply(this,arguments)}}}
+window.__genie={capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
