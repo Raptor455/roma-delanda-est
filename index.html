@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v207</span>
+ <span class="chg-ver">v208</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -13600,6 +13600,74 @@ setTimeout(()=>{try{nvBuild();
   if(typeof renderSide==='function'){const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{townTabs()}catch(e){}return r}}
   const so=new MutationObserver(()=>{if(!nvTownBusy)setTimeout(()=>{try{townTabs()}catch(e){}},0)});try{so.observe($('side'),{childList:true})}catch(e){}
   setInterval(()=>{nvBuild();nvTodo()},1000);nvTodo()}catch(e){console.error(e)}},1200);
+/* ---------- CONSTRUCTION : cartes illustrées (fil Interface, 11 nov.) ----------
+   Remplace le texte de ecoBlock (onglet « Construire » de la fiche de ville) par une carte par bâtiment :
+   vignette gravée crème et or, niveaux, effet en clair, prix et durée. Les boutons gardent data-bld (bindTown les relie à build).
+   Un bâtiment ajouté à BLD par un autre fil apparaît tout seul (vignette par défaut ; ajouter son dessin à BD_ICO et son effet court à BD_EFF). */
+const BD_ICO={
+  mar:`<path d="M21 6h6v6h-6z M19 4.5h10v2.6H19z"/><path d="M18 13Q9 22 15.5 34Q20 42 24 44Q28 42 32.5 34Q39 22 30 13Z"/><path d="M21 8Q12 9 15 19M27 8Q36 9 33 19" class="s" stroke-width="2.4"/><path d="M15 24h18" class="h" stroke-width="1.6"/><path d="M16.5 28h15" class="h" stroke-width="1.2"/>`,
+  port:`<circle cx="24" cy="8.5" r="3.4" class="s" stroke-width="2.4"/><path d="M22.6 12h2.8v28h-2.8z M16 16.5h16v2.8H16z"/><path d="M9.5 29Q11 41 24 41Q37 41 38.500 29" class="s" stroke-width="3"/><path d="M9.500 26l-4 7l7.500 -1z M38.500 26l4 7l-7.500 -1z"/>`,
+  tem:`<path d="M5 18L24 5L43 18Z"/><path d="M7 19.500h34v3H7z M5 38h38v3H5z M3 42h42v2.500H3z"/><path d="M9.500 24h4.500v13H9.500z M17.300 24h4.500v13h-4.500z M25.200 24h4.500v13h-4.500z M33 24h4.500v13H33z"/><circle cx="24" cy="13" r="2.300" class="hf"/>`,
+  cas:`<path d="M8 44L39 5M40 44L9 5" class="s" stroke-width="2.600"/><path d="M39 5l-5.500 2.500l3.800 3z M9 5l5.500 2.500l-3.800 3z"/><circle cx="24" cy="27" r="12.500"/><circle cx="24" cy="27" r="9.500" class="h" stroke-width="1.500"/><circle cx="24" cy="27" r="3.200" class="hf"/>`,
+  mur:`<path fill-rule="evenodd" d="M3 44V12h4v4h4v-4h4v4h3v8h3v-4h4v4h4v-4h4v4h3v-8h3v-4h4v4h1v28Z M19.500 44V35a4.500 4.500 0 0 1 9 0V44Z"/><path d="M5 26h9M5 34h9M34 26h9M34 34h9M20 30h8" class="h" stroke-width="1.200"/>`,
+  gre:`<path d="M24 45V14" class="s" stroke-width="2.200"/><ellipse cx="24" cy="9.500" rx="3" ry="5.500"/><g><ellipse cx="18.500" cy="15" rx="2.800" ry="5.500" transform="rotate(-28 18.500 15)"/><ellipse cx="29.500" cy="15" rx="2.800" ry="5.500" transform="rotate(28 29.500 15)"/><ellipse cx="18" cy="23" rx="2.800" ry="5.500" transform="rotate(-28 18 23)"/><ellipse cx="30" cy="23" rx="2.800" ry="5.500" transform="rotate(28 30 23)"/><ellipse cx="18" cy="31" rx="2.800" ry="5.500" transform="rotate(-28 18 31)"/><ellipse cx="30" cy="31" rx="2.800" ry="5.500" transform="rotate(28 30 31)"/></g><path d="M24 44Q16 42 12 36M24 44Q32 42 36 36" class="s" stroke-width="1.800"/>`,
+  min:`<path d="M10 43L31 15" class="s" stroke-width="3.400"/><path d="M17 9Q32 5 42 20Q33 13 22 14.500Z"/><circle cx="35" cy="36" r="7.500"/><circle cx="35" cy="36" r="4.600" class="h" stroke-width="1.400"/><circle cx="22.500" cy="40.500" r="4.500"/><circle cx="22.500" cy="40.500" r="2.300" class="h" stroke-width="1.200"/>`,
+  ars:`<circle cx="16" cy="32" r="10.500" class="s" stroke-width="2.800"/><path d="M16 21.500v21M5.500 32h21M8.600 24.600l14.800 14.800M23.400 24.600L8.600 39.400" class="s" stroke-width="1.600"/><circle cx="16" cy="32" r="2.800"/><path d="M29 43L42 9" class="s" stroke-width="2.800"/><path d="M43.500 5l-6 5l6.500 2.500z"/><path d="M27 36l8 3M30.500 27l8 3" class="s" stroke-width="2"/>`,
+  har:`<path d="M13 45Q12 30 19 22L16.500 10L24 16.500Q35 15 40 27L43 36Q41 41 36.500 39L29.500 32.500Q27.500 39 30 45Z"/><circle cx="31.500" cy="24.500" r="1.800" class="hf"/><path d="M19.500 22Q22 30 20.500 38" class="h" stroke-width="1.300"/><path d="M38.500 35.500l2 1.200" class="h" stroke-width="1.300"/>`,
+  frg:`<path d="M5 23H33Q40 23 43 18V27.500H32Q30 32 32.500 36H38V42.500H13V36H19.500Q22 32 20 27.500H5Z"/><path d="M14 17L31 6" class="s" stroke-width="2.800"/><path d="M26.500 3.500l9.500 -1.500l2.500 6l-9 3.500z"/><path d="M9 14l2 -4M15 9l1 -4.500M4 18l3.500 -2" class="s" stroke-width="1.500"/>`,
+  sci:`<path d="M5 31h33a5 5 0 0 1 0 10H5Z"/><ellipse cx="38.500" cy="36" rx="4.200" ry="5" class="h" stroke-width="1.300"/><ellipse cx="38.500" cy="36" rx="1.700" ry="2.200" class="h" stroke-width="1.100"/><path d="M8 34.500h22M10 38h17" class="h" stroke-width="1.100"/><path d="M6 10H37L43 16V19H6Z"/><path d="M6 19l3 5l3 -5l3 5l3 -5l3 5l3 -5l3 5l3 -5l3 5l3 -5l3 5l3 -5Z"/><circle cx="38" cy="14.500" r="1.800" class="hf"/>`,
+  _:`<path d="M9 8h30v4H9z M11 12.500h26v2.500H11z M14 16h20v24H14z M10 40.500h28v3H10z M7 44h34v2.500H7z"/><path d="M19 17v22M24 17v22M29 17v22" class="h" stroke-width="1.300"/>`};
+const BD_EFF={mar:'Revenu de la ville +15 %',port:'Commerce maritime : +2 or par mois',tem:'Ordre public +8',cas:'Recrues formées 40 % plus vite',mur:'Les sièges durent 50 % de plus',
+  gre:'Ordre +5, vivres refaits en ville',min:'+8 or par mois',ars:'+12 de matériel par mois aux armées',har:'Chevaux de la ville doublés',frg:'Fer de la ville doublé',sci:'Bois de la ville doublé'};
+function bdIco(k,on,sz){const c=(()=>{try{const p=START_PEO.find(p=>p.k===peoCur());return p?p.c:'#7d4fb8'}catch(e){return '#7d4fb8'}})();
+  const d=(BD_ICO[k]||BD_ICO._).replace(/class="s"/g,'fill="none" stroke="url(#bdE)" stroke-linecap="round" stroke-linejoin="round"').replace(/class="hf"/g,`fill="${on?c:'#2a2018'}" stroke="none"`).replace(/class="h"/g,`fill="none" stroke="${on?c:'#2a2018'}" stroke-linecap="round" opacity=".85"`);
+  return `<svg class="bdI${on?' on':''}" viewBox="0 0 48 48" width="${sz||46}" height="${sz||46}" aria-hidden="true"><defs><linearGradient id="bdE" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6dc"/><stop offset="1" stop-color="#d9b872"/></linearGradient>
+    <radialGradient id="bdF${on?1:0}" cx=".4" cy=".32" r=".85"><stop offset="0" stop-color="${on?c:'#4a3a28'}"/><stop offset="1" stop-color="${on?'#1a120a':'#211910'}"/></radialGradient></defs>
+    <rect x="1" y="1" width="46" height="46" rx="7" fill="url(#bdF${on?1:0})" stroke="${on?'#d6b878':'#6b5536'}" stroke-width="1.500"/>
+    <g transform="translate(24 24) scale(.8) translate(-24 -25)"><g transform="translate(0 1.600)" fill="rgba(8,5,2,.55)" stroke="none" style="--x:0">${(BD_ICO[k]||BD_ICO._).replace(/class="s"/g,'fill="none" stroke="rgba(8,5,2,.55)" stroke-linecap="round"').replace(/class="hf?"/g,'fill="none" stroke="none"')}</g>
+    <g fill="url(#bdE)" stroke="none">${d}</g></g></svg>`}
+const bdPips=(l,max)=>`<span class="bdP" aria-label="niveau ${l} sur ${max}">${'<i class="on"></i>'.repeat(l)}${'<i></i>'.repeat(max-l)}</span>`;
+if(typeof ecoBlock==='function'){const _ebE=ecoBlock;ecoBlock=function(i){try{ecoInit();const n=N[i],id=n.id;if(ownerN(i)!=='car'||n.col)return '';
+  const o=Math.round(S.ord[id]==null?ordTarget(n):S.ord[id]),P=ordParts(n),tg=Math.round(ordTarget(n));
+  const parts=P.filter(p=>p[0]!=='base').map(p=>`<span class="${p[1]>0?'pos':'neg'}">${esc(p[0])} ${p[1]>0?'+':'−'}${Math.abs(p[1])}</span>`).join('');
+  let h=`<h3>Gouvernement de la ville</h3><div class="bdO"><div class="bdOh"><b>Ordre public</b><span>${o}<small> sur 100${tg!==o?` · tend vers ${tg}`:''}</small></span></div>
+    <div class="bdOg"><i style="width:${o}%;background:${o<30?'var(--bad)':o<50?'var(--gold)':'var(--good)'}"></i>${tg!==o?`<u style="left:${Math.max(0,Math.min(100,tg))}%"></u>`:''}</div>
+    ${parts?`<div class="bdOp">${parts}</div>`:''}<p class="sub">Revenu <b>${townIncome(n)}</b> or par mois${o<30?' · sous 12, la ville peut se révolter':''}</p></div>`;
+  const q=S.bq[id],ks=Object.keys(BLD).filter(k=>!BLD[k].need||BLD[k].need(n)),gold=S.gold.car;
+  if(q&&BLD[q.k]){const B=BLD[q.k],l=bl(id,q.k),tot=(B.days&&B.days[l])||q.d,pr=Math.max(0,Math.min(1,1-q.d/tot));
+    h+=`<div class="bdW">${bdIco(q.k,true,40)}<div><b>En chantier : ${esc(B.n)}${B.max>1?' (niveau '+(l+1)+')':''}</b><div class="bdOg"><i style="width:${Math.round(pr*100)}%;background:var(--gold)"></i></div><small>encore ${Math.ceil(q.d)} jour${Math.ceil(q.d)>1?'s':''}</small></div></div>`}
+  const card=k=>{const B=BLD[k],l=bl(id,k),full=l>=B.max,busy=q&&q.k===k,c=full?0:B.cost[l],poor=!full&&gold<c;
+    const eff=BD_EFF[k]||(B.txt?B.txt.charAt(0).toUpperCase()+B.txt.slice(1):'');
+    return `<div class="bdC${full?' full':''}${l?' has':''}${busy?' busy':''}" title="${esc(B.n+' : '+(B.txt||''))}">${bdIco(k,l>0)}
+      <div class="bdT"><b>${esc(B.n)}</b>${bdPips(l,B.max)}<small>${esc(eff)}${B.max>1&&!full?' par niveau':''}</small></div>
+      ${full?'<span class="bdF">Complet</span>':busy?'<span class="bdF">En cours</span>':`<button data-bld="${k}" data-id="${id}" type="button" class="bdB${poor?' poor':''}" ${q||poor?'disabled':''} title="${q?'Un seul chantier à la fois dans la ville':poor?`Il manque ${Math.ceil(c-gold)} or`:(l?'Agrandir':'Construire')+' : '+c+' or, '+B.days[l]+' jours'}"><b>${c}</b><small>${B.days[l]} j</small></button>`}</div>`};
+  const todo=ks.filter(k=>bl(id,k)<BLD[k].max),done=ks.filter(k=>bl(id,k)>=BLD[k].max);
+  if(todo.length)h+=`<div class="bdH">À construire${q?' <small>· un seul chantier à la fois</small>':''}</div>`+todo.map(card).join('');
+  if(done.length)h+=`<div class="bdH">Achevés</div>`+done.map(card).join('');
+  return h}catch(e){console.error(e);return _ebE.apply(this,arguments)}}}
+{const st=document.createElement('style');st.textContent=`
+.bdO{border:1px solid var(--line,#6b5536);border-radius:5px;padding:8px 10px;margin:6px 0 10px;background:rgba(0,0,0,.18)}
+.bdOh{display:flex;justify-content:space-between;align-items:baseline}.bdOh span{font-family:var(--display,serif);font-size:19px}.bdOh small{font-family:var(--ui,sans-serif);font-size:11.500px;color:var(--mu2,#b9a98a)}
+.bdOg{position:relative;height:7px;border-radius:4px;background:rgba(255,255,255,.1);margin:6px 0;overflow:visible}.bdOg i{display:block;height:100%;border-radius:4px}
+.bdOg u{position:absolute;top:-3px;width:2px;height:13px;background:var(--tx,#efe6d2);opacity:.75;text-decoration:none}
+.bdOp{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 2px}.bdOp span{font-size:11.500px;border:1px solid var(--line,#6b5536);border-radius:9px;padding:0 7px;line-height:17px}
+.bdOp .pos{color:#a9d08c;border-color:rgba(169,208,140,.45)}.bdOp .neg{color:#e8907a;border-color:rgba(232,144,122,.45)}
+.bdO p.sub{margin:6px 0 0}
+.bdW{display:flex;gap:10px;align-items:center;border:1px solid var(--gold,#d6b878);border-radius:5px;padding:7px 9px;margin:0 0 10px;background:rgba(214,184,120,.1)}
+.bdW>div{flex:1;min-width:0}.bdW b{font-size:13.500px}.bdW small{color:var(--mu2,#b9a98a);font-size:11.500px}
+.bdH{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu2,#b9a98a);margin:12px 0 5px}.bdH small{text-transform:none;letter-spacing:0}
+.bdC{display:flex;gap:10px;align-items:center;padding:6px 7px;margin:0 0 5px;border:1px solid rgba(107,85,54,.7);border-radius:6px;background:rgba(255,255,255,.025)}
+.bdC:hover{border-color:var(--bz,#8a6a3c);background:rgba(214,184,120,.07)}
+.bdC .bdI{flex:none;display:block}.bdC:not(.has) .bdI{opacity:.82}
+.bdT{flex:1;min-width:0;line-height:1.25}.bdT b{font-size:14px;font-weight:600;margin-right:6px}.bdT small{display:block;color:var(--mu2,#b9a98a);font-size:12px;margin-top:1px}
+.bdP{display:inline-flex;gap:3px;vertical-align:1px}.bdP i{width:8px;height:8px;border-radius:50%;border:1.500px solid var(--gold,#d6b878);box-sizing:border-box}.bdP i.on{background:var(--gold,#d6b878)}
+.bdC .bdB{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:50px;min-height:40px;padding:3px 8px;line-height:1.1;background:rgba(214,184,120,.2);border-color:var(--gold,#d6b878)}
+.bdC .bdB b{font-size:15px}.bdC .bdB small{font-size:10.500px;color:var(--mu2,#b9a98a)}
+.bdC .bdB:hover:not(:disabled){background:var(--gold,#d6b878);color:#1b1712}.bdC .bdB:hover:not(:disabled) small{color:#1b1712}
+.bdC .bdB:disabled{opacity:.55;background:transparent;border-color:var(--line,#6b5536);cursor:default}.bdC .bdB.poor b{color:#e8907a}
+.bdF{flex:none;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold,#d6b878);min-width:50px;text-align:center}
+.bdC.full{border-color:rgba(214,184,120,.35)}
+`;document.head.appendChild(st)}
 /* ================= FIN EMBLÈMES ================= */
 /* ================= ÉCRANS DE CHARGEMENT ================= */
 /* Source : /mnt/project-files/chargement/ecrans.js, injecté avant « BOUCLE » par chargement/patch.py (relançable).
