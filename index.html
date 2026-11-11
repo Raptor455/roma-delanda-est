@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v216</span>
+ <span class="chg-ver">v217</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -12098,20 +12098,29 @@ function campDraw(a,pts,q,k){if(!pts.length)return;const c=FAC[a.side].c,col=`rg
    Tout changement de disposition (marche -> bivouac, bivouac -> colonne, camp...) glisse en 0,9 s au lieu de sauter : unitSq est enveloppé
    pendant l'appel de formation et interpole chaque carré depuis sa dernière place (u._fw, coordonnées carte).
    Camp fortifié établi (a.camp tout neuf) : les régiments entrent en file par la porte sud puis gagnent leur quartier, les tentes et le
-   pavillon se montent à mesure (a._ce début, u._ci rang, a._fold repris du démontage).
+   pavillon se montent à mesure (a._ce, a._cp avancement calé sur la palissade, u._ci rang, a._fold repris du démontage).
+   Levée du camp (a.decamp) : sortie en file par la porte du côté du départ, puis rangs de quatre dehors (a._dx, u._di) avant la colonne.
    Une garnison ou une armée de capitaine en marche porte le même écu sur hampe qu'une armée (plus le petit bouclier seul). */
-let BIV_A=null,BIV_S=1,BIV_NOW=0;const BIV_MS=900,CAMP_GAP=90,CAMP_RUN=1900;
+let BIV_A=null,BIV_S=1,BIV_NOW=0;const BIV_MS=900,CAMP_RUN=.3,DEC_RUN=.4,CAMP_RUN_GAP=n=>(1-CAMP_RUN)/Math.max(1,n-1);
+// point à la fraction tt (adoucie) d'un chemin brisé
+function bivPath(P,tt){const D=[];let L=0;for(let k=1;k<P.length;k++){const d=Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]);D.push(d);L+=d}
+  let d=L*(tt*tt*(3-2*tt)),k=0;while(k<D.length-1&&d>D[k]){d-=D[k];k++}const f=D[k]>1e-6?Math.min(1,d/D[k]):1;return [P[k][0]+(P[k+1][0]-P[k][0])*f,P[k][1]+(P[k+1][1]-P[k][1])*f]}
 {const _us=unitSq;unitSq=function(x,y,q,u,c,dark){const a=BIV_A;if(!a||!u)return _us.apply(this,arguments);
   let wx=(x-view.ox)/BIV_S,wy=(y-view.oy)/BIV_S;const t=(BIV_NOW-(a._bt||0))/BIV_MS;
   if(a._ce&&a.camp&&u._f0&&u._ci!=null){
     // entrée au camp fortifié : en file par la porte sud, puis par la rue centrale jusqu'au quartier du régiment
-    const tt=Math.max(0,Math.min(1,(BIV_NOW-a._ce-u._ci*CAMP_GAP)/CAMP_RUN));
-    if(tt<1){const P=[u._f0,[a._cg[0],a._cg[1]+.35],[a._cg[0],a._cg[1]-.3],[a._cg[0],wy],[wx,wy]],D=[];let L=0;for(let k=1;k<P.length;k++){const d=Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]);D.push(d);L+=d}
-      let d=L*(tt*tt*(3-2*tt)),k=0;while(k<D.length-1&&d>D[k]){d-=D[k];k++}const f=D[k]>1e-6?Math.min(1,d/D[k]):1;wx=P[k][0]+(P[k+1][0]-P[k][0])*f;wy=P[k][1]+(P[k+1][1]-P[k][1])*f;x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}}
+    const tt=Math.max(0,Math.min(1,((a._cp||0)-u._ci*CAMP_RUN_GAP(a._cn))/CAMP_RUN));
+    if(tt<1){const w=bivPath([u._f0,[a._cg[0],a._cg[1]+.35],[a._cg[0],a._cg[1]-.3],[a._cg[0],wy],[wx,wy]],tt);wx=w[0];wy=w[1];x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}}
+  else if(a._bk==='d'&&a.decamp&&a._dx&&u._f0&&u._di!=null){
+    // levée du camp : les régiments sortent en file par la porte du départ et se rangent dehors par rangs de quatre
+    const X=a._dx,d=a.decamp,p=Math.max(0,Math.min(1,(S.day-d.t0)/(d.end-d.t0))),tt=Math.max(0,Math.min(1,(p-u._di*(.97-DEC_RUN)/Math.max(1,X.n-1))/DEC_RUN));
+    const r=Math.floor(u._di/4),m=Math.min(4,X.n-r*4),f=(u._di%4)-(m-1)/2,dist=UNIT_KM*(2+(X.R-1-r)*1.35),sl=[X.g[0]+X.d[0]*dist-X.d[1]*f*UNIT_KM*1.35,X.g[1]+X.d[1]*dist+X.d[0]*f*UNIT_KM*1.35];
+    const st=X.d[0]?[u._f0[0],X.c[1]]:[X.c[0],u._f0[1]];
+    const w=bivPath([u._f0,st,X.g,[X.g[0]+X.d[0]*UNIT_KM*1.2,X.g[1]+X.d[1]*UNIT_KM*1.2],sl],tt);wx=w[0];wy=w[1];x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}
   else if(t<1&&u._f0){const dx=wx-u._f0[0],dy=wy-u._f0[1];if(dx*dx+dy*dy<64){const e=t<=0?0:t*t*(3-2*t);wx=u._f0[0]+dx*e;wy=u._f0[1]+dy*e;x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}}
   u._fw=[wx,wy];u._ff=BIV_NOW;return _us.call(this,x,y,q,u,c,dark)}}
 function bivKey(a){const sg=a.at!=null&&!a.legs.length&&N[a.at]&&!N[a.at].col&&S.siege&&S.siege[N[a.at].id];
-  return a.legs.length?'m':sg&&sg.a===a.id&&!a.inG?'s':a.decamp?'d':a.camp?'c':'b'+(a.at==null?'':a.at)}
+  return a.decamp?'d':a.legs.length?(a.camp?'c':'m'):sg&&sg.a===a.id&&!a.inG?'s':a.camp?'c':'b'+(a.at==null?'':a.at)}
 function bivStill(a,key){return key[0]==='b'&&!a.ship&&a.units&&a.units.length&&!(typeof lgLand==='function'&&lgLand(a))}
 const BIV_ORD={inf:0,eleph:1,skirm:2,lcav:3,cav:4};
 function bivFormation(a,s){
@@ -12147,8 +12156,14 @@ function bivFormation(a,s){
   if(a._bk!==key){if(a._bk!=null){a._bt=now;for(const u of a.units)u._f0=u._fw&&now-(u._ff||0)<600?u._fw:null}else a._bt=0;a._bk=key}
   // camp fortifié que l'armée vient d'établir : les régiments entrent en file par la porte, les tentes se montent à mesure (a._fold)
   if(key==='c'&&a._bt===now&&a.camp&&!a.camp.ok&&!a._lev){try{const L=campLayout(a),g=[a.camp.x,a.camp.y+L.H/2];const Q=a.units.filter(u=>u._f0&&Math.hypot(u._f0[0]-g[0],u._f0[1]-g[1])<10);
-      if(Q.length){for(const u of a.units)u._ci=null;Q.sort((p,r)=>Math.hypot(p._f0[0]-g[0],p._f0[1]-g[1])-Math.hypot(r._f0[0]-g[0],r._f0[1]-g[1])).forEach((u,i)=>u._ci=i);a._cg=g;a._ce=now;a._cn=Q.length}}catch(e){}}
-  if(a._ce){const tot=(a._cn-1)*CAMP_GAP+CAMP_RUN,pr=(now-a._ce)/tot;if(key!=='c'||pr>=1){a._ce=0;if(key==='c')a._fold=0}else a._fold=Math.max(0,Math.min(1,1.05-pr*1.15))}
+      if(Q.length){for(const u of a.units)u._ci=null;Q.sort((p,r)=>Math.hypot(p._f0[0]-g[0],p._f0[1]-g[1])-Math.hypot(r._f0[0]-g[0],r._f0[1]-g[1])).forEach((u,i)=>u._ci=i);a._cg=g;a._ce=now;a._cn=Q.length;a._cp=0;a._cl=now}}catch(e){}}
+  // l'entrée suit la construction (temps de jeu) : le dernier régiment gagne son quartier quand la palissade se ferme ;
+  // si le camp est achevé d'un coup (pionniers), l'entrée se termine en 1,5 s
+  if(a._ce){if(key!=='c'||!a.camp)a._ce=0;else{if(a.camp.ok)a._cp=Math.min(1,a._cp+(now-a._cl)/1500);else a._cp=Math.max(a._cp,Math.min(1,1-(a.camp.t-S.day)));a._cl=now;
+      if(a._cp>=1){a._ce=0;a._fold=0}else a._fold=Math.max(0,Math.min(1,1.05-a._cp*1.15))}}
+  if(key==='d'&&a._bt===now&&a.decamp){a._dx=null;try{const cam=a.decamp.cam,L=campLayout(a),l0=a.legs[0],dx=l0.x-cam.x,dy=l0.y-cam.y,d=Math.abs(dx)>Math.abs(dy)?[dx>0?1:-1,0]:[0,dy>0?1:-1],g=[cam.x+d[0]*L.W/2,cam.y+d[1]*L.H/2];
+      const Q=a.units.filter(u=>u._f0);for(const u of a.units)u._di=null;Q.sort((p,r)=>Math.hypot(p._f0[0]-g[0],p._f0[1]-g[1])-Math.hypot(r._f0[0]-g[0],r._f0[1]-g[1])).forEach((u,i)=>u._di=i);
+      if(Q.length)a._dx={c:[cam.x,cam.y],d,g,n:Q.length,R:Math.ceil(Q.length/4)}}catch(e){}}
   BIV_A=a;BIV_S=s;BIV_NOW=now;
   try{if(bivStill(a,key)){try{return bivFormation(a,s)}catch(e){console.error('[bivouac]',e)}}return _fm.apply(this,arguments)}finally{BIV_A=null}}}
 // garnison ou armée de capitaine en marche, vue rapprochée : écu sur hampe comme une armée
