@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v209</span>
+ <span class="chg-ver">v210</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -14063,13 +14063,18 @@ function eqMilAll(){if(!S||!S.armies)return 0;let n=0;for(const a of S.armies)if
     if(Math.floor(d)%10===3)for(const a of S.armies)if(!a.dead&&a.g)for(const u of a.units)if(u.gm&&u._mil){const cap=Math.round(UT[u.t].men*EQ_MIL_K);if(u.men>cap)u.men=cap}}}catch(e){console.error(e)}return r}}
 // ---- 2. armées de départ ----
 const EQ_ADD={
-  'P. Cornelius Scipio':[['legion',2]],'Ti. Sempronius Longus':[['legion',2],['acav',1]]};
+  // 11 nov. (Baptiste : « fortement augmenter » Hannibal et Scipion) : Hannibal quitte Nova Carthago avec ~70 000 h (Polybe : 90 000 fantassins, 12 000 cavaliers, 37 éléphants) ;
+  // Scipion mène une grande armée consulaire (~36 000 h)
+  'Hannibal':[['lib',6],['iber',7],['sling',3],['hcav',4],['ncav',4],['eleph',2]],
+  'P. Cornelius Scipio':[['legion',8],['velites',2],['rcav',1],['acav',1]],'Ti. Sempronius Longus':[['legion',2],['acav',1]]};
 const EQ_PEO={ath:{army:'Eurycléidès',add:[['athoplites',1],['thureo',1],['cretois',1]],gold:100},
   syr:{army:'Hiéron II',add:[['athoplites',1],['athpelt',1]],gold:0}};
 function eqAdd(a,spec){if(!a||!spec)return;for(const [t,k] of spec)for(let j=0;j<k;j++)if(UT[t]&&a.units.length<MAXU)a.units.push({t,men:UT[t].men});
   try{a._dep=null;depArmy(a);if(typeof fixCorps==='function')fixCorps(a)}catch(e){console.error(e)}try{a.food=armyFoodMax(a)}catch(e){}}
 function eqStart218(){if(!S||S.day>3||S.eqStart)return;S.eqStart=1;
-  for(const a of S.armies)if(!a.dead&&!a.g&&EQ_ADD[a.name])eqAdd(a,EQ_ADD[a.name])}
+  for(const a of S.armies)if(!a.dead&&!a.g&&EQ_ADD[a.name]){const n0=a.units.length;eqAdd(a,EQ_ADD[a.name]);
+    // Hannibal a déjà son état-major (Maharbal, Magon, Carthalon) : les nouveaux régiments rejoignent leur corps
+    if((a.sub||[]).length===3){const MAP={hcav:1,ncav:1,iber:2,sling:3,eleph:3};for(let i=n0;i<a.units.length;i++)a.units[i].cp=MAP[a.units[i].t]||0}}}
 {const _ngE=newGame;newGame=function(){const r=_ngE.apply(this,arguments);try{eqStart218();eqMilAll();S.eqMil=1}catch(e){console.error(e)}return r}}
 {const _psE=peo218Setup;peo218Setup=function(k){const r=_psE.apply(this,arguments);try{const P=EQ_PEO[k];if(P&&!S.eqPeo){S.eqPeo=1;
     const L=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g);const a=L.find(x=>x.name===P.army)||L.sort((p,q)=>q.units.length-p.units.length)[0];
