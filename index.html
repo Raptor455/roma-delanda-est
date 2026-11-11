@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v208</span>
+ <span class="chg-ver">v209</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -13619,13 +13619,14 @@ const BD_ICO={
   _:`<path d="M9 8h30v4H9z M11 12.500h26v2.500H11z M14 16h20v24H14z M10 40.500h28v3H10z M7 44h34v2.500H7z"/><path d="M19 17v22M24 17v22M29 17v22" class="h" stroke-width="1.300"/>`};
 const BD_EFF={mar:'Revenu de la ville +15 %',port:'Commerce maritime : +2 or par mois',tem:'Ordre public +8',cas:'Recrues formées 40 % plus vite',mur:'Les sièges durent 50 % de plus',
   gre:'Ordre +5, vivres refaits en ville',min:'+8 or par mois',ars:'+12 de matériel par mois aux armées',har:'Chevaux de la ville doublés',frg:'Fer de la ville doublé',sci:'Bois de la ville doublé'};
-function bdIco(k,on,sz){const c=(()=>{try{const p=START_PEO.find(p=>p.k===peoCur());return p?p.c:'#7d4fb8'}catch(e){return '#7d4fb8'}})();
-  const d=(BD_ICO[k]||BD_ICO._).replace(/class="s"/g,'fill="none" stroke="url(#bdE)" stroke-linecap="round" stroke-linejoin="round"').replace(/class="hf"/g,`fill="${on?c:'#2a2018'}" stroke="none"`).replace(/class="h"/g,`fill="none" stroke="${on?c:'#2a2018'}" stroke-linecap="round" opacity=".85"`);
-  return `<svg class="bdI${on?' on':''}" viewBox="0 0 48 48" width="${sz||46}" height="${sz||46}" aria-hidden="true"><defs><linearGradient id="bdE" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6dc"/><stop offset="1" stop-color="#d9b872"/></linearGradient>
-    <radialGradient id="bdF${on?1:0}" cx=".4" cy=".32" r=".85"><stop offset="0" stop-color="${on?c:'#4a3a28'}"/><stop offset="1" stop-color="${on?'#1a120a':'#211910'}"/></radialGradient></defs>
-    <rect x="1" y="1" width="46" height="46" rx="7" fill="url(#bdF${on?1:0})" stroke="${on?'#d6b878':'#6b5536'}" stroke-width="1.500"/>
+let bdIcoN=0;
+function bdIco(k,on,sz){const u=++bdIcoN;const c=(()=>{try{const p=START_PEO.find(p=>p.k===peoCur());return p?p.c:'#7d4fb8'}catch(e){return '#7d4fb8'}})();
+  const d=(BD_ICO[k]||BD_ICO._).replace(/class="s"/g,`fill="none" stroke="url(#bdE${u})" stroke-linecap="round" stroke-linejoin="round"`).replace(/class="hf"/g,`fill="${on?c:'#2a2018'}" stroke="none"`).replace(/class="h"/g,`fill="none" stroke="${on?c:'#2a2018'}" stroke-linecap="round" opacity=".85"`);
+  return `<svg class="bdI${on?' on':''}" viewBox="0 0 48 48" width="${sz||46}" height="${sz||46}" aria-hidden="true"><defs><linearGradient id="bdE${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6dc"/><stop offset="1" stop-color="#d9b872"/></linearGradient>
+    <radialGradient id="bdF${u}" cx=".4" cy=".32" r=".85"><stop offset="0" stop-color="${on?c:'#4a3a28'}"/><stop offset="1" stop-color="${on?'#1a120a':'#211910'}"/></radialGradient></defs>
+    <rect x="1" y="1" width="46" height="46" rx="7" fill="url(#bdF${u})" stroke="${on?'#d6b878':'#6b5536'}" stroke-width="1.500"/>
     <g transform="translate(24 24) scale(.8) translate(-24 -25)"><g transform="translate(0 1.600)" fill="rgba(8,5,2,.55)" stroke="none" style="--x:0">${(BD_ICO[k]||BD_ICO._).replace(/class="s"/g,'fill="none" stroke="rgba(8,5,2,.55)" stroke-linecap="round"').replace(/class="hf?"/g,'fill="none" stroke="none"')}</g>
-    <g fill="url(#bdE)" stroke="none">${d}</g></g></svg>`}
+    <g fill="url(#bdE${u})" stroke="none">${d}</g></g></svg>`}
 const bdPips=(l,max)=>`<span class="bdP" aria-label="niveau ${l} sur ${max}">${'<i class="on"></i>'.repeat(l)}${'<i></i>'.repeat(max-l)}</span>`;
 if(typeof ecoBlock==='function'){const _ebE=ecoBlock;ecoBlock=function(i){try{ecoInit();const n=N[i],id=n.id;if(ownerN(i)!=='car'||n.col)return '';
   const o=Math.round(S.ord[id]==null?ordTarget(n):S.ord[id]),P=ordParts(n),tg=Math.round(ordTarget(n));
@@ -13668,6 +13669,125 @@ if(typeof ecoBlock==='function'){const _ebE=ecoBlock;ecoBlock=function(i){try{ec
 .bdF{flex:none;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold,#d6b878);min-width:50px;text-align:center}
 .bdC.full{border-color:rgba(214,184,120,.35)}
 `;document.head.appendChild(st)}
+/* ---------- CHANTIER NAVAL ET PANNEAU DE FLOTTE (fil Interface, 11 nov.) ----------
+   1. shipyardBlock : une carte illustrée par type de navire (mêmes vignettes gravées que les bâtiments). Les boutons gardent
+      data-ship / data-n (bindShipyard et le module des ressources les relient) et un .sub dans la carte reçoit le coût en bois.
+   2. Panneau de flotte : rangé après coup dans la tablette (comme townTabs) : état, composition en vignettes, chiffres clés,
+      puis onglets Ordres / À bord / Missions / Amiral. Les boutons d'origine sont déplacés, pas recréés : leurs actions restent.
+      Une section ajoutée par un autre fil (nouveau h3) tombe dans « Missions » ; l'ajouter à NF_KIND pour la ranger ailleurs. */
+Object.assign(BD_ICO,{
+  quin:`<path d="M4 29H37L46 26.500L41.500 33Q39.500 37.500 35 37.500H10Q5 37.500 4 29Z"/><path d="M40.500 31.500L47.500 33.200L40 35.500Z"/><path d="M6 30Q1.500 22 6.500 15.500Q9.500 12.500 11.500 16.500" class="s" stroke-width="2.400"/>
+    <path d="M17 21h2.500v2h2.500v-2h3v2h2.500v-2H30v8H17Z"/><path d="M23.500 3.500v18" class="s" stroke-width="2"/><path d="M14.500 6h18" class="s" stroke-width="2.200"/><path d="M15.500 7.500h16v5.500Q23.500 15.500 15.500 13Z"/>
+    <path d="M8 32.500h29" class="h" stroke-width="1.300"/><circle cx="33.500" cy="26" r="1.700" class="hf"/><circle cx="12.500" cy="26.300" r="1.700" class="hf"/>
+    <path d="M11 38l-3.500 7.500M15.500 38l-3.500 7.500M20 38l-3.500 7.500M24.500 38l-3.500 7.500M29 38l-3.500 7.500M33.500 38l-3.500 7.500" class="s" stroke-width="1.700"/>`,
+  tri:`<path d="M3 31.500H37L46.500 29.500L41.500 34.500Q39.500 37.500 36 37.500H8.500Q4 37.500 3 31.500Z"/><path d="M41 33L47.500 34.300L40.500 36.300Z"/><path d="M4.500 32Q1 25 5.500 19.500Q8 17 9.500 20.500" class="s" stroke-width="2.200"/>
+    <path d="M23.500 4v27" class="s" stroke-width="1.800"/><path d="M12.500 7H34.500Q38.500 16.500 34.500 26H12.500Q16.500 16.500 12.500 7Z"/><path d="M18 9.500Q21 16.500 18 23.500M29 9.500Q32 16.500 29 23.500" class="h" stroke-width="1.200"/>
+    <circle cx="39" cy="32.300" r="1.500" class="hf"/>
+    <path d="M9 38l-3 7M12.800 38l-3 7M16.600 38l-3 7M20.400 38l-3 7M24.200 38l-3 7M28 38l-3 7M31.800 38l-3 7M35.600 38l-3 7" class="s" stroke-width="1.300"/>`,
+  trans:`<path d="M4.500 27H43.500Q43 40 33 42H15Q5 40 4.500 27Z"/><path d="M6 28Q2.500 21 6 15.500Q8.500 13 10.500 15.500" class="s" stroke-width="2.400"/><path d="M42 28Q45.500 24 44 19.500" class="s" stroke-width="2.200"/>
+    <path d="M24 3.500v24" class="s" stroke-width="2.200"/><path d="M11 6H37Q39.500 14 37 22.500H11Q13.500 14 11 6Z"/><path d="M11.800 11.500h24.400M11.800 17h24.400M19.500 6.500v15.500M28.500 6.500v15.500" class="h" stroke-width="1.100"/>
+    <path d="M7.500 32h33M9.500 36.500h29" class="h" stroke-width="1.200"/><path d="M9 29.500L5.500 44" class="s" stroke-width="2"/><path d="M4 41l3.500 .800l-1.800 4.700l-3 -.700Z"/>`});
+const NF_ROLE={quin:['Vaisseaux de ligne : combat et blocus','Éperonnent, abordent, tiennent un blocus. Portent aussi quelques troupes.'],
+  tri:['Galères rapides : poursuite et vigie','Poursuivent pirates et marchands, partent en vigie.'],
+  trans:['Portent les armées, un régiment par navire','Un régiment par navire. Sans défense s\'ils naviguent seuls.']};
+const nfPl=(n,k)=>n+' '+(n>1?SHIP[k].n.toLowerCase():SHIP[k].one);
+if(typeof shipyardBlock==='function'){const _sbE=shipyardBlock;shipyardBlock=function(n){try{
+  if(!n.port||ownerN(n.i)!=='car')return '';
+  const yard=YARD.has(n.id),blocked=S.block[n.id]&&S.block[n.id].side!=='car',q=S.fq[n.id],gold=S.gold.car;
+  let h=`<h3>Chantier naval</h3>`;
+  if(blocked)h+=`<div class="bdW nfBad"><div><b>Port bloqué</b><small>Une flotte ennemie tient la rade : aucun navire ne peut être lancé. Chassez-la pour rouvrir le chantier.</small></div></div>`;
+  else if(q&&SHIP[q.t]){const tot=SHIP[q.t].d,pr=Math.max(0,Math.min(1,1-q.d/tot));
+    h+=`<div class="bdW">${bdIco(q.t,true,40)}<div><b>Sur cale : ${nfPl(q.n,q.t)}</b><div class="bdOg"><i style="width:${Math.round(pr*100)}%;background:var(--gold)"></i></div><small>lancement dans ${Math.ceil(q.d)} jour${Math.ceil(q.d)>1?'s':''}</small></div></div>`}
+  const here=S.fleets.filter(f=>f.side==='car'&&f.at===n.i&&!f.legs.length);
+  h+=`<p class="sub nfIn">Les navires sortent par escadres de ${BATCH}${here.length?` et rejoignent <b>${esc(here[0].name)}</b>, au port`:' et forment une flotte au port'}.${yard?'':' Petit port : il ne construit que des transports.'}</p>`;
+  h+=`<div class="bdH">Mettre sur cale${q?' <small>· une seule cale à la fois</small>':''}</div>`;
+  h+=Object.keys(SHIP).map(k=>{const s=SHIP[k],c=s.cost*BATCH,no=!yard&&k!=='trans',poor=gold<c,R=NF_ROLE[k]||['',''];
+    return `<div class="bdC nfY${no?' nfNo':''}" title="${esc(s.n+' : '+R[1])}">${bdIco(k,!no)}
+      <div class="bdT"><b>${BATCH} ${s.n.toLowerCase()}</b><small class="nfR">${R[0]}</small>
+        <small class="sub nfS">${s.d} jours · entretien ${+(s.up*BATCH).toFixed(2)} or/mois</small></div>
+      ${no?'<span class="bdF">Grand port requis</span>':`<button data-ship="${k}" data-n="${n.i}" type="button" class="bdB${poor?' poor':''}" ${q||blocked||poor?'disabled':''} title="${blocked?'Port bloqué':q?'Une seule cale à la fois':poor?`Il manque ${Math.ceil(c-gold)} or`:`Construire : ${c} or, ${s.d} jours`}"><b>${c}</b><small>or</small></button>`}</div>`}).join('');
+  return h}catch(e){console.error(e);return _sbE.apply(this,arguments)}}}
+
+/* ---- panneau de flotte ---- */
+let nfTab='ord',nfBusy=false,nfHelpOpen=false;
+const NF_TT=[['ord','Ordres'],['brd','À bord'],['mis','Missions'],['adm','Amiral']];
+const NF_KIND=t=>/À bord/i.test(t)?'brd':/Commandement/i.test(t)?'adm':'mis';
+const NF_HELP=/Clic droit|Une armée embarque|Une descente demande/;
+function nfFleet(){const el=$('side');if(!el||nfBusy)return;
+  const f=typeof sel!=='undefined'&&sel&&sel.f;
+  if(!f||f.side!=='car'||!S.fleets.includes(f)){el.classList.remove('nfFleet');return}
+  if(el.querySelector(':scope > .nfW')||!$('fCote'))return;
+  nfBusy=true;try{
+    const skip=c=>c.nodeType===1&&(c.classList.contains('ui-x')||c.classList.contains('ui-head')||c.tagName==='H2'||c.classList.contains('nvKeep'));
+    const loose=[...el.childNodes].filter(c=>!skip(c)&&!(c.nodeType===3&&!c.textContent.trim()));
+    const W=document.createElement('div');W.className='nfW';
+    const P={};const body=document.createElement('div');body.className='nfB';
+    NF_TT.forEach(([k])=>{const p=document.createElement('div');p.className='nfP';p.dataset.k=k;body.appendChild(p);P[k]=p});
+    const help=[];let cur='ord',stat=null,first=true;
+    for(const c of loose){
+      if(c.nodeType!==1){continue}
+      if(c.tagName==='H3'){cur=NF_KIND(c.textContent);const t=c.textContent.replace(/\s*\(.*$/,'').trim();
+        if(/^(À bord|Missions|Commandement)$/.test(t)){c.remove();continue}
+        c.classList.add('nfH');P[cur].appendChild(c);continue}
+      if(c.tagName==='P'&&first&&cur==='ord'){first=false;stat=c;continue}
+      if(c.tagName==='P'&&cur==='ord'&&c.classList.contains('sub')&&/quinquérèmes ·/.test(c.textContent)){c.remove();continue}
+      if(c.tagName==='P'&&c.classList.contains('sub')&&!c.querySelector('button,select')&&NF_HELP.test(c.textContent)){c.removeAttribute('style');help.push(c);
+        if(/^Aucune troupe/.test(c.textContent.trim()))P[cur].insertAdjacentHTML('beforeend','<p class="sub nfE">Aucune troupe à bord.</p>');continue}
+      if(cur==='ord'&&c.classList.contains('row')){const lab=c.querySelector('#fCote')?'Route':c.querySelector('#fGar')?'Port':c.querySelector('#fHalt')?'Manœuvres':'';
+        if(lab)P.ord.insertAdjacentHTML('beforeend',`<div class="nfL">${lab}</div>`)}
+      P[cur].appendChild(c)}
+    // en-tête : état, composition, chiffres clés
+    const cap=fCap(f),used=fUsed(f),coast=f.at!=null||(typeof onCoast==='function'&&onCoast(f.x,f.y)),food=f.food==null?null:Math.round(f.food);
+    const comp=Object.keys(SHIP).map(k=>{const n=f.ships[k]||0;return `<div class="nfS1${n?'':' zero'}" title="${esc((NF_ROLE[k]||['',''])[1])}">${bdIco(k,n>0,34)}<b>${n}</b><small>${n>1?SHIP[k].n.toLowerCase():SHIP[k].one}</small></div>`}).join('');
+    const tile=(v,l,cls,tt)=>`<div class="nfK1${cls?' '+cls:''}"${tt?` title="${esc(tt)}"`:''}><b>${v}</b><small>${l}</small></div>`;
+    let xp='';try{if(f.xp!=null&&typeof xpRank==='function')xp=tile(xpRank(f.xp),'équipages','',`Expérience ${Math.round(f.xp)}/100`)}catch(e){}
+    const tiles=tile(Math.round(fSpeed(f)),'km/jour','',f.mode==='cote'?'Cabotage : plus lent mais sûr':'Haute mer : plus rapide, plus risqué')+
+      (food!=null?tile(food+' j','vivres',food<=5?'bad':food<=10?'warn':'','Les vivres se refont au port ou par un convoi qui suit la flotte'):'')+
+      tile(coast?'côte':(f.water+' j'),'eau',!coast&&f.water<=2?'bad':'',coast?'Renouvelée chaque soir près des côtes':'En haute mer, l\'eau est comptée')+
+      tile(used+'/'+cap,'à bord',used>cap?'bad':'')+xp;
+    const head=document.createElement('div');head.className='nfHd';
+    if(stat){stat.classList.add('nfSt');head.appendChild(stat)}
+    head.insertAdjacentHTML('beforeend',`<div class="nfS0">${comp}</div><div class="nfK">${tiles}</div>`);
+    const bar=document.createElement('div');bar.className='nfT ua-tabs';bar.setAttribute('role','tablist');
+    const cnt={brd:f.cargo.length||'',mis:(f.task||f.chase||f.follow!=null)?'●':''};
+    bar.innerHTML=NF_TT.filter(([k])=>P[k].children.length).map(([k,n])=>`<button type="button" role="tab" data-k="${k}">${n}${cnt[k]?` <i>${cnt[k]}</i>`:''}</button>`).join('');
+    bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{nfTab=b.dataset.k;nfShow(el)});
+    W.appendChild(head);W.appendChild(bar);W.appendChild(body);
+    if(help.length){const d=document.createElement('details');d.className='nfHp';d.open=nfHelpOpen;d.innerHTML='<summary>Comment ça marche</summary>';help.forEach(p=>d.appendChild(p));d.ontoggle=()=>{nfHelpOpen=d.open};W.appendChild(d)}
+    el.appendChild(W);el.classList.add('nfFleet');nfShow(el)}catch(e){console.error(e)}finally{nfBusy=false}}
+function nfShow(el){const bar=el.querySelector('.nfT'),body=el.querySelector('.nfB');if(!bar||!body)return;
+  const ks=[...bar.querySelectorAll('button')].map(b=>b.dataset.k);const t=ks.includes(nfTab)?nfTab:ks[0];
+  bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===t));
+  body.querySelectorAll(':scope > .nfP').forEach(p=>p.hidden=p.dataset.k!==t)}
+{const st=document.createElement('style');st.textContent=`
+.bdW.nfBad{border-color:#d9694f;background:rgba(217,105,79,.12)}.bdW.nfBad small{display:block;margin-top:2px}
+p.nfIn{margin:0 0 4px}
+.bdC.nfY{align-items:flex-start}.bdC.nfY .bdI{margin-top:2px}.bdC.nfY .bdB{align-self:center}.bdC.nfY .bdF{align-self:center;max-width:62px;line-height:1.25}
+.bdC.nfY .bdT small.nfR{line-height:1.3}.bdC.nfY .bdT small.nfS{color:var(--tx,#efe6d2);opacity:.85;margin-top:3px;font-size:11.500px}
+.bdC.nfNo{opacity:.62}
+#side.nfFleet>.nfW{margin-top:6px}
+.nfSt{margin:2px 0 8px;line-height:1.35}
+.nfS0{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.nfS1{display:grid;grid-template-columns:auto 1fr;column-gap:7px;row-gap:3px;align-items:center;padding:5px 6px;border:1px solid rgba(107,85,54,.7);border-radius:6px;background:rgba(255,255,255,.025)}
+.nfS1 svg{display:block}.nfS1 b{font-family:var(--display,serif);font-size:21px;line-height:1}.nfS1 small{grid-column:1/3;font-size:11px;color:var(--mu2,#b9a98a);line-height:1.1}
+.nfS1.zero{opacity:.5}
+.nfK{display:flex;gap:5px;margin:5px 0 9px}
+.nfK1{flex:1;min-width:0;text-align:center;padding:4px 2px;border-radius:5px;background:rgba(0,0,0,.2);border:1px solid rgba(107,85,54,.45)}
+.nfK1 b{display:block;font-size:14px;font-weight:600;line-height:1.15;white-space:nowrap}.nfK1 small{display:block;font-size:10px;color:var(--mu2,#b9a98a);line-height:1.15;letter-spacing:.02em}
+.nfK1.bad b{color:#e8907a}.nfK1.warn b{color:var(--gold,#d6b878)}
+.nfT{flex-wrap:wrap}.nfT button{padding:3px 8px!important;font-size:12.500px!important}.nfT button i{font-style:normal;font-size:10.500px;color:var(--gold,#d6b878);margin-left:2px}
+.nfB{padding-top:8px}.nfB .row{flex-wrap:wrap}
+.nfL,.nfB h3.nfH{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu2,#b9a98a);margin:10px 0 4px;font-weight:400;font-family:var(--ui,sans-serif);border:0;padding:0}
+.nfP>.nfL:first-child,.nfP>h3.nfH:first-child{margin-top:0}
+.nfP>p{margin:4px 0 6px;line-height:1.4}
+.nfHp{margin-top:12px;border-top:1px solid rgba(138,106,60,.35);padding-top:6px}
+.nfHp summary{cursor:pointer;font-size:12px;color:var(--mu2,#b9a98a);letter-spacing:.04em}.nfHp summary:hover{color:var(--tx,#efe6d2)}
+.nfHp p{margin:6px 0 0;font-size:12px;line-height:1.4}
+`;document.head.appendChild(st)}
+setTimeout(()=>{try{
+  if(typeof renderSide==='function'){const _rsN=renderSide;renderSide=function(){const r=_rsN.apply(this,arguments);try{nfFleet()}catch(e){}return r}}
+  const so=new MutationObserver(()=>{if(!nfBusy)setTimeout(()=>{try{nfFleet()}catch(e){}},0)});try{so.observe($('side'),{childList:true})}catch(e){}
+}catch(e){console.error(e)}},1300);
 /* ================= FIN EMBLÈMES ================= */
 /* ================= ÉCRANS DE CHARGEMENT ================= */
 /* Source : /mnt/project-files/chargement/ecrans.js, injecté avant « BOUCLE » par chargement/patch.py (relançable).
