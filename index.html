@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v205</span>
+ <span class="chg-ver">v206</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -3200,7 +3200,7 @@ function drawStatic(w,h,T){
   if(texPat&&s>=5){ctx.save();ctx.clip(landSmooth);const m=new DOMMatrix().scale(.08);texPat.setTransform(m);ctx.fillStyle=texPat;ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.restore()}
   // territoires
   ctx.save();ctx.clip(landSmooth);if(!NOTERR){
-  /*TERR-LISIBLE*/const tA=s>4?.55:s>2.5?.7:s>1?.85:1;for(const o in ownerPaths){if(o==='_')continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.36:.5)*tA);ctx.fill(ownerPaths[o])}
+  /*TERR-LISIBLE*/const tA=s>4?.55:s>2.5?.7:s>1?.85:1;for(const o in ownerPaths){if(o==='_'||(MPTERR&&MPTERR[o]&&mpTerrFill(o,tA))/*MP*/)continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.36:.5)*tA);ctx.fill(ownerPaths[o])}
   // frontières : entre maîtres différents, plus discrètes entre villes d'un même maître quand on zoome
   for(const B of BORDER){if(!B.bb){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of B.pts){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}B.bb=[a,b,c,d]}if(B.bb[2]<vx0||B.bb[0]>vx1||B.bb[3]<vy0||B.bb[1]>vy1)continue;const oa=ownerN(B.a),ob=ownerN(B.b);
     if(oa===ob){if(s<1.4)continue;ctx.strokeStyle='rgba(70,50,30,.22)';ctx.lineWidth=1*z;ctx.setLineDash([4*z,4*z])}
@@ -9716,6 +9716,43 @@ setInterval(()=>{if(!MP.role||!S||!S.mpP||!mpdOn('car')||MP.domAsked)return;cons
   if(!$('modal').hidden||S.cur)return;MP.domAsked=true;openDom();const h=document.querySelector('#mcard h2');if(h)h.textContent='Choisissez votre général'},700);
 document.addEventListener('click',e=>{if(e.target&&e.target.id==='mpDom')openDom()});
 window.__mpd={mpdOn,mpdKeys,mpdView,mpdInc,mpdArmy,mpdCity,mpdOwner,mpdAct,openDom,mpdSync};
+/* ---- COULEURS DES JOUEURS d'un même camp (Baptiste 11 nov. : « voir rapidement qui a quelle armée et quelle terre est à qui,
+   peut-être un dégradé de couleurs ») : chaque joueur reçoit une nuance de la couleur de son pays (1er : la couleur du pays,
+   2e : plus claire, 3e : plus sombre…). Terres : villes de son commandement (coop). Armées : pastille à son initiale. Légende en haut à gauche. ---- */
+let MPTERR=null,mpColSig='';
+function mpSidePlayers(X){const P=S&&S.mpP;if(!P)return [];return Object.keys(P).filter(id=>P[id]&&P[id].side===X)}
+const mpMulti=X=>!!MP.role&&(X==='car'||X==='rom')&&mpSidePlayers(X).length>1;
+function mpShadeOf(X,pid){const L=mpSidePlayers(X),i=Math.max(0,L.indexOf(pid)),c=(FAC[X]&&FAC[X].c)||[128,128,128];
+  const mix=(t,k)=>c.map((v,j)=>Math.round(v+(t[j]-v)*k));
+  return [c,mix([255,255,255],.5),mix([0,0,0],.5),mix([255,232,170],.72),mix([0,0,0],.72),mix([255,255,255],.82)][i%6]}
+{const _bo=buildOwnerPaths;buildOwnerPaths=function(){const r=_bo.apply(this,arguments);MPTERR=null;
+  try{if(MP.role&&S.mpD)for(const X of ['car','rom']){if(!mpdOn(X)||!mpMulti(X))continue;const T={};
+      for(const n of N){if(n.col||!CELL[n.i]||ownerN(n.i)!==X)continue;const k=mpdCity(n),p=k?mpdOwner(k):null,key=p||'_';(T[key]=T[key]||new Path2D()).addPath(CELL[n.i].path)}
+      (MPTERR=MPTERR||{})[X]=T}}catch(e){console.warn(e);MPTERR=null}
+  return r}}
+function mpTerrFill(X,tA){const T=MPTERR&&MPTERR[X];if(!T)return false;for(const p in T){const c=p==='_'?FAC[X].c:mpShadeOf(X,p);ctx.fillStyle=rgb(c,.55*tA);ctx.fill(T[p])}return true}
+{const _tk=token;token=function(x,y,side,txt,selected,a){const r=_tk.apply(this,arguments);
+  try{if(a&&!a.g&&!a.dead&&a.units&&mpMulti(side)){const p=mpOwner(a);if(p){
+      mpBadge(x+11,y-11,7,side,p)}}}catch(e){}
+  return r}}
+function mpBadge(x,y,r,side,p){const c=mpShadeOf(side,p),nm=String(mpName(p)||'?').trim()||'?';
+  ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fill();ctx.lineWidth=Math.max(1.4,r*.2);ctx.strokeStyle='#f3e6c4';ctx.stroke();
+  const lum=c[0]*.3+c[1]*.59+c[2]*.11;ctx.fillStyle=lum>150?'#1e160d':'#fff6e0';ctx.font=`700 ${Math.round(r*1.25)}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(nm[0].toUpperCase(),x,y+.5);ctx.restore()}
+// cartouche d'armée (médaillon du général) : pastille du joueur en haut à droite du médaillon
+{const _gc=genCard;genCard=function(a,s){const r=_gc.apply(this,arguments);
+  try{if(a&&!a.g&&a._sq&&a._sq.length&&mpMulti(a.side)){const p=mpOwner(a);if(p){const [X,my]=a._sq[a._sq.length-1],k=s<.5?.78:s<.8?.9:1,mr=Math.round(27*k);mpBadge(X+mr*.8,my-mr*.62,Math.round(11*k),a.side,p)}}}catch(e){}
+  return r}}
+function mpColLegend(){let e=$('mpCol');const sides=['car','rom'].filter(mpMulti);
+  if(!sides.length){if(e)e.remove();return}
+  if(!e){e=document.createElement('div');e.id='mpCol';e.setAttribute('role','note');
+    e.style.cssText='position:absolute;left:12px;bottom:200px;z-index:5;padding:6px 9px;border-radius:6px;background:rgba(24,19,13,.86);border:1px solid #a8823c;color:#efe6d2;font:12px Georgia,serif;line-height:1.5;pointer-events:none;max-width:220px';
+    ($('mapw')||document.body).appendChild(e)}
+  let h='';for(const X of sides){for(const id of mpSidePlayers(X)){const c=mpShadeOf(X,id),on=S.mpP[id].on!==0;
+      h+=`<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis${on?'':';opacity:.55'}"><i style="display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:6px;background:rgb(${c[0]},${c[1]},${c[2]});border:1px solid #f3e6c4"></i>${esc(mpName(id))}${id===MP.me?' <span style="opacity:.7">(vous)</span>':''}</div>`}}
+  if(e._h!==h){e._h=h;e.innerHTML=h}}
+setInterval(()=>{try{if(!MP.role||!S){const e=$('mpCol');if(e)e.remove();return}mpColLegend();
+    const sig=JSON.stringify([S.mpCity||null,S.mpD?Object.keys(S.mpD).map(k=>[k,S.mpD[k].p]):null,mpSidePlayers('car'),mpSidePlayers('rom')]);
+    if(sig!==mpColSig){mpColSig=sig;territoryDirty=true}}catch(e){}},1000);
 /* ================= FIN MULTIJOUEUR ================= */
 /* ================= PORTRAITS DES GÉNÉRAUX (fil « Terrain Campagne ») ================= */
 // Bustes, statues et monnaies réels (Wikimedia Commons, licences libres), teintés aux couleurs du camp.
@@ -13912,6 +13949,366 @@ window.__equi={eqStaff,eqStaffAll,eqCorps,EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ
   window.__lt={canWatch,doWatch};
 }
 /* ================= FIN LIEUTENANTS (campagne) ================= */
+/* ================= SÉNAT (fil « Mécaniques de campagne », 11 nov. 2026, lot A) =================
+   Source : /mnt/project-files/senat/senat.js, injecté juste avant « BOUCLE » par senat/patch.py (relançable, remplace le bloc sur place).
+   Un vrai Sénat : trois partis avec leurs sièges (g = guerre, m = marchands ou modérés, p = paix), leur loyauté envers le joueur,
+   un crédit politique, des motions mises au vote (une par mois), des leviers (convaincre, acheter des voix, promettre une faveur),
+   des motions de l'opposition, des exigences à échéance, des magistrats élus chaque printemps.
+   L'« appui » historique (S.pol.bar, 0-100) reste le maître : les sièges s'y ajustent (senSync). Pour les peuples sans S.pol, S.sen.bar.
+   État : S.sen = {fa:{g,m,p:{s,l}}, cr, bar, last, cd:{}, prep:{}, opp:[], dem, mag:[], back:{}, debt:{}, noSub, loan, w0, h:[]}.
+   Enveloppe sans les réécrire : openPol, senAdj, applyResult, capture, daily, afterLoad. Côté joueur = 'car' (miroir en mode Rome). */
+const SEN_P={
+  car:{t:'Le Conseil des Cent-Quatre',sub:'Sénat de Carthage',tot:104,mag:'Suffètes',s0:[46,20,38],
+    f:{g:{n:'Barcides',ch:'Hannibal',w:'la guerre en Italie, des renforts, la gloire'},m:{n:'Marchands',ch:'Magon le Samnite',w:"les routes de mer ouvertes, l'argent d'Hispanie"},p:{n:"Parti d'Hannon",ch:'Hannon le Grand',w:"la paix, l'Afrique d'abord"}}},
+  rom:{t:'Le Sénat romain',sub:'Le Sénat et le peuple de Rome',tot:300,mag:'Consuls',s0:[124,70,106],
+    f:{g:{n:'Scipions',ch:'P. Cornelius Scipio',w:"l'offensive, la guerre portée chez l'ennemi"},m:{n:'Populaires',ch:'C. Flaminius',w:'du blé, des terres, des victoires rapides'},p:{n:'Fabii',ch:'Q. Fabius Maximus',w:"la prudence, l'Italie d'abord"}}},
+  mac:{t:'Le Conseil des Amis du roi',sub:'Cour de Pella',tot:40,mag:'Stratèges',s0:[17,9,14],
+    f:{g:{n:'Compagnons',ch:'Démétrios de Pharos',w:'la guerre contre Rome, la gloire de Philippe'},m:{n:'Cités grecques',ch:'Aratos de Sicyone',w:'la paix en Grèce, le commerce'},p:{n:'Vieux conseillers',ch:'Apellès',w:'la prudence, garder la Macédoine'}}},
+  syr:{t:'Le Conseil de Syracuse',sub:'Conseil de la cité',tot:60,mag:'Stratèges',s0:[26,14,20],
+    f:{g:{n:'Parti punique',ch:'Hippocrate',w:'la guerre contre Rome, toute la Sicile'},m:{n:'Marchands du port',ch:'Andranodoros',w:'le blé, les routes de mer'},p:{n:'Amis de Rome',ch:'Zoïppos',w:'la paix, le vieux traité de Hiéron'}}},
+  ath:{t:'La Boulè des Six-Cents',sub:'Assemblée des Athéniens',tot:600,mag:'Stratèges',s0:[250,140,210],
+    f:{g:{n:'Parti de la liberté',ch:'Céphisodore',w:'chasser les Macédoniens de Grèce'},m:{n:'Armateurs du Pirée',ch:'Micion',w:'le Pirée ouvert, le commerce'},p:{n:'Prudents',ch:'Eurycléidès',w:'la neutralité, les murs'}}},
+  num:{t:'Le Conseil des chefs',sub:'Assemblée des Massyles',tot:24,mag:'Chefs de guerre',s0:[10,6,8],
+    f:{g:{n:'Jeunes guerriers',ch:'Massinissa',w:'la guerre contre Syphax, le butin'},m:{n:'Chefs des tribus',ch:'Oezalcès',w:'les troupeaux, les pâturages'},p:{n:'Anciens',ch:'Gaïa',w:'la paix entre Numides'}}},
+  ins:{t:'Le Conseil des chefs',sub:'Assemblée des Insubres et des Boïens',tot:30,mag:'Vergobrets',s0:[13,7,10],
+    f:{g:{n:'Guerriers',ch:'Ducarios',w:'chasser Rome de la plaine du Pô, le butin'},m:{n:'Druides',ch:'les druides',w:'les présages, la concorde des tribus'},p:{n:'Anciens',ch:'Magalos',w:'garder les terres, ne pas tout risquer'}}},
+  per:{t:'Le Conseil du roi',sub:'Cour de Pergame',tot:30,mag:'Stratèges',s0:[13,7,10],
+    f:{g:{n:'Amis de Rome',ch:'Attale',w:'la guerre contre Philippe, la flotte'},m:{n:'Cités d’Éolide',ch:'Ménogène',w:'le commerce, la paix des mers'},p:{n:'Prudents',ch:'Philétairos',w:'ne pas quitter l’Asie'}}},
+  mas:{t:'Le Conseil des Six-Cents',sub:'Les Timouques de Massalia',tot:600,mag:'Timouques',s0:[250,150,200],
+    f:{g:{n:'Amis de Rome',ch:'Hermocratès',w:'chasser Carthage de l’Ibérie'},m:{n:'Armateurs',ch:'Apellis',w:'les comptoirs, la mer libre'},p:{n:'Anciens',ch:'les Quinze',w:'garder la cité, éviter la guerre'}}}};
+const SEN_COL={g:'#9a6fd6',m:'#e0b458',p:'#5f9a6a'},SEN_K=['g','m','p'];
+function senPeo(){if(!S)return 'car';if(S.mirror)return 'rom';const k=S.peo;if(k&&k!=='car'&&k!=='rom'&&SEN_P[k]&&typeof isMac==='function'&&isMac())return k;return 'car'}
+const senProf=()=>SEN_P[senPeo()]||SEN_P.car;
+const senClamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const senMonth=()=>Math.floor(S.day/30);
+function senBar(){return S.pol&&typeof S.pol.bar==='number'?S.pol.bar:(S.sen&&typeof S.sen.bar==='number'?S.sen.bar:60)}
+function senBarSet(v){v=senClamp(v,0,100);if(S.pol&&typeof S.pol.bar==='number')S.pol.bar=v;if(S.sen)S.sen.bar=v}
+function senBarOf(){const F=S.sen.fa,T=senProf().tot;return 100*(F.g.s+.8*F.m.s)/T}
+// les sièges suivent l'appui : la paix cède des sièges à la guerre (ou l'inverse), les marchands en dernier recours
+function senSync(){const X=S.sen;if(!X)return;const F=X.fa,T=senProf().tot,min=T*.04;let x=(senBar()-senBarOf())*T/100;if(Math.abs(x)<.01)return;
+  if(x>0){const a=Math.min(x,Math.max(0,F.p.s-min));F.p.s-=a;F.g.s+=a;x-=a;if(x>0){const b=Math.min(x*5,Math.max(0,F.m.s-min));F.m.s-=b;F.g.s+=b}}
+  else{x=-x;const a=Math.min(x,Math.max(0,F.g.s-min));F.g.s-=a;F.p.s+=a;x-=a;if(x>0){const b=Math.min(x*1.25,Math.max(0,F.m.s-min));F.m.s-=b;F.p.s+=b}}}
+function senInit(){if(!S)return;const pk=senPeo();if(S.sen&&S.sen.pk===pk){if(!S.sen.laws)S.sen.laws={};return}const P=SEN_P[pk]||SEN_P.car;
+  S.sen={pk,fa:{g:{s:P.s0[0],l:78},m:{s:P.s0[1],l:52},p:{s:P.s0[2],l:26}},cr:20,bar:60,last:-9,cd:{},prep:{},opp:[],dem:null,demNext:senMonth()+2,mag:['g','p'],back:{},debt:{},noSub:0,loan:0,laws:{},h:[]};
+  senSync()}
+function senSeats(){const F=S.sen.fa,T=senProf().tot;const g=Math.round(F.g.s),m=Math.round(F.m.s);return {g,m,p:T-g-m}}
+function senCr(v){const X=S.sen;X.cr=senClamp(X.cr+v,0,100)}
+function senLoy(k,v){const f=S.sen.fa[k];if(f)f.l=senClamp(f.l+v,0,100)}
+function senNote(t){S.sen.h.unshift({d:Math.floor(S.day),t});S.sen.h.length=Math.min(S.sen.h.length,12)}
+const senName=k=>senProf().f[k].n;
+const senSg=k=>/^Parti/.test(senName(k));
+const senLe=k=>(senSg(k)?'le ':'les ')+senName(k).replace(/^Parti/,'parti'),senDu=k=>(senSg(k)?'du ':'des ')+senName(k).replace(/^Parti/,'parti'),senUp=t=>t.charAt(0).toUpperCase()+t.slice(1);
+const senV=(k,a,b)=>senSg(k)?a:b;
+function senCapI(){const k=senPeo();if(typeof PX!=='undefined'&&PX&&PX[k]&&PX[k].cap&&NI[PX[k].cap]!=null)return NI[PX[k].cap];
+  const id={mac:'pella',syr:'syracusae',ath:'athenae'}[k];if(id&&NI[id]!=null)return NI[id];return capOf('car')}
+function senPortI(){const c=N[senCapI()];if(c.port)return c.i;let b=-1,bd=1e9;for(const n of N){if(!n.port||n.col||ownerN(n.i)!=='car')continue;const d=Math.hypot(n.x-c.x,n.y-c.y);if(d<bd){bd=d;b=n.i}}return b}
+const senMine=()=>S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g&&!a.ship&&a.reinf==null&&!a.conv);
+// troupes votées par le Sénat : celles du peuple (types de l'armée de départ), équipées comme elles
+function senTroops(spec){const pk=senPeo(),R=(typeof DEP_R!=='undefined'&&DEP_R[pk])||null;const by={inf:[],skirm:[],cav:[]};
+  if(R)for(const t in R){if(!UT[t])continue;const K=UT[t].k;(K==='lcav'||K==='cav'?by.cav:K==='skirm'?by.skirm:by.inf).push(t)}
+  if(!by.inf.length)by.inf=[pk==='rom'?'legion':'lib'];if(!by.skirm.length)by.skirm=[pk==='rom'?'velites':'sling'];if(!by.cav.length)by.cav=[pk==='rom'?'rcav':'ncav'];
+  const out=[];for(const [r,k] of spec)for(let j=0;j<k;j++){const L=by[r]||by.inf;out.push([L[j%L.length],1])}return out}
+function senSpawn(name,spec,gen){const i=senCapI(),n=N[i];const a=scenArmy('car',n.id,senTroops(spec),name||nextGen('car'));if(!a)return null;
+  try{if(typeof depArmy==='function')depArmy(a)}catch(e){}if(gen)try{syncGens()}catch(e){}return a}
+/* ---- les voix ---- */
+function senPrep(id){const X=S.sen;return X.prep[id]||(X.prep[id]={b:{},buy:0,fav:null})}
+function senMagBonus(){const X=S.sen,T=senProf().tot;let v=0;for(const k of X.mag||[]){const l=X.fa[k].l;if(l>=55)v+=.03*T;else if(l<40)v-=.03*T}return v}
+// mine = motion du joueur (les partis loyaux votent pour) ; sinon motion de l'opposition (les partis loyaux votent contre)
+function senVotes(M,mine){const X=S.sen,F=X.fa,T=senProf().tot,P=senPrep(M.id),S3=senSeats(),det={};let v=0;
+  for(const k of SEN_K){const a=(M.aff&&M.aff[SEN_K.indexOf(k)])||0,sg=mine?1:-1;
+    const fr=senClamp(.5+sg*(F[k].l-50)/100*.9+a*.45-(M.dif||0)+(P.b[k]||0)*(mine?1:-1),.03,.97);det[k]=Math.round(S3[k]*fr);v+=det[k]}
+  v+=(mine?1:-1)*senMagBonus()+(mine?1:-1)*(P.buy||0)*.05*T-(mine?0:(P.blk||0)*.07*T);
+  v=Math.round(senClamp(v,0,T));return {v,need:Math.floor(T/2)+1,T,det}}
+/* ---- les motions du joueur ---- */
+function senTowns(){return N.filter(n=>!n.col&&ownerN(n.i)==='car')}
+function senOrdAll(v){S.ord=S.ord||{};for(const n of senTowns())S.ord[n.id]=senClamp((S.ord[n.id]==null?60:S.ord[n.id])+v,0,100)}
+function senBestArmy(){return senMine().sort((a,b)=>armyMen(b)-armyMen(a))[0]||null}
+const SEN_M={
+  renf:{n:'Envoyer des renforts',d:()=>`Cinq régiments levés aux frais de l'État vous attendent à ${N[senCapI()].n}.`,aff:[.9,0,-.6],cd:6,cat:'g',dif:.05,
+    run(){const a=senSpawn('Renforts du Sénat',[['inf',3],['skirm',1],['cav',1]]);if(a){a.mor=65;a.food=20}senBarSet(senBar()-4);return `Cinq régiments de renfort se rassemblent à ${N[senCapI()].n}.`}},
+  levee:{n:'Lever une armée citoyenne',d:()=>`Une nouvelle armée de sept régiments, avec son général, à ${N[senCapI()].n}. Le peuple gronde : appui −6.`,aff:[.7,-.3,-.5],cd:12,cat:'g',dif:.08,
+    run(){const a=senSpawn(null,[['inf',4],['skirm',2],['cav',1]],true);senBarSet(senBar()-6);try{const n=N[senCapI()];if(typeof popTake==='function')popTake('car',n.i,3000,true)}catch(e){}return `${a?a.name:'Un général'} prend la tête d'une armée citoyenne à ${N[senCapI()].n}.`}},
+  flotte:{n:'Armer une escadre',d:()=>`Vingt navires de guerre et cinq transports au port de ${senPortI()>=0?N[senPortI()].n:'…'}.`,aff:[.2,.9,-.4],cd:12,cat:'g',ok:()=>senPortI()>=0?true:'Vous ne tenez aucun port.',
+    run(){const i=senPortI();newFleet('car',i,{quin:15,tri:5,trans:5},'Escadre du Sénat');senLoy('m',6);return `Une escadre neuve sort des arsenaux de ${N[i].n}.`}},
+  impot:{n:'Voter un impôt de guerre',d:()=>'250 or tout de suite. Les villes grondent (ordre public −4) et les marchands vous en veulent.',aff:[.6,-.8,-.1],cd:8,cat:'f',dif:.05,
+    run(){S.gold.car+=250;senOrdAll(-4);senLoy('m',-8);return 'L’impôt de guerre rapporte 250 or.'}},
+  emprunt:{n:'Emprunter aux marchands',d:()=>'300 or tout de suite, remboursés 30 or par mois pendant un an. Les marchands y gagnent.',aff:[.3,.8,-.3],cd:14,cat:'f',ok:()=>S.sen.loan>0?'Un emprunt court déjà.':true,
+    run(){S.gold.car+=300;S.sen.loan=12;senLoy('m',5);return 'Les marchands avancent 300 or au trésor.'}},
+  jeux:{n:'Donner des jeux et des sacrifices',d:()=>'120 or. Appui +6, ordre public +5 partout, tous les partis vous regardent d’un meilleur œil.',aff:[.3,.4,.3],cd:6,cat:'c',ok:()=>S.gold.car>=120?true:'Il faut 120 or.',
+    run(){S.gold.car-=120;senBarSet(senBar()+6);senOrdAll(5);for(const k of SEN_K)senLoy(k,4);return 'Jeux et sacrifices : la ville est en fête.'}},
+  pouvoirs:{n:'Donner les pleins pouvoirs',pick:'army',d:()=>'Le général choisi gagne en autorité (expérience +3, moral de son armée +10). Les autres partis jalousent.',aff:[.8,-.2,-.7],cd:12,cat:'g',dif:.1,ok:()=>senMine().length?true:'Aucune armée en campagne.',
+    run(arg){const a=S.armies.find(x=>x.id===+arg)||senBestArmy();if(!a)return 'Aucune armée.';const g=genOf(a);if(g)g.xp=(g.xp||0)+3;a.mor=Math.min(100,(a.mor||60)+10);senLoy('m',-5);senLoy('p',-6);return `${a.name} reçoit les pleins pouvoirs.`}},
+  releve:{n:'Relever un général',pick:'army',d:()=>'Le général choisi est rappelé ; un autre prend son armée. Utile contre un chef médiocre.',aff:[-.3,.1,.5],cd:6,cat:'g',ok:()=>senMine().length?true:'Aucune armée en campagne.',
+    run(arg){const a=S.armies.find(x=>x.id===+arg)||senBestArmy();if(!a)return 'Aucune armée.';const old=a.name,g=mkGen('car',nextGen('car'));if(!S.gens)S.gens=[];giveGen(a,g);a.mor=Math.max(20,(a.mor||60)-6);return `${old} est relevé ; ${g.name} prend l'armée.`}},
+  colonie:{n:'Installer des vétérans',pick:'town',d:()=>'100 or. La ville choisie reçoit deux régiments de garnison et son ordre public monte de 15.',aff:[.2,.5,.4],cd:10,cat:'c',ok:()=>S.gold.car>=100?true:'Il faut 100 or.',
+    run(arg){const n=N.find(x=>x.id===arg)||N[senCapI()];S.gold.car-=100;S.ord=S.ord||{};S.ord[n.id]=senClamp((S.ord[n.id]==null?60:S.ord[n.id])+15,0,100);
+      try{let a=S.armies.find(x=>x.g&&!x.dead&&x.at===n.i&&x.side==='car');if(!a){a={id:S.uid++,side:'car',name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
+        for(const [t] of senTroops([['inf',2]])){const u={t,men:UT[t].men,gm:1};a.units.push(u);try{if(typeof depOne==='function')depOne(a,u,{})}catch(e){}}}catch(e){console.error(e)}
+      return `Des vétérans s'installent à ${n.n}.`}},
+  completer:{n:'Compléter les rangs',pick:'army',d:()=>'80 or. Tous les régiments de l’armée choisie retrouvent leur effectif complet.',aff:[.7,.1,-.3],cd:6,cat:'g',ok:()=>S.gold.car<80?'Il faut 80 or.':senMine().length?true:'Aucune armée en campagne.',
+    run(arg){const a=S.armies.find(x=>x.id===+arg)||senBestArmy();if(!a)return 'Aucune armée.';S.gold.car-=80;let k=0;for(const u of a.units){const mx=UT[u.t].men;if(u.men<mx){k+=mx-u.men;u.men=mx}}return `${a.name} reçoit ${k} recrues.`}},
+  mercs:{n:'Enrôler des mercenaires',pick:'army',d:()=>'220 or. Quatre régiments rejoignent tout de suite l’armée choisie, où qu’elle soit. Aucun citoyen levé : les marchands approuvent.',aff:[.5,.4,-.3],cd:8,cat:'g',ok:()=>S.gold.car<220?'Il faut 220 or.':senMine().some(a=>a.units.length<=36)?true:'Aucune armée ne peut les accueillir.',
+    run(arg){const a=S.armies.find(x=>x.id===+arg&&x.units.length<=36)||senMine().find(x=>x.units.length<=36);if(!a)return 'Aucune armée.';S.gold.car-=220;for(const [t] of senTroops([['inf',2],['skirm',1],['cav',1]])){const u={t,men:UT[t].men};a.units.push(u);try{if(typeof depOne==='function')depOne(a,u,{})}catch(e){}}return `Quatre régiments de mercenaires rejoignent ${a.name}.`}},
+  solde:{n:'Doubler la solde',d:()=>'150 or. Moral +12 dans toutes vos armées ; le parti de la guerre apprécie.',aff:[.8,-.3,-.2],cd:6,cat:'g',ok:()=>S.gold.car>=150?true:'Il faut 150 or.',
+    run(){S.gold.car-=150;for(const a of senMine())a.mor=Math.min(100,(a.mor||60)+12);senLoy('g',3);return 'La solde est doublée pour la saison : les camps acclament le Sénat.'}},
+  vivres:{n:'Voter un convoi de vivres',pick:'army',d:()=>'60 or. L’armée choisie reçoit un mois de vivres.',aff:[.6,.3,0],cd:3,cat:'g',ok:()=>S.gold.car<60?'Il faut 60 or.':senMine().length?true:'Aucune armée en campagne.',
+    run(arg){const a=S.armies.find(x=>x.id===+arg)||senBestArmy();if(!a)return 'Aucune armée.';S.gold.car-=60;a.food=(a.food||0)+30;return `Un convoi de vivres part rejoindre ${a.name}.`}},
+  triomphe:{n:'Célébrer un triomphe',d:()=>'100 or, après une victoire : crédit +15, appui +8, ordre public +5 partout.',aff:[.8,.4,-.1],cd:6,cat:'c',ok:()=>(S.vict||0)<=(S.sen.tri||0)?'Il faut une nouvelle victoire.':S.gold.car>=100?true:'Il faut 100 or.',
+    run(){S.gold.car-=100;S.sen.tri=S.vict||0;senCr(15);senBarSet(senBar()+8);senOrdAll(5);senLoy('g',5);return 'La ville entière fête la victoire.'}},
+  l_eco:{n:'Loi : économie de guerre',law:'eco',d:()=>'Pendant un an : +35 or par mois. Ordre public −1 par mois partout, les marchands se lassent.',aff:[.6,-.6,0],cd:18,cat:'f',dif:.05,
+    run(){S.sen.laws.eco=senMonth()+12;return 'L’économie de guerre est votée pour un an.'}},
+  l_ble:{n:'Loi : distributions de blé',law:'ble',d:()=>'Pendant un an : −25 or par mois. Ordre public +2 par mois partout, appui +1 par mois.',aff:[0,.7,.5],cd:18,cat:'c',
+    run(){S.sen.laws.ble=senMonth()+12;return 'Le blé public sera distribué pendant un an.'}},
+  l_serv:{n:'Loi : service prolongé',law:'serv',d:()=>'Pendant un an : chaque mois, vos régiments en campagne regagnent 5 % de leur effectif. Appui −1 par mois.',aff:[.8,-.1,-.6],cd:18,cat:'g',dif:.08,
+    run(){S.sen.laws.serv=senMonth()+12;return 'Les soldats resteront sous les enseignes un an de plus.'}},
+  l_port:{n:'Loi : franchise des ports',law:'port',d:()=>'Pendant un an : −15 or par mois, mais les marchands vous suivent (loyauté +2 par mois) et les peuples neutres en contact gagnent 1 de confiance par mois.',aff:[-.1,1,.2],cd:18,cat:'f',
+    run(){S.sen.laws.port=senMonth()+12;return 'Les ports sont ouverts en franchise pour un an.'}},
+  exil:{n:'Exiler le chef de l’opposition',d:()=>`30 de crédit. ${senProf().f.p.ch} est banni : son parti perd un cinquième de ses sièges et ne dépose plus de motion pendant un an. Ordre public −5, ce parti ne vous le pardonnera pas.`,aff:[.8,-.2,-1],cd:36,cat:'c',dif:.14,ok:()=>S.sen.cr>=30?true:'Il faut 30 de crédit.',
+    run(){const X=S.sen,F=X.fa,k=F.p.s*.2;senCr(-30);F.p.s-=k;F.m.s+=k;senLoy('p',-25);senLoy('m',-5);X.quiet=senMonth()+12;X.opp=[];senOrdAll(-5);senBarSet(Math.max(senBar(),senBarOf()));return `${senProf().f.p.ch} prend le chemin de l'exil.`}},
+  ambassade:{n:'Voter une ambassade solennelle',pick:'fac',d:()=>'60 or. Le peuple choisi reçoit une ambassade officielle : confiance +10.',aff:[0,.6,.4],cd:4,cat:'c',ok:()=>S.gold.car<60?'Il faut 60 or.':senFacs().length?true:'Aucun peuple à portée.',
+    run(arg){if(!arg||!S.fac[arg])arg=senFacs()[0];const F=S.fac&&S.fac[arg];if(!F)return 'Aucun peuple.';S.gold.car-=60;F.car=Math.min(100,F.car+10);try{F.why=F.why||{};F.why['ambassade du Sénat']=(F.why['ambassade du Sénat']||0)+10}catch(e){}return `Une ambassade solennelle part chez ${FAC[arg].n}.`}},
+  dictateur:{n:'Nommer un dictateur',d:()=>'Après deux désastres : appui +10, moral de toutes vos armées +8, crédit +10.',aff:[.2,.5,.7],cd:24,cat:'c',only:'rom',ok:()=>(S.defeats||0)>=2?true:'Il faut avoir subi deux défaites.',
+    run(){senBarSet(senBar()+10);for(const a of senMine())a.mor=Math.min(100,(a.mor||60)+8);senCr(10);senLoy('p',10);return 'Le Sénat nomme un dictateur pour six mois.'}}
+};
+function senFacs(){if(!S.fac)return [];return Object.keys(S.fac).filter(f=>FAC[f]&&['neutre','pacte_car','tribut_car'].includes(S.fac[f].st)&&(typeof contact!=='function'||contact('car',f)))}
+function senList(){const pk=senPeo(),out=[];for(const id in SEN_M){const M=SEN_M[id];if(M.only&&M.only!==pk)continue;out.push(Object.assign({id},M))}
+  const o='gfc';out.sort((a,b)=>o.indexOf(a.cat)-o.indexOf(b.cat));const rt=[];for(const R of S.sen.rat||[])rt.push({id:'rat'+R.id,n:'Ratifier : '+R.n,d:()=>R.d,aff:R.aff,cd:0,rat:R});return rt.concat(out)}
+function senAvail(M){const X=S.sen;if(M.law&&X.laws[M.law]>senMonth())return `En vigueur encore ${X.laws[M.law]-senMonth()} mois.`;if(M.ok){const r=M.ok();if(r!==true)return r}const c=X.cd[M.id];if(c&&c>senMonth())return `Possible dans ${c-senMonth()} mois.`;return true}
+function senCanVote(){return S.sen.last<senMonth()}
+function senVote(id,arg){const X=S.sen,M=senList().find(m=>m.id===id);if(!M)return;if(senAvail(M)!==true||(!M.rat&&!senCanVote()))return;
+  const V=senVotes(M,true),T=V.T,v=Math.round(senClamp(V.v+(Math.random()*.06-.03)*T,0,T)),ok=v>=V.need;
+  if(!M.rat)X.last=senMonth();const P=senPrep(id);if(P.fav){X.debt[P.fav]=(X.debt[P.fav]||0)+1;senDemand(P.fav)}delete X.prep[id];let txt;
+  if(ok){if(M.cd)X.cd[id]=senMonth()+M.cd;txt=M.rat?senRatDone(M.rat,true):M.run(arg);senCr(2)}
+  else{txt=M.rat?senRatDone(M.rat,false):'La motion est repoussée.';senCr(-3);senLoy('g',-2);if(M.cd)X.cd[id]=senMonth()+2}
+  const line=`${M.n} : ${v} voix sur ${T} (${ok?'adoptée':'rejetée'}). ${txt}`;senNote(line);log(`${senProf().sub} · ${line}`);senSync();renderAll();return {ok,v,T,txt}}
+// leviers
+function senLever(id,what,k){const X=S.sen,P=senPrep(id),T=senProf().tot;
+  if(what==='conv'){if(X.cr<15||P.b[k]>=.3)return;senCr(-15);P.b[k]=(P.b[k]||0)+.3}
+  if(what==='buy'){if(S.gold.car<80||P.buy>=2)return;S.gold.car-=80;P.buy++;if(Math.random()<.15){senCr(-8);senNote('Scandale : on parle de voix achetées (crédit −8).');log('Scandale au Sénat : on parle de voix achetées.')}}
+  if(what==='fav'){if(P.fav||X.debt[k])return;P.fav=k;P.b[k]=(P.b[k]||0)+.45}
+  if(what==='blk'){if(X.cr<10||(P.blk||0)>=3)return;senCr(-10);P.blk=(P.blk||0)+1}
+  if(what==='oconv'){if(X.cr<15||P.b[k]>=.3)return;senCr(-15);P.b[k]=(P.b[k]||0)+.3}}
+/* ---- ratification des traités (lot B) : S.sen.rat=[{id,n,d,aff,ok(),no()}] ---- */
+function senRatDone(R,ok){S.sen.rat=(S.sen.rat||[]).filter(x=>x.id!==R.id);try{const fn=window.__senRat&&window.__senRat[R.id];if(fn)return fn(ok)||''}catch(e){console.error(e)}return ok?'Le traité est ratifié.':'Le traité est rejeté.'}
+/* ---- les motions de l'opposition ---- */
+const SEN_O={
+  rappel:{n:a=>`Rappeler ${a.nm}`,d:()=>'Si elle passe, ce général est relevé de son commandement.',aff:[-.8,0,.6],
+    run(o){const a=S.armies.find(x=>x.id===o.arg&&!x.dead);if(!a)return 'Le général n’est plus en campagne.';const old=a.name,g=mkGen('car',nextGen('car'));if(!S.gens)S.gens=[];giveGen(a,g);a.mor=Math.max(20,(a.mor||60)-8);senLoy('g',-6);return `${old} est rappelé ; ${g.name} le remplace.`}},
+  proces:{n:a=>`Procès de ${a.nm} pour sa défaite`,d:()=>'Si elle passe, le général perd de son autorité (expérience −2) et son armée 10 de moral.',aff:[-.7,.1,.6],
+    run(o){const a=S.armies.find(x=>x.id===o.arg&&!x.dead);if(!a)return 'Le général n’est plus en campagne.';const g=genOf(a);if(g)g.xp=Math.max(0,(g.xp||0)-2);a.mor=Math.max(15,(a.mor||60)-10);return `${a.name} est blâmé publiquement.`}},
+  coupe:{n:()=>'Suspendre les subsides de guerre',d:()=>'Si elle passe, plus de subsides du Sénat pendant six mois.',aff:[-.9,.2,.7],
+    run(){S.sen.noSub=senMonth()+6;return 'Les subsides sont suspendus pour six mois.'}},
+  paix:{n:()=>'Envoyer une ambassade de paix à l’ennemi',d:()=>'Si elle passe : appui −8, crédit −5, le parti de la guerre vous en veut.',aff:[-1,.3,.9],
+    run(){senBarSet(senBar()-8);senCr(-5);senLoy('g',-8);return 'Une ambassade de paix part sans votre accord.'}},
+  enquete:{n:()=>'Ouvrir une enquête sur le trésor de guerre',d:()=>'Si elle passe : un sixième de votre or est saisi, crédit −5.',aff:[-.7,-.2,.7],
+    run(){const g=Math.round(S.gold.car/6);S.gold.car-=g;senCr(-5);return `Les enquêteurs saisissent ${g} or.`}},
+  bride:{n:()=>'Soumettre vos motions à une commission',d:()=>'Si elle passe : vous ne pouvez plus faire voter de motion pendant trois mois.',aff:[-.8,.1,.7],
+    run(){S.sen.last=senMonth()+2;return 'Une commission examinera vos motions : rien ne sera voté avant trois mois.'}},
+  taxe:{n:()=>'Baisser les taxes des ports',d:()=>'Si elle passe : vous perdez 20 or par mois pendant six mois, mais les marchands sont contents.',aff:[-.4,1,.2],
+    run(){S.sen.cut=senMonth()+6;senLoy('m',8);return 'Les taxes des ports sont allégées pour six mois.'}}};
+function senOppAdd(k,by,arg,nm){const X=S.sen;if(X.opp.length>=2||X.opp.some(o=>o.k===k))return;if(k==='enquete'&&S.gold.car<150)k='bride';if(k==='bride'&&X.last>senMonth())return;X.oppNext=senMonth()+3;const o={id:'o'+(X.ou=(X.ou||0)+1),k,by,arg,nm,until:Math.floor(S.day)+30};X.opp.push(o);
+  const t=`${senUp(senLe(by))} ${senV(by,'dépose','déposent')} une motion : « ${SEN_O[k].n(o)} ». Vote dans un mois.`;senNote(t);log(`${senProf().sub} · ${t}`);if(!S.auto)S.paused=true}
+function senOppM(o){const D=SEN_O[o.k];return {id:o.id,n:D.n(o),aff:D.aff}}
+function senOppVote(o){const X=S.sen,D=SEN_O[o.k],V=senVotes(senOppM(o),false),T=V.T,v=Math.round(senClamp(V.v+(Math.random()*.06-.03)*T,0,T)),ok=v>=V.need;
+  X.opp=X.opp.filter(x=>x!==o);delete X.prep[o.id];const txt=ok?D.run(o):'Elle est repoussée.';if(!ok){senCr(3);senLoy(o.by,-3)}
+  const line=`Motion de l'opposition « ${D.n(o)} » : ${v} voix sur ${T} (${ok?'adoptée':'rejetée'}). ${txt}`;senNote(line);log(`${senProf().sub} · ${line}`);senSync()}
+function senOppDaily(){const X=S.sen,d=Math.floor(S.day);for(const o of X.opp.slice())if(d>=o.until)senOppVote(o)}
+/* ---- les exigences ---- */
+const SEN_D={
+  afr:{by:'p',mo:5,t:()=>`« Mettez ${N[senCapI()].n} à l'abri » : gardez au moins 8 régiments à moins de 150 km de la capitale, à l'échéance.`,
+    ok:()=>{const c=N[senCapI()];let k=0;for(const a of S.armies)if(a.side==='car'&&!a.dead&&Math.hypot(a.x-c.x,a.y-c.y)<150)k+=a.units.length;return k>=8}},
+  vic:{by:'g',mo:6,mk:()=>({v:S.vict||0}),t:()=>'« Une victoire ! » : gagnez une bataille rangée avant l’échéance.',ok:D=>(S.vict||0)>D.v},
+  ville:{by:'g',mo:8,mk:()=>({n:S.sen.cap||0}),t:()=>'« Prenez une ville » : enlevez une ville à l’ennemi avant l’échéance.',ok:D=>(S.sen.cap||0)>D.n},
+  or:{by:'m',mo:5,mk:()=>({g:Math.round(S.gold.car/50)*50+200}),t:D=>`« Remplissez les coffres » : ayez au moins ${D.g} or au trésor à l'échéance.`,ok:D=>S.gold.car>=D.g},
+  tenir:{by:'m',mo:6,mk:()=>({n:S.sen.lost||0}),t:()=>'« Ne perdez rien » : aucune de vos villes ne doit tomber avant l’échéance.',ok:D=>(S.sen.lost||0)<=D.n,early:D=>(S.sen.lost||0)>D.n?false:null},
+  flotte:{by:'m',mo:8,mk:()=>({n:senWar()+10}),t:D=>`« Tenez la mer » : alignez au moins ${D.n} navires de guerre à l'échéance.`,ok:D=>senWar()>=D.n},
+  armee:{by:'g',mo:6,t:()=>'« Une grande armée » : réunissez une armée d’au moins 16 régiments à l’échéance.',ok:()=>senMine().some(a=>a.units.length>=16)},
+  ordre:{by:'p',mo:6,t:()=>'« Du calme dans les villes » : l’ordre public moyen de vos villes doit atteindre 62 à l’échéance.',ok:()=>senOrdAvg()>=62},
+  calme:{by:'p',mo:6,mk:()=>({d:S.defeats||0}),t:()=>'« Pas d’aventure » : ne subissez aucune défaite avant l’échéance.',ok:D=>(S.defeats||0)<=D.d,early:D=>(S.defeats||0)>D.d?false:null}};
+function senWar(){let k=0;for(const f of S.fleets||[])if(f.side==='car'&&f.ships)k+=(f.ships.quin||0)+(f.ships.tri||0);return k}
+function senOrdAvg(){const L=senTowns();if(!L.length)return 60;let s=0;for(const n of L)s+=S.ord&&S.ord[n.id]!=null?S.ord[n.id]:60;return s/L.length}
+function senDemand(by){const X=S.sen;if(X.dem)return;const L=Object.keys(SEN_D).filter(k=>!by||SEN_D[k].by===by);if(!L.length)return;const k=L[Math.floor(Math.random()*L.length)],D=SEN_D[k];
+  X.dem=Object.assign({k,by:D.by,until:Math.floor(S.day)+D.mo*30,debt:!!by},D.mk?D.mk():{});
+  const t=`${senUp(senLe(D.by))} : ${D.t(X.dem)}`;senNote('Exigence · '+t);log(`${senProf().sub} · exigence · ${t}`)}
+function senDemEnd(ok){const X=S.sen,D=X.dem;if(!D)return;X.dem=null;X.demNext=senMonth()+2;if(D.debt)X.debt[D.by]=0;
+  if(ok){senCr(10);senLoy(D.by,12);senBarSet(senBar()+3);const t=`Exigence tenue : ${senLe(D.by)} vous ${senV(D.by,'soutient','soutiennent')} (crédit +10).`;senNote(t);log(`${senProf().sub} · ${t}`)}
+  else{senCr(-6);senLoy(D.by,-15);senBarSet(senBar()-4);const t=`Exigence manquée : ${senLe(D.by)} se ${senV(D.by,'retourne','retournent')} contre vous (crédit −6, appui −4).`;senNote(t);log(`${senProf().sub} · ${t}`)}senSync()}
+function senDemDaily(){const X=S.sen,D=X.dem;if(!D)return;const T=SEN_D[D.k];if(T.early){const r=T.early(D);if(r===false){senDemEnd(false);return}}
+  if(Math.floor(S.day)>=D.until)senDemEnd(!!T.ok(D));else if((D.k==='vic'||D.k==='ville')&&T.ok(D))senDemEnd(true)}
+/* ---- les lois en vigueur ---- */
+const SEN_L={eco:'Économie de guerre : +35 or par mois',ble:'Distributions de blé : −25 or par mois, ordre +2',serv:'Service prolongé : rangs regarnis de 5 % par mois',port:'Franchise des ports : −15 or par mois'};
+function senLaws(){const X=S.sen,L=X.laws,m=senMonth(),on=k=>L[k]>m;
+  if(on('eco')){S.gold.car+=35;senOrdAll(-1);senLoy('m',-1)}
+  if(on('ble')){S.gold.car=Math.max(0,S.gold.car-25);senOrdAll(2);senBarSet(senBar()+1);senLoy('p',.5)}
+  if(on('serv')){for(const a of senMine())for(const u of a.units){const mx=UT[u.t].men;if(u.men<mx)u.men=Math.min(mx,Math.round(u.men+mx*.05))}senBarSet(senBar()-1)}
+  if(on('port')){S.gold.car=Math.max(0,S.gold.car-15);senLoy('m',2);for(const f of senFacs())S.fac[f].car=Math.min(100,S.fac[f].car+1)}
+  for(const k in L)if(L[k]===m){const t=`La loi « ${SEN_L[k].split(' :')[0]} » arrive à son terme.`;senNote(t);log(`${senProf().sub} · ${t}`)}}
+/* ---- les crises : une affaire à trancher, trois réponses ; sans réponse au bout d'un mois, la dernière s'applique ---- */
+const SEN_C={
+  disette:{t:()=>`Disette à ${N[senCapI()].n}`,d:()=>'La récolte est mauvaise, le prix du blé double. La foule attend sous les murs du Conseil.',
+    o:[['Acheter du blé (150 or)',()=>S.gold.car>=150,()=>{S.gold.car-=150;senOrdAll(5);senLoy('p',5);return 'Le blé arrive : la foule se disperse.'}],
+       ['Réquisitionner chez les marchands',null,()=>{senLoy('m',-12);senOrdAll(3);return 'Les greniers des marchands sont ouverts de force.'}],
+       ['Laisser faire',null,()=>{senOrdAll(-8);senBarSet(senBar()-4);return 'La faim gagne les quartiers : appui −4.'}]]},
+  scandale:{t:()=>'Un proche accusé de détournement',d:()=>'Un de vos intendants aurait puisé dans la caisse de l’armée. Vos adversaires réclament sa tête.',
+    o:[['Le livrer aux juges',null,()=>{senLoy('g',-8);senCr(6);return 'Vous le sacrifiez : on loue votre droiture (crédit +6).'}],
+       ['Étouffer l’affaire (100 or)',()=>S.gold.car>=100,()=>{S.gold.car-=100;if(Math.random()<.3){senCr(-12);return 'L’affaire éclate quand même : crédit −12.'}return 'On n’en parlera plus.'}],
+       ['Nier en bloc',null,()=>{senCr(-8);senLoy('m',-4);return 'Personne ne vous croit : crédit −8.'}]]},
+  complot:{t:()=>`Complot ${senDu('p')}`,d:()=>`Des lettres saisies montrent que ${senProf().f.p.ch} négocie en secret avec l'ennemi.`,
+    o:[['Frapper fort',null,()=>{const F=S.sen.fa,k=F.p.s*.1;F.p.s-=k;F.m.s+=k;senLoy('p',-15);senOrdAll(-4);senBarSet(Math.max(senBar(),senBarOf()));return 'Arrestations et exils : le parti est affaibli, la ville murmure.'}],
+       ['Négocier en coulisse (10 de crédit)',()=>S.sen.cr>=10,()=>{senCr(-10);senLoy('p',10);return 'Un arrangement est trouvé.'}],
+       ['Fermer les yeux',null,()=>{if(Math.random()<.5){senOppAdd('paix','p');return 'Enhardis, ils déposent une motion de paix.'}return 'L’affaire en reste là.'}]]},
+  escorte:{t:()=>'Les marchands réclament une escorte',d:()=>'Des pirates coupent les routes de mer. Les armateurs demandent des navires ou de l’or.',
+    o:[['Payer une escorte (120 or)',()=>S.gold.car>=120,()=>{S.gold.car-=120;senLoy('m',12);return 'Les convois repartent sous escorte.'}],
+       ['Promettre sans payer',null,()=>{senLoy('m',4);S.sen.debt.m=(S.sen.debt.m||0)+1;return 'Ils attendront, mais vous leur devez une faveur.'}],
+       ['Refuser',null,()=>{senLoy('m',-10);S.gold.car=Math.max(0,S.gold.car-40);return 'Le commerce souffre : 40 or de recettes perdus.'}]]},
+  acclame:{t:()=>'Le peuple acclame vos victoires',need:()=>(S.vict||0)>0,d:()=>'On veut vous dresser une statue sur la place. Certains y voient déjà un roi.',
+    o:[['Accepter les honneurs',null,()=>{senBarSet(senBar()+5);senLoy('p',-6);senLoy('m',-3);return 'La statue est dressée : appui +5, les jaloux grincent.'}],
+       ['Refuser avec modestie',null,()=>{senCr(8);for(const k of SEN_K)senLoy(k,2);return 'Votre modestie désarme vos adversaires (crédit +8).'}],
+       ['Offrir l’argent aux temples',null,()=>{senOrdAll(4);senCr(3);return 'Les prêtres bénissent votre nom.'}]]},
+  transfuge:{t:()=>'Des sénateurs hésitent',d:()=>`Des voix ${senDu('m')} sont à prendre. Chaque camp leur fait des offres.`,
+    o:[['Les acheter (140 or)',()=>S.gold.car>=140,()=>{const F=S.sen.fa,k=Math.min(F.m.s*.25,senProf().tot*.06);F.m.s-=k;F.g.s+=k;senBarSet(senBarOf());return 'Ils rejoignent vos bancs.'}],
+       ['Leur promettre des charges (15 de crédit)',()=>S.sen.cr>=15,()=>{senCr(-15);senLoy('m',10);return 'Ils restent où ils sont, mais voteront pour vous.'}],
+       ['Ne rien faire',null,()=>{const F=S.sen.fa,k=Math.min(F.m.s*.25,senProf().tot*.06);F.m.s-=k;F.p.s+=k;senBarSet(senBarOf());return 'Ils passent à l’opposition.'}]]}};
+function senCrisis(k){const X=S.sen;if(X.cri)return;const L=Object.keys(SEN_C).filter(c=>!SEN_C[c].need||SEN_C[c].need());k=k||pick(L);X.cri={k,until:Math.floor(S.day)+30};
+  const t=`Crise · ${SEN_C[k].t()}. ${SEN_C[k].d()} Le Sénat attend votre décision.`;senNote(t);log(`${senProf().sub} · ${t}`);
+  if(!S.auto){S.paused=true;try{if($('modal').hidden&&!S.cur&&!S.over){SEN_UI.tab='mo';openSenat()}}catch(e){}}}
+function senCrisisPick(i){const X=S.sen,C=X.cri;if(!C)return;const D=SEN_C[C.k],o=D.o[i];if(!o||(o[1]&&!o[1]()))return;X.cri=null;X.criNext=senMonth()+5;
+  const t=`${D.t()} · ${o[0].replace(/ \(.*\)$/,'')} : ${o[2]()}`;senNote(t);log(`${senProf().sub} · ${t}`);senSync();renderAll()}
+function senCrisisDaily(){const C=S.sen.cri;if(C&&Math.floor(S.day)>=C.until)senCrisisPick(SEN_C[C.k].o.length-1)}
+/* ---- le mois ---- */
+function senElect(){const X=S.sen,F=X.fa,w=k=>Math.max(1,F[k].s)*(1+.6*(X.back[k]||0));const pickK=(ex)=>{const L=SEN_K.filter(k=>k!==ex||true);let t=L.reduce((s,k)=>s+w(k),0),r=Math.random()*t;for(const k of L){r-=w(k);if(r<=0)return k}return L[0]};
+  X.mag=[pickK(),pickK()];X.back={};const P=senProf();const t=`${P.mag} de l'année : ${X.mag.map(k=>'un homme '+senDu(k)).join(' et ')}.`;senNote(t);log(`${P.sub} · ${t}`)}
+function senMonthly(d){senInit();const X=S.sen,F=X.fa,c=cal(d);
+  if(X.cr<45)senCr(1+((X.mag||[]).filter(k=>F[k].l>=55).length?1:0));
+  // humeur des partis
+  if(X.w6==null)X.w6=senMonth();if((S.vict||0)>(X.v0||0)){X.v0=S.vict||0;X.w6=senMonth()}else if(senMonth()-X.w6>=6)senLoy('g',-1);
+  const r=typeof income==='function'?income('car'):{inc:1,up:0};senLoy('m',r.inc-r.up>=0?1:-2);
+  if(F.p.l<30)senLoy('p',.5);if(F.g.l>85)senLoy('g',-.5);
+  // emprunt, taxes allégées, subsides suspendus
+  senLaws();
+  if(!X.cri&&!S.over&&senMonth()>=(X.criNext||4)&&Math.random()<.14)senCrisis();
+  if(X.loan>0){X.loan--;S.gold.car=Math.max(0,S.gold.car-30)}
+  if(X.cut&&X.cut>senMonth())S.gold.car=Math.max(0,S.gold.car-20);
+  if(X.noSub&&X.noSub>senMonth()&&S.pol&&typeof SUBS==='function'){const s=SUBS(S.pol.bar);if(s)S.gold.car=Math.max(0,S.gold.car-s)}
+  // opposition : un parti hostile dépose une motion
+  if(!S.over&&!(X.quiet>senMonth())&&!(X.oppNext>senMonth())&&Math.random()<.25){const hostile=SEN_K.filter(k=>F[k].l<40&&k!=='g');if(hostile.length){const by=hostile[Math.floor(Math.random()*hostile.length)];
+    const a=X.lostA&&S.armies.find(x=>x.id===X.lostA&&!x.dead);
+    if(a&&senMonth()-X.lostM<=2)senOppAdd(Math.random()<.5?'rappel':'proces',by,a.id,a.name);
+    else if(by==='m')senOppAdd('taxe',by);else if(senBar()<45)senOppAdd(pick(['coupe','paix','bride']),by);else senOppAdd(pick(['enquete','bride']),by)}}
+  if(!X.dem&&senMonth()>=X.demNext&&!S.over){const owe=SEN_K.find(k=>X.debt[k]>0);senDemand(owe||null)}
+  if(c.mo===2&&d>0)senElect();
+  senSync()}
+/* ---- branchements ---- */
+{const _sa=senAdj;senAdj=function(v){const r=_sa.apply(this,arguments);try{if(S&&S.sen){if(!S.pol||typeof S.pol.bar!=='number')S.sen.bar=senClamp(S.sen.bar+v,0,100);senSync()}}catch(e){}return r}}
+{const _ar=applyResult;applyResult=function(b,res){let mine=null,my=null;try{for(const id of [...b.att,...b.def]){const a=S.armies.find(x=>x.id===id);if(a&&a.side==='car'&&!a.g){my=a;break}}
+    const aS=(S.armies.find(x=>x.id===b.att[0])||{}).side,dS=(S.armies.find(x=>x.id===b.def[0])||{}).side;if(aS==='car'||dS==='car')mine=(res.attWin?aS:dS)==='car'}catch(e){}
+  const bw0=S&&S.bigWin||0;const r=_ar.apply(this,arguments);
+  try{if(mine!=null&&S&&S.sen){if(mine){const big=(S.bigWin||0)>bw0;senCr(big?12:6);senLoy('g',4);senLoy('m',1)}else{senCr(-4);senLoy('g',-5);senLoy('m',-3);if(my){S.sen.lostA=my.id;S.sen.lostM=senMonth()}}senSync()}}catch(e){console.error(e)}return r}}
+{const _cp=capture;capture=function(i,side){const prev=ownerN(i);const r=_cp.apply(this,arguments);try{if(S&&S.sen){const n=N[i];
+    if(side==='car'&&prev!=='car'){S.sen.cap=(S.sen.cap||0)+1;senCr(n.size>=2?6:3);senLoy('g',2);if(n.port)senLoy('m',3)}
+    else if(prev==='car'&&side!=='car'){S.sen.lost=(S.sen.lost||0)+1;senCr(-3);for(const k of SEN_K)senLoy(k,-3)}senSync()}}catch(e){}return r}}
+{const _dS=daily;daily=function(d){const r=_dS.apply(this,arguments);try{if(S&&!S.over){senInit();if(d%30===0)senMonthly(d);senOppDaily();senDemDaily();senCrisisDaily()}}catch(e){console.error(e)}return r}}
+{const _alS=afterLoad;afterLoad=function(){const r=_alS.apply(this,arguments);try{senInit()}catch(e){console.error(e)}return r}}
+/* ---- la fenêtre ---- */
+{const st=document.createElement('style');st.textContent=`
+#mcard.sn-win{max-width:1120px!important;width:min(1120px,96vw)}
+.sn-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:2px solid var(--bz,#8a6a3c);margin-bottom:12px}
+.sn-head h2{margin:0}.sn-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sn-chip{border:1px solid var(--line,#4a3a26);border-radius:4px;padding:6px 10px;background:rgba(0,0,0,.25);font-size:13px}.sn-chip b{font-size:15px}
+.sn-wrap{display:grid;grid-template-columns:minmax(300px,470px) 1fr;gap:14px;align-items:start}@media (max-width:860px){.sn-wrap{grid-template-columns:1fr}}
+.sn-box{border:1px solid var(--line,#4a3a26);border-radius:6px;padding:12px 14px;background:rgba(0,0,0,.22)}
+.sn-t{font-family:Marcellus,Georgia,serif;font-size:16px;color:var(--bzL,#d2ae6c);margin:0 0 6px}
+.sn-hemiW{position:relative;width:100%;max-width:440px;margin:0 auto;aspect-ratio:2/1}
+.sn-hemi{position:absolute;inset:0;-webkit-mask-image:radial-gradient(circle at 50% 100%,transparent 0 33%,#000 33.4% 99.4%,transparent 100%),repeating-radial-gradient(circle at 50% 100%,#000 0 9%,transparent 9% 11.1%),repeating-conic-gradient(from 270deg at 50% 100%,#000 0deg 3.3deg,transparent 3.3deg 4deg);
+mask-image:radial-gradient(circle at 50% 100%,transparent 0 33%,#000 33.4% 99.4%,transparent 100%),repeating-radial-gradient(circle at 50% 100%,#000 0 9%,transparent 9% 11.1%),repeating-conic-gradient(from 270deg at 50% 100%,#000 0deg 3.3deg,transparent 3.3deg 4deg);-webkit-mask-composite:source-in;mask-composite:intersect}
+.sn-mid{position:absolute;left:50%;bottom:0;transform:translateX(-50%);text-align:center;line-height:1.1}.sn-mid b{font-family:Marcellus,Georgia,serif;font-size:28px;font-weight:400;display:block}
+.sn-leg{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;margin-top:8px;font-size:13px}.sn-leg i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.sn-fac{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}@media (max-width:620px){.sn-fac{grid-template-columns:1fr}}
+.sn-f{border:1px solid var(--line,#4a3a26);border-top:3px solid #888;border-radius:6px;padding:10px;background:rgba(0,0,0,.22);font-size:12.5px;display:flex;flex-direction:column;gap:6px}
+.sn-f .h{display:flex;align-items:center;gap:8px}.sn-f .h img,.sn-f .h span.av{width:42px;height:42px;border-radius:50%;border:2px solid var(--bz,#8a6a3c);object-fit:cover;flex:none;display:flex;align-items:center;justify-content:center;font-family:Marcellus,Georgia,serif;font-size:18px;background:#17110b}
+.sn-f .nm{font-family:Marcellus,Georgia,serif;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--bzL,#d2ae6c);display:flex;justify-content:space-between;gap:6px;align-items:baseline}.sn-f .nm b{font-size:18px;font-weight:400;color:var(--tx,#efe4cc)}.sn-cri{border-color:#c9744f!important;background:rgba(201,116,79,.12)!important;margin-bottom:10px}.sn-cats{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}.sn-cats button{font-size:12px;padding:3px 9px}.sn-cats button.on{border-color:var(--bzL,#d2ae6c);color:var(--tx,#efe4cc)}.sn-g{height:7px;background:rgba(255,255,255,.08);border-radius:4px;position:relative;overflow:hidden}.sn-g i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.sn-tabs{display:flex;gap:6px;margin:0 0 8px;flex-wrap:wrap}.sn-tabs button.on{border-color:var(--bzL,#d2ae6c);color:var(--tx,#efe4cc);font-weight:600}
+.sn-list{display:flex;flex-direction:column;gap:8px;max-height:58vh;overflow:auto;padding-right:4px}
+.sn-m{border:1px solid var(--line,#4a3a26);border-radius:4px;padding:9px 11px;background:rgba(0,0,0,.18)}.sn-m.off{opacity:.62}.sn-m.sel{border-color:var(--bzL,#d2ae6c)}
+.sn-m .top{display:flex;gap:10px;align-items:center;justify-content:space-between}.sn-m .nm{font-weight:600;font-size:14px}.sn-m .opp{color:#f0a08a}
+.sn-v{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12.5px}.sn-v .bar{flex:1;height:8px;background:rgba(255,255,255,.08);border-radius:4px;position:relative}.sn-v .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}.sn-v .bar u{position:absolute;left:50%;top:-3px;width:2px;height:14px;background:var(--tx,#efe4cc)}
+.sn-lev{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}.sn-lev select{max-width:210px}
+.sn-good{color:#8fd08f}.sn-bad{color:#f0a08a}.sn-warn{color:#e0b458}`;document.head.appendChild(st)}
+let SEN_UI={tab:'mo',sel:null,arg:{},cat:'all'};
+const SEN_CAT=[['all','Toutes'],['g','Guerre'],['f','Finances'],['c','Cité'],['t','Traités']];
+function senPor(name){try{if(typeof porGenURL==='function'){const pk=senPeo(),u=porGenURL({name,side:pk==='rom'?'rom':'car'});if(u&&(typeof POR_GEN==='undefined'||(POR_GEN[pk==='rom'?'rom':'car']||{})[name]))return u}}catch(e){}return null}
+function senMood(l){return l>=65?['Acquis · votent avec vous','sn-good']:l>=45?['Hésitants · à convaincre','sn-warn']:['Hostiles · votent contre vous','sn-bad']}
+function senVoteBar(V,mine){const pct=Math.round(100*V.v/V.T),pass=V.v>=V.need,col=mine?(pass?'#8fd08f':'#e0b458'):(pass?'#f0a08a':'#8fd08f');
+  const txt=mine?(pass?'passe':`il manque ${V.need-V.v} voix`):(pass?'passerait contre vous':`échoue de ${V.need-V.v} voix`);
+  return `<div class="sn-v"><div class="bar"><i style="width:${pct}%;background:${col}"></i><u></u></div><span><b>${V.v}</b> pour sur ${V.T} · ${txt}</span></div>`}
+function senPick(M){if(!M.pick)return '';const cur=SEN_UI.arg[M.id];let L=[];
+  if(M.pick==='army')L=senMine().map(a=>[a.id,`${a.name} (${a.units.length} rég.)`]);
+  if(M.pick==='town')L=senTowns().filter(n=>n.size>=1).sort((a,b)=>a.n.localeCompare(b.n)).map(n=>[n.id,n.n]);
+  if(M.pick==='fac')L=senFacs().map(f=>[f,FAC[f].n]);
+  if(!L.length)return '';if(cur==null||!L.some(x=>String(x[0])===String(cur)))SEN_UI.arg[M.id]=L[0][0];
+  return `<select data-snp="${M.id}" aria-label="Choix">${L.map(x=>`<option value="${esc(x[0])}" ${String(x[0])===String(SEN_UI.arg[M.id])?'selected':''}>${esc(x[1])}</option>`).join('')}</select>`}
+function openSenat(){senInit();senSync();const X=S.sen,P=senProf(),F=X.fa,S3=senSeats(),T=P.tot,bar=Math.round(senBar()),c=cal(Math.floor(S.day));
+  const aG=180*S3.g/T,aM=aG+180*S3.m/T;
+  const hemi=`background:conic-gradient(from 270deg at 50% 100%,${SEN_COL.g} 0deg ${aG}deg,${SEN_COL.m} ${aG}deg ${aM}deg,${SEN_COL.p} ${aM}deg 180deg,transparent 180deg)`;
+  const sub=S.pol&&typeof SUBS==='function'?(X.noSub>senMonth()?0:SUBS(S.pol.bar)):null;
+  const fac=SEN_K.map(k=>{const f=P.f[k],m=senMood(F[k].l),por=senPor(f.ch);
+    return `<div class="sn-f" style="border-top-color:${SEN_COL[k]}"><div class="nm"><span>${esc(f.n)}</span></div><div class="h">${por?`<img src="${por}" alt="">`:`<span class="av" style="color:${SEN_COL[k]}">${esc(f.n.replace(/^(Parti d'|Parti de la |Parti )/,'').charAt(0).toUpperCase())}</span>`}<div class="sub" style="min-width:0">${esc(f.ch)}<br>${S3[k]} sièges</div></div>
+      <div>Veulent : <b>${esc(f.w)}</b>.</div><div class="sn-g" title="Loyauté envers vous : ${Math.round(F[k].l)}"><i style="width:${Math.round(F[k].l)}%;background:${SEN_COL[k]}"></i></div><div class="${m[1]}">${m[0]}${X.debt[k]?' · vous leur devez une faveur':''}</div></div>`}).join('');
+  const D=X.dem,dem=D?`<p style="margin:0 0 6px"><b>${esc(senUp(senLe(D.by)))}</b> · ${esc(SEN_D[D.k].t(D))}</p><p class="sub" style="margin:0">Reste ${Math.max(0,Math.ceil((D.until-S.day)/30))} mois. Tenue : crédit +10, ce parti vous suit. Manquée : crédit −6, appui −4.</p>`:'<p class="sub" style="margin:0">Aucune exigence pour le moment. Les partis en formuleront une bientôt.</p>';
+  const Cr=X.cri&&SEN_C[X.cri.k],cri=Cr?`<div class="sn-box sn-cri"><p class="sn-t" style="color:#f0a08a">Crise · ${esc(Cr.t())}</p><p style="margin:0 0 8px">${esc(Cr.d())} <span class="sub">Décision attendue sous ${Math.max(0,X.cri.until-Math.floor(S.day))} jours.</span></p><div class="row" style="margin:0">${Cr.o.map((o,i)=>`<button type="button" data-snk="${i}" ${o[1]&&!o[1]()?'disabled':''}>${esc(o[0])}</button>`).join('')}</div></div>`:'';
+  const laws=Object.keys(X.laws).filter(k=>X.laws[k]>senMonth()).map(k=>`<p style="margin:0 0 4px">${esc(SEN_L[k])} <span class="sub">· encore ${X.laws[k]-senMonth()} mois</span></p>`).join('');
+  const mag=`<p style="margin:0 0 6px">${X.mag.map(k=>`<span style="white-space:nowrap"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${SEN_COL[k]};margin-right:6px"></i>un homme <b>${esc(senDu(k))}</b></span>`).join(' · ')}</p>
+    <p class="sub" style="margin:0 0 8px">Un magistrat d'un parti acquis ajoute des voix à vos motions ; d'un parti hostile, il en retire. Élection chaque printemps.</p>
+    <div class="row" style="margin:0">${SEN_K.map(k=>`<button type="button" data-snb="${k}" ${X.cr<20?'disabled':''} title="20 de crédit : ce parti a plus de chances de placer un des siens">Soutenir : ${esc(P.f[k].n)}${X.back[k]?' ×'+X.back[k]:''}</button>`).join('')}</div>`;
+  const can=senCanVote();
+  const cats=`<div class="sn-cats">${SEN_CAT.filter(c=>c[0]!=='t'||(X.rat||[]).length).map(c=>`<button type="button" data-snc="${c[0]}" class="${SEN_UI.cat===c[0]?'on':''}">${c[1]}</button>`).join('')}</div>`;
+  const mo=cats+senList().filter(M=>SEN_UI.cat==='all'||(M.rat?'t':M.cat)===SEN_UI.cat).map(M=>{const av=senAvail(M),V=senVotes(M,true),sel=SEN_UI.sel===M.id,Pp=senPrep(M.id),ok=av===true&&(can||M.rat);
+    const lev=sel?`<div class="sn-lev">${senPick(M)}${SEN_K.map(k=>`<button type="button" data-snl="conv:${k}" ${X.cr<15||Pp.b[k]>=.3?'disabled':''} title="15 de crédit : ce parti vote davantage pour">Convaincre : ${esc(P.f[k].n)}${Pp.b[k]>=.3?' ✓':''}</button>`).join('')}
+      <button type="button" data-snl="buy:" ${S.gold.car<80||Pp.buy>=2?'disabled':''} title="80 or : des voix en plus ; risque de scandale">Acheter des voix (80 or)${Pp.buy?' ×'+Pp.buy:''}</button>
+      ${SEN_K.filter(k=>k!=='g').map(k=>`<button type="button" data-snl="fav:${k}" ${Pp.fav||X.debt[k]?'disabled':''} title="Gratuit : ce parti vote pour, mais formulera une exigence que vous devrez tenir">Promettre une faveur : ${esc(P.f[k].n)}${Pp.fav===k?' ✓':''}</button>`).join('')}
+      <button type="button" class="go" data-snv="${M.id}" ${ok?'':'disabled'}>Mettre au vote</button></div>`:'';
+    return `<div class="sn-m ${av===true?'':'off'} ${sel?'sel':''}" ${sel?'data-me':''}><div class="top"><div><div class="nm">${esc(M.n)}</div><div class="sub">${esc(M.d())}${av!==true?' <b>'+esc(av)+'</b>':''}</div></div><button type="button" data-sns="${M.id}">${sel?'Replier':'Préparer'}</button></div>${senVoteBar(V,true)}${lev}</div>`}).join('');
+  const op=X.opp.length?X.opp.map(o=>{const M=senOppM(o),V=senVotes(M,false),Pp=senPrep(o.id);
+    return `<div class="sn-m sel"><div class="top"><div><div class="nm opp">${esc(senUp(senLe(o.by)))} : ${esc(M.n)}</div><div class="sub">${esc(SEN_O[o.k].d())} Vote dans ${Math.max(0,o.until-Math.floor(S.day))} jours.</div></div></div>${senVoteBar(V,false)}
+      <div class="sn-lev"><button type="button" data-sno="blk:${o.id}:" ${X.cr<10||(Pp.blk||0)>=3?'disabled':''} title="10 de crédit : des voix en moins pour cette motion">Faire barrage (10)${Pp.blk?' ×'+Pp.blk:''}</button>
+      ${SEN_K.map(k=>`<button type="button" data-sno="oconv:${o.id}:${k}" ${X.cr<15||Pp.b[k]>=.3?'disabled':''} title="15 de crédit : ce parti vote davantage contre">Retourner : ${esc(P.f[k].n)}</button>`).join('')}</div></div>`}).join(''):'<p class="sub">L’opposition n’a rien déposé. Un parti hostile dépose une motion après une défaite, ou quand l’appui baisse.</p>';
+  const hist=X.h.length?X.h.map(h=>{const cc=cal(h.d);return `<p class="sub" style="margin:0 0 6px">${cc.season} ${cc.year} · ${esc(h.t)}</p>`}).join(''):'<p class="sub">Rien encore.</p>';
+  const tabs=[['mo','Vos motions'],['op',`Opposition${X.opp.length?' ('+X.opp.length+')':''}`],['hi','Séances passées']];
+  modal(`<div class="sn-head"><div><h2>${esc(P.t)}</h2><div class="sub">${esc(P.sub)} · ${c.season.toLowerCase()} ${c.year} av. J.-C.</div></div>
+    <div class="sn-chips"><span class="sn-chip" title="Gagné par les victoires, les villes prises, les exigences tenues ; dépensé pour convaincre, faire barrage, soutenir un candidat">Crédit politique <b style="color:var(--bzL,#d2ae6c)">${Math.round(X.cr)}</b></span>
+    <span class="sn-chip" title="Part du Sénat qui soutient votre guerre. À 0, la partie est perdue.">Appui <b>${bar}</b> %</span>${sub!=null?`<span class="sn-chip">Subsides <b>${sub}</b> or / mois</span>`:''}
+    <button type="button" id="snWar">Guerre et objectifs</button><button type="button" id="snX" aria-label="Fermer">Fermer</button></div></div>
+   <div class="sn-wrap"><div style="display:flex;flex-direction:column;gap:12px">
+     <div class="sn-box"><div class="sn-hemiW"><div class="sn-hemi" style="${hemi}" role="img" aria-label="Hémicycle : ${S3.g} sièges ${esc(P.f.g.n)}, ${S3.m} ${esc(P.f.m.n)}, ${S3.p} ${esc(P.f.p.n)}"></div><div class="sn-mid"><b>${T}</b><span class="sub">sièges · majorité ${Math.floor(T/2)+1}</span></div></div>
+       <div class="sn-leg">${SEN_K.map(k=>`<span><i style="background:${SEN_COL[k]}"></i>${esc(P.f[k].n)} <b>${S3[k]}</b></span>`).join('')}</div></div>
+     <div class="sn-fac">${fac}</div>
+     <div class="sn-box"><p class="sn-t">${esc(P.mag)} de l'année</p>${mag}</div>
+     <div class="sn-box"><p class="sn-t">Lois en vigueur et trésor public</p>${laws||'<p class="sub" style="margin:0 0 8px">Aucune loi en vigueur. Les lois se votent dans « Vos motions ».</p>'}<div class="row" style="margin:0"><button type="button" id="snLoot" ${S.gold.car<100?'disabled':''} title="100 or : crédit +10, appui +6">Verser du butin (100 or)</button></div>
+       <p class="sub" style="margin:8px 0 0">${X.loan>0?`Emprunt : encore ${X.loan} mois à 30 or. `:''}${X.cut>senMonth()?'Taxes des ports allégées : −20 or par mois. ':''}${X.noSub>senMonth()?`Subsides suspendus encore ${X.noSub-senMonth()} mois.`:''}</p></div>
+   </div><div>${cri}<div class="sn-box" style="margin-bottom:10px"><p class="sn-t">Exigence du Sénat</p>${dem}</div>
+     <div class="sn-tabs" role="tablist">${tabs.map(t=>`<button type="button" data-snt="${t[0]}" class="${SEN_UI.tab===t[0]?'on':''}">${t[1]}</button>`).join('')}<span class="sub" style="align-self:center">${can?'Une motion par mois : vous pouvez en mettre une au vote.':'Vous avez déjà fait voter ce mois-ci.'}</span></div>
+     <div class="sn-list">${SEN_UI.tab==='mo'?mo:SEN_UI.tab==='op'?op:hist}</div></div></div>`);
+  const C=$('mcard');C.classList.add('wide','sn-win');try{const e=C.querySelector('.sn-m.sel[data-me]');if(e)e.scrollIntoView({block:'nearest'})}catch(e){}
+  $('snX').onclick=()=>{C.classList.remove('sn-win');closeModal()};
+  $('snWar').onclick=()=>{C.classList.remove('sn-win');senOldPol()};
+  $('snLoot').onclick=()=>{if(S.gold.car<100)return;S.gold.car-=100;senCr(10);senBarSet(senBar()+6);senLoy('g',3);senNote('Du butin est versé au trésor public (crédit +10, appui +6).');senSync();renderAll();openSenat()};
+  C.querySelectorAll('[data-snt]').forEach(b=>b.onclick=()=>{SEN_UI.tab=b.dataset.snt;openSenat()});
+  C.querySelectorAll('[data-snc]').forEach(b=>b.onclick=()=>{SEN_UI.cat=b.dataset.snc;openSenat()});
+  C.querySelectorAll('[data-snk]').forEach(b=>b.onclick=()=>{senCrisisPick(+b.dataset.snk);openSenat()});
+  C.querySelectorAll('[data-sns]').forEach(b=>b.onclick=()=>{SEN_UI.sel=SEN_UI.sel===b.dataset.sns?null:b.dataset.sns;openSenat()});
+  C.querySelectorAll('[data-snp]').forEach(s=>s.onchange=()=>{SEN_UI.arg[s.dataset.snp]=s.value});
+  C.querySelectorAll('[data-snl]').forEach(b=>b.onclick=()=>{const [w,k]=b.dataset.snl.split(':');senLever(SEN_UI.sel,w,k);renderAll();openSenat()});
+  C.querySelectorAll('[data-sno]').forEach(b=>b.onclick=()=>{const [w,id,k]=b.dataset.sno.split(':');senLever(id,w,k);openSenat()});
+  C.querySelectorAll('[data-snb]').forEach(b=>b.onclick=()=>{if(X.cr<20)return;senCr(-20);X.back[b.dataset.snb]=(X.back[b.dataset.snb]||0)+1;openSenat()});
+  C.querySelectorAll('[data-snv]').forEach(b=>b.onclick=()=>{const id=b.dataset.snv,M=senList().find(m=>m.id===id);const r=senVote(id,SEN_UI.arg[id]);SEN_UI.sel=null;
+    if(r){SEN_UI.tab='hi';openSenat()}})}
+// l'ancienne fenêtre Politique (score de guerre, objectifs, paix, coordination) reste accessible ; ses boutons de Sénat sont retirés
+let senOldPol=()=>{};
+{const _op=openPol;senOldPol=function(){const r=_op.apply(this,arguments);try{const C=$('mcard');['pLoot','pReinf','rG','rL','rV'].forEach(id=>{const b=$(id);if(b)b.remove()});
+    const h=C.querySelector('h2');if(h&&!$('snBack')){const b=document.createElement('button');b.type='button';b.id='snBack';b.textContent='← Sénat';b.style.cssText='float:right';b.onclick=()=>openSenat();h.before(b)}}catch(e){console.error(e)}return r};
+  openPol=function(){try{senInit();return openSenat()}catch(e){console.error(e);return _op.apply(this,arguments)}}}
+try{const b=$('bPol');if(b)b.onclick=()=>openPol()}catch(e){}
+window.__senat={get S(){return S},senInit,senVotes,senVote,senList,senLever,senMonthly,senDemand,senDemEnd,senOppAdd,senOppVote,senSeats,senBar,senBarSet,senSync,senElect,openSenat,senCrisis,senCrisisPick,SEN_C,senLaws,senOldPol:()=>senOldPol(),SEN_M,SEN_O,SEN_D,senPeo,daily:d=>daily(d)};
+/* ================= FIN SÉNAT ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
