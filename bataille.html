@@ -2943,7 +2943,67 @@ if(!V3D){
   function campView(){if(!ISCAMP())return;const P=units.filter(u=>u.side===0&&!u.dead&&!u.pend),E=units.filter(u=>u.side===1&&!u.dead&&!u.pend);if(!P.length)return;
     const pc=cen(P),ec=E.length?cen(E):pc,d=Math.hypot(ec.x-pc.x,ec.y-pc.y)||1,k=-45;cam.tx=pc.x+(ec.x-pc.x)/d*k;cam.ty=pc.y+(ec.y-pc.y)/d*k;cam.dist=640*Math.sqrt(G)}
   {const _su2=setup;setup=function(){const r=_su2.apply(this,arguments);endDep();DZ=null;campStart();try{campView()}catch(e){}return r}}
-  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
+  /* -- v21x : batailles de campagne plus lentes (SLOWK) et départ des camps. Chaque armée attend dans son camp, derrière sa ligne ;
+        le déploiement fixe les places (carrés translucides) ; au lancement les régiments sortent un à un par la porte et vont s'y ranger.
+        L'ennemi fait de même, puis son IA reprend la main quand il est rangé (ou dès qu'on l'attaque). -- */
+  const SLOWK=.45,KGAP=2.2;let KAMP=null;
+  const CAMPS_ON=()=>ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
+  function campGeom(side){const P=units.filter(u=>u.side===side&&!u.dead&&!u.pend),E=units.filter(u=>u.side!==side&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
+    const pc=cen(P),ec=cen(E),dd=Math.hypot(pc.x-ec.x,pc.y-ec.y)||1,n={x:(pc.x-ec.x)/dd,y:(pc.y-ec.y)/dd},t={x:-n.y,y:n.x},N=P.length,sp=SQ+3;
+    const cols=Math.max(8,Math.ceil(Math.sqrt(N*2.2))),rows=Math.ceil(N/cols),w=cols*sp+36,d=rows*sp+36;
+    const mx=Math.max(...P.map(u=>(u.x-pc.x)*n.x+(u.y-pc.y)*n.y)),R=Math.hypot(w,d)/2+24;
+    // une ville sur le champ (bataille devant les murs) : le camp se pose à côté, jamais dedans, et sa sortie ne traverse pas l'enceinte
+    const V=window.__villes,bad=(x,y)=>{if(!V||!V.P||!V.W2P)return false;try{const q=V.W2P(x,y),o=V.dbgPt(q[0],q[1]);return !!(V.inCity(q[0],q[1])||o.town||o.water||o.wall)}catch(e){return false}};
+    const mk=(la,de)=>{const q={x:pc.x+n.x*de+t.x*la,y:pc.y+n.y*de+t.y*la};q.x=Math.max(RIVER+R,Math.min(W-R,q.x));q.y=Math.max(R,Math.min(H-R,q.y));return q};
+    const cost=q=>{let b=0;for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)if(bad(q.x+t.x*i*(w/2+30)/3+n.x*j*(d/2+30)/3,q.y+t.y*i*(w/2+30)/3+n.y*j*(d/2+30)/3))b+=4;
+      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);for(let i=1;i<=10;i++)if(bad(gx+(pc.x-gx)*i/10,gy+(pc.y-gy)*i/10))b+=2;return b};
+    const D0=mx+170+d/2;let c=mk(0,D0),best=cost(c);
+    if(best)for(const de of [D0,D0*.6,mx*.3,0])for(const la of [0,-260,260,-520,520,-800,800,-1100,1100,-1400,1400]){if(!la&&de<D0)continue;const q=mk(la,de);if(Math.hypot(q.x-pc.x,q.y-pc.y)<R+40&&Math.abs(la)<w)continue;const v=cost(q)+Math.abs(la)/2000+(D0-de)/4000;if(v<best-1e-9){best=v;c=q}if(best<1)break}
+    const slot=i=>{const col=i%cols,row=Math.floor(i/cols),la=(col-(cols-1)/2)*sp,de=(row-(rows-1)/2)*sp;return{x:c.x+t.x*la+n.x*de,y:c.y+t.y*la+n.y*de,la}};
+    return {side,c,n,t,w,d,cols,rows,sp,slot,gate:{x:c.x-n.x*(d/2+14),y:c.y-n.y*(d/2+14)},q:[],next:0,N}}
+  function campFill(k){const P=units.filter(u=>u.side===k.side&&!u.dead&&!u.pend),m=new Map();for(const u of P){const id=rkey(u);if(!m.has(id))m.set(id,[]);m.get(id).push(u)}
+    // les régiments qui vont le plus loin sortent les premiers : on les range près de la porte
+    const far=g=>{const q=cen(g);return Math.hypot(q.x-k.gate.x,q.y-k.gate.y)},regs=[...m.values()].sort((a,b)=>far(b)-far(a));let i=0;
+    for(const g of regs){for(const u of g){u._plan={x:u.x,y:u.y,a:u.ang};const s=k.slot(i++);u.x=s.x;u.y=s.y;u._gl=s.la;u.ang=Math.atan2(-k.n.y,-k.n.x);u._sq=null;u._lx=null;u.dirty=true;u.order=null;u.preview=null;u.v=0;u._wait=true;u._gate=false;u._forming=false}}
+    k.q=regs;k.filled=true}
+  function campsInit(){if(KAMP||!CAMPS_ON())return;const a=campGeom(0),b=campGeom(1);if(!a||!b)return;KAMP={s:[a,b],t:0,freeE:false,lastE:0};campFill(b)}
+  function campsLaunch(){if(!CAMPS_ON())return;campsInit();if(!KAMP)return;if(!KAMP.s[0].filled)campFill(KAMP.s[0]);for(const k of KAMP.s)k.next=KAMP.t+.5;KAMP.go=true}
+  const gateOrd=(u,k)=>({type:'move',x:k.gate.x+k.t.x*(u._gl||0)*.25,y:k.gate.y+k.t.y*(u._gl||0)*.25,run:false});
+  const planOrd=u=>({type:'move',x:u._plan.x,y:u._plan.y,face:u._plan.a,run:false});
+  function campTick(dt){if(!KAMP||!KAMP.go)return;KAMP.t+=dt;
+    for(const k of KAMP.s){while(k.q.length&&KAMP.t>=k.next){const g=k.q.shift();k.next=KAMP.t+KGAP;if(k.side===1)KAMP.lastE=KAMP.t;else KAMP.lastP=KAMP.t;
+        for(const u of g){if(!u._wait||u.dead)continue;u._wait=false;u._gate=true;u.order=gateOrd(u,k)}}}
+    const kp=KAMP.s[0],ke=KAMP.s[1];let formingE=0;
+    for(const u of units){if(u.dead||u.pend||u.routing)continue;
+      if(u.side===0){ // le joueur garde la main : un ordre donné à un carré encore au camp le fait sortir
+        if(u._wait){if(u.order){u._wait=false}continue}
+        if(u._gate){const o=u.order;if(!o||o.type!=='move'||Math.abs(o.x-(kp.gate.x+kp.t.x*(u._gl||0)*.25))>1){u._gate=false;continue}
+          if(Math.hypot(u.x-o.x,u.y-o.y)<26){u._gate=false;u.order=planOrd(u)}}
+        continue}
+      if(KAMP.freeE){u._wait=u._gate=u._forming=false;continue}
+      if(u.contacts.length||u.underFire>0){KAMP.freeE=true;continue}
+      if(u._wait){u.order=null;formingE++}
+      else if(u._gate){const o=gateOrd(u,ke);if(Math.hypot(u.x-o.x,u.y-o.y)<26){u._gate=false;u._forming=true;u.order=planOrd(u)}else u.order=o;formingE++}
+      else if(u._forming){if(Math.hypot(u.x-u._plan.x,u.y-u._plan.y)>8){u.order=planOrd(u);formingE++}else if(u.order&&u.order.type==='attack')u.order=null}}
+    if(!KAMP.freeE&&!ke.q.length&&(!formingE||KAMP.t>KAMP.lastE+45)&&!kp.q.length&&KAMP.t>(KAMP.lastP||0)+12)KAMP.freeE=true}
+  // dessin des camps : terre battue, palissade ouverte côté ennemi, tentes
+  function drawCamps(){if(!KAMP)return;for(const k of KAMP.s){const P=PAL[k.side],{c,n,t,w,d}=k,pt=(la,de)=>scr(c.x+t.x*la+n.x*de,c.y+t.y*la+n.y*de);
+      const A=pt(-w/2,-d/2),B=pt(w/2,-d/2),C=pt(w/2,d/2),D=pt(-w/2,d/2),g1=pt(-22,-d/2),g2p=pt(22,-d/2);
+      g2.save();g2.beginPath();g2.moveTo(A[0],A[1]);g2.lineTo(B[0],B[1]);g2.lineTo(C[0],C[1]);g2.lineTo(D[0],D[1]);g2.closePath();g2.fillStyle='rgba(122,98,62,.5)';g2.fill();
+      const z=Math.max(2,5*s2);
+      for(let i=0;i<k.cols*k.rows;i+=1){const col=i%k.cols,row=Math.floor(i/k.cols);if((col+row)%2)continue;const s=k.slot(i),[x,y]=scr(s.x,s.y);
+        g2.beginPath();g2.moveTo(x,y-z);g2.lineTo(x+z,y+z*.8);g2.lineTo(x-z,y+z*.8);g2.closePath();g2.fillStyle='rgba(236,224,196,.5)';g2.fill();g2.lineWidth=1;g2.strokeStyle='rgba(40,28,16,.45)';g2.stroke()}
+      g2.lineWidth=Math.max(2.5,4*s2);g2.strokeStyle='#3a2a18';g2.lineJoin='round';g2.beginPath();g2.moveTo(g1[0],g1[1]);g2.lineTo(A[0],A[1]);g2.lineTo(D[0],D[1]);g2.lineTo(C[0],C[1]);g2.lineTo(B[0],B[1]);g2.lineTo(g2p[0],g2p[1]);g2.stroke();
+      g2.lineWidth=Math.max(1,1.4*s2);g2.strokeStyle=P.lt||'#d6b878';g2.setLineDash([3,5]);g2.stroke();g2.setLineDash([]);
+      const L=pt(0,d/2+16);g2.font='13px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';g2.lineWidth=3;g2.strokeStyle='rgba(20,14,8,.8)';const tx='Camp · '+P.n;g2.strokeText(tx,L[0],L[1]);g2.fillStyle='#efe3c6';g2.fillText(tx,L[0],L[1]);
+      g2.restore()}}
+  {const _do2=drawOrders;drawOrders=function(){try{drawCamps()}catch(e){console.warn('camps',e)}return _do2.apply(this,arguments)}}
+  // pendant le déploiement, vos carrés sont translucides : ce sont les places qu'ils iront prendre en sortant du camp
+  {const _du=drawUnit;drawUnit=function(u){if(DEP&&KAMP&&u.side===0&&!u.pend){g2.save();g2.globalAlpha*=.6;try{return _du.apply(this,arguments)}finally{g2.restore()}}return _du.apply(this,arguments)}}
+  {const _sd=startDep;startDep=function(){const r=_sd.apply(this,arguments);try{campsInit();const b=document.getElementById('depBar');if(b&&KAMP){const d=b.querySelector('div');if(d&&!d._k){d._k=1;d.innerHTML='<b>Déploiement</b> · vos troupes attendent au camp. Placez leurs places (carrés translucides) dans la zone claire : clic droit, glisser à la souris, tracé de ligne ou formations. Au lancement, elles sortiront du camp une à une pour s\'y ranger.'}}}catch(e){console.warn('camps',e)}return r}}
+  {const _bg=begin;begin=function(){if(!started){try{campsLaunch()}catch(e){console.warn('camps',e)}}return _bg.apply(this,arguments)}}
+  {const _su3=setup;setup=function(){KAMP=null;return _su3.apply(this,arguments)}}
+  window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
@@ -2966,6 +3026,7 @@ if(!V3D){
   // (posé au premier dessin : l'interface « Bronze » enveloppe hudTick plus tard, et ses cartes doivent être corrigées après elle)
   let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;
     try{selected.clear=function(){SELCLR=true;return Set.prototype.clear.call(this)}}catch(e){}
+    {const _stx=step;step=function(dt){const d=ISCAMP()?dt*SLOWK:dt,r=_stx.call(this,d);try{campTick(d)}catch(e){console.warn('camps',e)}return r}}
     {const _rsx=renderSel;renderSel=function(){try{expandSel()}catch(e){}return _rsx.apply(this,arguments)}}
     {const _sh=shoot;shoot=function(u,dt){if(!u.T.ranged||u.routing||u.contacts.length)return;if(u.cd-dt>0){u.cd-=dt;return}return _sh.apply(this,arguments)}}
 const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTop()}catch(e){}try{const bar=document.getElementById('uiCards');if(bar){
