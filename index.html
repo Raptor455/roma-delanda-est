@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v210</span>
+ <span class="chg-ver">v211</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -14069,7 +14069,7 @@ const EQ_ADD={
   'P. Cornelius Scipio':[['legion',8],['velites',2],['rcav',1],['acav',1]],'Ti. Sempronius Longus':[['legion',2],['acav',1]]};
 const EQ_PEO={ath:{army:'Eurycléidès',add:[['athoplites',1],['thureo',1],['cretois',1]],gold:100},
   syr:{army:'Hiéron II',add:[['athoplites',1],['athpelt',1]],gold:0}};
-function eqAdd(a,spec){if(!a||!spec)return;for(const [t,k] of spec)for(let j=0;j<k;j++)if(UT[t]&&a.units.length<MAXU)a.units.push({t,men:UT[t].men});
+function eqAdd(a,spec){if(!a||!spec)return;for(const [t,k] of spec)for(let j=0;j<k;j++)if(UT[t]&&a.units.length<MAXU)a.units.push({t,men:UT[t].men,eq:1});
   try{a._dep=null;depArmy(a);if(typeof fixCorps==='function')fixCorps(a)}catch(e){console.error(e)}try{a.food=armyFoodMax(a)}catch(e){}}
 function eqStart218(){if(!S||S.day>3||S.eqStart)return;S.eqStart=1;
   for(const a of S.armies)if(!a.dead&&!a.g&&EQ_ADD[a.name]){const n0=a.units.length;eqAdd(a,EQ_ADD[a.name]);
@@ -14116,6 +14116,13 @@ function eqStaffAll(){if(!S||!S.armies||!S.gens||(S.day||0)>3)return;for(const a
 {const _ngS=newGame;newGame=function(){const r=_ngS.apply(this,arguments);try{eqStaffAll()}catch(e){console.error(e)}return r}}
 {const _psS=peo218Setup;peo218Setup=function(k){const r=_psS.apply(this,arguments);try{eqStaffAll();for(const a of S.armies)if(a.side==='car'&&!a.dead&&!a.g&&a._eqSt)eqCorps(a)}catch(e){console.error(e)}return r}}
 {const _dS=daily;daily=function(d){const r=_dS.apply(this,arguments);try{if(S&&(S.day||0)<=3)eqStaffAll()}catch(e){console.error(e)}return r}}
+// coop (trésors séparés par commandement) : les régiments ajoutés au départ sont payés par un trésor de guerre de leur commandement
+// (argent des mines d'Ibérie pour Hannibal, subsides du Sénat pour Scipion), tant qu'ils vivent ; sinon le commandement d'Hannibal fait faillite au 3e mois.
+// S'il reste en déficit, le trésor de guerre comble jusqu'à +10 or par mois, dans la limite de l'entretien de toute l'armée de départ (les Scipions n'ont que Pise au départ).
+try{if(typeof mpdInc==='function'){const _mi=mpdInc;mpdInc=function(k){const r=_mi.apply(this,arguments);if(!r||!S.mpD||!S.mpD[k]||k.endsWith(':eq'))return r;
+  const keep=[];try{for(const a of S.armies)if(!a.dead&&a.units.some(u=>u.eq)){keep.push([a,a.units]);a.units=a.units.filter(u=>!u.eq)}
+    if(keep.length){const r2=_mi.apply(this,arguments);const x=Math.max(0,(r.up||0)-(r2&&r2.up||0));if(x>0){let w=x;const net=(r.inc||0)+x-(r.up||0);let cap=0;for(const [a,L] of keep)if(mpdArmy(a)===k){for(const u of L)cap+=uCost(u)/12;try{for(const g of [genOf(a),...subsOf(a)])if(g)cap+=genPay(g)}catch(e){}}if(net<10)w+=Math.min(10-net,Math.max(x,cap));r.inc=Math.round((r.inc||0)+w);r.eqWar=Math.round(w)}}}
+  catch(e){}finally{for(const [a,L] of keep)a.units=L}return r};if(window.__mpd)window.__mpd.mpdInc=mpdInc}}catch(e){console.error(e)}
 window.__equi={eqStaff,eqStaffAll,eqCorps,EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ_ADD,EQ_PEO};
 /* ================= FIN ÉQUILIBRAGE ================= */
 /* ================= LIEUTENANTS (campagne ; multijoueur) =================
