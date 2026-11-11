@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v204</span>
+ <span class="chg-ver">v205</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -13849,7 +13849,44 @@ function eqStart218(){if(!S||S.day>3||S.eqStart)return;S.eqStart=1;
 {const _psE=peo218Setup;peo218Setup=function(k){const r=_psE.apply(this,arguments);try{const P=EQ_PEO[k];if(P&&!S.eqPeo){S.eqPeo=1;
     const L=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g);const a=L.find(x=>x.name===P.army)||L.sort((p,q)=>q.units.length-p.units.length)[0];
     eqAdd(a,P.add);if(P.gold)S.gold.car=(S.gold.car||0)+P.gold}eqMilAll()}catch(e){console.error(e)}return r}}
-window.__equi={EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ_ADD,EQ_PEO};
+// ---- 5. états-majors de départ (11 nov., Baptiste : « 2 sous-généraux en plus du général principal à toutes les armées de départ, organisées en corps ») ----
+const EQ_STAFF={'Hannibal':['Maharbal','Magon'],'Hasdrubal':['Hannon','Bostar'],'Giscon':['Adherbal','Bomilcar'],
+  'P. Cornelius Scipio':['Cn. Cornelius Scipio','P. Scipio le Jeune'],'Ti. Sempronius Longus':['Sex. Pomponius','M. Aemilius Lepidus'],'C. Flaminius':['L. Manlius Vulso','C. Centenius'],
+  'Philippe V':['Apelle','Léontios'],'Taurion':['Mégaléas','Alexandros'],'Hiéron II':['Gélon','Andranodoros'],'Eurycléidès':['Mikion','Képhisodoros'],
+  'Gaïa':['Oezalcès','Capussa'],'Massinissa':['Lacumazès','Mazétullus'],'Boiorix':['Britomaros','Viridomaros'],'Ducarios':['Comontorios','Ancoros'],
+  'Attale Ier':['Épigénès','Sosandros'],'Dionysodore':['Deinocratès','Ménandros'],'Hermocratès':['Euthyménès','Protis'],'Apellis':['Pythéas','Aristoxénos']};
+const EQ_NAMES={gre:['Nikanor','Kléon','Aristodèmos','Philon','Lysias','Démétrios','Kallias','Timon','Agathoclès','Ménon','Polémon','Straton','Aratos','Lykortas','Dorimachos','Scopas','Machanidas','Kléomédon','Archidamos','Euryloque','Théodotos','Hippias','Nikias','Phainéas','Damoclès','Xénon','Pausanias','Glaukos','Andronikos','Hermias','Kratéros','Ptolémaios','Zeuxis','Molon','Ariarathe','Antipatros'],
+  gau:['Cassivellos','Andecomboros','Litavicos','Eporedorix','Vercassivellaunos','Cotuatos','Dumnacos','Segovax'],
+  ibe:['Indibilis','Mandonios','Allucios','Edecon','Attenes','Corbis','Orsua','Culchas'],
+  num:['Mazaetullus','Naravas','Bocchar','Vermina','Masgaba','Arabion'],
+  ill:['Démétrios de Pharos','Scerdilaïdas','Pleuratos','Gentios','Bastarnos','Sitalcès','Kotys','Seuthès'],
+  rom:['C. Terentius','Q. Fulvius','M. Minucius','L. Postumius','Ap. Claudius','T. Otacilius'],
+  car:['Himilcon','Hamilcar','Mutines','Hannon le Jeune','Mago le Samnite','Bostar l\'Ancien']};
+const EQ_CULT={ibe:'ibe',cel:'ibe',lus:'ibe',olc:'ibe',carp:'ibe',vac:'ibe',bal:'ibe',gau:'gau',lig:'gau',ins:'gau',ven:'gau',num:'num',mae:'num',mau:'num',
+  ill:'ill',dar:'ill',thr:'ill',rom:'rom',car:'car',pun:'car'};
+function eqStaffName(a,j){const L=EQ_STAFF[a.name];let nm=L&&L[j];const used=n=>S.gens.some(g=>!g.dead&&g.name===n);
+  if(nm&&!used(nm))return nm;const P=EQ_NAMES[EQ_CULT[a.side]||'gre'];for(let i=0;i<P.length;i++){const n=P[(a.id*3+j+i)%P.length];if(!used(n))return n}
+  try{if(GEN[a.side])return nextGen(a.side)}catch(e){}for(let i=0;i<P.length*P.length;i++){const n=P[i%P.length]+' fils de '+P[(Math.floor(i/P.length)+1)%P.length];if(!used(n))return n}return 'Lieutenant '+(j+1)}
+// les corps : le chef garde le centre (et la garde), le Ier corps prend la cavalerie et une partie des troupes légères, le IIe une aile d'infanterie
+function eqCorps(a){const n=1+(a.sub||[]).length;if(n<3){try{autoCorps(a,'eq')}catch(e){}return}
+  const pw=u=>{try{return power([u])}catch(e){return 1}},K=u=>UT[u.t]?UT[u.t].k:'inf';
+  const cav=a.units.filter(u=>isCavK(K(u))),sk=a.units.filter(u=>K(u)==='skirm'),inf=a.units.filter(u=>K(u)==='inf').sort((p,q)=>pw(q)-pw(p)),el=a.units.filter(u=>K(u)==='eleph');
+  a.units.forEach(u=>{u.cp=0;u.gd=0});
+  if(cav.length&&cav.length>inf.length){cav.forEach((u,i)=>u.cp=i%2?2:1);sk.forEach((u,i)=>u.cp=i%2?0:(i%4?2:1));inf.forEach(u=>u.cp=0)}
+  else if(cav.length){cav.forEach(u=>u.cp=1);sk.forEach((u,i)=>u.cp=i%2?2:1);inf.forEach((u,i)=>u.cp=i%2?2:0)}
+  else{let l=[0,0,0];[...inf,...sk].forEach(u=>{const c=l[0]<=l[1]&&l[0]<=l[2]?0:l[1]<=l[2]?1:2;u.cp=c;l[c]+=pw(u)})}
+  el.forEach(u=>u.cp=0);
+  for(let k=0;k<n;k++)if(!a.units.some(u=>(u.cp||0)===k)){const cnt=c=>a.units.filter(v=>(v.cp||0)===c).length;let big=0;for(let c=1;c<n;c++)if(cnt(c)>cnt(big))big=c;if(cnt(big)>1){const d=a.units.filter(u=>(u.cp||0)===big).pop();d.cp=k}}
+  try{pickGuard(a)}catch(e){}}
+function eqStaff(a){if(!a||a.dead||a.g||a.units.length<3||a._eqSt)return;a._eqSt=1;
+  a.sub=(a.sub||[]).filter(id=>S.gens.some(g=>g.id===id&&!g.dead));if(a.sub.length>=2)return;
+  for(let j=a.sub.length;j<2;j++){const g=mkGen(a.side,eqStaffName(a,j));S.gens.push(g);if(!addSub(a,g,true))break}
+  eqCorps(a)}
+function eqStaffAll(){if(!S||!S.armies||!S.gens||(S.day||0)>3)return;for(const a of S.armies)try{eqStaff(a)}catch(e){console.error(e)}}
+{const _ngS=newGame;newGame=function(){const r=_ngS.apply(this,arguments);try{eqStaffAll()}catch(e){console.error(e)}return r}}
+{const _psS=peo218Setup;peo218Setup=function(k){const r=_psS.apply(this,arguments);try{eqStaffAll();for(const a of S.armies)if(a.side==='car'&&!a.dead&&!a.g&&a._eqSt)eqCorps(a)}catch(e){console.error(e)}return r}}
+{const _dS=daily;daily=function(d){const r=_dS.apply(this,arguments);try{if(S&&(S.day||0)<=3)eqStaffAll()}catch(e){console.error(e)}return r}}
+window.__equi={eqStaff,eqStaffAll,eqCorps,EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ_ADD,EQ_PEO};
 /* ================= FIN ÉQUILIBRAGE ================= */
 /* ================= LIEUTENANTS (campagne ; multijoueur) =================
    Baptiste (10 nov.) : « rentrer dans la bataille d'un ami même si je n'ai pas d'armée à côté, je pourrais alors contrôler
