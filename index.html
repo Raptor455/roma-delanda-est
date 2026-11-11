@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v221</span>
+ <span class="chg-ver">v222</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -1486,11 +1486,11 @@ const STRAIT=[['gades','tingis'],['messana','rhegium'],['olbia','alalia'],['naup
    Situation de départ de Carthage au printemps 218 av. J.-C. et régions historiques.
    Injecté avant « RELIEF, FLEUVES » par mecaniques/patch.py. Les nouveaux lieux sont ajoutés EN FIN de PL (indices stables). */
 // Sagonte est tombée en 219 : elle est punique, et garde les otages des peuples ibères
-// Peuples tributaires des Barcides : Carpétans, Olcades, Vaccéens (soumis par Hannibal en 221-220)
+// Carpétans, Olcades, Vaccéens : peuples libres au départ (Baptiste, 11 nov. 2026 : plus de tributaires, tout le monde peut être envahi)
 {const own={saguntum:'car',toletum:'carp',segobriga:'olc',helmantica:'vac'};for(const p of PL)if(own[p[0]])p[4]=own[p[0]]}
-FAC.carp={n:'Carpétans',c:[184,120,78],a:[45,-25],cul:'ibe',trib:1};
-FAC.olc={n:'Olcades',c:[168,112,84],a:[40,-20],cul:'ibe',trib:1};
-FAC.vac={n:'Vaccéens',c:[160,124,90],a:[30,-15],cul:'ibe',trib:1};
+FAC.carp={n:'Carpétans',c:[184,120,78],a:[45,-25],cul:'ibe'};
+FAC.olc={n:'Olcades',c:[168,112,84],a:[40,-20],cul:'ibe'};
+FAC.vac={n:'Vaccéens',c:[160,124,90],a:[30,-15],cul:'ibe'};
 PL.push(
  // Afrique punique : la chôra de Carthage (Zeugitane), le Sahel (Byzacène) et les Emporia
  ['tunes','Tunès',10.18,36.80,'car',1],['neapolisafr','Néapolis',10.73,36.45,'car',1,'p'],['aspis','Aspis',11.10,36.85,'car',1,'p'],
@@ -6373,7 +6373,7 @@ function mecaStart(){
   put('melita',[...U('lib',2)],'Garnison de Mélité',true);
   put('leptis',[...U('lib',1),...U('ncav',1)],'Garnison de Leptis',true);
   S.log=S.log||[];
-  log("Les otages des peuples ibères sont gardés à Sagonte. Carpétans, Olcades et Vaccéens paient tribut à Carthage.");
+  log("Les otages des peuples ibères sont gardés à Sagonte.");
 }
 const _newGameM=newGame;
 newGame=function(){_newGameM();mecaStart()};
