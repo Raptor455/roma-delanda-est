@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v211</span>
+ <span class="chg-ver">v212</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -2911,7 +2911,7 @@ function tick(dd){
   tickFleets(dd);patrolsMove(dd);
   // rencontres : deux armées hostiles à moins de 6 km
   for(let i=0;i<S.armies.length;i++)for(let j=i+1;j<S.armies.length;j++){
-    const a=S.armies[i],b=S.armies[j];if(a.dead||b.dead||a.ship||b.ship||a.cool>0||b.cool>0||!hostile(a,b))continue;
+    const a=S.armies[i],b=S.armies[j];if(a.dead||b.dead||a.ship||b.ship||a.cool>0||b.cool>0||Math.hypot(a.x-b.x,a.y-b.y)>=6/*PERF-GA*/||!hostile(a,b))continue;
     if(Math.hypot(a.x-b.x,a.y-b.y)<6){const att=(a.legs.length>0)>=(b.legs.length>0)?a:b,def=att===a?b:a;
       const defs=S.armies.filter(o=>o.side===def.side&&!o.dead&&Math.hypot(o.x-def.x,o.y-def.y)<6);startBattle(att,defs);if(S.cur)return}
   }
@@ -14835,6 +14835,34 @@ function trFicheAdd(){const M=$('mcard'),f=DVS.f;if(!M||!f||!S.fac[f])return;con
 {const _bT=dvBadge;dvBadge=function(){const r=_bT.apply(this,arguments);try{const b=$('bDip');if(b&&S&&(S.trq||S.trc)){let s=b.querySelector('.dv-badge');if(!s){s=document.createElement('span');s.className='dv-badge';b.appendChild(s);s.textContent='1'}}}catch(e){}return r}}
 window.__traites={get S(){return S},TR_C,trEval,trCounter,trApply,trSign,trArrive:e=>trArrive(e),trTable,trNewOffer,trDaily,trPropose,trOpenQ,trAcceptQ,trAcceptC,trRat,trBreak,trTheyBreak,trDenounce,trMercs,trAvail,trFig,DVS,dvRender:()=>dvRender(),daily:d=>daily(d),declareWar:(s,f)=>declareWar(s,f)};
 /* ================= FIN TRAITÉS ================= */
+/* ================= PERFORMANCE DES GRANDES ARMÉES (fil Performance, 11 nov., Baptiste : « gros problèmes de performance quand je sélectionne la grande armée d'Hannibal et que j'essaye de la déplacer ») =================
+   Source : /mnt/project-files/performance/grandes-armees.js, injecté juste avant « BOUCLE » par performance/patch_ga.py (relançable, remplace le bloc sur place).
+   À garder APRÈS equilibrage (il enveloppe le dStats final). Avec 40 régiments, chaque survol de la carte recalculait l'itinéraire :
+   des milliers d'appels à legSpeed → armySpeed → uKm → dStats (statistiques complètes de chaque régiment).
+   1. dStats mémorisé par modèle (clé = contenu du modèle) : mêmes résultats, une copie à chaque appel.
+   2. armySpeed mémorisé par armée pendant 0,25 s (tant que le nombre de régiments ne change pas).
+   3. Rafraîchissement du panneau de sélection (toutes les 0,5 s dans BOUCLE, retouche marquée PERF-GA → gaSide) : si le panneau coûte
+      plus de 12 ms à refaire (grande armée), il n'est refait que si quelque chose d'affiché change (jour, effectifs, ordres, or…),
+      et au moins toutes les 4 s. Les petits panneaux restent refaits toutes les 0,5 s comme avant.
+   4. Rencontres (tick) : distance testée avant hostile() (retouche marquée PERF-GA dans tick, même résultat). */
+{
+  const _ds=dStats,DSM=new WeakMap();
+  dStats=function(d){if(!d||typeof d!=='object')return _ds.apply(this,arguments);let k;try{k=JSON.stringify(d)}catch(e){return _ds.apply(this,arguments)}
+    const m=DSM.get(d);if(m&&m.k===k)return Object.assign({},m.s);const s=_ds.apply(this,arguments);DSM.set(d,{k,s:Object.assign({},s)});return s};
+  const _as=armySpeed;
+  armySpeed=function(a){if(!a||!a.units)return _as.apply(this,arguments);const t=performance.now(),c=a._gaSp;
+    if(c&&c.u===a.units&&c.n===a.units.length&&t-c.t<250)return c.v;const v=_as.apply(this,arguments);try{Object.defineProperty(a,'_gaSp',{value:{t,u:a.units,n:a.units.length,v},enumerable:false,configurable:true,writable:true})}catch(e){}return v};
+  const GAS={t:0,sig:'',cost:0};
+  const gaSig=()=>{try{const d=Math.floor(S.day),g=S.gold?JSON.stringify(S.gold):'';
+    if(sel&&sel.a){const a=sel.a;let m=0;for(const u of a.units)m+=u.men||0;
+      return ['a',a.id,d,a.units.length,Math.round(m/20),a.legs.length?(()=>{const L=a.legs[a.legs.length-1];return Math.round(L.x)+','+Math.round(L.y)})():'-',a.legs.length?'':a.at,a.dead?1:0,a.inG?1:0,Math.round(a.mor||0),Math.round(a.food||0),Math.round(a.fat||0),a.pace,a.mo,a.camp?1:0,S.paused?1:0,g].join('|')}
+    return ['o',sel&&sel.n,sel&&sel.v,sel&&sel.f&&sel.f.id,d,S.paused?1:0,g].join('|')}catch(e){return String(Math.random())}};
+  window.gaSide=function(){const now=performance.now(),sig=gaSig();
+    if(GAS.cost>12&&sig===GAS.sig&&now-GAS.t<4000)return;
+    const t0=performance.now();renderSide();const c=performance.now()-t0;GAS.cost=GAS.cost?GAS.cost*.6+c*.4:c;GAS.t=now;GAS.sig=gaSig()};
+  window.__ga={dsm:DSM,side:GAS};
+}
+/* ================= FIN PERFORMANCE DES GRANDES ARMÉES ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
@@ -14848,7 +14876,7 @@ setTimeout(async()=>{
     if(!S.paused&&!S.cur&&!S.over&&($('modal').hidden||MPH())/*MP*/){
       {const _p=performance.now();tick(raw/DAY_S*S.speed);computeVis();PERF.t.sim+=performance.now()-_p}/*PERF*/
       for(const a of S.armies)if(a.side!=='car'&&visOfArmy(a)>0)S.intel[a.id]={x:a.x,y:a.y,d:Math.floor(S.day)};
-      uiT-=raw;if(uiT<=0){uiT=.5;renderTop();if(sel&&!$('side').matches(':hover'))renderSide()}
+      uiT-=raw;if(uiT<=0){uiT=.5;renderTop();if(sel&&!$('side').matches(':hover'))gaSide()/*PERF-GA*/}
     }
     if(sel&&sel.a&&sel.a.dead){sel=null;renderSide()}
     {const bf=$('battle3d');if(!bf||bf.style.opacity!=='1'){stepZoom(raw||.016);const _p=performance.now();draw();PERF.t.draw+=performance.now()-_p;PERF.t.n++}/*PERF*/}requestAnimationFrame(frame);
