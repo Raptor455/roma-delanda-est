@@ -2947,7 +2947,7 @@ if(!V3D){
         le déploiement fixe les places (carrés translucides) ; au lancement les carrés sortent UN PAR UN, en file, par la grande porte
         et vont se ranger. L'ennemi fait de même, puis son IA reprend la main. Un camp laissé sans défenseur peut être pillé :
         provisions perdues (res.pille pour la campagne), moral de l'armée qui s'effondre. -- */
-  const SLOWK=.45,KSP=19,KST=34,KFL=50,KBK=120,KFR=38,KGW=27,LOOT_T=12;let KAMP=null;
+  const SLOWK=1,KSP=19,KST=34,KFL=50,KBK=120,KFR=38,KGW=27,LOOT_T=12;let KAMP=null;
   const CAMPS_ON=()=>ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
   const krnd=s=>{let a=s>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}};
   function campGeom(side){const P=units.filter(u=>u.side===side&&!u.dead&&!u.pend),E=units.filter(u=>u.side!==side&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
@@ -2956,7 +2956,7 @@ if(!V3D){
     const half=Math.max(4,Math.ceil(Math.sqrt(N*2.4)/2)),cols=half*2,rows=Math.ceil(N/cols),w=cols*sp+KST+2*KFL+16,d=KFR+rows*sp+KBK;
     const mx=Math.max(...P.map(u=>(u.x-pc.x)*n.x+(u.y-pc.y)*n.y)),R=Math.hypot(w,d)/2+30;
     // une ville sur le champ (bataille devant les murs) : le camp se pose à côté, jamais dedans, et sa sortie ne traverse pas l'enceinte
-    const V=window.__villes,bad=(x,y)=>{if(!V||!V.P||!V.W2P)return false;try{const q=V.W2P(x,y),o=V.dbgPt(q[0],q[1]);return !!(V.inCity(q[0],q[1])||o.town||o.water||o.wall)}catch(e){return false}};
+    const V=window.__villes,bad=(x,y)=>{const RG=window.__rangees;try{if(RG&&((RG.wet&&RG.wet(x,y))||(RG.inMarsh&&RG.inMarsh(x,y))))return true}catch(e){}if(!V||!V.P||!V.W2P)return false;try{const q=V.W2P(x,y),o=V.dbgPt(q[0],q[1]);return !!(V.inCity(q[0],q[1])||o.town||o.water||o.wall)}catch(e){return false}};
     const mk=(la,de)=>{const q={x:pc.x+n.x*de+t.x*la,y:pc.y+n.y*de+t.y*la};q.x=Math.max(RIVER+R,Math.min(W-R,q.x));q.y=Math.max(R,Math.min(H-R,q.y));return q};
     const cost=q=>{let b=0;for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)if(bad(q.x+t.x*i*(w/2+30)/3+n.x*j*(d/2+30)/3,q.y+t.y*i*(w/2+30)/3+n.y*j*(d/2+30)/3))b+=4;
       const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);for(let i=1;i<=10;i++)if(bad(gx+(pc.x-gx)*i/10,gy+(pc.y-gy)*i/10))b+=2;
