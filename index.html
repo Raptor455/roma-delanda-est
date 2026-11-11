@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v203</span>
+ <span class="chg-ver">v204</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -13335,7 +13335,7 @@ const peoCur=()=>{try{return S&&(S.peo&&(PEO_EMB_D[S.peo]||PEO_IMG[S.peo])?S.peo
   window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;escBusy=true;try{
     const t=e.target,typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
     escBusy=typing||e.repeat||!$('modal').hidden||!!$('chg')||!!$('rgCard')||!!$('battle3d')||(typeof mkMode!=='undefined'&&mkMode)||
-      !!(S&&(S.cur||S.over))||!!(typeof sel!=='undefined'&&sel)}catch(err){escBusy=true}},true);
+      !!(S&&(S.cur||S.over))||!!(typeof sel!=='undefined'&&sel)||!!(typeof nvOpen!=='undefined'&&nvOpen)}catch(err){escBusy=true}},true);
   window.addEventListener('keydown',e=>{if(e.key!=='Escape'||escBusy)return;escBusy=true;
     try{openMenu()}catch(err){console.error(err)}});
 }
@@ -13371,6 +13371,198 @@ if(typeof chgBataille==='function'){const _cbE=chgBataille;chgBataille=function(
   const M={gau:'ins'},ks=[o&&o.pp,o&&o.ep].map(k=>M[k]||k),cs=document.querySelectorAll('#chgB .chgB-c > i');
   cs.forEach((el,i)=>{const k=ks[i];if(k&&(PEO_EMB_D[k]||PEO_IMG[k])){el.classList.add('peMed');el.innerHTML=PEO_EMB(k,48)}})}catch(e){}return r}}
 {const st=document.createElement('style');st.textContent='.chgB-c i.peMed{background:none!important;border:0!important;box-shadow:none!important;width:52px!important;height:52px!important}.chgB-c i.peMed svg{padding:0!important;width:100%;height:100%}';document.head.appendChild(st)}
+/* ---------- MENUS SIMPLIFIÉS (fil Interface, 11 nov.) ----------
+   1. barre du haut : les boutons d'origine (.ui-menu) restent dans la page mais sont cachés ; cinq boutons nommés les regroupent.
+      Tout bouton ajouté plus tard à .ui-menu par un autre fil apparaît tout seul dans « Partie » (ou dans NV_G si on l'y range).
+   2. liste « À faire » (#nvTodo) : ce qui demande l'attention du joueur, un clic mène au bon endroit.
+   3. fiche de ville à onglets (townTabs) : Ville / Recruter / Construire / Marine / Intendance.
+   4. fenêtres : même en-tête (à quoi ça sert) et bandeau d'onglets vers les fenêtres voisines du même groupe. */
+const NV_G=[
+  {k:'roy',n:'Royaume',d:'Villes, argent, commerce, Sénat',ids:['bEco','bSea','bHub','bPol']},
+  {k:'dip',n:'Diplomatie',d:'Peuples, traités, agents',ids:['bDip','bAg']},
+  {k:'arm',n:'Armées',d:'Généraux, unités, repères',ids:['bGen','bWork','bMark']},
+  {k:'chr',n:'Chroniques',d:'Le récit de votre guerre',ids:['bChr']},
+  {k:'par',n:'Partie',d:'Pause, options, aide, amis',ids:['bMenu','mpTag','sonBtn','bHelp']}];
+const NV_I={
+  bEco:['Économie et villes','Revenus, impôts, ordre public et bâtiments de toutes vos villes.','Économie et villes'],
+  bSea:['Mer et commerce','Routes marchandes, blocus, pirates et guerre de course.','Mer et commerce'],
+  bHub:['Logistique','Affiche sur la carte vos bases, dépôts et lignes de ravitaillement.'],
+  bPol:['Politique','L\'appui du Sénat, les renforts et la paix.','Politique'],
+  bDip:['Diplomatie','Ce que veut chaque peuple, et comment s\'en faire un allié.','Diplomatie'],
+  bAg:['Agents','Espions et saboteurs en mission.','Agents'],
+  bGen:['Généraux','Vos chefs, leur loyauté, leurs talents ; les chefs ennemis connus.','Généraux'],
+  bWork:['Atelier des unités','Composer, équiper et nommer vos propres régiments.','Atelier des unités'],
+  bMark:['Poser un repère','Marquer un point de la carte, visible par vos alliés (ou Alt+clic).'],
+  bChr:['Chroniques','Le récit de votre guerre, jour après jour.','Chroniques de la guerre'],
+  bMenu:['Menu de la partie','Pause, nouvelle campagne, difficulté, affichage.','Partie en pause'],
+  mpTag:['Jouer à plusieurs','Héberger une partie ou rejoindre des amis.','Jouer à plusieurs'],
+  sonBtn:['Sons et musique','Volume et réglages du son.'],
+  bHelp:['Comment jouer','Commandes, règles et légende de la carte.','Comment jouer']};
+const nvBtn=id=>document.getElementById(id);
+const nvName=id=>NV_I[id]?NV_I[id][0]:(nvBtn(id)&&(nvBtn(id).textContent.trim()||nvBtn(id).title))||id;
+const nvDesc=id=>NV_I[id]?NV_I[id][1]:(nvBtn(id)&&nvBtn(id).title)||'';
+const nvIco=(id,sz)=>{const b=nvBtn(id),s=b&&b.querySelector('svg');if(!s)return `<span class="nvI0" style="width:${sz}px;height:${sz}px"></span>`;const c=s.cloneNode(true);c.setAttribute('width',sz);c.setAttribute('height',sz);c.removeAttribute('style');return c.outerHTML};
+function nvGroups(){const menu=document.querySelector('.ui-menu');const known=new Set(NV_G.flatMap(g=>g.ids));
+  const extra=menu?[...menu.querySelectorAll(':scope > button[id]')].map(b=>b.id).filter(id=>!known.has(id)):[];
+  return NV_G.map(g=>({k:g.k,n:g.n,d:g.d,ids:(g.k==='par'?g.ids.concat(extra):g.ids).filter(id=>{const b=nvBtn(id);return b&&!b.hidden&&b.style.display!=='none'})})).filter(g=>g.ids.length)}
+let nvOpen=null;
+function nvClose(){nvOpen=null;const d=document.getElementById('nvDrop');if(d)d.hidden=true;document.querySelectorAll('#nvBar .nvB').forEach(b=>b.classList.remove('on'))}
+function nvGo(id){nvClose();const b=nvBtn(id);if(b)b.click()}
+function nvShow(k){const G=nvGroups().find(g=>g.k===k),bar=document.getElementById('nvBar');if(!G||!bar)return;
+  if(G.ids.length===1){nvGo(G.ids[0]);return}
+  let d=document.getElementById('nvDrop');if(!d){d=document.createElement('div');d.id='nvDrop';d.setAttribute('role','menu');document.body.appendChild(d)}
+  if(nvOpen===k&&!d.hidden){nvClose();return}
+  nvOpen=k;d.innerHTML=`<div class="nvDh">${esc(G.n)}</div>`+G.ids.map((id,i)=>`<button type="button" role="menuitem" data-nv="${id}">${nvIco(id,22)}<span><b>${esc(nvName(id))}</b><small>${esc(nvDesc(id))}</small></span></button>`).join('');
+  d.querySelectorAll('[data-nv]').forEach(b=>b.onclick=()=>nvGo(b.dataset.nv));
+  d.hidden=false;const bt=bar.querySelector(`[data-g="${k}"]`),r=bt.getBoundingClientRect();
+  bar.querySelectorAll('.nvB').forEach(b=>b.classList.toggle('on',b===bt));
+  d.style.top=(r.bottom+6)+'px';d.style.left=Math.max(8,Math.min(innerWidth-d.offsetWidth-8,r.left+r.width/2-d.offsetWidth/2))+'px'}
+function nvBuild(){const menu=document.querySelector('.ui-menu');if(!menu||!menu.parentNode)return;
+  let bar=document.getElementById('nvBar');const G=nvGroups(),sig=G.map(g=>g.k+':'+g.ids.join(',')).join('|');
+  if(bar&&bar.dataset.sig===sig&&bar.previousElementSibling===menu)return;
+  if(!bar){bar=document.createElement('div');bar.id='nvBar';bar.setAttribute('role','menubar')}
+  menu.classList.add('nvHid');menu.parentNode.insertBefore(bar,menu.nextSibling);bar.dataset.sig=sig;
+  bar.innerHTML=G.map((g,i)=>`<button type="button" class="nvB" data-g="${g.k}" aria-haspopup="${g.ids.length>1}" data-tt-nv="${esc(g.d)}">${nvIco(g.ids[0],20)}<span>${esc(g.n)}</span><kbd>${i+1}</kbd></button>`).join('');
+  bar.querySelectorAll('.nvB').forEach(b=>{b.onclick=e=>{e.stopPropagation();nvShow(b.dataset.g)};
+    b.onmouseenter=()=>{if(nvOpen&&nvOpen!==b.dataset.g)nvShow(b.dataset.g)}})}
+document.addEventListener('click',e=>{if(nvOpen&&!e.target.closest('#nvDrop'))nvClose()});
+window.addEventListener('keydown',e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+  if(e.key==='Escape'&&nvOpen){nvClose();return}
+  if(e.ctrlKey||e.metaKey||e.altKey||!/^Digit[1-9]$/.test(e.code||''))return;
+  try{if(!$('modal').hidden||$('chg')||$('chgB')||(S&&(S.cur||S.over)))return}catch(err){return}
+  const g=nvGroups()[+e.code.slice(5)-1];if(g){e.preventDefault();nvShow(g.k)}});
+
+/* ----- 4. fenêtres : à quoi ça sert + onglets vers les fenêtres voisines ----- */
+function nvWinDeco(){try{const mc=$('mcard');if(!mc||$('modal').hidden)return;const h=mc.querySelector(':scope > h2');if(!h)return;
+  const t=h.textContent.replace(/\s+/g,' ').trim();let id=null;for(const k in NV_I)if(NV_I[k][2]&&t.startsWith(NV_I[k][2])){id=k;break}
+  const old=mc.querySelector(':scope > .nvTabs');
+  if(!id||!nvBtn(id)){if(old)old.remove();return}
+  const G=nvGroups().find(g=>g.ids.includes(id));if(!G)return;
+  const wins=G.ids.filter(x=>NV_I[x]&&NV_I[x][2]);
+  if(!old||old.dataset.id!==id){if(old)old.remove();
+    const bar=document.createElement('div');bar.className='nvTabs';bar.dataset.id=id;
+    bar.innerHTML=`<span class="nvTg">${esc(G.n)}</span>`+wins.map(x=>`<button type="button" class="${x===id?'on':''}" data-nvw="${x}">${nvIco(x,16)}${esc(nvName(x))}</button>`).join('');
+    bar.querySelectorAll('[data-nvw]').forEach(b=>b.onclick=()=>{if(b.dataset.nvw!==id){closeModal();nvGo(b.dataset.nvw)}});
+    mc.insertBefore(bar,mc.firstChild)}
+  if(!mc.querySelector(':scope > .nvWhy')&&id!=='bMenu'){const p=document.createElement('p');p.className='nvWhy';p.textContent=nvDesc(id);h.insertAdjacentElement('afterend',p)}
+}catch(e){}}
+{let q=false;const run=()=>{q=false;nvWinDeco()};
+  const mo=new MutationObserver(()=>{if(!q){q=true;setTimeout(run,0)}});
+  setTimeout(()=>{try{mo.observe($('mcard'),{childList:true});mo.observe($('modal'),{attributes:true,attributeFilter:['hidden']})}catch(e){}},600)}
+
+/* ----- 3. fiche de ville à onglets ----- */
+const NV_TT=[['vil','Ville'],['rec','Recruter'],['bat','Construire'],['mar','Marine'],['int','Dépôt']];
+let nvTownTab='vil',nvTownBusy=false;
+const nvTownKind=t=>/abri des murs|Patrouille/i.test(t)?'vil':/Recrut|Recrues/i.test(t)?'rec':/Gouvernement/i.test(t)?'bat':/Chantier naval/i.test(t)?'mar':'int';
+function townTabs(){const el=$('side');if(!el||nvTownBusy)return;
+  const on=!!(typeof sel!=='undefined'&&sel&&sel.n!=null&&!sel.a&&!sel.f);
+  if(!on){el.classList.remove('nvTown');return}
+  let i=sel.n;try{if(ownerN(i)!=='car'||N[i].col){el.classList.remove('nvTown');return}}catch(e){return}
+  nvTownBusy=true;try{
+    let bar=el.querySelector(':scope > .nvTT'),body=el.querySelector(':scope > .nvTB');
+    const loose=[...el.childNodes].filter(c=>c!==bar&&c!==body&&!(c.nodeType===1&&(c.classList.contains('ui-x')||c.classList.contains('ui-head')||c.classList.contains('nvKeep'))));
+    if(bar&&body&&!loose.length){nvTownShow(el);return}
+    if(!loose.some(c=>c.nodeType===1&&c.tagName==='H3')&&!body)return;
+    if(!bar){bar=document.createElement('div');bar.className='nvTT ua-tabs';bar.setAttribute('role','tablist');body=document.createElement('div');body.className='nvTB';
+      NV_TT.forEach(([k])=>{const p=document.createElement('div');p.className='nvTP';p.dataset.k=k;body.appendChild(p)})}
+    let cur='vil';for(const c of loose){if(c.nodeType===1&&c.tagName==='H3')cur=nvTownKind(c.textContent);body.querySelector(`.nvTP[data-k="${cur}"]`).appendChild(c)}
+    el.appendChild(bar);el.appendChild(body);el.classList.add('nvTown');
+    const have=NV_TT.filter(([k])=>body.querySelector(`.nvTP[data-k="${k}"]`).children.length);
+    bar.innerHTML=have.map(([k,n])=>`<button type="button" role="tab" data-k="${k}">${n}</button>`).join('');
+    bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{nvTownTab=b.dataset.k;nvTownShow(el)});
+    nvTownShow(el)}finally{nvTownBusy=false}}
+function nvTownShow(el){const bar=el.querySelector(':scope > .nvTT'),body=el.querySelector(':scope > .nvTB');if(!bar||!body)return;
+  const ks=[...bar.querySelectorAll('button')].map(b=>b.dataset.k);if(!ks.includes(nvTownTab))nvTownTab=ks[0]||'vil';
+  bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===nvTownTab));
+  body.querySelectorAll(':scope > .nvTP').forEach(p=>p.hidden=p.dataset.k!==nvTownTab)}
+
+/* ----- 2. liste « À faire » ----- */
+let nvTodoOpen=true,nvTodoSig='',nvDipCache={t:0,L:[]};
+try{nvTodoOpen=localStorage.getItem('bellum.nvTodo')!=='0'}catch(e){}
+const nvSelArmy=a=>{sel={a};centerOn(a.x,a.y,Math.max(view.s,1.2));renderAll()};
+const nvSelTown=i=>{sel={n:i};centerOn(N[i].x,N[i].y,Math.max(view.s,1.2));renderAll()};
+function nvTodoList(){const L=[],add=(lv,ic,t,s,go,ok)=>L.push({lv,ic,t,s,go,ok});if(!S||S.over)return L;
+  const mine=S.armies.filter(a=>{try{return isMine(a)&&!a.dead}catch(e){return false}});
+  const sieger={};for(const id in (S.siege||{})){const sg=S.siege[id];if(sg&&sg.a!=null)sieger[sg.a]=id}
+  try{for(const id in (S.siege||{})){const sg=S.siege[id],i=NI[id];if(i==null)continue;
+    if(sg.side!=='car'&&ownerN(i)==='car')add(0,'!',`${N[i].n} est assiégée`,`${Math.floor(sg.d)} jours sur ${sg.need} avant la chute`,()=>nvSelTown(i));
+    else if(sg.side==='car'){const a=mine.find(x=>x.id===sg.a);if(a)add(3,'⚔',`Siège ${deN(N[i].n)}`,`${esc(a.name)} · ${Math.floor(sg.d)} jours sur ${sg.need}`,()=>nvSelArmy(a))}}}catch(e){}
+  try{for(const a of mine){if(a.g||a.inG)continue;const fd=foodDays(a);if(fd<=5)add(1,'!',`${a.name} : ${fd} jour${fd>1?'s':''} de vivres`,'Rejoignez une ville amie, un dépôt ou un village',()=>nvSelArmy(a))}}catch(e){}
+  try{for(const a of mine){if(a.legs.length)delete a.nvOk;if(a.g||a.inG||a.ship||a.legs.length||sieger[a.id]||a.nvOk)continue;
+    add(2,'➤',`${a.name} attend vos ordres`,where(a),()=>nvSelArmy(a),()=>{a.nvOk=1})}}catch(e){}
+  try{for(const id in (S.ord||{})){const i=NI[id];if(i==null||ownerN(i)!=='car')continue;const o=S.ord[id];if(o!=null&&o<25)add(1,'!',`Ordre public bas à ${N[i].n}`,`${Math.round(o)} sur 100 : la ville peut se révolter`,()=>{nvSelTown(i);nvTownTab='bat'})}}catch(e){}
+  try{const {inc,up}=income('car'),net=inc-up,g=Math.round(S.gold.car);
+    if(net<0)add(1,'!',`Vous perdez ${-net} or par mois`,'Voir les revenus et les dépenses',()=>nvGo('bEco'));
+    else if(g>=250)add(4,'●',`${g} or à dépenser`,'Recruter, construire ou acheter des appuis',()=>nvGo('bEco'))}catch(e){}
+  try{for(const g of (S.gens||[])){if(g.side!=='car'||g.dead||g.loy==null||g.loy>=25)continue;add(1,'!',`La loyauté de ${g.name} chancelle`,`${Math.round(g.loy)} sur 100`,()=>nvGo('bGen'))}}catch(e){}
+  try{if(S.pol&&S.pol.bar!=null&&S.pol.bar<25&&!S.peo&&!S.mirror)add(1,'!','Le Sénat se détourne de vous',`Appui ${Math.round(S.pol.bar)} sur 100`,()=>nvGo('bPol'))}catch(e){}
+  try{const now=Date.now();if(now-nvDipCache.t>4000){nvDipCache={t:now,L:[]};
+      if(S.dv&&typeof dvDisp==='function'){for(const r of (S.dv.req||[])){if(!r.st&&S.fac[r.f])nvDipCache.L.push([2,'✉',`Une demande ${dvDes(r.f)}`,'Ils attendent votre réponse',r.f])}
+        for(const f in S.fac){const F=S.fac[f];if(!F||F.st!=='neutre'||!contact('car',f))continue;if(dvDisp(f).v>=25)nvDipCache.L.push([3,'✉',`${dvC(dvLes(f))} sont prêts à traiter`,'Le moment de conclure une alliance',f])}}}
+    for(const x of nvDipCache.L)add(x[0],x[1],x[2],x[3],()=>dipOpenFac(x[4]))}catch(e){}
+  return L.sort((a,b)=>a.lv-b.lv)}
+function nvTodo(){try{if(!S||!document.querySelector('.ui-menu'))return;
+  let el=document.getElementById('nvTodo');if(!el){el=document.createElement('div');el.id='nvTodo';document.body.appendChild(el)}
+  const hide=!!($('chg')||$('chgB')||S.cur||S.over);el.hidden=hide;if(hide)return;
+  // la tablette (armée, ville) peut monter jusqu'en haut à gauche : la liste se range alors à sa droite
+  try{const sd=$('side'),r=sd&&sd.getBoundingClientRect(),h=el.offsetHeight||40;const sh=r&&r.width&&r.top<96+h+8&&r.left<280&&innerWidth>900;el.style.left=(sh?Math.round(r.right+10):12)+'px'}catch(e){}
+  const L=nvTodoList(),sig=nvTodoOpen+'|'+L.map(x=>x.lv+x.t+x.s).join('|');if(sig===nvTodoSig)return;nvTodoSig=sig;
+  const urg=L.filter(x=>x.lv<=1).length,show=L.slice(0,7);
+  el.className=(nvTodoOpen?'open':'')+(urg?' urg':'');
+  el.innerHTML=`<button type="button" class="nvTh" aria-expanded="${nvTodoOpen}"><b>À faire</b><i>${L.length}</i><span>${nvTodoOpen?'▾':'▸'}</span></button>`+
+    (nvTodoOpen?(L.length?show.map((x,i)=>`<div class="nvTi l${x.lv}" data-i="${i}" role="button" tabindex="0"><em>${x.ic}</em><span><b>${esc(x.t)}</b><small>${x.s||''}</small></span>${x.ok?`<button type="button" class="nvTo" data-o="${i}" title="Laisser cette armée en poste : ne plus le rappeler tant qu'elle ne bouge pas">✓</button>`:''}</div>`).join('')+(L.length>7?`<p class="nvTm">et ${L.length-7} de plus</p>`:''):'<p class="nvTm">Rien ne presse. Le temps peut reprendre (Espace).</p>'):'');
+  el.querySelector('.nvTh').onclick=()=>{nvTodoOpen=!nvTodoOpen;try{localStorage.setItem('bellum.nvTodo',nvTodoOpen?'1':'0')}catch(e){}nvTodoSig='';nvTodo()};
+  el.querySelectorAll('.nvTi').forEach(d=>{d.onclick=e=>{if(e.target.closest('.nvTo'))return;try{show[+d.dataset.i].go()}catch(err){console.error(err)}}});
+  el.querySelectorAll('.nvTo').forEach(b=>b.onclick=e=>{e.stopPropagation();try{show[+b.dataset.o].ok()}catch(err){}nvTodoSig='';nvTodo()})}catch(e){}}
+
+{const st=document.createElement('style');st.textContent=`
+.ui-menu.nvHid{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%)!important;pointer-events:none!important;opacity:0!important}
+#nvBar{display:flex;gap:4px;align-items:stretch;flex:none}
+#nvBar .nvB{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:74px;min-height:46px;padding:4px 9px 3px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--mu2,#b9a98a);position:relative;font-size:11.5px;letter-spacing:.04em;line-height:1.1}
+#nvBar .nvB svg{display:block;opacity:.9}
+#nvBar .nvB:hover,#nvBar .nvB.on{color:var(--tx,#efe6d2);border-color:var(--bz,#8a6a3c);background:rgba(214,184,120,.1)}
+#nvBar .nvB kbd{position:absolute;top:2px;right:3px;font:10px var(--ui,sans-serif);opacity:.45;border:0;background:none;padding:0;min-width:0}
+#nvBar .nvI0,#nvDrop .nvI0{display:inline-block;border:1.5px solid currentColor;border-radius:50%;opacity:.6;flex:none}
+#nvDrop{position:fixed;z-index:60;width:300px;max-width:calc(100vw - 16px);background:#211a13;border:1px solid var(--bz,#8a6a3c);box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 0 3px #15110c;border-radius:4px;padding:6px}
+#nvDrop[hidden]{display:none}
+#nvDrop .nvDh{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu2,#b9a98a);padding:4px 8px 6px}
+#nvDrop button{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:3px;padding:7px 8px;min-height:0}
+#nvDrop button:hover,#nvDrop button:focus-visible{background:rgba(214,184,120,.14);border-color:var(--line,#6b5536)}
+#nvDrop button svg{flex:none;color:var(--gold,#d6b878)}
+#nvDrop button b{display:block;font-weight:600;font-size:14px}#nvDrop button small{display:block;color:var(--mu2,#b9a98a);font-size:12px;line-height:1.3;margin-top:1px}
+#mcard>.nvTabs{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:-4px 0 12px;padding-bottom:0;border-bottom:1px solid var(--bz,#8a6a3c)}
+#mcard>.nvTabs .nvTg{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu2,#b9a98a);margin-right:10px}
+#mcard>.nvTabs button{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid transparent;border-bottom:0;border-radius:3px 3px 0 0;margin-bottom:-1px;min-height:30px;padding:4px 11px;color:var(--mu2,#b9a98a);font-size:13px}
+#mcard>.nvTabs button:hover{color:var(--tx,#efe6d2)}
+#mcard>.nvTabs button.on{color:var(--tx,#efe6d2);border-color:var(--bz,#8a6a3c);background:#2b2219;font-weight:600;cursor:default}
+#mcard>.nvWhy{margin:-2px 0 10px;color:var(--mu2,#b9a98a);font-size:13px;font-style:italic}
+#side.nvTown>.nvTT{margin-top:8px;flex-wrap:wrap}
+#side.nvTown>.nvTT button{padding:3px 6px!important;font-size:12px!important}
+#side.nvTown>.nvTB{padding-top:8px}
+#side.nvTown .nvTP>h3:first-child{margin-top:2px}
+#nvTodo{position:fixed;left:12px;top:96px;z-index:20;width:268px;max-width:calc(100vw - 24px);background:rgba(27,21,15,.94);border:1px solid var(--bz,#8a6a3c);border-radius:4px;box-shadow:0 6px 18px rgba(0,0,0,.5);font-size:13px}
+#nvTodo[hidden]{display:none}
+#nvTodo:not(.open){width:auto}
+#nvTodo .nvTh{display:flex;align-items:center;gap:8px;width:100%;background:transparent;border:0;min-height:30px;padding:5px 10px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx,#efe6d2)}
+#nvTodo .nvTh i{font-style:normal;background:var(--gold,#d6b878);color:#1b1712;border-radius:9px;min-width:18px;padding:0 5px;font-weight:700;letter-spacing:0;text-align:center}
+#nvTodo.urg .nvTh i{background:#d9694f;color:#fff}
+#nvTodo .nvTh span{margin-left:auto;opacity:.6}
+#nvTodo .nvTi{display:flex;gap:8px;align-items:flex-start;padding:6px 8px 6px 10px;border-top:1px solid rgba(138,106,60,.35);cursor:pointer}
+#nvTodo .nvTi:hover{background:rgba(214,184,120,.12)}
+#nvTodo .nvTi em{font-style:normal;flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:rgba(214,184,120,.18);color:var(--gold,#d6b878);margin-top:1px}
+#nvTodo .nvTi.l0 em,#nvTodo .nvTi.l1 em{background:#b5452f;color:#fff}
+#nvTodo .nvTi span{flex:1;min-width:0}#nvTodo .nvTi b{display:block;font-weight:600;line-height:1.25}
+#nvTodo .nvTi small{display:block;color:var(--mu2,#b9a98a);font-size:11.5px;line-height:1.3}
+#nvTodo .nvTo{flex:none;min-height:0;width:22px;height:22px;padding:0;font-size:12px;opacity:.7}
+#nvTodo .nvTm{margin:0;padding:6px 10px 8px;color:var(--mu2,#b9a98a);font-size:12px;border-top:1px solid rgba(138,106,60,.35)}
+@media (max-width:1180px){#nvBar .nvB{min-width:0;padding:4px 7px}#nvBar .nvB>span{display:none}#nvBar .nvB kbd{display:none}}
+@media (max-width:700px){#nvTodo{top:auto;bottom:8px;left:8px}}
+`;document.head.appendChild(st)}
+// installation après tous les autres modules (qui redessinent la barre et la tablette)
+setTimeout(()=>{try{nvBuild();
+  if(typeof renderSide==='function'){const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{townTabs()}catch(e){}return r}}
+  const so=new MutationObserver(()=>{if(!nvTownBusy)setTimeout(()=>{try{townTabs()}catch(e){}},0)});try{so.observe($('side'),{childList:true})}catch(e){}
+  setInterval(()=>{nvBuild();nvTodo()},1000);nvTodo()}catch(e){console.error(e)}},1200);
 /* ================= FIN EMBLÈMES ================= */
 /* ================= ÉCRANS DE CHARGEMENT ================= */
 /* Source : /mnt/project-files/chargement/ecrans.js, injecté avant « BOUCLE » par chargement/patch.py (relançable).
