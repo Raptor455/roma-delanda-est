@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v214</span>
+ <span class="chg-ver">v215</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -12091,7 +12091,59 @@ function campDraw(a,pts,q,k){if(!pts.length)return;const c=FAC[a.side].c,col=`rg
   ctx.restore()}
 {const _gc=genCard;genCard=function(a,s){if(!campStill(a))return _gc.apply(this,arguments);CAMP_ON=true;let r;try{r=_gc.apply(this,arguments)}finally{CAMP_ON=false}
   try{if(a._sq&&a._sq.length>2){const k=s<.5?.78:s<.8?.9:1,q=Math.round(14*k);campDraw(a,a._sq.slice(0,a._sq.length-2),q,k)}}catch(e){console.error('[camp]',e)}return r}}
-window.__genie={campDraw,campStill,capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ---- BIVOUAC AU ZOOM PROCHE (11 nov., Baptiste : « ils marchent et d'un coup sont tous en liste ») ----
+   Vue rapprochée (carrés de 300 m) : une armée arrêtée ne se range plus en ligne de bataille. Elle bivouaque : régiments en îlots serrés,
+   une rangée de tentes derrière chaque rang, feux, tente du chef à l'emplacement de l'armée (à côté des murs si elle est dans une ville).
+   Le camp fortifié (a.camp), le siège, le démontage et le débarquement gardent leur dessin.
+   Tout changement de disposition (marche -> bivouac, bivouac -> colonne, camp...) glisse en 0,9 s au lieu de sauter : unitSq est enveloppé
+   pendant l'appel de formation et interpole chaque carré depuis sa dernière place (u._fw, coordonnées carte).
+   Une garnison ou une armée de capitaine en marche porte le même écu sur hampe qu'une armée (plus le petit bouclier seul). */
+let BIV_A=null,BIV_S=1,BIV_NOW=0;const BIV_MS=900;
+{const _us=unitSq;unitSq=function(x,y,q,u,c,dark){const a=BIV_A;if(!a||!u)return _us.apply(this,arguments);
+  let wx=(x-view.ox)/BIV_S,wy=(y-view.oy)/BIV_S;const t=(BIV_NOW-(a._bt||0))/BIV_MS;
+  if(t<1&&u._f0){const dx=wx-u._f0[0],dy=wy-u._f0[1];if(dx*dx+dy*dy<64){const e=t<=0?0:t*t*(3-2*t);wx=u._f0[0]+dx*e;wy=u._f0[1]+dy*e;x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}}
+  u._fw=[wx,wy];u._ff=BIV_NOW;return _us.call(this,x,y,q,u,c,dark)}}
+function bivKey(a){const sg=a.at!=null&&!a.legs.length&&N[a.at]&&!N[a.at].col&&S.siege&&S.siege[N[a.at].id];
+  return a.legs.length?'m':sg&&sg.a===a.id&&!a.inG?'s':a.decamp?'d':a.camp?'c':'b'+(a.at==null?'':a.at)}
+function bivStill(a,key){return key[0]==='b'&&!a.ship&&a.units&&a.units.length&&!(typeof lgLand==='function'&&lgLand(a))}
+const BIV_ORD={inf:0,eleph:1,skirm:2,lcav:3,cav:4};
+function bivFormation(a,s){
+  const c=FAC[a.side].c,dark='rgba(26,18,10,.95)',col=`rgb(${c[0]},${c[1]},${c[2]})`,q=UNIT_KM*s,n=a.units.length,T=(S.day||0)*DAY_S;
+  const U=a.units.slice().sort((p,r)=>BIV_ORD[UT[p.t].k]-BIV_ORD[UT[r.t].k]);
+  // îlots de 4 régiments (2 × 2), une rangée de tentes derrière chaque îlot, ruelles entre les îlots, léger désordre
+  const nb=Math.ceil(n/4),bc=Math.max(2,Math.min(5,Math.ceil(Math.sqrt(nb*1.7)))),br=Math.ceil(nb/bc),up=q*1.3,px=q*3.7,py=q*4.1,W=(Math.min(bc,nb)-1)*px+up,rows=br;
+  let X=view.ox+a._p[0]*s,Y=view.oy+a._p[1]*s,cx=X,ty=Y;
+  // dans une ville : le bivouac se dresse à côté des murs, pour laisser la ville lisible
+  if(a.at!=null){const nd=N[a.at],tr=s>1.6?Math.max([4,6,8.5,11][nd.size]||6,(.55+(nd.size||0)*.55)*s*.9):7;cx=X+tr+8+W/2+q*1.6;ty=Y-(br*py)/2}
+  const y0=ty+q*3.1,pts=[],blk=[],jit=(k,m)=>{const v=Math.sin((a.id*7.13+k*12.9898+m*78.233))*43758.5453;return (v-Math.floor(v)-.5)*q*.5};
+  for(let b=0;b<nb;b++){const r=Math.floor(b/bc),m=Math.min(bc,nb-r*bc),bx=cx+((b%bc)-(m-1)/2)*px+jit(b,1),by=y0+r*py+jit(b,2)*.7,k=Math.min(4,n-b*4);blk.push([bx,by,k]);
+    for(let i=0;i<k;i++)pts.push([bx+((i&1)-(k>1?.5:0))*up,by+(i>>1)*up])}
+  ctx.save();
+  // terre battue
+  const gx=cx-W/2-q*1.6,gy=ty-q*1.6,gw=W+q*3.2,gh=y0+(rows-1)*py+up+q*1.3-gy;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(gx,gy,gw,gh,q*1.1);else ctx.rect(gx,gy,gw,gh);
+  ctx.fillStyle='rgba(150,122,82,.30)';ctx.fill();ctx.strokeStyle='rgba(90,66,36,.28)';ctx.lineWidth=Math.max(1,q*.08);ctx.setLineDash([q*.5,q*.4]);ctx.stroke();ctx.setLineDash([]);
+  if(sel&&sel.a===a){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,q*.9,0,7);ctx.fill()})}
+  // tentes derrière chaque rang, feux entre les îlots
+  const tw=Math.max(3.5,q*.62);
+  blk.forEach(([bx,by,k],b)=>{const m=k>1?3:2;for(let i=0;i<m;i++)campTent(bx+(i-(m-1)/2)*tw*1.15,by-q*.72,tw,i&1?'#e6d9b8':'#efe4c8','rgba(90,70,40,.9)');
+    if(b%2===0&&k>2)try{fire(bx+up*1.25,by+up*.5,Math.max(1.2,q*.14),T,a.id+b)}catch(e){}});
+  // tente du chef, à l'emplacement de l'armée
+  const cw=Math.max(8,q*1.7),by=ty+cw*.3;campTent(cx,by,cw,col,'#2b1c0e');
+  ctx.strokeStyle='#2b1c0e';ctx.lineWidth=Math.max(1,q*.08);ctx.beginPath();ctx.moveTo(cx+cw*.62,by);ctx.lineTo(cx+cw*.62,by-cw*1.1);ctx.stroke();
+  ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(cx+cw*.62,by-cw*1.1);ctx.lineTo(cx+cw*1.12,by-cw*.95);ctx.lineTo(cx+cw*.62,by-cw*.78);ctx.closePath();ctx.fill();ctx.stroke();
+  try{fire(cx-cw*.85,by-q*.1,Math.max(1.4,q*.17),T,a.id)}catch(e){}
+  ctx.restore();
+  U.forEach((u,i)=>unitSq(pts[i][0],pts[i][1],q,u,c,dark));
+  a._sq=[...pts,[cx,by-cw*.4]]}
+{const _fm=formation;formation=function(a,s){let key;try{key=bivKey(a)}catch(e){return _fm.apply(this,arguments)}
+  const now=performance.now();
+  if(a._bk!==key){if(a._bk!=null){a._bt=now;for(const u of a.units)u._f0=u._fw&&now-(u._ff||0)<600?u._fw:null}else a._bt=0;a._bk=key}
+  BIV_A=a;BIV_S=s;BIV_NOW=now;
+  try{if(bivStill(a,key)){try{return bivFormation(a,s)}catch(e){console.error('[bivouac]',e)}}return _fm.apply(this,arguments)}finally{BIV_A=null}}}
+// garnison ou armée de capitaine en marche, vue rapprochée : écu sur hampe comme une armée
+{const _tk2=token;token=function(x,y,side,txt,selected,a){if(a&&a.g&&a.legs&&a.legs.length&&!a.dead&&/^\d+$/.test(txt||'')&&a._sq)return _tk2.call(this,x,y-18,side,txt,selected,{side:a.side,at:a.at,id:a.id,g:false});
+  return _tk2.apply(this,arguments)}}
+window.__genie={bivFormation,bivKey,campDraw,campStill,capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
 /* ================= FIN GÉNIE ================= */
 /* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
 // 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
