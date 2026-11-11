@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v218</span>
+ <span class="chg-ver">v219</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -12835,8 +12835,8 @@ window.__dv={get S(){return S},DVS,dvEval,dvRender,dvSend,dvArrive,dvReqMonthly,
         o.push([p[i][0]-dy/l*w,p[i][1]+dx/l*w])}
       for(let k=0;k<3;k++)for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}
       // le fleuve contourne la ville voisine (jamais à travers les maisons)
-      if(t.town){const tr=780+(t.town.size||0)*180+R.hw;for(let k=0;k<4;k++){for(const q of o){const dx=q[0]-t.town.x,dy=q[1]-t.town.y,d=Math.hypot(dx,dy)||1;if(d<tr){q[0]=t.town.x+dx/d*tr;q[1]=t.town.y+dy/d*tr}}
-        for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}}}
+      if(t.town){const tr=260+(t.town.size||0)*110+R.hw;for(let k=0;k<4;k++){for(const q of o){const dx=q[0]-t.town.x,dy=q[1]-t.town.y,d=Math.hypot(dx,dy)||1;if(d<tr){q[0]=t.town.x+dx/d*tr;q[1]=t.town.y+dy/d*tr}}
+        for(let q=0;q<4;q++)for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}}}
       R.p=o.map(([x,y])=>[Math.round(x),Math.round(y)])}
     function r0(v){return Math.round(v*10)}
     // ponts : là où une route du champ franchit un fleuve ; coupé si le pont de la campagne l'est
@@ -13317,7 +13317,34 @@ function caraDraw(s,inV){if(!S.cara||!S.cara.length||s<(HUBV?.45:.9))return;cons
 {const _dfC=drawFleets;drawFleets=function(s,z,inV){try{if(S&&S.cara)caraDraw(s,inV)}catch(e){console.error(e)}return _dfC.apply(this,arguments)}}
 {const _hpC=hubPanel;hubPanel=function(){_hpC.apply(this,arguments);try{const leg=$('hubResLeg');if(!leg||!S.cara)return;const mine=S.cara.filter(c=>c.side==='car');
   if(mine.length)leg.insertAdjacentHTML('beforebegin',`<div class="sub">Caravanes en route : ${mine.length}. Une armée ennemie à moins de 5 km les enlève si vous ne les escortez pas.</div>`)}catch(e){}}}
-window.__hubs={caraDaily,caraSend,moveCara,resAdd,resEff,vilFrac,hinterLoss,peageOf,relaisOf,resOf,resIncome,resMonthly,resCost,resHas,resPay,resLinked,resBuy,resInit,resWhy,regOf:n=>regOf(n),addRecruit:(i,s,t)=>addRecruit(i,s,t),get N(){return N},get S(){return S},get sel(){return sel},set sel(v){sel=v},renderAll:()=>renderAll(),centerOn:(x,y,s)=>centerOn(x,y,s),capture:(i,s)=>capture(i,s),hubNet,hubLvl,hubDebit,hubProd,hubCap,hubInit,hubSupply,hubConvoy,hubToggle,hubNearest,hubHinter,lineOf:a=>lineOf(a),get HUBV(){return HUBV},HUB_R,HUB_D,HUB_N};
+/* ---- Camp pillé en bataille (res.pille={p,e} envoyé par bataille.html, fil Batailles 2D) :
+   l'armée dont le camp est pillé perd ses vivres (il en reste 15 %), tout son matériel et ses bagages ;
+   le pilleur récupère 60 % des vivres et la moitié du matériel. L'écouteur de base ne transmet pas res.pille
+   à applyResult : on le capte ici, avec la bataille en cours comme clé. ---- */
+let HPIL=null;
+window.addEventListener('message',ev=>{try{const d=ev.data,fr=$('battle3d');if(d&&d.bellum==='retour'&&d.res&&d.res.pille&&S&&S.cur&&fr&&ev.source===fr.contentWindow)HPIL={p:!!d.res.pille.p,e:!!d.res.pille.e,k:S.cur.att[0]}}catch(e){}},true);
+function campPille(lose,win,snap){
+  let f=0,m=0;const noms=[];
+  for(const a of lose){const s=snap[a.id]||{f:0,m:0},mx=armyFoodMax(a);
+    const reste=Math.min(a.dead?0:aFood(a),s.f,mx*.15);f+=Math.max(0,s.f-reste);m+=s.m;
+    if(!a.dead){a.food=reste;a.mat=0;a.bag=false;noms.push(a.name)}}
+  const w=win.find(x=>!x.dead&&x.units.length);let gf=0,gm=0;
+  if(w){const mx=armyFoodMax(w);aFood(w);gf=Math.max(0,Math.min(mx-w.food,f*.6));w.food+=gf;
+    const cap=typeof matCap==='function'?matCap(w):0;gm=Math.max(0,Math.min(cap-(w.mat||0),Math.floor(m*.5)));if(gm)w.mat=(w.mat||0)+gm}
+  const hum=s=>s==='car'||(typeof MPRH==='function'&&MPRH(s));
+  if(lose.length&&hum(lose[0].side))log(`Le camp de ${noms[0]||lose[0].name} est pillé : les vivres, le matériel et les bagages sont perdus.`);
+  if(w&&hum(w.side))log(`${w.name} pille le camp ennemi${gf>=1||gm?' : '+[gf>=1?Math.round(gf)+' rations':'',gm?gm+' de matériel':''].filter(Boolean).join(' et ')+' récupérés':''}. L\'ennemi a perdu ses vivres et son matériel.`);
+}
+{const _arP=applyResult;applyResult=function(b,res){
+  let pl=res&&res.pille;if(!pl&&HPIL&&b&&b.att&&HPIL.k===b.att[0])pl=HPIL;HPIL=null;
+  if(!pl||(!pl.p&&!pl.e))return _arP.apply(this,arguments);
+  const get=L=>(L||[]).map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),attA=get(b.att),defA=get(b.def),snap={};
+  for(const a of [...attA,...defA])snap[a.id]={f:aFood(a),m:Math.floor(a.mat||0)};
+  const r=_arP.apply(this,arguments);
+  try{const am=b.attMine!=null?b.attMine:!!(attA[0]&&attA[0].side==='car'),mine=am?attA:defA,other=am?defA:attA;
+    if(pl.p)campPille(mine,other,snap);if(pl.e)campPille(other,mine,snap)}catch(e){console.warn('campPille',e)}
+  return r}}
+window.__hubs={applyResult:(b,r)=>applyResult(b,r),caraDaily,caraSend,moveCara,resAdd,resEff,vilFrac,hinterLoss,peageOf,relaisOf,resOf,resIncome,resMonthly,resCost,resHas,resPay,resLinked,resBuy,resInit,resWhy,regOf:n=>regOf(n),addRecruit:(i,s,t)=>addRecruit(i,s,t),get N(){return N},get S(){return S},get sel(){return sel},set sel(v){sel=v},renderAll:()=>renderAll(),centerOn:(x,y,s)=>centerOn(x,y,s),capture:(i,s)=>capture(i,s),hubNet,hubLvl,hubDebit,hubProd,hubCap,hubInit,hubSupply,hubConvoy,hubToggle,hubNearest,hubHinter,lineOf:a=>lineOf(a),get HUBV(){return HUBV},HUB_R,HUB_D,HUB_N};
 /* ================= FIN HUBS ================= */
 /* ================= IA : COMPOSITION DES ARMÉES (10 nov., demande de Baptiste) =================
    « Des compositions d'armée différentes avec des unités différentes, logiques pour chaque peuple. »

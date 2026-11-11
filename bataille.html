@@ -2508,7 +2508,7 @@ if(!V3D){
       g2.restore()}
   }
   function draw2d(){
-    view();g2.setTransform(1,0,0,1,0,0);drawGround();try{window.__sol2d&&window.__sol2d(g2,M,DPR,s2)}catch(e){}
+    view();g2.setTransform(1,0,0,1,0,0);(window.__solNet?0:drawGround());try{window.__sol2d&&window.__sol2d(g2,M,DPR,s2)}catch(e){}
     g2.save();g2.scale(DPR,DPR);
     drawOrders();
     const order=units.filter(u=>!u.dead&&!u.pend).sort((a,b)=>(a.routing?0:1)-(b.routing?0:1));
@@ -2566,7 +2566,7 @@ if(!V3D){
     const wa=(a.contacts.length?.3:1)*(a.moving?1:.6),wb=(b.contacts.length?.3:1)*(b.moving?1:.6),t=(wa+wb||1)/(k||1);
     a.x-=bx*best*wa/t;a.y-=by*best*wa/t;b.x+=bx*best*wb/t;b.y+=by*best*wb/t}
   const CELL=SQ*2;
-  function separate(){const L=units.filter(u=>!u.dead&&!u.pend&&!u.routing&&u.reg!=null);if(L.length<2)return;const grid=new Map(),K=c=>(c.x+32768)*65536+c.y+32768;
+  function separate(){const L=units.filter(u=>!u.dead&&!u.pend&&!u.routing&&u.reg!=null&&!u._ex&&!u._wait);if(L.length<2)return;const grid=new Map(),K=c=>(c.x+32768)*65536+c.y+32768;
     for(const u of L){const k=(Math.floor(u.x/CELL)+32768)*65536+Math.floor(u.y/CELL)+32768;let c=grid.get(k);if(!c)grid.set(k,c=[]);c.push(u)}
     for(const u of L){const cx=Math.floor(u.x/CELL),cy=Math.floor(u.y/CELL);
       for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const c=grid.get((cx+i+32768)*65536+cy+j+32768);if(!c)continue;
@@ -2943,64 +2943,150 @@ if(!V3D){
   function campView(){if(!ISCAMP())return;const P=units.filter(u=>u.side===0&&!u.dead&&!u.pend),E=units.filter(u=>u.side===1&&!u.dead&&!u.pend);if(!P.length)return;
     const pc=cen(P),ec=E.length?cen(E):pc,d=Math.hypot(ec.x-pc.x,ec.y-pc.y)||1,k=-45;cam.tx=pc.x+(ec.x-pc.x)/d*k;cam.ty=pc.y+(ec.y-pc.y)/d*k;cam.dist=640*Math.sqrt(G)}
   {const _su2=setup;setup=function(){const r=_su2.apply(this,arguments);endDep();DZ=null;campStart();try{campView()}catch(e){}return r}}
-  /* -- v21x : batailles de campagne plus lentes (SLOWK) et départ des camps. Chaque armée attend dans son camp, derrière sa ligne ;
-        le déploiement fixe les places (carrés translucides) ; au lancement les régiments sortent un à un par la porte et vont s'y ranger.
-        L'ennemi fait de même, puis son IA reprend la main quand il est rangé (ou dès qu'on l'attaque). -- */
-  const SLOWK=.45,KGAP=2.2;let KAMP=null;
+  /* -- v218+ : batailles de campagne plus lentes (SLOWK) et CAMPS. Chaque armée attend dans son camp fortifié, derrière sa ligne ;
+        le déploiement fixe les places (carrés translucides) ; au lancement les carrés sortent UN PAR UN, en file, par la grande porte
+        et vont se ranger. L'ennemi fait de même, puis son IA reprend la main. Un camp laissé sans défenseur peut être pillé :
+        provisions perdues (res.pille pour la campagne), moral de l'armée qui s'effondre. -- */
+  const SLOWK=.45,KSP=19,KST=34,KFL=50,KBK=120,KFR=38,KGW=27,LOOT_T=12;let KAMP=null;
   const CAMPS_ON=()=>ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
+  const krnd=s=>{let a=s>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}};
   function campGeom(side){const P=units.filter(u=>u.side===side&&!u.dead&&!u.pend),E=units.filter(u=>u.side!==side&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
-    const pc=cen(P),ec=cen(E),dd=Math.hypot(pc.x-ec.x,pc.y-ec.y)||1,n={x:(pc.x-ec.x)/dd,y:(pc.y-ec.y)/dd},t={x:-n.y,y:n.x},N=P.length,sp=SQ+3;
-    const cols=Math.max(8,Math.ceil(Math.sqrt(N*2.2))),rows=Math.ceil(N/cols),w=cols*sp+36,d=rows*sp+36;
-    const mx=Math.max(...P.map(u=>(u.x-pc.x)*n.x+(u.y-pc.y)*n.y)),R=Math.hypot(w,d)/2+24;
+    const pc=cen(P),ec=cen(E),dd=Math.hypot(pc.x-ec.x,pc.y-ec.y)||1,n={x:(pc.x-ec.x)/dd,y:(pc.y-ec.y)/dd},t={x:-n.y,y:n.x},N=P.length,sp=KSP;
+    // les carrés attendent sur la place d'armes, de part et d'autre de la grande rue ; tentes sur les flancs et au fond
+    const half=Math.max(4,Math.ceil(Math.sqrt(N*2.4)/2)),cols=half*2,rows=Math.ceil(N/cols),w=cols*sp+KST+2*KFL+16,d=KFR+rows*sp+KBK;
+    const mx=Math.max(...P.map(u=>(u.x-pc.x)*n.x+(u.y-pc.y)*n.y)),R=Math.hypot(w,d)/2+30;
     // une ville sur le champ (bataille devant les murs) : le camp se pose à côté, jamais dedans, et sa sortie ne traverse pas l'enceinte
     const V=window.__villes,bad=(x,y)=>{if(!V||!V.P||!V.W2P)return false;try{const q=V.W2P(x,y),o=V.dbgPt(q[0],q[1]);return !!(V.inCity(q[0],q[1])||o.town||o.water||o.wall)}catch(e){return false}};
     const mk=(la,de)=>{const q={x:pc.x+n.x*de+t.x*la,y:pc.y+n.y*de+t.y*la};q.x=Math.max(RIVER+R,Math.min(W-R,q.x));q.y=Math.max(R,Math.min(H-R,q.y));return q};
     const cost=q=>{let b=0;for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)if(bad(q.x+t.x*i*(w/2+30)/3+n.x*j*(d/2+30)/3,q.y+t.y*i*(w/2+30)/3+n.y*j*(d/2+30)/3))b+=4;
-      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);for(let i=1;i<=10;i++)if(bad(gx+(pc.x-gx)*i/10,gy+(pc.y-gy)*i/10))b+=2;return b};
+      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);for(let i=1;i<=10;i++)if(bad(gx+(pc.x-gx)*i/10,gy+(pc.y-gy)*i/10))b+=2;
+      for(const u of P){const dx=u.x-q.x,dy=u.y-q.y;if(Math.abs(dx*t.x+dy*t.y)<w/2+40&&Math.abs(dx*n.x+dy*n.y)<d/2+60)b+=.5}return b};
     const D0=mx+170+d/2;let c=mk(0,D0),best=cost(c);
-    if(best)for(const de of [D0,D0*.6,mx*.3,0])for(const la of [0,-260,260,-520,520,-800,800,-1100,1100,-1400,1400]){if(!la&&de<D0)continue;const q=mk(la,de);if(Math.hypot(q.x-pc.x,q.y-pc.y)<R+40&&Math.abs(la)<w)continue;const v=cost(q)+Math.abs(la)/2000+(D0-de)/4000;if(v<best-1e-9){best=v;c=q}if(best<1)break}
-    const slot=i=>{const col=i%cols,row=Math.floor(i/cols),la=(col-(cols-1)/2)*sp,de=(row-(rows-1)/2)*sp;return{x:c.x+t.x*la+n.x*de,y:c.y+t.y*la+n.y*de,la}};
-    return {side,c,n,t,w,d,cols,rows,sp,slot,gate:{x:c.x-n.x*(d/2+14),y:c.y-n.y*(d/2+14)},q:[],next:0,N}}
+    if(best)for(const de of [D0,D0*.6,mx*.3,0])for(const la of [0,-260,260,-520,520,-800,800,-1100,1100,-1400,1400]){if(!la&&de<D0)continue;const q=mk(la,de);const v=cost(q)+Math.abs(la)/2000+(D0-de)/4000;if(v<best-1e-9){best=v;c=q}if(best<1)break}
+    const L=(la,de)=>({x:c.x+t.x*la+n.x*de,y:c.y+t.y*la+n.y*de});
+    const slot=i=>{const col=i%cols,row=Math.floor(i/cols),la=col<half?-(KST/2+(half-col-.5)*sp):KST/2+(col-half+.5)*sp,de=-d/2+KFR+(row+.5)*sp;return Object.assign(L(la,de),{la,de})};
+    // décor fixe : tentes (flancs, fond), tente du chef, provisions, feux, promeneurs
+    const r=krnd(7919*(side+1)+N),tents=[],fires=[],sup=[],men=[];
+    for(const sg of [-1,1])for(let de=-d/2+26;de<d/2-KBK+6;de+=17)for(const o of [15,34])tents.push({la:sg*(w/2-o),de:de+(o>20?8:0),a:sg>0?0:Math.PI});
+    for(let la=-w/2+16;la<=w/2-16;la+=17)for(const o of [16,36,58]){if(Math.abs(la)<34&&o>30)continue;if(Math.abs(la)>w/2-70&&o<50)continue;if(Math.abs(la)<KST/2+2)continue;tents.push({la,de:d/2-o,a:Math.PI/2})}
+    for(const sg of [-1,1]){for(let i=0;i<9;i++)sup.push({la:sg*(w/2-22-(i%3)*11),de:d/2-16-Math.floor(i/3)*11,k:i%4});sup.push({la:sg*(w/2-62),de:d/2-22,k:9})}
+    fires.push({la:0,de:d/2-78},{la:-w/4,de:d/2-76},{la:w/4,de:d/2-76},{la:-(w/2-48),de:-d/2+20},{la:w/2-48,de:-d/2+20});
+    for(let i=0;i<46;i++){const a=tents[Math.floor(r()*tents.length)],b=r()<.3?fires[Math.floor(r()*fires.length)]:tents[Math.floor(r()*tents.length)];men.push({a:{la:a.la+(r()-.5)*8,de:a.de+7},b:{la:b.la+(r()-.5)*14,de:b.de+(r()-.5)*14},T:7+r()*12,ph:r()*20,sit:r()<.2})}
+    return {side,c,n,t,w,d,cols,rows,sp,slot,L,gate:L(0,-d/2),out:L(0,-d/2-34),q:[],N,tents,fires,sup,men,loot:0,looted:false,seed:r()*100}}
   function campFill(k){const P=units.filter(u=>u.side===k.side&&!u.dead&&!u.pend),m=new Map();for(const u of P){const id=rkey(u);if(!m.has(id))m.set(id,[]);m.get(id).push(u)}
     // les régiments qui vont le plus loin sortent les premiers : on les range près de la porte
-    const far=g=>{const q=cen(g);return Math.hypot(q.x-k.gate.x,q.y-k.gate.y)},regs=[...m.values()].sort((a,b)=>far(b)-far(a));let i=0;
-    for(const g of regs){for(const u of g){u._plan={x:u.x,y:u.y,a:u.ang};const s=k.slot(i++);u.x=s.x;u.y=s.y;u._gl=s.la;u.ang=Math.atan2(-k.n.y,-k.n.x);u._sq=null;u._lx=null;u.dirty=true;u.order=null;u.preview=null;u.v=0;u._wait=true;u._gate=false;u._forming=false}}
-    k.q=regs;k.filled=true}
-  function campsInit(){if(KAMP||!CAMPS_ON())return;const a=campGeom(0),b=campGeom(1);if(!a||!b)return;KAMP={s:[a,b],t:0,freeE:false,lastE:0};campFill(b)}
-  function campsLaunch(){if(!CAMPS_ON())return;campsInit();if(!KAMP)return;if(!KAMP.s[0].filled)campFill(KAMP.s[0]);for(const k of KAMP.s)k.next=KAMP.t+.5;KAMP.go=true}
-  const gateOrd=(u,k)=>({type:'move',x:k.gate.x+k.t.x*(u._gl||0)*.25,y:k.gate.y+k.t.y*(u._gl||0)*.25,run:false});
+    const far=g=>{const q=cen(g);return Math.hypot(q.x-k.gate.x,q.y-k.gate.y)},regs=[...m.values()].sort((a,b)=>far(b)-far(a));let i=0;k.q=[];
+    for(const g of regs){for(const u of g){u._plan={x:u.x,y:u.y,a:u.ang};const s=k.slot(i++);u.x=s.x;u.y=s.y;u._kl=s.la;u._kd=s.de;u.ang=Math.atan2(-k.n.y,-k.n.x);u._sq=null;u._lx=null;u.dirty=true;u.order=null;u.preview=null;u.v=0;u._wait=true;u._ex=null;u._forming=false;u._pendO=null;k.q.push(u)}}
+    k.filled=true;k.N=i;k.iv=Math.min(.6,80/Math.max(1,i));k.acc=0}
+  function campsInit(){if(KAMP||!CAMPS_ON())return;const a=campGeom(0),b=campGeom(1);if(!a||!b)return;KAMP={s:[a,b],t:0,freeE:false,lastE:0,lastP:0,msg:null};campFill(b);
+    // le résultat renvoyé à la campagne dit quel camp a été pillé (provisions perdues)
+    if(!window.__campGF){window.__campGF=1;const _g=window.__echelleGF;window.__echelleGF=function(){let o={};try{if(_g)o=_g.apply(this,arguments)||{}}catch(e){}if(KAMP)o.pille={p:!!KAMP.s[0].looted,e:!!KAMP.s[1].looted};return o}}}
+  function campsLaunch(){if(!CAMPS_ON())return;campsInit();if(!KAMP)return;if(!KAMP.s[0].filled)campFill(KAMP.s[0]);for(const k of KAMP.s)k.acc=-.4;KAMP.go=true}
   const planOrd=u=>({type:'move',x:u._plan.x,y:u._plan.y,face:u._plan.a,run:false});
-  function campTick(dt){if(!KAMP||!KAMP.go)return;KAMP.t+=dt;
-    for(const k of KAMP.s){while(k.q.length&&KAMP.t>=k.next){const g=k.q.shift();k.next=KAMP.t+KGAP;if(k.side===1)KAMP.lastE=KAMP.t;else KAMP.lastP=KAMP.t;
-        for(const u of g){if(!u._wait||u.dead)continue;u._wait=false;u._gate=true;u.order=gateOrd(u,k)}}}
+  // sortie : le carré gagne la grande rue, la descend en file, passe la porte
+  function exitPath(u,k){const p=[];if(Math.abs(u._kl)>1)p.push(k.L(0,u._kd));p.push(k.L(0,-k.d/2-30));return {p,i:0}}
+  function campOut(u){u._wait=false;u._ex=null;u.dirty=true;if(u.side===0){u.order=u._pendO||planOrd(u);u._pendO=null}else{u._forming=true;u.order=planOrd(u)}}
+  function inCamp(k,x,y,m){const dx=x-k.c.x,dy=y-k.c.y;return Math.abs(dx*k.t.x+dy*k.t.y)<k.w/2+(m||0)&&Math.abs(dx*k.n.x+dy*k.n.y)<k.d/2+(m||0)}
+  // raw = temps réel (× bouton de vitesse) pour la sortie en file ; dt = temps de simulation
+  function campTick(dt,raw){if(!KAMP||!KAMP.go)return;KAMP.t+=dt;
+    for(const k of KAMP.s){const V=20/k.iv;
+      // le joueur garde la main : un ordre donné à un carré encore au camp le fait passer en tête de file
+      if(k.side===0)for(let j=0;j<k.q.length;j++){const u=k.q[j];if(u.order){u._pendO=u.order;u.order=null;if(j){k.q.splice(j,1);k.q.unshift(u)}}}
+      k.acc+=raw;while(k.q.length&&k.acc>=k.iv){k.acc-=k.iv;const u=k.q.shift();if(u.dead||!u._wait)continue;u._wait=false;u._ex=exitPath(u,k);if(k.side===1)KAMP.lastE=KAMP.t;else KAMP.lastP=KAMP.t}
+      if(!k.q.length)k.acc=0;
+      for(const u of units){if(u.side!==k.side||u.dead||u.pend)continue;
+        if((u._wait||u._ex)&&(u.routing||u.contacts.length)){const i=k.q.indexOf(u);if(i>=0)k.q.splice(i,1);u._wait=false;u._ex=null;u._forming=false;if(k.side===1)KAMP.freeE=true;continue}
+        if(u._wait){if(k.side===1)u.order=null;u.v=0;continue}
+        if(!u._ex)continue;
+        if(u.order){if(k.side===0)u._pendO=u.order;u.order=null}
+        let st=V*raw;const e=u._ex;while(st>0&&e.i<e.p.length){const q=e.p[e.i],dx=q.x-u.x,dy=q.y-u.y,L=Math.hypot(dx,dy);if(L<=st){u.x=q.x;u.y=q.y;st-=L;e.i++}else{u.x+=dx/L*st;u.y+=dy/L*st;u.ang=Math.atan2(dy,dx);st=0}}
+        u.moving=true;u.dirty=true;if(e.i>=e.p.length)campOut(u)}}
     const kp=KAMP.s[0],ke=KAMP.s[1];let formingE=0;
-    for(const u of units){if(u.dead||u.pend||u.routing)continue;
-      if(u.side===0){ // le joueur garde la main : un ordre donné à un carré encore au camp le fait sortir
-        if(u._wait){if(u.order){u._wait=false}continue}
-        if(u._gate){const o=u.order;if(!o||o.type!=='move'||Math.abs(o.x-(kp.gate.x+kp.t.x*(u._gl||0)*.25))>1){u._gate=false;continue}
-          if(Math.hypot(u.x-o.x,u.y-o.y)<26){u._gate=false;u.order=planOrd(u)}}
-        continue}
-      if(KAMP.freeE){u._wait=u._gate=u._forming=false;continue}
-      if(u.contacts.length||u.underFire>0){KAMP.freeE=true;continue}
-      if(u._wait){u.order=null;formingE++}
-      else if(u._gate){const o=gateOrd(u,ke);if(Math.hypot(u.x-o.x,u.y-o.y)<26){u._gate=false;u._forming=true;u.order=planOrd(u)}else u.order=o;formingE++}
-      else if(u._forming){if(Math.hypot(u.x-u._plan.x,u.y-u._plan.y)>8){u.order=planOrd(u);formingE++}else if(u.order&&u.order.type==='attack')u.order=null}}
-    if(!KAMP.freeE&&!ke.q.length&&(!formingE||KAMP.t>KAMP.lastE+45)&&!kp.q.length&&KAMP.t>(KAMP.lastP||0)+12)KAMP.freeE=true}
-  // dessin des camps : terre battue, palissade ouverte côté ennemi, tentes
-  function drawCamps(){if(!KAMP)return;for(const k of KAMP.s){const P=PAL[k.side],{c,n,t,w,d}=k,pt=(la,de)=>scr(c.x+t.x*la+n.x*de,c.y+t.y*la+n.y*de);
-      const A=pt(-w/2,-d/2),B=pt(w/2,-d/2),C=pt(w/2,d/2),D=pt(-w/2,d/2),g1=pt(-22,-d/2),g2p=pt(22,-d/2);
-      g2.save();g2.beginPath();g2.moveTo(A[0],A[1]);g2.lineTo(B[0],B[1]);g2.lineTo(C[0],C[1]);g2.lineTo(D[0],D[1]);g2.closePath();g2.fillStyle='rgba(122,98,62,.5)';g2.fill();
-      const z=Math.max(2,5*s2);
-      for(let i=0;i<k.cols*k.rows;i+=1){const col=i%k.cols,row=Math.floor(i/k.cols);if((col+row)%2)continue;const s=k.slot(i),[x,y]=scr(s.x,s.y);
-        g2.beginPath();g2.moveTo(x,y-z);g2.lineTo(x+z,y+z*.8);g2.lineTo(x-z,y+z*.8);g2.closePath();g2.fillStyle='rgba(236,224,196,.5)';g2.fill();g2.lineWidth=1;g2.strokeStyle='rgba(40,28,16,.45)';g2.stroke()}
-      g2.lineWidth=Math.max(2.5,4*s2);g2.strokeStyle='#3a2a18';g2.lineJoin='round';g2.beginPath();g2.moveTo(g1[0],g1[1]);g2.lineTo(A[0],A[1]);g2.lineTo(D[0],D[1]);g2.lineTo(C[0],C[1]);g2.lineTo(B[0],B[1]);g2.lineTo(g2p[0],g2p[1]);g2.stroke();
-      g2.lineWidth=Math.max(1,1.4*s2);g2.strokeStyle=P.lt||'#d6b878';g2.setLineDash([3,5]);g2.stroke();g2.setLineDash([]);
-      const L=pt(0,d/2+16);g2.font='13px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';g2.lineWidth=3;g2.strokeStyle='rgba(20,14,8,.8)';const tx='Camp · '+P.n;g2.strokeText(tx,L[0],L[1]);g2.fillStyle='#efe3c6';g2.fillText(tx,L[0],L[1]);
-      g2.restore()}}
+    if(!KAMP.freeE){for(const u of units){if(u.side!==1||u.dead||u.pend||u.routing)continue;
+        if(u._wait||u._ex){formingE++;continue}
+        if(u.contacts.length||u.underFire>0){KAMP.freeE=true;break}
+        if(u._forming){if(Math.hypot(u.x-u._plan.x,u.y-u._plan.y)>8){u.order=planOrd(u);formingE++}else if(u.order&&u.order.type==='attack')u.order=null}}
+      // l'ennemi attend que les deux armées soient sorties (plus 12 s) : personne ne tombe sur une armée en file
+      if(!KAMP.freeE&&!ke.q.length&&(!formingE||KAMP.t>KAMP.lastE+45)&&!kp.q.length&&KAMP.t>KAMP.lastP+12)KAMP.freeE=true}
+    if(KAMP.freeE)for(const u of units)if(u.side===1&&u._forming)u._forming=false;
+    // pillage : des ennemis dans le camp, plus un seul défenseur à portée
+    for(const k of KAMP.s){if(k.looted)continue;let foes=0,def=0;
+      for(const u of units){if(u.dead||u.pend||u.routing)continue;if(u.side===k.side){if(inCamp(k,u.x,u.y,45))def++}else if(inCamp(k,u.x,u.y,-4))foes++}
+      if(foes&&!def){k.loot+=dt*Math.min(1,.4+foes*.12)/LOOT_T;if(k.loot>=1)campLoot(k)}else if(k.loot>0)k.loot=Math.max(0,k.loot-dt/(LOOT_T*2))}}
+  function campLoot(k){k.looted=true;k.loot=1;k.lt=performance.now();
+    for(const u of units){if(u.dead||u.pend||u.routing)continue;if(u.side===k.side){u.morale-=22;if(u.morale<=0)try{rout(u)}catch(e){}}}
+    KAMP.msg={t:performance.now(),own:k.side===0,tx:k.side===0?'Votre camp est pillé ! Vos provisions sont perdues, l\'armée vacille.':'Le camp de '+PAL[k.side].n+' est pillé ! Ses provisions sont à vous, son armée vacille.'}}
+  // ---- dessin ----
+  function drawCamps(){if(!KAMP)return;const T=performance.now()/1000;
+    for(const k of KAMP.s){const P=PAL[k.side],{w,d}=k,pt=(la,de)=>{const q=k.L(la,de);return scr(q.x,q.y)},z=s2,burnt=k.looted;
+      const poly=(a,close)=>{g2.beginPath();a.forEach((q,i)=>i?g2.lineTo(q[0],q[1]):g2.moveTo(q[0],q[1]));if(close)g2.closePath()};
+      const box=(la,de,hl,hd)=>[pt(la-hl,de-hd),pt(la+hl,de-hd),pt(la+hl,de+hd),pt(la-hl,de+hd)];
+      const A=pt(-w/2,-d/2),B=pt(w/2,-d/2),C=pt(w/2,d/2),D=pt(-w/2,d/2),g1=pt(-KGW,-d/2),g2p=pt(KGW,-d/2);
+      g2.save();g2.lineJoin='round';g2.lineCap='round';
+      // fossé, sol battu, grande rue, place du chef
+      poly(box(0,0,w/2+9,d/2+9),1);g2.fillStyle='rgba(54,40,24,.55)';g2.fill();
+      poly([A,B,C,D],1);g2.fillStyle=burnt?'rgba(96,80,58,.92)':'rgba(158,132,92,.92)';g2.fill();
+      poly(box(0,(-KBK+14)/2-12,KST/2-3,(d-KBK+14)/2+12),1);g2.fillStyle='rgba(196,172,128,.55)';g2.fill();
+      poly(box(0,d/2-KBK+14,w/2-KFL-4,7),1);g2.fill();
+      // tentes
+      const tw=6.2,tl=7.6;for(let i=0;i<k.tents.length;i++){const tn=k.tents[i],hor=Math.abs(Math.cos(tn.a))>.5,bx=box(tn.la,tn.de,hor?tl:tw,hor?tw:tl);
+        if(burnt&&(i*7+3)%5<3){poly(bx,1);g2.fillStyle='rgba(38,30,24,.75)';g2.fill();continue}
+        const sh=box(tn.la+2,tn.de+2,hor?tl:tw,hor?tw:tl);poly(sh,1);g2.fillStyle='rgba(30,22,12,.3)';g2.fill();
+        poly(bx,1);g2.fillStyle=(i%3)?'#e9dcbd':'#dccba6';g2.fill();g2.lineWidth=Math.max(.7,.9*z);g2.strokeStyle='rgba(60,44,26,.75)';g2.stroke();
+        const r1=hor?pt(tn.la-tl,tn.de):pt(tn.la,tn.de-tl),r2=hor?pt(tn.la+tl,tn.de):pt(tn.la,tn.de+tl);g2.beginPath();g2.moveTo(r1[0],r1[1]);g2.lineTo(r2[0],r2[1]);g2.strokeStyle='rgba(90,66,40,.8)';g2.stroke()}
+      // tente du chef, aux couleurs du camp, et son enseigne qui flotte
+      {const de=d/2-KBK+44,bx=box(0,de,17,13);poly(box(2.5,de+2.5,17,13),1);g2.fillStyle='rgba(30,22,12,.35)';g2.fill();poly(bx,1);g2.fillStyle=burnt?'#3a2c22':shade(P.blk,1.15);g2.fill();g2.lineWidth=Math.max(1,1.4*z);g2.strokeStyle='#2a1c10';g2.stroke();
+        const a=pt(-17,de),b=pt(17,de),m=pt(0,de-13),m2=pt(0,de+13);g2.beginPath();g2.moveTo(a[0],a[1]);g2.lineTo(b[0],b[1]);g2.moveTo(m[0],m[1]);g2.lineTo(m2[0],m2[1]);g2.strokeStyle=P.lt||'#e6cf96';g2.lineWidth=Math.max(.8,1*z);g2.stroke();
+        if(!burnt){const f=pt(0,de),h=Math.max(12,20*z);g2.beginPath();g2.moveTo(f[0],f[1]);g2.lineTo(f[0],f[1]-h);g2.strokeStyle='#2a1c10';g2.lineWidth=Math.max(1.2,1.5*z);g2.stroke();
+          const fw=h*.75,fh=h*.42,wv=Math.sin(T*3+k.seed)*fh*.18;g2.beginPath();g2.moveTo(f[0],f[1]-h);g2.quadraticCurveTo(f[0]+fw*.5,f[1]-h+wv,f[0]+fw,f[1]-h+fh*.2-wv);g2.lineTo(f[0]+fw,f[1]-h+fh-wv);g2.quadraticCurveTo(f[0]+fw*.5,f[1]-h+fh+wv,f[0],f[1]-h+fh);g2.closePath();g2.fillStyle=P.blk;g2.fill();g2.strokeStyle=P.lt||'#e6cf96';g2.lineWidth=1;g2.stroke()}}
+      // provisions : sacs, jarres, caisses, chariots (perdues si le camp est pillé)
+      for(const s of k.sup){const q=pt(s.la,s.de),r=Math.max(1.6,3.6*z);
+        if(burnt){g2.beginPath();g2.arc(q[0],q[1],r*.8,0,6.3);g2.fillStyle='rgba(30,24,20,.7)';g2.fill();continue}
+        if(s.k===9){poly(box(s.la,s.de,9,5.5),1);g2.fillStyle='#8a6638';g2.fill();g2.lineWidth=Math.max(.7,1*z);g2.strokeStyle='#33220f';g2.stroke();for(const sx of [-6,6])for(const sy of [-6.5,6.5]){const c=pt(s.la+sx,s.de+sy);g2.beginPath();g2.arc(c[0],c[1],Math.max(1.2,2.2*z),0,6.3);g2.fillStyle='#33220f';g2.fill()}continue}
+        if(s.k===1){poly(box(s.la,s.de,4,4),1);g2.fillStyle='#9b7440';g2.fill();g2.lineWidth=Math.max(.6,.8*z);g2.strokeStyle='#33220f';g2.stroke();continue}
+        g2.beginPath();g2.arc(q[0],q[1],r,0,6.3);g2.fillStyle=s.k===2?'#b5673c':s.k===3?'#c9b17c':'#d8c79a';g2.fill();g2.lineWidth=Math.max(.6,.8*z);g2.strokeStyle='#3a2814';g2.stroke()}
+      // palissade : talus, pieux, tours d'angle, grande porte à deux tours
+      const wall=()=>{g2.beginPath();g2.moveTo(g1[0],g1[1]);g2.lineTo(A[0],A[1]);g2.lineTo(D[0],D[1]);g2.lineTo(C[0],C[1]);g2.lineTo(B[0],B[1]);g2.lineTo(g2p[0],g2p[1])};
+      wall();g2.lineWidth=Math.max(3.5,6.5*z);g2.strokeStyle='#2c1e10';g2.stroke();wall();g2.lineWidth=Math.max(2,4*z);g2.strokeStyle=burnt?'#4a3a2a':'#8a6436';g2.stroke();
+      wall();g2.lineWidth=Math.max(2,4*z);g2.setLineDash([Math.max(1,1.2*z),Math.max(2,2.6*z)]);g2.strokeStyle=burnt?'#2a2018':'#5c3f1e';g2.stroke();g2.setLineDash([]);
+      const tower=(la,de,h)=>{poly(box(la,de,h,h),1);g2.fillStyle=burnt?'#3a2c20':'#7a5830';g2.fill();g2.lineWidth=Math.max(1,1.5*z);g2.strokeStyle='#22160a';g2.stroke();poly(box(la,de,h*.55,h*.55),1);g2.fillStyle=burnt?'#2c2018':'#a37a44';g2.fill()};
+      for(const [la,de] of [[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]])tower(la,de,7);tower(-KGW-6,-d/2,8);tower(KGW+6,-d/2,8);
+      // vantaux ouverts vers l'extérieur
+      for(const sg of [-1,1]){const a=pt(sg*KGW,-d/2),b=pt(sg*(KGW+7),-d/2-KGW*.8);g2.beginPath();g2.moveTo(a[0],a[1]);g2.lineTo(b[0],b[1]);g2.lineWidth=Math.max(2,3.2*z);g2.strokeStyle='#4a321a';g2.stroke()}
+      if(!burnt)for(const sg of [-1,1]){const f=pt(sg*(KGW+6),-d/2),h=Math.max(8,13*z),wv=Math.sin(T*3.4+sg+k.seed)*2;g2.beginPath();g2.moveTo(f[0],f[1]);g2.lineTo(f[0],f[1]-h);g2.strokeStyle='#22160a';g2.lineWidth=1.2;g2.stroke();g2.beginPath();g2.moveTo(f[0],f[1]-h);g2.lineTo(f[0]+h*.7,f[1]-h*.8+wv*.4);g2.lineTo(f[0],f[1]-h*.55);g2.closePath();g2.fillStyle=P.blk;g2.fill()}
+      // feux de camp et fumée
+      for(let i=0;i<k.fires.length;i++){const f=k.fires[i],q=pt(f.la,f.de),fl=.75+.25*Math.sin(T*11+i*2.1)+.12*Math.sin(T*23+i),r=Math.max(2,3.4*z);
+        if(!burnt){const gr=g2.createRadialGradient(q[0],q[1],0,q[0],q[1],r*5);gr.addColorStop(0,'rgba(255,170,60,'+(.34*fl).toFixed(3)+')');gr.addColorStop(1,'rgba(255,150,40,0)');g2.fillStyle=gr;g2.beginPath();g2.arc(q[0],q[1],r*5,0,6.3);g2.fill()}
+        g2.beginPath();g2.arc(q[0],q[1],r,0,6.3);g2.fillStyle='#2a1c12';g2.fill();
+        if(!burnt){g2.beginPath();g2.arc(q[0],q[1]-r*.2,r*.7*fl,0,6.3);g2.fillStyle='#ff9a2e';g2.fill();g2.beginPath();g2.arc(q[0],q[1]-r*.35,r*.36*fl,0,6.3);g2.fillStyle='#ffe08a';g2.fill()}
+        for(let j=0;j<4;j++){const ph=((T*.22+j/4+i*.17)%1),sx=q[0]+Math.sin(T*.8+j*2+i)*r*1.2*ph+r*3*ph,sy=q[1]-r*(1.5+9*ph);g2.beginPath();g2.arc(sx,sy,r*(.7+1.8*ph),0,6.3);g2.fillStyle='rgba(90,84,78,'+(.2*(1-ph)).toFixed(3)+')';g2.fill()}}
+      // camp pillé : incendies sur les tentes et les provisions
+      if(burnt){for(let i=0;i<k.tents.length;i+=4){const tn=k.tents[i],q=pt(tn.la,tn.de),r=Math.max(2.5,5*z),fl=.7+.3*Math.sin(T*9+i);
+          const gr=g2.createRadialGradient(q[0],q[1],0,q[0],q[1],r*4);gr.addColorStop(0,'rgba(255,140,40,'+(.4*fl).toFixed(3)+')');gr.addColorStop(1,'rgba(255,120,30,0)');g2.fillStyle=gr;g2.beginPath();g2.arc(q[0],q[1],r*4,0,6.3);g2.fill();
+          g2.beginPath();g2.moveTo(q[0]-r*.7,q[1]+r*.4);g2.quadraticCurveTo(q[0]-r*.2,q[1]-r*1.2*fl,q[0],q[1]-r*1.9*fl);g2.quadraticCurveTo(q[0]+r*.3,q[1]-r*1.1*fl,q[0]+r*.7,q[1]+r*.4);g2.closePath();g2.fillStyle='#ff8a22';g2.fill();
+          for(let j=0;j<3;j++){const ph=((T*.18+j/3+i*.13)%1);g2.beginPath();g2.arc(q[0]+r*4*ph,q[1]-r*(2+12*ph),r*(1+2.4*ph),0,6.3);g2.fillStyle='rgba(40,36,34,'+(.28*(1-ph)).toFixed(3)+')';g2.fill()}}}
+      // la vie du camp : soldats qui vont et viennent, veilleurs près des feux, sentinelles sur le rempart
+      if(!burnt){const wait=k.q.length,nm=Math.round(10+Math.min(36,wait*.4)),rs=Math.max(1.3,1.7*z);
+        const man=(la,de,bob)=>{const q=pt(la,de);g2.beginPath();g2.arc(q[0],q[1]+rs*.9,rs*1.15,0,6.3);g2.fillStyle='rgba(20,14,8,.35)';g2.fill();g2.beginPath();g2.arc(q[0],q[1]-(bob||0),rs,0,6.3);g2.fillStyle=P.blk;g2.fill();g2.lineWidth=Math.max(.6,.5*z);g2.strokeStyle='#1c120a';g2.stroke();g2.beginPath();g2.arc(q[0],q[1]-rs*.9-(bob||0),rs*.55,0,6.3);g2.fillStyle='#e2c39a';g2.fill()};
+        for(let i=0;i<nm&&i<k.men.length;i++){const m=k.men[i];if(m.sit){const f=k.fires[i%k.fires.length],an=i*1.7;man(f.la+Math.cos(an)*7,f.de+Math.sin(an)*7,0);continue}
+          const u=((T+m.ph)%(2*m.T))/m.T,v=u<1?u:2-u,e=Math.min(1,Math.max(0,(v-.12)/.76)),s=e*e*(3-2*e),walking=e>0&&e<1;man(m.a.la+(m.b.la-m.a.la)*s,m.a.de+(m.b.de-m.a.de)*s,walking?Math.abs(Math.sin(T*8+i))*rs*.35:0)}
+        const per=2*(w+d),ns=8;for(let i=0;i<ns;i++){let s=((i/ns+.5/ns)*per+Math.sin(T*.35+i*1.9)*16+per)%per,la,de;const m=5;
+          if(s<w){la=-w/2+s;de=-d/2+m}else if(s<w+d){la=w/2-m;de=-d/2+(s-w)}else if(s<2*w+d){la=w/2-(s-w-d);de=d/2-m}else{la=-w/2+m;de=d/2-(s-2*w-d)}
+          if(de<-d/2+m+1&&Math.abs(la)<KGW+2)la=(la<0?-1:1)*(KGW+3);man(la,de,0)}
+        // les gardes de la porte
+        for(const sg of [-1,1])man(sg*(KGW-4),-d/2-6,0)}
+      // pillage en cours : jauge
+      if(k.loot>0&&!k.looted){const q=pt(0,0),bw=Math.max(70,110*z),bh=7;g2.fillStyle='rgba(20,14,8,.8)';g2.fillRect(q[0]-bw/2-2,q[1]-bh/2-2,bw+4,bh+4);g2.fillStyle='#e0902c';g2.fillRect(q[0]-bw/2,q[1]-bh/2,bw*k.loot,bh);
+        g2.font='bold 12px Georgia,serif';g2.textAlign='center';g2.textBaseline='bottom';g2.lineWidth=3;g2.strokeStyle='rgba(20,14,8,.85)';g2.strokeText('Pillage du camp…',q[0],q[1]-bh);g2.fillStyle='#ffd9a0';g2.fillText('Pillage du camp…',q[0],q[1]-bh)}
+      const L=pt(0,d/2+20);g2.font='13px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';g2.lineWidth=3;g2.strokeStyle='rgba(20,14,8,.8)';const tx=(burnt?'Camp pillé · ':'Camp · ')+P.n;g2.strokeText(tx,L[0],L[1]);g2.fillStyle=burnt?'#f0a070':'#efe3c6';g2.fillText(tx,L[0],L[1]);
+      g2.restore()}
+    // annonce du pillage
+    const m=KAMP.msg;if(m){const a=(performance.now()-m.t)/1000;if(a>7)KAMP.msg=null;else{g2.save();g2.globalAlpha=a<.4?a/.4:a>6?7-a:1;g2.font='bold 17px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';const tw2=g2.measureText(m.tx).width+36,x=SW/2,y=SH*.2;
+        g2.fillStyle='rgba(24,16,10,.88)';g2.fillRect(x-tw2/2,y-19,tw2,38);g2.strokeStyle=m.own?'#c0503c':'#c9a45a';g2.lineWidth=1.5;g2.strokeRect(x-tw2/2,y-19,tw2,38);g2.fillStyle=m.own?'#f3b0a0':'#f1e2b8';g2.fillText(m.tx,x,y);g2.restore()}}}
   {const _do2=drawOrders;drawOrders=function(){try{drawCamps()}catch(e){console.warn('camps',e)}return _do2.apply(this,arguments)}}
   // pendant le déploiement, vos carrés sont translucides : ce sont les places qu'ils iront prendre en sortant du camp
   {const _du=drawUnit;drawUnit=function(u){if(DEP&&KAMP&&u.side===0&&!u.pend){g2.save();g2.globalAlpha*=.6;try{return _du.apply(this,arguments)}finally{g2.restore()}}return _du.apply(this,arguments)}}
-  {const _sd=startDep;startDep=function(){const r=_sd.apply(this,arguments);try{campsInit();const b=document.getElementById('depBar');if(b&&KAMP){const d=b.querySelector('div');if(d&&!d._k){d._k=1;d.innerHTML='<b>Déploiement</b> · vos troupes attendent au camp. Placez leurs places (carrés translucides) dans la zone claire : clic droit, glisser à la souris, tracé de ligne ou formations. Au lancement, elles sortiront du camp une à une pour s\'y ranger.'}}}catch(e){console.warn('camps',e)}return r}}
+  {const _sd=startDep;startDep=function(){const r=_sd.apply(this,arguments);try{campsInit();const b=document.getElementById('depBar');if(b&&KAMP){const d=b.querySelector('div');if(d&&!d._k){d._k=1;d.innerHTML='<b>Déploiement</b> · vos troupes attendent au camp. Placez leurs places (carrés translucides) dans la zone claire : clic droit, glisser à la souris, tracé de ligne ou formations. Au lancement, elles sortiront une à une par la grande porte pour s\'y ranger. Gardez un œil sur votre camp : un camp sans défenseur peut être pillé.'}}}catch(e){console.warn('camps',e)}return r}}
   {const _bg=begin;begin=function(){if(!started){try{campsLaunch()}catch(e){console.warn('camps',e)}}return _bg.apply(this,arguments)}}
   {const _su3=setup;setup=function(){KAMP=null;return _su3.apply(this,arguments)}}
   window.__pilote={regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
@@ -3026,7 +3112,7 @@ if(!V3D){
   // (posé au premier dessin : l'interface « Bronze » enveloppe hudTick plus tard, et ses cartes doivent être corrigées après elle)
   let cardsHooked=false;function hookCards(){if(cardsHooked)return;cardsHooked=true;
     try{selected.clear=function(){SELCLR=true;return Set.prototype.clear.call(this)}}catch(e){}
-    {const _stx=step;step=function(dt){const d=ISCAMP()?dt*SLOWK:dt,r=_stx.call(this,d);try{campTick(d)}catch(e){console.warn('camps',e)}return r}}
+    {const _stx=step;step=function(dt){const d=ISCAMP()?dt*SLOWK:dt,r=_stx.call(this,d);try{campTick(d,dt)}catch(e){console.warn('camps',e)}return r}}
     {const _rsx=renderSel;renderSel=function(){try{expandSel()}catch(e){}return _rsx.apply(this,arguments)}}
     {const _sh=shoot;shoot=function(u,dt){if(!u.T.ranged||u.routing||u.contacts.length)return;if(u.cd-dt>0){u.cd-=dt;return}return _sh.apply(this,arguments)}}
 const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTop()}catch(e){}try{const bar=document.getElementById('uiCards');if(bar){
@@ -4895,8 +4981,10 @@ window.__sol2d=function(g2,M,DPR,s2){try{
   function hAt0(sx,sy){const D=RG.dem,fx=Math.max(0,Math.min(D.nx-1.001,(sx-D.x0)/D.st)),fy=Math.max(0,Math.min(D.ny-1.001,(sy-D.y0)/D.st)),i=fx|0,j=fy|0,u=fx-i,v=fy-j,H=D.h,n=D.nx;
     return H[j*n+i]*(1-u)*(1-v)+H[j*n+i+1]*u*(1-v)+H[(j+1)*n+i]*(1-u)*v+H[(j+1)*n+i+1]*u*v}
   /* --- géométrie, en coordonnées du monde (×G) --- */
-  const RIVS=RG.riv.map(r=>({n:r.n,hw:r.hw*K,p:r.p.map(([x,y])=>[x*K,y*K])}));
-  const CROSS=RG.cross.map(c=>({x:c.x*K,y:c.y*K,a:c.a,hw:c.hw*K,k:c.k,w:c.w*K,ux:Math.cos(c.a),uy:Math.sin(c.a)}));
+  // v2 : largeurs à l'échelle des régiments (petit cours d'eau 20 m, rivière 32 m, grand fleuve 88 m), gués et ponts resserrés
+  const HWF=h=>h>=50?h*.8:h*.5;
+  const RIVS=RG.riv.map(r=>({n:r.n,hw:HWF(r.hw)*K,p:r.p.map(([x,y])=>[x*K,y*K])}));
+  const CROSS=RG.cross.map(c=>({x:c.x*K,y:c.y*K,a:c.a,hw:HWF(c.hw)*K,k:c.k,w:c.w*K*(c.k==='gue'?.6:.75),ux:Math.cos(c.a),uy:Math.sin(c.a)}));
   const MARSH=RG.marsh.map(p=>{const P=p.map(([x,y])=>[x*K,y*K]);let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of P){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}return {P,b:[a,b,c,d]}});
   const DEM=RG.dem;
   // seaux de 200 m : segments de fleuve proches
@@ -4975,6 +5063,176 @@ window.__sol2d=function(g2,M,DPR,s2){try{
       else{const o=w.hw+4*K,s=w.side;u.x=w.px+w.nx*s*o;u.y=w.py+w.ny*s*o}}
     return r}}
   /* --- dessin : relief, marais, fleuves, gués, ponts --- */
+  /* --- SOL NET (v2, 11 nov.) : le sol n'est plus l'image de la campagne agrandie. Il est redessiné à l'échelle des régiments,
+     en tuiles nettes à tous les zooms : parcelles de 40 à 130 m avec sillons, haies et murets, arbres un par un, chemins, fermes, cailloux.
+     Les bois, champs, routes et fermes viennent toujours de l'endroit de la campagne (CT) ; seule leur finesse change.
+     Tout est en mètres du champ (avant ×G). Les cartes de villes (bloc VILLES) gardent leur propre sol. --- */
+  const NET=!window.__villes&&!!document.createElement('canvas').getContext;
+  const SOL=(()=>{
+    if(!NET)return null;
+    const hs=(a,b)=>hash(a|0,b|0),SEEDX=Math.round((CT.f?CT.f.cx:0)*7)%9973,SEEDY=Math.round((CT.f?CT.f.cy:0)*7)%9973;
+    const hx=(a,b,k)=>hs(a*3+SEEDX+k*101,b*3+SEEDY-k*57);
+    const mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t],rgb=c=>`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+    const MX0=GX0,MY0=GY0,MX1=GX0+(GNX-1)*GS,MY1=GY0+(GNY-1)*GS,DRY=CT.dry||0;
+    // bois : seaux de 300 m
+    const FB=new Map(),fk=(i,j)=>i*4099+j;
+    for(const f of FORESTS)for(let i=Math.floor((f.x-f.r)/300);i<=Math.floor((f.x+f.r)/300);i++)for(let j=Math.floor((f.y-f.r)/300);j<=Math.floor((f.y+f.r)/300);j++){const k=fk(i,j);let L=FB.get(k);if(!L)FB.set(k,L=[]);L.push(f)}
+    function inFo(x,y){const L=FB.get(fk(Math.floor(x/300),Math.floor(y/300)));if(!L)return 0;let b=0;for(const f of L){const d=Math.hypot(x-f.x,y-f.y);if(d<f.r)b=Math.max(b,1-d/f.r)}return b}
+    const rivD=(x,y)=>{const w=water(x*K,y*K);return w?(w.d-w.hw)/K:1e9}; // distance à la berge (m), négative dans l'eau
+    const seaAt=(x,y)=>RIVER0>-1000&&SEA&&x<riverX(y)+30;
+    /* couleur de fond : une image douce (8 m par point) : teinte du pays, sécheresse, ombrage du relief, vert près de l'eau */
+    let BASE=null;
+    function buildBase(){const c=document.createElement('canvas');c.width=GNX;c.height=GNY;const g=c.getContext('2d'),im=g.createImageData(GNX,GNY),d=im.data;
+      const A=[118,128,70],B=[158,150,88],DR=[196,172,118],GRN=[96,122,60],MT=[136,126,100],FL=[84,104,58],WET=[92,124,70];
+      for(let j=0;j<GNY;j++)for(let i=0;i<GNX;i++){const x=GX0+i*GS,y=GY0+j*GS,n1=fbm(x*.0021+SEEDX,y*.0021),n2=fbm(x*.006+40,y*.006+SEEDY),n3=vnoise(x*.03,y*.03);
+        let c=mix(A,B,n1);if(n2>.55)c=mix(c,DR,Math.min(1,(n2-.55)*2.4)*.7);if(n2<.42)c=mix(c,GRN,Math.min(1,(.42-n2)*3)*.75);
+        if(DRY)c=mix(c,DR,DRY*.6);const mt=mtn(x,y);if(mt>0)c=mix(c,MT,mt*.55);
+        const fo=inFo(x,y);if(fo>0)c=mix(c,FL,Math.min(1,fo*3)*.7);
+        const rd=rivD(x,y);if(rd<140)c=mix(c,WET,(1-Math.max(0,rd)/140)*.55);
+        const o=j*GNX+i,i0=Math.max(1,Math.min(GNX-2,i)),j0=Math.max(1,Math.min(GNY-2,j)),q=j0*GNX+i0,sx=(HG[q+1]-HG[q-1])/(2*GS),sy=(HG[q+GNX]-HG[q-GNX])/(2*GS);
+        let sh=(1+(-sx*.62+sy*.5)*2.2)*(.96+n3*.08);sh=Math.max(.62,Math.min(1.3,sh));
+        if(seaAt(x,y)){c=[112,150,160];sh=1}
+        d[o*4]=Math.min(255,c[0]*sh);d[o*4+1]=Math.min(255,c[1]*sh);d[o*4+2]=Math.min(255,c[2]*sh);d[o*4+3]=255}
+      g.putImageData(im,0,0);BASE=c}
+    /* parcelles : les grands champs de la carte découpés en lanières, plus un petit terroir autour de chaque ferme */
+    const PAR=[],FARM=[],PB=new Map();
+    const CROPS=[[[203,180,100],[188,164,88]],[[190,170,96],[176,156,84]],[[150,160,82],[136,148,72]],[[128,146,70],[116,134,62]],[[150,122,84],[138,110,74]],[[170,150,104],[158,138,94]]];
+    function addPar(P,kind,ang,seed){let a=1e9,b=1e9,c=-1e9,d=-1e9,cx=0,cy=0;for(const [x,y] of P){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y);cx+=x/P.length;cy+=y/P.length}
+      if(VIL&&Math.hypot(VIL.x-cx,VIL.y-cy)<VIL.r+8)return;
+      if(cx<MX0||cy<MY0||cx>MX1||cy>MY1||rivD(cx,cy)<12||inMarsh(cx*K,cy*K)||inFo(cx,cy)>.25||mtn(cx,cy)>.5||seaAt(cx,cy))return;
+      for(const [x,y] of P)if(rivD(x,y)<4)return;
+      const o={P,kind,ang,seed,b:[a,b,c,d],edge:seed%5};PAR.push(o);
+      for(let i=Math.floor(a/256);i<=Math.floor(c/256);i++)for(let j=Math.floor(b/256);j<=Math.floor(d/256);j++){const k=fk(i,j);let L=PB.get(k);if(!L)PB.set(k,L=[]);L.push(o)}}
+    function split(x0,y0,x1,y1,T,rot,sd,dep){const w=x1-x0,h=y1-y0,R=k=>hx(sd,dep,k);
+      const maxL=70+R(1)*70,maxW=34+R(2)*46;
+      if((Math.max(w,h)<=maxL&&Math.min(w,h)<=maxW)||dep>9){
+        if(R(3)<.13)return; // friche : rien
+        const m=1.2+R(4)*1.6,j=k=>(R(k)-.5)*Math.min(w,h)*.07,P=[[x0+m+j(5),y0+m+j(6)],[x1-m+j(7),y0+m+j(8)],[x1-m+j(9),y1-m+j(10)],[x0+m+j(11),y1-m+j(12)]].map(T);
+        const r=R(13),kind=r<.34?0:r<.5?1:r<.66?2:r<.78?3:r<.9?4:r<.95?'vigne':'olive';
+        addPar(P,kind,rot+(w>=h?0:Math.PI/2),(sd*31+dep*7+((x0+y0)|0))>>>0);return}
+      const t=.36+R(14)*.28;
+      if(w/maxL>h/maxW){const xm=x0+w*t;split(x0,y0,xm,y1,T,rot,sd*2+1,dep+1);split(xm,y0,x1,y1,T,rot,sd*2+2,dep+1)}
+      else{const ym=y0+h*t;split(x0,y0,x1,ym,T,rot,sd*2+1,dep+1);split(x0,ym,x1,y1,T,rot,sd*2+2,dep+1)}}
+    function buildParcels(){buildVillage();
+      FIELDS.forEach((f,i)=>{const c=Math.cos(f.a),s=Math.sin(f.a),T=([x,y])=>[f.x+x*c-y*s,f.y+x*s+y*c];split(-f.w/2,-f.h/2,f.w/2,f.h/2,T,f.a,1000+i*97,0)});
+      (CT.houses||[]).forEach((h,i)=>{const a=hx(i,7,1)*6.283,c=Math.cos(a),s=Math.sin(a),x=h[0],y=h[1];
+        if(x<MX0+60||y<MY0+60||x>MX1-60||y>MY1-60||rivD(x,y)<30||inMarsh(x*K,y*K)||seaAt(x,y))return;
+        if(FARM.some(q=>Math.hypot(q.x-x,q.y-y)<70))return;
+        FARM.push({x,y,a,i});const T=([u,v])=>[x+u*c-v*s,y+u*s+v*c],w=150+hx(i,7,2)*130,hh=110+hx(i,7,3)*110;
+        split(-w/2,26,w/2,26+hh,T,a,5000+i*53,0);if(hx(i,7,4)<.7)split(-w/2,-26-hh*.7,w/2,-26,T,a,7000+i*53,0)})}
+    // village voisin (quand la ville n'a pas sa carte du bloc VILLES) : rues de terre, maisons le long, terroir autour
+    let VIL=null;
+    function buildVillage(){const t=CT.town;if(!t||t.x<MX0+150||t.y<MY0+150||t.x>MX1-150||t.y>MY1-150)return;
+      let hc=0;const sz=t.size||0,n=12+sz*16,R=k=>hx(71,k,9),a0=R(1)*3.14,H=[],LN=[],Rv=55+sz*38;
+      const ns=2+Math.min(2,sz);for(let k=0;k<ns;k++){const a=a0+k*(3.14/ns)+(R(10+k)-.5)*.5,L=Rv*(.8+R(20+k)*.5),bend=(R(30+k)-.5)*.5,P=[];
+        for(let q=-1;q<=1.001;q+=.25){const d=q*L,aa=a+bend*q;P.push([t.x+Math.cos(aa)*d,t.y+Math.sin(aa)*d])}LN.push(P);
+        for(let q=1;q<P.length;q++){const [ax,ay]=P[q-1],[bx,by]=P[q],an=Math.atan2(by-ay,bx-ax),l=Math.hypot(bx-ax,by-ay);
+          for(let u=4;u<l-3;u+=11+R(H.length+40)*6)for(const sd of [-1,1]){hc++;if(H.length>=n*1.6||R(hc+90)<.22)continue;const w=7+R(H.length+140)*5,h=5+R(H.length+190)*3,off=4.2+h/2+R(H.length+240)*2.5,
+              x=ax+(bx-ax)*u/l-Math.sin(an)*off*sd,y=ay+(by-ay)*u/l+Math.cos(an)*off*sd;if(H.some(o=>Math.hypot(o[0]-x,o[1]-y)<Math.max(w,o[2])*.95)||rivD(x,y)<10)continue;H.push([x,y,w,h,an+(R(H.length+300)-.5)*.2,R(H.length+350)<.85])}}}
+      VIL={x:t.x,y:t.y,r:Rv*1.25+12,H,LN,n:t.n};
+      const nb=4+sz*2;for(let k=0;k<nb;k++){const a=a0+.4+k*6.283/nb+(R(60+k)-.5)*.4,d=VIL.r+70+R(70+k)*60,cx=t.x+Math.cos(a)*d,cy=t.y+Math.sin(a)*d,c=Math.cos(a+1.571),s2=Math.sin(a+1.571),T=([u,v])=>[cx+u*c-v*s2,cy+u*s2+v*c];
+        split(-90-R(80+k)*50,-60,90+R(85+k)*50,60+R(90+k)*40,T,a+1.571,9000+k*61,0)}}
+    function parsIn(x0,y0,x1,y1){const S=new Set();for(let i=Math.floor(x0/256);i<=Math.floor(x1/256);i++)for(let j=Math.floor(y0/256);j<=Math.floor(y1/256);j++){const L=PB.get(fk(i,j));if(L)for(const o of L)if(o.b[0]<x1&&o.b[2]>x0&&o.b[1]<y1&&o.b[3]>y0)S.add(o)}return S}
+    function inPar(x,y){const L=PB.get(fk(Math.floor(x/256),Math.floor(y/256)));if(!L)return null;for(const o of L){if(x<o.b[0]||x>o.b[2]||y<o.b[1]||y>o.b[3])continue;const P=o.P;let c=false;for(let i=0,j=3;i<4;j=i++){const [xi,yi]=P[i],[xj,yj]=P[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}if(c)return o}return null}
+    const nearFarm=(x,y,r)=>FARM.some(q=>Math.hypot(q.x-x,q.y-y)<r)||(VIL&&Math.hypot(VIL.x-x,VIL.y-y)<VIL.r);
+    /* grain du sol : motif répété (1 point = 0,5 m) */
+    let GRAIN=null;
+    function buildGrain(){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),im=g.createImageData(256,256);let s=12345;const r=()=>(s=(s*16807)%2147483647)/2147483647;
+      for(let i=0;i<256*256;i++){const v=r(),dk=v<.5;im.data[i*4]=dk?40:250;im.data[i*4+1]=dk?44:240;im.data[i*4+2]=dk?20:200;im.data[i*4+3]=Math.abs(v-.5)*2*38}
+      g.putImageData(im,0,0);GRAIN=c}
+    /* une tuile : 512 points, S points par mètre */
+    const TS=512,LV=[.0625,.125,.25,.5,1,2,4,8],CACHE=new Map();let tick=0,ready=false;
+    function tree(g,x,y,r,S,tone,kind){
+      if(S>=.5){g.fillStyle='rgba(18,26,10,.34)';g.beginPath();g.ellipse(x+r*.38,y+r*.5,r*1.02,r*.92,0,0,6.283);g.fill()}
+      const base=kind==='olive'?[122,136,96]:kind==='pin'?[52,84,48]:[66,100,44],c=mix(base,kind==='olive'?[150,160,118]:[104,128,58],tone);
+      g.fillStyle=rgb(c);g.beginPath();g.arc(x,y,r,0,6.283);g.fill();
+      if(S>=1){g.fillStyle=rgb(mix(c,[190,200,120],.3));g.beginPath();g.arc(x-r*.28,y-r*.3,r*.52,0,6.283);g.fill();
+        if(S>=2){g.strokeStyle='rgba(22,34,12,.55)';g.lineWidth=.35;g.beginPath();g.arc(x,y,r,0,6.283);g.stroke();
+          g.fillStyle=rgb(mix(c,[30,50,20],.35));g.beginPath();g.arc(x+r*.3,y+r*.32,r*.32,0,6.283);g.fill()}}}
+    function house(g,x,y,w,h,a,S,roof){g.save();g.translate(x,y);g.rotate(a);
+      g.fillStyle='rgba(20,14,8,.36)';g.fillRect(-w/2+1.6,-h/2+2,w,h);
+      g.fillStyle=roof?'#a8603f':'#b9a27a';g.fillRect(-w/2,-h/2,w,h);g.fillStyle=roof?'#8f4c30':'#a48e68';g.fillRect(-w/2,0,w,h/2);
+      if(S>=1){g.strokeStyle='rgba(40,24,12,.8)';g.lineWidth=.4;g.strokeRect(-w/2,-h/2,w,h);g.beginPath();g.moveTo(-w/2,0);g.lineTo(w/2,0);g.stroke();
+        if(S>=2&&roof){g.strokeStyle='rgba(60,30,16,.35)';g.lineWidth=.2;g.beginPath();for(let u=-w/2+1;u<w/2;u+=1){g.moveTo(u,-h/2);g.lineTo(u,h/2)}g.stroke()}}
+      g.restore()}
+    function render(L,ti,tj){const S=LV[L],sz=TS/S,x0=ti*sz,y0=tj*sz,x1=x0+sz,y1=y0+sz,c=document.createElement('canvas');c.width=c.height=TS;const g=c.getContext('2d');
+      g.setTransform(S,0,0,S,-x0*S,-y0*S);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.lineCap='round';g.lineJoin='round';
+      g.drawImage(BASE,MX0-GS/2,MY0-GS/2,GNX*GS,GNY*GS);
+      if(S>=.5){g.save();g.scale(.5,.5);g.fillStyle=g.createPattern(GRAIN,'repeat');g.globalAlpha=S>=2?.9:.6;g.fillRect(x0*2,y0*2,sz*2,sz*2);g.restore()}
+      // touffes d'herbe, broussailles et cailloux (tirés de l'endroit)
+      if(S>=1){const cs=12;for(let i=Math.floor(x0/cs)-1;i<=Math.floor(x1/cs)+1;i++)for(let j=Math.floor(y0/cs)-1;j<=Math.floor(y1/cs)+1;j++){const h=hx(i,j,21);if(h>.62)continue;
+          const x=(i+hx(i,j,22))*cs,y=(j+hx(i,j,23))*cs;if(x<MX0||y<MY0||x>MX1||y>MY1||rivD(x,y)<1||seaAt(x,y))continue;const mt=mtn(x,y),p=inPar(x,y);if(p&&p.kind!==undefined)continue;
+          if(h<.08+mt*.3+DRY*.1){const r=.5+hx(i,j,24)*1.1;g.fillStyle='rgba(60,50,34,.35)';g.beginPath();g.ellipse(x+.3,y+.4,r*1.2,r*.9,h*40,0,6.283);g.fill();g.fillStyle=h<.04?'#b3aa94':'#9f957c';g.beginPath();g.ellipse(x,y,r*1.15,r*.8,h*40,0,6.283);g.fill()}
+          else if(h<.3){const r=1+hx(i,j,25)*1.4;g.fillStyle='rgba(30,40,16,.25)';g.beginPath();g.arc(x+.4,y+.5,r,0,6.283);g.fill();g.fillStyle=h<.2?'#5f7a3a':'#788a48';g.beginPath();g.arc(x,y,r,0,6.283);g.fill();g.beginPath();g.arc(x+r*.8,y+r*.3,r*.7,0,6.283);g.fill()}
+          else{g.strokeStyle=h<.46?'rgba(70,92,40,.55)':'rgba(190,178,110,.5)';g.lineWidth=.22;g.beginPath();for(let k=0;k<4;k++){const ux=x+(hx(i,j,30+k)-.5)*5,uy=y+(hx(i,j,40+k)-.5)*5;g.moveTo(ux-.5,uy);g.lineTo(ux-.2,uy-1.1);g.moveTo(ux+.1,uy);g.lineTo(ux+.2,uy-1.3);g.moveTo(ux+.6,uy);g.lineTo(ux+.9,uy-1)}g.stroke()}}}
+      // parcelles
+      for(const o of parsIn(x0-6,y0-6,x1+6,y1+6)){const P=o.P;g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let k=1;k<4;k++)g.lineTo(P[k][0],P[k][1]);g.closePath();
+        if(typeof o.kind==='number'){const C=CROPS[o.kind],t=(o.seed%100)/100,col=mix(C[0],C[1],t);g.fillStyle=rgb(DRY?mix(col,[200,178,124],DRY*.3):col);g.globalAlpha=.93;g.fill();g.globalAlpha=1;
+          if(S>=1){g.save();g.clip();const ca=Math.cos(o.ang),sa=Math.sin(o.ang),cx=(o.b[0]+o.b[2])/2,cy=(o.b[1]+o.b[3])/2,R=Math.hypot(o.b[2]-o.b[0],o.b[3]-o.b[1])/2+2,st=o.kind===4?1.6:2.4;
+            g.strokeStyle=o.kind===4?'rgba(70,48,26,.3)':'rgba(84,70,30,.24)';g.lineWidth=S>=2?.45:.7;g.beginPath();for(let v=-R;v<=R;v+=st){g.moveTo(cx+ca*-R-sa*v,cy+sa*-R+ca*v);g.lineTo(cx+ca*R-sa*v,cy+sa*R+ca*v)}g.stroke();
+            if(S>=2&&o.kind<2){g.strokeStyle='rgba(240,225,150,.2)';g.lineWidth=.3;g.beginPath();for(let v=-R+st/2;v<=R;v+=st){g.moveTo(cx+ca*-R-sa*v,cy+sa*-R+ca*v);g.lineTo(cx+ca*R-sa*v,cy+sa*R+ca*v)}g.stroke()}
+            g.restore()}}
+        else{g.fillStyle=o.kind==='vigne'?'rgb(150,132,92)':'rgb(152,148,96)';g.globalAlpha=.9;g.fill();g.globalAlpha=1;
+          if(o.kind==='vigne'&&S>=.5){g.save();g.clip();const ca=Math.cos(o.ang),sa=Math.sin(o.ang),cx=(o.b[0]+o.b[2])/2,cy=(o.b[1]+o.b[3])/2,R=Math.hypot(o.b[2]-o.b[0],o.b[3]-o.b[1])/2+2;
+            g.strokeStyle='rgba(62,92,44,.85)';g.lineWidth=1.1;g.setLineDash(S>=1?[1.3,1.1]:[]);g.beginPath();for(let v=-R;v<=R;v+=3.2){g.moveTo(cx+ca*-R-sa*v,cy+sa*-R+ca*v);g.lineTo(cx+ca*R-sa*v,cy+sa*R+ca*v)}g.stroke();g.setLineDash([]);g.restore()}}
+        // limite : fossé, haie ou muret
+        g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let k=1;k<4;k++)g.lineTo(P[k][0],P[k][1]);g.closePath();
+        if(o.edge===0&&S>=.5){g.strokeStyle='rgba(58,84,36,.95)';g.lineWidth=2.2;g.setLineDash([2.2,1]);g.stroke();g.setLineDash([]);if(S>=2){g.strokeStyle='rgba(120,150,70,.6)';g.lineWidth=.8;g.setLineDash([1,2.2]);g.stroke();g.setLineDash([])}}
+        else if(o.edge===1&&S>=.5){g.strokeStyle='rgba(70,60,44,.8)';g.lineWidth=1.3;g.stroke();g.strokeStyle='rgba(200,192,170,.9)';g.lineWidth=.7;g.setLineDash([1.6,.5]);g.stroke();g.setLineDash([])}
+        else{g.strokeStyle='rgba(80,62,34,.5)';g.lineWidth=S>=1?.6:1/S;g.stroke()}}
+      // routes et chemins
+      for(const P of ROADS){if(P.length<2)continue;let hit=false;for(const [x,y] of P)if(x>x0-400&&x<x1+400&&y>y0-400&&y<y1+400){hit=true;break}if(!hit&&P.length<40){let a=1e9,b=1e9,c2=-1e9,d=-1e9;for(const [x,y] of P){a=Math.min(a,x);b=Math.min(b,y);c2=Math.max(c2,x);d=Math.max(d,y)}if(a>x1||c2<x0||b>y1||d<y0)continue}
+        const ri=ROADS.indexOf(P),kd=CT.roads[ri]?CT.roads[ri].k:'route',w=kd==='via'?6.5:kd==='route'?5:kd==='piste'?3.6:2.8;
+        g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let k=1;k<P.length-1;k++){const mx=(P[k][0]+P[k+1][0])/2,my=(P[k][1]+P[k+1][1])/2;g.quadraticCurveTo(P[k][0],P[k][1],mx,my)}g.lineTo(P[P.length-1][0],P[P.length-1][1]);
+        g.strokeStyle='rgba(84,64,36,.75)';g.lineWidth=Math.max(w+1.4,2/S);g.stroke();g.strokeStyle=kd==='via'?'#cfc4a8':'#c6b086';g.lineWidth=Math.max(w,1.2/S);g.stroke();
+        if(S>=1){if(kd==='via'){g.strokeStyle='rgba(110,100,80,.55)';g.lineWidth=.3;g.setLineDash([1.6,.5]);g.stroke();g.setLineDash([])}else{g.strokeStyle='rgba(120,96,60,.4)';g.lineWidth=.5;g.setLineDash([3,5]);g.lineDashOffset=1;g.stroke();g.setLineDash([])}}}
+      // fermes : cour, bâtiments, meules
+      for(const f of FARM){if(f.x<x0-60||f.x>x1+60||f.y<y0-60||f.y>y1+60)continue;const R=k=>hx(f.i,11,k);g.save();g.translate(f.x,f.y);g.rotate(f.a);
+        const cw=30+R(1)*16,ch=22+R(2)*10;g.fillStyle='rgba(186,166,126,.95)';g.beginPath();g.moveTo(-cw/2,-ch/2);g.lineTo(cw/2+R(3)*4,-ch/2+R(4)*3);g.lineTo(cw/2,ch/2);g.lineTo(-cw/2-R(5)*3,ch/2+R(6)*3);g.closePath();g.fill();
+        if(S>=.5){g.strokeStyle='rgba(90,78,58,.9)';g.lineWidth=1;g.stroke();g.strokeStyle='rgba(214,204,180,.9)';g.lineWidth=.5;g.stroke()}
+        g.restore();const ca=Math.cos(f.a),sa=Math.sin(f.a),W=(u,v)=>[f.x+u*ca-v*sa,f.y+u*sa+v*ca];
+        {const [x,y]=W(-cw/2+7,-ch/2+5);house(g,x,y,13+R(7)*5,7.5,f.a,S,true)}{const [x,y]=W(cw/2-5,2);house(g,x,y,7,11+R(8)*4,f.a,S,true)}
+        if(R(9)<.7){const [x,y]=W(-cw/2+6,ch/2-4.5);house(g,x,y,8,5.5,f.a,S,false)}
+        if(S>=.5)for(let k=0;k<2+(R(10)*3|0);k++){const [x,y]=W(-2+k*5.5,ch/2+6+R(12+k)*4);g.fillStyle='rgba(30,22,10,.3)';g.beginPath();g.arc(x+.8,y+1,2.3,0,6.283);g.fill();g.fillStyle='#cdb46a';g.beginPath();g.arc(x,y,2.2,0,6.283);g.fill();g.fillStyle='#e0cc86';g.beginPath();g.arc(x-.5,y-.5,1.1,0,6.283);g.fill()}}
+      if(VIL&&VIL.x>x0-VIL.r-40&&VIL.x<x1+VIL.r+40&&VIL.y>y0-VIL.r-40&&VIL.y<y1+VIL.r+40){
+        for(const P of VIL.LN){g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let k=1;k<P.length;k++)g.lineTo(P[k][0],P[k][1]);g.strokeStyle='rgba(96,78,50,.6)';g.lineWidth=5;g.stroke();g.strokeStyle='#c2ad84';g.lineWidth=3.8;g.stroke()}
+        for(const [x,y,w,h,a,roof] of VIL.H)house(g,x,y,w,h,a,S,roof)}
+      // arbres : bois serrés (lisière irrégulière, clairières), arbres des berges, arbres isolés, oliviers en rangs
+      {const cs=S>=.5?7.5:S>=.2?15:30,big=cs/7.5;for(let i=Math.floor((x0-12)/cs);i<=Math.floor((x1+12)/cs);i++)for(let j=Math.floor((y0-12)/cs);j<=Math.floor((y1+12)/cs);j++){
+          const h=hx(i,j,1),x=(i+.15+hx(i,j,2)*.7)*cs,y=(j+.15+hx(i,j,3)*.7)*cs;if(x<MX0||y<MY0||x>MX1||y>MY1)continue;
+          const fo=inFo(x,y);let r=0,kind='f';
+          if(fo>0){const ed=fo+(vnoise(x*.02+9,y*.02)-.5)*.5,cl=vnoise(x*.008+3,y*.008+11);if(ed>.1&&cl<.74&&h<.9)r=(2.6+hx(i,j,4)*2.6)*(big>1?big*.8:1)}
+          else if(big===1){const rd=rivD(x,y);if(rd>1.5&&rd<26&&h<.2)r=2.4+hx(i,j,4)*2.4;else if(h<.0045+ (vnoise(x*.004,y*.004+5)>.62?.03:0))r=3+hx(i,j,4)*3}
+          if(!r)continue;const rd=rivD(x,y);if(rd<r*.6||seaAt(x,y)||inMarsh(x*K,y*K))continue;if(roadDist(x,y)<r+3||nearFarm(x,y,26))continue;const p=inPar(x,y);if(p)continue;
+          tree(g,x,y,r,S,hx(i,j,5),mtn(x,y)>.3?'pin':kind)}
+        if(S>=.5)for(const o of parsIn(x0-6,y0-6,x1+6,y1+6)){if(o.kind!=='olive')continue;const ca=Math.cos(o.ang),sa=Math.sin(o.ang),cx=(o.b[0]+o.b[2])/2,cy=(o.b[1]+o.b[3])/2,R=Math.hypot(o.b[2]-o.b[0],o.b[3]-o.b[1])/2;
+          for(let u=-R;u<=R;u+=9)for(let v=-R;v<=R;v+=9){const x=cx+ca*u-sa*v,y=cy+sa*u+ca*v;if(x<x0-5||x>x1+5||y<y0-5||y>y1+5)continue;const q=inPar(x,y);if(q!==o)continue;let ok=true;for(const [px,py] of o.P)if(Math.hypot(px-x,py-y)<3)ok=false;if(ok)tree(g,x,y,2.6+hx(u|0,v|0,6)*.9,S,hx(u|0,v|0,7),'olive')}}}
+      return c}
+    function prep(){if(ready)return;buildBase();buildGrain();buildParcels();ready=true}
+    /* dessin : niveau choisi d'après le zoom, tuiles rendues peu à peu (le fond doux sert d'attente) */
+    function draw(g,M,DPR,s2){prep();tick++;
+      const need=s2*DPR*K;let L=LV.length-1;for(let i=0;i<LV.length;i++)if(LV[i]>=need*.7){L=i;break}
+      const S=LV[L],sz=TS/S,W=g.canvas.width/DPR,H=g.canvas.height/DPR,det=M[0]*M[3]-M[1]*M[2],inv=(sx,sy)=>{const x=sx-M[4],y=sy-M[5];return [(M[3]*x-M[2]*y)/det/K,(-M[1]*x+M[0]*y)/det/K]};
+      let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [sx,sy] of [[0,0],[W,0],[W,H],[0,H]]){const [x,y]=inv(sx,sy);a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}
+      a=Math.max(a,MX0);b=Math.max(b,MY0);c=Math.min(c,MX1);d=Math.min(d,MY1);
+      g.save();g.setTransform(M[0]*DPR*K,M[1]*DPR*K,M[2]*DPR*K,M[3]*DPR*K,M[4]*DPR,M[5]*DPR);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+      g.fillStyle='#6f7648';g.fillRect(MX0-20000,MY0-20000,40000+MX1-MX0,40000+MY1-MY0);
+      // le fond doux ne sert que là où une tuile manque encore
+      let miss=!(c>a&&d>b);if(!miss)for(let ti=Math.floor(a/sz);ti<=Math.floor(c/sz)&&!miss;ti++)for(let tj=Math.floor(b/sz);tj<=Math.floor(d/sz);tj++)if(!CACHE.has(L+'/'+ti+'/'+tj)){miss=true;break}
+      if(miss)g.drawImage(BASE,MX0-GS/2,MY0-GS/2,GNX*GS,GNY*GS);
+      g.imageSmoothingQuality='low';window.__solNet=1;
+      if(c>a&&d>b){let made=0;const t0=performance.now(),cxm=(a+c)/2,cym=(b+d)/2,todo=[];
+        for(let ti=Math.floor(a/sz);ti<=Math.floor(c/sz);ti++)for(let tj=Math.floor(b/sz);tj<=Math.floor(d/sz);tj++){const key=L+'/'+ti+'/'+tj;let t=CACHE.get(key);
+          if(t){t.u=tick;g.drawImage(t.c,ti*sz,tj*sz,sz+.5/S,sz+.5/S)}
+          else{ // en attendant : la tuile du niveau au-dessous si elle existe
+            for(let l=L-1;l>=0;l--){const z=TS/LV[l],p=CACHE.get(l+'/'+Math.floor(ti*sz/z)+'/'+Math.floor(tj*sz/z));if(p){p.u=tick;const px=Math.floor(ti*sz/z)*z,py=Math.floor(tj*sz/z)*z;g.save();g.beginPath();g.rect(ti*sz,tj*sz,sz,sz);g.clip();g.drawImage(p.c,px,py,z,z);g.restore();break}}
+            todo.push([Math.hypot((ti+.5)*sz-cxm,(tj+.5)*sz-cym),ti,tj,key])}}
+        todo.sort((p,q)=>p[0]-q[0]);
+        for(const [,ti,tj,key] of todo){if(made&&performance.now()-t0>(window.__solBudget||10))break;const t={c:render(L,ti,tj),u:tick};CACHE.set(key,t);g.drawImage(t.c,ti*sz,tj*sz,sz+.5/S,sz+.5/S);made++}
+        if(CACHE.size>90){const A=[...CACHE.entries()].sort((p,q)=>p[1].u-q[1].u);for(let i=0;i<A.length-70;i++)CACHE.delete(A[i][0])}
+        SOL.pending=todo.length-made}
+      g.restore()}
+    return {draw,prep,inFo,PAR,FARM,CACHE,pending:0,get VIL(){return VIL}}})();
   const P2=window.Path2D;let CNT=null,RIVP=null,REEDS=null,info=null;
   function smooth(p,P){const n=p.length;P.moveTo(p[0][0],p[0][1]);for(let i=1;i<n-1;i++){const mx=(p[i][0]+p[i+1][0])/2,my=(p[i][1]+p[i+1][1])/2;P.quadraticCurveTo(p[i][0],p[i][1],mx,my)}P.lineTo(p[n-1][0],p[n-1][1])}
   function build(){
@@ -5000,19 +5258,20 @@ window.__sol2d=function(g2,M,DPR,s2){try{
   window.__sol2d=function(g,M,DPR,s2){
     try{_sol&&_sol.apply(this,arguments)}catch(e){}
     if(!CNT)build();if(!fixed&&units&&units.length&&!started)fixDeploy();
+    if(SOL)try{SOL.draw(g,M,DPR,s2)}catch(e){window.__solNet=0;if(!window.__solErr){window.__solErr=e;console.warn('sol net',e)}}
     const px=1/s2; // 1 pixel écran en unités du monde
     g.save();g.setTransform(M[0]*DPR,M[1]*DPR,M[2]*DPR,M[3]*DPR,M[4]*DPR,M[5]*DPR);g.lineCap='round';g.lineJoin='round';
     // relief
-    g.strokeStyle='rgba(96,64,30,.5)';g.lineWidth=px*1;g.stroke(CNT.thin);g.strokeStyle='rgba(88,56,24,.72)';g.lineWidth=px*1.8;g.stroke(CNT.thick);
+    g.strokeStyle=SOL?'rgba(70,46,20,.2)':'rgba(96,64,30,.5)';g.lineWidth=px*1;g.stroke(CNT.thin);g.strokeStyle=SOL?'rgba(70,46,20,.34)':'rgba(88,56,24,.72)';g.lineWidth=px*1.6;g.stroke(CNT.thick);
     // marais
     for(const Mh of MARSH){g.beginPath();smooth(Mh.P.concat([Mh.P[0]]),g);g.closePath();g.fillStyle='rgba(96,128,108,.42)';g.fill();g.setLineDash([px*4,px*3]);g.strokeStyle='rgba(40,62,50,.6)';g.lineWidth=px;g.stroke();g.setLineDash([])}
     if(s2>.15){g.strokeStyle='rgba(38,58,46,.75)';g.lineWidth=px*.9;const z=px*5;g.beginPath();for(const [x,y] of REEDS){g.moveTo(x-z,y);g.lineTo(x+z,y);g.moveTo(x,y);g.lineTo(x-z*.5,y-z);g.moveTo(x,y);g.lineTo(x,y-z*1.2);g.moveTo(x,y);g.lineTo(x+z*.5,y-z)}g.stroke()}
     // fleuves : berge sombre, eau, reflet au milieu
-    RIVS.forEach((R,i)=>{const P=RIVP[i];g.strokeStyle='rgba(120,140,90,.35)';g.lineWidth=R.hw*2+px*14;g.stroke(P);
+    RIVS.forEach((R,i)=>{const P=RIVP[i];g.strokeStyle='rgba(190,180,138,.8)';g.lineWidth=R.hw*2+7*K;g.stroke(P);
       g.strokeStyle=INKC;g.lineWidth=R.hw*2+px*3;g.stroke(P);g.strokeStyle=WATER;g.lineWidth=R.hw*2;g.stroke(P);
       g.strokeStyle='rgba(255,255,255,.22)';g.lineWidth=Math.max(px,R.hw*.25);g.setLineDash([px*14,px*18]);g.stroke(P);g.setLineDash([])});
     // gués et ponts
-    for(const c of CROSS){g.save();g.translate(c.x,c.y);g.rotate(c.a);const L=c.hw+18*K,w=c.w;
+    for(const c of CROSS){g.save();g.translate(c.x,c.y);g.rotate(c.a);const L=c.hw+7*K,w=c.w;
       if(c.k==='gue'){g.fillStyle='rgba(222,206,158,.88)';g.beginPath();g.ellipse(0,0,w/2,L,0,0,6.283);g.fill();g.setLineDash([px*3,px*3]);g.strokeStyle='rgba(70,52,28,.75)';g.lineWidth=px*1.2;g.stroke();g.setLineDash([]);
         g.fillStyle='rgba(90,74,48,.55)';for(let k=0;k<14;k++){const a=(k*2.399)%6.283,r=Math.sqrt((k+.5)/14);g.beginPath();g.arc(Math.cos(a)*r*w*.42,Math.sin(a)*r*L*.85,px*1.6,0,6.283);g.fill()}}
       else{g.fillStyle='#d8c497';g.strokeStyle=INKC;g.lineWidth=px*1.5;
