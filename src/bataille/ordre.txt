@@ -25,6 +25,7 @@
 024-effectifs-reels-fil-armees-v190-choix-de.part
 025-equilibrage-bataille-fil-equilibrage-10.part
 026-performance-des-grandes-batailles-fil-pe.part
-027-boucle.part
-028-interface-bronze-bataille-fil-refaire-l.part
-029-bandeau-d-armee-fil-interface-12-nov.part
+027-ia-plan-de-bataille-fil-ameliorer-l-ia-d.part
+028-boucle.part
+029-interface-bronze-bataille-fil-refaire-l.part
+030-bandeau-d-armee-fil-interface-12-nov.part
