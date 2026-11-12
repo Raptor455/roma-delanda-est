@@ -134,14 +134,16 @@ async function main() {
       await p.click('#chgBGo'); await p.waitForTimeout(2500);
       const f = p.frames().find(f => /bataille\.html/.test(f.url()));
       if (!f) throw new Error('la page de bataille ne s\'est pas ouverte');
-      await f.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => /Déployer mes troupes/.test(b.innerText)); if (b) b.click(); }); await p.waitForTimeout(2500);
+      await f.waitForFunction(() => { const b = document.getElementById('bDepGo'); return b && b.offsetParent; }, null, { timeout: 30000 }); // on arrive directement au déploiement
       await f.evaluate(() => { const b = document.getElementById('bDepGo'); if (b) b.click(); }); await p.waitForTimeout(2000);
       const r = await f.evaluate(() => window.__ev(`(()=>{const B=window.__bellum;const tot=()=>{const s=[0,0];for(const u of B.units)s[u.side]+=u.men||0;return s.map(Math.round)};const a=tot();let err=null;
-        try{for(let i=0;i<2700;i++)B.step(1/15)}catch(e){err=String(e&&e.message||e).slice(0,200)}return JSON.stringify({a,b:tot(),n:B.units.length,err})})()`)).then(JSON.parse);
+        try{const pas=dt=>(window.__pilote?window.__pilote.step:B.step)(dt); /* le pas complet (sortie des camps, déroute générale), pas celui figé dans __bellum */
+          for(let i=0;i<7200;i++){pas(1/15);if(i%150===0){/* le joueur « joue simplement » : ses carrés libres marchent sur l'ennemi le plus proche (l'ennemi en défense, moins nombreux, ne vient pas de lui-même) */
+          const E=B.units.filter(u=>u.side===1&&!u.dead&&!u.fled&&!u.routing&&!u.pend);for(const u of B.units){if(u.side!==0||u.dead||u.fled||u.routing||u.pend||u.order||u._wait||u._ex||!E.length)continue;let t=null,d=1e9;for(const e of E){const q=Math.hypot(e.x-u.x,e.y-u.y);if(q<d){d=q;t=e}}u.order={type:'attack',target:t}}}}}catch(e){err=String(e&&e.message||e).slice(0,200)}return JSON.stringify({a,b:tot(),n:B.units.length,err})})()`)).then(JSON.parse);
       await p.screenshot({ path: path.join(RAPPORT, 'bataille.png') });
       const ok = !r.err && !p.errs.length && r.n > 0 && r.b[0] < r.a[0] && r.b[1] < r.a[1];
-      note('Bataille : ouverture, déploiement, 3 minutes de combat', ok, `Carthage ${r.a[0]} → ${r.b[0]}, Rome ${r.a[1]} → ${r.b[1]}` + (r.err ? ' · ' + r.err : '') + (p.errs.length ? ' · ' + p.errs.slice(0, 3).join(' | ') : ''));
-    } catch (e) { note('Bataille : ouverture, déploiement, 3 minutes de combat', false, String(e.message || e).slice(0, 300)); if (p) await p.screenshot({ path: path.join(RAPPORT, 'echec-bataille.png') }).catch(() => {}); }
+      note('Bataille : ouverture, déploiement direct, 8 minutes de combat', ok, `Carthage ${r.a[0]} → ${r.b[0]}, Rome ${r.a[1]} → ${r.b[1]}` + (r.err ? ' · ' + r.err : '') + (p.errs.length ? ' · ' + p.errs.slice(0, 3).join(' | ') : ''));
+    } catch (e) { note('Bataille : ouverture, déploiement direct, 8 minutes de combat', false, String(e.message || e).slice(0, 300)); if (p) await p.screenshot({ path: path.join(RAPPORT, 'echec-bataille.png') }).catch(() => {}); }
     if (p) { await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await p.close(); }
   }
 

@@ -202,7 +202,7 @@ function flee(u,dt){
   if(!u.rallied&&u.routeT>14&&nd>420*G&&frac(u)>.3){u.routing=false;u.rallied=true;u.morale=u.T.morale*.4;u.dirty=true;u.ang=u.side===0?-Math.PI/2:Math.PI/2}
   if(u.y<-60||u.y>H+60){u.fled=true;u.dead=true;selected.delete(u)}
 }
-function ai(){
+function ai(){try{if(window.__iaB&&window.__iaB.tick())return}catch(e){console.warn('IA plan',e)}/*IA-PLAN*/
   const mine=units.filter(u=>u.side===1&&!u.dead&&!u.routing),foes=units.filter(u=>u.side===0&&!u.dead&&!u.routing);
   if(!foes.length)return;
   for(const u of mine){

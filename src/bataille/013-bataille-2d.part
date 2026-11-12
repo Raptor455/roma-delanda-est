@@ -1,8 +1,8 @@
 /* ================= BATAILLE 2D ================= */
 // Vue de carte façon atlas : sol peint (image de la campagne quand elle est envoyée), régiments en carrés symboliques
 // (X infanterie, diagonale cavalerie, trois ronds tirailleurs), étendards des généraux. La simulation ne change pas :
-// seules la caméra, le rendu et la conversion écran ↔ terrain sont remplacés. « Vue 3D » dans les options rend l'ancienne vue.
-const V3D=(()=>{try{const q=new URLSearchParams(location.search).get('vue');if(q)return q==='3d';return localStorage.getItem('bellum.vue')==='3d'}catch(e){return false}})();
+// seules la caméra, le rendu et la conversion écran ↔ terrain sont remplacés.
+const V3D=false; /* la vue 3D est retirée (12 nov.) : les batailles sont en 2D */
 if(!V3D){
   const cv2=document.createElement('canvas');cv2.id='map2d';cv2.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block';
   host.appendChild(cv2);const g2=cv2.getContext('2d');
@@ -747,7 +747,8 @@ if(!V3D){
         et vont se ranger. L'ennemi fait de même, puis son IA reprend la main. Un camp laissé sans défenseur peut être pillé :
         provisions perdues (res.pille pour la campagne), moral de l'armée qui s'effondre. -- */
   const SLOWK=1,KSP=19,KFL=50,KBK=120,KFR=38,LOOT_T=12;let KAMP=null;
-  const CAMPS_ON=()=>ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
+  const BANC=/[?&]banc=1/.test(location.search); // banc d'essai (outils/banc) : pas de camps, la bataille commence rangée
+  const CAMPS_ON=()=>!BANC&&ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
   const krnd=s=>{let a=s>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}};
   function campGeom(side){const P=units.filter(u=>u.side===side&&!u.dead&&!u.pend),E=units.filter(u=>u.side!==side&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
     const pc=cen(P),ec=cen(E),dd=Math.hypot(pc.x-ec.x,pc.y-ec.y)||1,n={x:(pc.x-ec.x)/dd,y:(pc.y-ec.y)/dd},t={x:-n.y,y:n.x},N=P.length,sp=KSP;
@@ -759,7 +760,8 @@ if(!V3D){
     const V=window.__villes,bad=(x,y)=>{const RG=window.__rangees;try{if(RG&&((RG.wet&&RG.wet(x,y))||(RG.inMarsh&&RG.inMarsh(x,y))))return true}catch(e){}if(!V||!V.P||!V.W2P)return false;try{const q=V.W2P(x,y),o=V.dbgPt(q[0],q[1]);return !!(V.inCity(q[0],q[1])||o.town||o.water||o.wall)}catch(e){return false}};
     const mk=(la,de)=>{const q={x:pc.x+n.x*de+t.x*la,y:pc.y+n.y*de+t.y*la};q.x=Math.max(BX0()+R,Math.min(BX1()-R,q.x));q.y=Math.max(BY0()+R,Math.min(BY1()-R,q.y));return q};
     const cost=q=>{let b=0;for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)if(bad(q.x+t.x*i*(w/2+30)/3+n.x*j*(d/2+30)/3,q.y+t.y*i*(w/2+30)/3+n.y*j*(d/2+30)/3))b+=4;
-      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);for(let i=1;i<=10;i++)if(bad(gx+(pc.x-gx)*i/10,gy+(pc.y-gy)*i/10))b+=2;
+      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);/* le chemin de la porte à l'armée, sondé tous les 25 m : un camp de l'autre côté d'un fleuve ou d'un marais bloquait toute l'armée sur la rive */
+      {const ns=Math.max(10,Math.ceil(Math.hypot(pc.x-gx,pc.y-gy)/25));let cut=0;for(let i=1;i<=ns;i++)if(bad(gx+(pc.x-gx)*i/ns,gy+(pc.y-gy)*i/ns))cut++;if(cut)b+=60+cut}
       for(const u of P){const dx=u.x-q.x,dy=u.y-q.y;if(Math.abs(dx*t.x+dy*t.y)<w/2+40&&Math.abs(dx*n.x+dy*n.y)<d/2+60)b+=.5}return b};
     const D0=EXT()?6000:mx+170+d/2;let c=mk(0,D0),best=cost(c);
     if(best)for(const de of (EXT()?[D0,mx+900,mx+500,mx+170+d/2]:[D0,D0*.6,mx*.3,0]))for(const la of [0,-260,260,-520,520,-800,800,-1100,1100,-1400,1400]){if(!la&&de<D0)continue;const q=mk(la,de);const v=cost(q)+Math.abs(la)/2000+(D0-de)/4000;if(v<best-1e-9){best=v;c=q}if(best<1)break}
@@ -994,23 +996,34 @@ if(!V3D){
       if(nEle&&ri>0)for(let i=0;i<Math.min(2,nEle);i++)eleph(Wd*.93-i*58*s+(ri===1?-8:0),y,s*.82)});
     gr=g.createRadialGradient(Wd/2,Hd/2,Hd*.5,Wd/2,Hd/2,Wd*.62);gr.addColorStop(0,'rgba(30,20,8,0)');gr.addColorStop(1,'rgba(30,20,8,.4)');g.fillStyle=gr;g.fillRect(0,0,Wd,Hd)}
   // ---- l'aperçu des forces ----
+  const DIRECT=()=>ISCAMP()&&!BANC&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P; // deux écrans : la fenêtre de la campagne, puis le déploiement
   function apercuForces(){if(!ISCAMP())return;const card=document.querySelector('#start .card');if(!card)return;const b=CAMP.b,esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     if(!document.getElementById('apercuCss')){const st=document.createElement('style');st.id='apercuCss';st.textContent=`#apercu{display:flex;flex-direction:column;gap:10px}
 #apercu canvas{width:100%;height:auto;display:block;border-radius:6px;border:1px solid rgba(214,184,120,.55)}
 #apercu .af{display:grid;grid-template-columns:1fr 1fr;gap:10px}#apercu .ac{border:1px solid rgba(214,184,120,.28);border-radius:6px;padding:8px 10px;background:rgba(0,0,0,.16);min-width:0}
 #apercu .an{font-family:var(--display,Georgia,serif);font-size:18px;display:flex;align-items:center;gap:7px}#apercu .an i{width:12px;height:12px;border-radius:2px;display:inline-block;border:1px solid rgba(0,0,0,.5);flex:none}
 #apercu .ag{font-size:13px;opacity:.9;margin:2px 0 5px}#apercu .at{font-size:15px;font-variant-numeric:tabular-nums}#apercu .ak{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;opacity:.92;margin-top:4px}
+#apVolet{position:absolute;left:20px;top:92px;width:292px;max-height:calc(100% - 432px);min-height:120px;overflow:auto;z-index:8;background:rgba(28,22,16,.95);border:1px solid rgba(214,184,120,.5);border-radius:8px;padding:8px 10px;color:var(--ink,#efe6d2);box-shadow:0 6px 18px rgba(0,0,0,.4)}
+#apVolet[hidden]{display:none}#apVolet .ah{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:var(--display,Georgia,serif);font-size:16px}#apVolet .ah button{padding:2px 9px;font-size:12px}
+#apVolet.plie{max-height:none;min-height:0;overflow:visible}#apVolet.plie #apercu{display:none}#apVolet #apercu{margin-top:8px}#apVolet #apercu .af{grid-template-columns:1fr}#apVolet .an{font-size:16px}
+#apVolet .ap{font-size:12.5px;opacity:.85;margin:0}
 #apercu .ar{font-size:13px;line-height:1.5}#apercu .ar b{font-weight:600}#apercu .ad{font-size:13px;opacity:.85;margin:0}
 @media (max-width:560px){#apercu .af{grid-template-columns:1fr}}`;document.head.appendChild(st)}
     for(const p of card.querySelectorAll(':scope > p'))if(!p.className||p.classList.contains('ech-p')||/^\s*Vous\s*:/.test(p.textContent))p.style.display='none';
     const h=card.querySelector('h2');if(h&&b.title)h.textContent=b.title;
-    let box=document.getElementById('apercu');if(!box){box=document.createElement('div');box.id='apercu';if(h)h.after(box);else card.prepend(box)}
+    let box=document.getElementById('apercu');if(!box){box=document.createElement('div');box.id='apercu'}
+    if(DIRECT()){let v=document.getElementById('apVolet');if(!v){v=document.createElement('div');v.id='apVolet';v.hidden=true;v.innerHTML='<div class="ah"><span></span><button type="button" aria-expanded="true">Replier</button></div>';$('app').appendChild(v);
+        v.querySelector('button').onclick=()=>{const p=v.classList.toggle('plie');v.querySelector('button').textContent=p?'Aperçu des forces':'Replier';v.querySelector('button').setAttribute('aria-expanded',p?'false':'true')}}
+      v.querySelector('.ah span').textContent=b.title||'Aperçu des forces';if(box.parentNode!==v)v.appendChild(box)}
+    else if(box.parentNode!==card){if(h)h.after(box);else card.prepend(box)}
+    // les remarques des autres modules sur la bataille (murs voisins, brume…) suivent dans le volet
+    const notes=DIRECT()?[...card.querySelectorAll(':scope > p')].filter(p=>p.style.display!=='none'&&p.textContent.trim()).map(p=>`<p class="ap">${esc(p.textContent.trim())}</p>`).join(''):'';
     const KN=[['inf','Infanterie'],['skirm','Tirailleurs'],['cav','Cavalerie'],['eleph','Éléphants']],kOf=k=>k==='lcav'?'cav':k;
     const col=s=>{const U=units.filter(u=>u.side===s&&!u.dead&&!u.pend),regs=new Map();for(const u of U){const id=rkey(u);if(!regs.has(id))regs.set(id,kOf(u.T.kind))}
       const men=Math.round(U.reduce((a,u)=>a+u.men*(u._ms||1),0)),cnt={};for(const k of regs.values())cnt[k]=(cnt[k]||0)+1;const cmd=String((b.cmd&&b.cmd[s?'e':'p'])||'');
       return `<div class="ac"><div class="an"><i style="background:${PAL[s].blk}"></i>${esc(PAL[s].n||(s?b.enemy:'Vous'))}</div><div class="ag">${esc(cmd||(s?'Commandement inconnu':''))}</div><div class="at"><b>${men.toLocaleString('fr-FR')}</b> hommes · ${regs.size} régiment${regs.size>1?'s':''}</div><div class="ak">${KN.filter(k=>cnt[k[0]]).map(k=>`<span>${k[1]} ${cnt[k[0]]}</span>`).join('')}</div></div>`};
     const R=resList().filter(r=>!r.done).slice().sort((a,c)=>a.arr-c.arr),rl=R.length?R.map(r=>`<div><b>${r.side?'Renfort ennemi':'Renfort'}</b> : ${esc(r.an||'une armée')}, ${resRegs(r)} régiment${resRegs(r)>1?'s':''}, ${resSide(r.e.dx,r.e.dy)}, vers ${mmss(r.arr)} de bataille</div>`).join(''):'<div>Aucun renfort attendu, ni pour vous ni pour l\'ennemi.</div>';
-    box.innerHTML=`<canvas width="1120" height="330" aria-label="Votre armée rangée face au camp ennemi"></canvas>${b.desc?`<p class="ad">${esc(b.desc)}</p>`:''}<div class="af">${col(0)}${col(1)}</div><div class="ar">${rl}</div>`;
+    box.innerHTML=`<canvas width="1120" height="330" aria-label="Votre armée rangée face au camp ennemi"></canvas>${b.desc?`<p class="ad">${esc(b.desc)}</p>`:''}<div class="af">${col(0)}${col(1)}</div><div class="ar">${rl}</div>${notes}`;
     try{fresque(box.querySelector('canvas'))}catch(e){console.warn('fresque',e)}}
   // ---- en bataille : compte à rebours et flèche d'arrivée des renforts ----
   function drawRes(){if(!ISCAMP()||ended)return;const R=resList();if(!R.length)return;const T=performance.now()/1000;
@@ -1027,7 +1040,9 @@ if(!V3D){
       g2.font='bold 13px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';const tw=g2.measureText(txt).width+16;lx=Math.max(tw/2+8,Math.min(SW-tw/2-8,lx));ly=Math.max(100,Math.min(SH-160,ly));
       g2.fillStyle='rgba(22,16,10,.88)';g2.fillRect(lx-tw/2,ly-11,tw,22);g2.strokeStyle=P.lt||'#c9a45a';g2.lineWidth=1;g2.strokeRect(lx-tw/2,ly-11,tw,22);g2.fillStyle=r.side?'#f3b9ab':'#f1e2b8';g2.fillText(txt,lx,ly);g2.restore()}}
   {const _db6=drawBanners;drawBanners=function(){const r=_db6.apply(this,arguments);try{drawRes()}catch(e){}return r}}
-  {const _su6=setup;setup=function(){const r=_su6.apply(this,arguments);try{extRes()}catch(e){console.warn('renforts',e)}try{apercuForces();setTimeout(()=>{try{if(!started&&!DEP)apercuForces()}catch(e){}},60)}catch(e){console.warn('aperçu',e)}return r}}
+  {const _su6=setup;setup=function(){const r=_su6.apply(this,arguments);try{extRes()}catch(e){console.warn('renforts',e)}try{apercuForces();setTimeout(()=>{try{if(!started&&!DEP){apercuForces();if(DIRECT()){startDep();apercuForces()}}}catch(e){console.warn('aperçu',e)}},60)}catch(e){console.warn('aperçu',e)}return r}}
+  {const _sd6=startDep;startDep=function(){const r=_sd6.apply(this,arguments);const v=document.getElementById('apVolet');if(v&&DEP&&DIRECT())v.hidden=false;return r}}
+  {const _ed6=endDep;endDep=function(){const v=document.getElementById('apVolet');if(v)v.hidden=true;return _ed6.apply(this,arguments)}}
   // ---- minicarte du champ étendu ----
   {const _dm=drawMinimap;drawMinimap=function(){if(!EXT()||!mmBg)return _dm.apply(this,arguments);
       const x0=BX0()-20,x1=BX1()+20,y0=BY0()-20,y1=BY1()+20,k=Math.min(480/(x1-x0),300/(y1-y0)),ox=(480-(x1-x0)*k)/2,oy=(300-(y1-y0)*k)/2,X=x=>ox+(x-x0)*k,Y=y=>oy+(y-y0)*k;
@@ -1041,7 +1056,58 @@ if(!V3D){
     document.addEventListener('pointerdown',e=>{if(e.target!==mm||!EXT())return;e.stopImmediatePropagation();drag=true;try{mm.setPointerCapture(e.pointerId)}catch(_){}go(e)},true);
     document.addEventListener('pointermove',e=>{if(!drag||!EXT())return;if(e.target===mm)e.stopImmediatePropagation();go(e)},true);
     for(const ev of ['pointerup','pointercancel'])document.addEventListener(ev,()=>{drag=false},true)}
-  window.__pilote={stance:k=>applyStance(k),regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
+  /* -- UNE BATAILLE JUSTE (plan de reprise, étape 2) --
+        RIPOSTE : un régiment du joueur resté sans ordre se défend seul quand on lui tire dessus, quand on le charge ou quand ses
+        voisins de régiment sont au contact, sauf s'il a l'ordre « Tenir » ou « Repli ». Il ne poursuit pas au-delà de 260 m de sa place.
+        VRAIE FIN : une armée qui n'a plus qu'une fraction de ses hommes debout (FIN_F), ou dont le moral s'est effondré, part en
+        déroute générale ; le vainqueur poursuit FIN_P secondes, puis vient le bilan. -- */
+  const FIN_F=.42,FIN_FM=.55,FIN_M=.34,FIN_P=22;let FIN=null,MSG2=null;
+  const say2=(tx,own)=>{MSG2={t:performance.now(),tx,own}};
+  function riposte(){if(!started||DEP||ended||(FIN&&FIN.gen!=null))return;const foes=units.filter(e=>e.side===1&&foeOk(e));if(!foes.length)return;
+    const near=(u,L,R)=>{let b=null,bd=R;for(const e of L){const d=Math.hypot(e.x-u.x,e.y-u.y);if(d<bd){bd=d;b=e}}return b};
+    for(const u of units){if(u.side!==0||u.dead||u.pend||u.routing||u._wait||u._ex||u._wd||u._st==='hold'||u._st==='back')continue;
+      if(u._rp&&!u.contacts.length&&Math.hypot(u.x-u._rp.x,u.y-u._rp.y)>260){u.order={type:'move',x:u._rp.x,y:u._rp.y,face:u._rp.a,run:false};u._rpT=time+12;u._rp=null;continue} // trop loin : on revient à sa place
+      if(u.order||u.contacts.length||(u._rpT||0)>time)continue;
+      if(u.T.kind==='skirm'){const n=near(u,foes.filter(e=>e.T.kind!=='skirm'),75);if(n){const d=Math.hypot(n.x-u.x,n.y-u.y)||1;u.order={type:'move',x:CLX(u.x-(n.x-u.x)/d*110),y:CLY(u.y-(n.y-u.y)/d*110),face:Math.atan2(n.y-u.y,n.x-u.x),run:true}}continue}
+      let t=null;const mates=regOf(u);
+      if(mates.some(v=>v!==u&&!v.dead&&v.contacts.length)){const L=[];for(const v of mates)for(const e of v.contacts)if(foeOk(e))L.push(e);t=near(u,foes,110)||near(u,L,200)}
+      if(!t&&u.underFire>0)t=near(u,foes.filter(e=>e.T.ranged),u.T.kind==='inf'?170:320)||near(u,foes,150);
+      if(!t){const n=near(u,foes,70);if(n&&(n.order&&n.order.type==='attack'||n.moving))t=n}
+      if(!t)continue;if(!u._rp)u._rp={x:u.x,y:u.y,a:u.ang};u._auto=true;u.order={type:'attack',target:t,run:Math.hypot(t.x-u.x,t.y-u.y)<160}}}
+  // forces debout de chaque camp, rapportées à ce qui est entré sur le champ
+  function finEtat(s){let m0=0,m=0,mo=0,n=0,pend=false;for(const u of units){if(u.side!==s)continue;if(u.pend){pend=true;continue}if(u._m0==null)u._m0=Math.max(u.men,u.T.men*.2);m0+=u._m0;if(!u.dead&&!u.routing){m+=u.men;mo+=Math.max(0,u.morale)/u.T.morale;n++}}
+    return {m0,m,f:m0?m/m0:0,mo:n?mo/n:0,n,pend}}
+  function finTick(){if(!started||ended||DEP)return;if(!FIN)FIN={gen:null,t:0,vide:[0,0]};
+    const E=[finEtat(0),finEtat(1)];
+    if(FIN.gen==null&&time>20)for(const s of [0,1]){const a=E[s],b=E[1-s];if(!a.n||!b.n||a.pend)continue;
+        // on ne lâche pied que si l'on est aussi le plus faible sur le terrain
+        if((a.f<FIN_F||(a.f<FIN_FM&&a.mo<FIN_M))&&a.m<b.m*1.15){FIN.gen=s;FIN.t=time;
+          for(const u of units)if(u.side===s&&!u.dead&&!u.pend){if(!u.routing)try{rout(u)}catch(e){}u.rallied=true}
+          say2(s===0?'Déroute générale : votre armée lâche pied !':'Déroute générale : l\'armée de '+PAL[s].n+' lâche pied !',s===0);break}}
+    // poursuite : les carrés libres du vainqueur courent sus aux fuyards
+    const w=FIN.gen!=null?1-FIN.gen:(E[0].n&&!E[1].n?0:E[1].n&&!E[0].n?1:null);
+    if(w!=null){if(!FIN.t)FIN.t=time;const run=units.filter(e=>e.side!==w&&!e.dead&&!e.pend&&e.routing&&!e.fled);
+      if(run.length&&Math.round(time*10)%8===0)for(const u of units){if(u.side!==w||u.dead||u.pend||u.routing||u.contacts.length||u._st==='hold'||u._st==='back'||u._wait||u._ex)continue;if(u.order&&u.order.type==='attack'&&u.order.target&&!u.order.target.dead)continue;
+          const R=u.T.kind==='cav'||u.T.kind==='lcav'?520:u.T.kind==='inf'?150:0;let b=null,bd=R;for(const e of run){const d=Math.hypot(e.x-u.x,e.y-u.y);if(d<bd){bd=d;b=e}}if(b){u.order={type:'attack',target:b,run:true};u._auto=true}}}
+    else if(FIN.gen==null)FIN.t=0}
+  // la fin attend la poursuite ; puis le bilan
+  {const _ce7=checkEnd;checkEnd=function(){if(!ended&&FIN&&FIN.t&&time<FIN.t+FIN_P&&units.some(e=>!e.dead&&!e.pend&&e.routing&&!e.fled)&&units.some(u=>!u.dead&&!u.pend&&!u.routing))return;
+      const was=ended,r=_ce7.apply(this,arguments);try{if(!was&&ended)bilan()}catch(e){console.warn('bilan',e)}return r}}
+  function bilan(){const S=$('endS');if(!S)return;const k=u=>(u.T.kind==='eleph'?0:1)*msOf(u);
+    const L=s=>{const U=units.filter(u=>u.side===s&&!u.pend&&u._m0!=null),eng=U.reduce((a,u)=>a+u._m0*k(u),0),left=U.reduce((a,u)=>a+(u.dead&&!u.fled?0:u.men)*k(u),0),fui=U.filter(u=>u.fled||(u.routing&&!u.dead)).reduce((a,u)=>a+u.men*k(u),0);
+      const regs=new Map();for(const u of U){const id=rkey(u),o=regs.get(id)||{n:0,ko:0};o.n++;if(u.dead||u.routing)o.ko++;regs.set(id,o)}let det=0;for(const o of regs.values())if(o.ko===o.n)det++;
+      return {eng,tues:Math.max(0,eng-left),fui,det,regs:regs.size}};
+    const a=L(0),b=L(1),pc=(x,t)=>t?Math.round(x/t*100)+' %':'',row=(s,o)=>`<span class="${s?'cr':'cp'}">${PAL[s].n}</span><span>${nf(o.eng)}</span><span>${nf(o.tues)} <small>(${pc(o.tues,o.eng)})</small></span><span>${nf(o.fui)}</span><span>${o.det} / ${o.regs}</span>`;
+    S.style.gridTemplateColumns='auto repeat(4,auto)';S.dataset.bilan='1';
+    S.innerHTML=`<span class="h">Armée</span><span class="h">Engagés</span><span class="h">Tués et blessés</span><span class="h">En fuite</span><span class="h">Régiments défaits</span>${row(0,a)}${row(1,b)}`+
+      `<span class="h" style="grid-column:1/-1;margin-top:6px">Durée : ${mmss(time)}${FIN&&FIN.gen!=null?' · déroute générale à '+mmss(FIN.t):''}${KAMP&&KAMP.s.some(c=>c.looted)?' · '+KAMP.s.filter(c=>c.looted).map(c=>'camp de '+PAL[c.side].n+' pillé').join(', '):''}</span>`;
+    const P=$('endP');if(P&&ISCAMP()&&FIN&&FIN.gen!=null)P.textContent=FIN.gen===1?'L\'armée ennemie a lâché pied et vos troupes l\'ont poursuivie : le champ de bataille est à vous.':'Votre armée a lâché pied. Les survivants se replient.'}
+  {const _ai7=ai;ai=function(){const r=_ai7.apply(this,arguments);try{riposte()}catch(e){console.warn('riposte',e)}return r}}
+  {const _sp7=step;step=function(dt){const r=_sp7.apply(this,arguments);try{finTick()}catch(e){console.warn('fin',e)}return r}}
+  {const _su7=setup;setup=function(){FIN=null;MSG2=null;return _su7.apply(this,arguments)}}
+  {const _db7=drawBanners;drawBanners=function(){const r=_db7.apply(this,arguments);const m=MSG2;if(m){const a=(performance.now()-m.t)/1000;if(a>7)MSG2=null;else{g2.save();g2.globalAlpha=a<.4?a/.4:a>6?7-a:1;g2.font='bold 18px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';const tw=g2.measureText(m.tx).width+40,x=SW/2,y=SH*.27;
+        g2.fillStyle='rgba(24,16,10,.9)';g2.fillRect(x-tw/2,y-20,tw,40);g2.strokeStyle=m.own?'#c0503c':'#c9a45a';g2.lineWidth=1.5;g2.strokeRect(x-tw/2,y-20,tw,40);g2.fillStyle=m.own?'#f3b0a0':'#f1e2b8';g2.fillText(m.tx,x,y);g2.restore()}}return r}}
+  window.__pilote={get fin(){return FIN},stance:k=>applyStance(k),regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
@@ -1055,7 +1121,7 @@ if(!V3D){
   {const _rs3=renderSel;renderSel=function(){const r=_rs3.apply(this,arguments);try{fixSel()}catch(e){}return r}}
   function fixTop(){if(!MSON())return;const sum=s=>units.filter(u=>u.side===s&&!u.dead&&!u.routing).reduce((a,u)=>a+(u.T.kind==='eleph'?u.men*40:u.men)*msOf(u),0);
     const a=$('fP'),b=$('fR');if(a&&/\d/.test(a.textContent))a.textContent=PAL[0].n+' '+nf(sum(0));if(b&&/\d/.test(b.textContent))b.textContent=nf(sum(1))+' '+PAL[1].n}
-  {const _ce=checkEnd;checkEnd=function(){const was=ended,r=_ce.apply(this,arguments);try{if(!was&&ended&&MSON()){const S=$('endS');if(S){const sp=S.children;
+  {const _ce=checkEnd;checkEnd=function(){const was=ended,r=_ce.apply(this,arguments);try{if(!was&&ended&&MSON()){const S=$('endS');if(S&&!S.dataset.bilan){const sp=S.children;
       const loss=s=>units.filter(u=>u.side===s&&u.T.kind!=='eleph').reduce((a,u)=>a+(u.fled?0:(u.T.men-u.men)*msOf(u)),0);
       if(sp[4])sp[4].textContent=nf(loss(0));if(sp[7])sp[7].textContent=nf(loss(1))}}}catch(e){}return r}}
   // étiquettes : seulement pour les carrés choisis ou survolés (les fissures montrent déjà l'usure)
@@ -1088,8 +1154,4 @@ const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTo
   // le sol se prépare au premier affichage (après l'arrivée éventuelle de l'image de la campagne)
   const _bt=buildTerrain;buildTerrain=function(){_bt();try{if(GROUND)groundFromCampaign();if(!GM)buildGround()}catch(e){console.warn('sol 2D',e);buildGround()}};
 }
-try{const o=document.querySelector('#sFig option[value="bellum"]');if(o)o.textContent='Roma Delenda Est (construites)'}catch(e){}
-// option « Vue 3D » (ancienne vue) sur l'écran d'accueil
-try{const sF=$('sFig'),lb=document.createElement('label');lb.innerHTML='<input type="checkbox" id="c3d"> Vue 3D (ancienne)';sF.parentElement.after(lb);
-  const c=$('c3d');c.checked=V3D;c.onchange=()=>{try{localStorage.setItem('bellum.vue',c.checked?'3d':'2d')}catch(e){}const u=new URL(location.href);u.searchParams.delete('vue');location.href=u.href}}catch(e){}
 /* ================= FIN BATAILLE 2D ================= */

@@ -138,16 +138,12 @@ button.on{background:var(--gold);color:#1d1a12;border-color:var(--gold)}
       <p>Placez vos troupes pendant que le temps est arrêté, puis lancez la bataille. Les mêlées sont longues : c'est la charge, les flancs et le moral qui décident. Tenez le centre, écrasez les cavaleries adverses et prenez les légions à revers.</p>
       <p style="font-size:13px">Commandes au clic droit comme dans Total War : clic pour marcher, double clic pour courir, glisser pour tracer la ligne de front. Le bouton « ? » en haut à droite détaille tout.</p>
       <div id="taille" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px">
-        <label>Taille des unités <select id="sTaille"><option value="1">×1 (60 hommes)</option><option value="2">×2 (120)</option><option value="3">×3 (180)</option><option value="4">×4 (240)</option><option value="6">×6 (360, test)</option><option value="8">×8 (480, test)</option></select></label>
-        <label><input type="checkbox" id="cOmbres"> Ombres</label>
-        <label>Figurines <select id="sFig"><option value="bellum">Bellum (construites)</option><option value="beelim">Modèles Beelim</option></select></label>
       </div>
       <button class="go" id="bGo" type="button">Lancer la bataille</button>
       <button id="bPrep" type="button" style="align-self:flex-start">Préparer le déploiement d'abord</button>
       <button id="bCamp" type="button" style="align-self:flex-start">Mode campagne</button>
       <button id="bRevue" type="button" style="align-self:flex-start">Revue des troupes (toutes les unités et équipements)</button>
       <button id="bPeuples" type="button" style="align-self:flex-start">Revue des peuples (Rome, Macédoine, Sparte, Athènes)</button>
-      <p style="font-size:12px">Modèles Beelim : Beelim Solutions.</p>
     </div>
   </div>
 
@@ -162,7 +158,6 @@ button.on{background:var(--gold);color:#1d1a12;border-color:var(--gold)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 (function(){
 /* Taille des unités (test de charge) : ×1 = 60 fantassins par régiment. Réglée sur l'écran d'accueil ou par ?taille=4 dans l'adresse. */
@@ -410,7 +405,7 @@ function flee(u,dt){
   if(!u.rallied&&u.routeT>14&&nd>420*G&&frac(u)>.3){u.routing=false;u.rallied=true;u.morale=u.T.morale*.4;u.dirty=true;u.ang=u.side===0?-Math.PI/2:Math.PI/2}
   if(u.y<-60||u.y>H+60){u.fled=true;u.dead=true;selected.delete(u)}
 }
-function ai(){
+function ai(){try{if(window.__iaB&&window.__iaB.tick())return}catch(e){console.warn('IA plan',e)}/*IA-PLAN*/
   const mine=units.filter(u=>u.side===1&&!u.dead&&!u.routing),foes=units.filter(u=>u.side===0&&!u.dead&&!u.routing);
   if(!foes.length)return;
   for(const u of mine){
@@ -2206,8 +2201,8 @@ window.__echelle={get res(){return RESv},arrive,get corps(){return CORPS3}};
 /* ================= BATAILLE 2D ================= */
 // Vue de carte façon atlas : sol peint (image de la campagne quand elle est envoyée), régiments en carrés symboliques
 // (X infanterie, diagonale cavalerie, trois ronds tirailleurs), étendards des généraux. La simulation ne change pas :
-// seules la caméra, le rendu et la conversion écran ↔ terrain sont remplacés. « Vue 3D » dans les options rend l'ancienne vue.
-const V3D=(()=>{try{const q=new URLSearchParams(location.search).get('vue');if(q)return q==='3d';return localStorage.getItem('bellum.vue')==='3d'}catch(e){return false}})();
+// seules la caméra, le rendu et la conversion écran ↔ terrain sont remplacés.
+const V3D=false; /* la vue 3D est retirée (12 nov.) : les batailles sont en 2D */
 if(!V3D){
   const cv2=document.createElement('canvas');cv2.id='map2d';cv2.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block';
   host.appendChild(cv2);const g2=cv2.getContext('2d');
@@ -2952,7 +2947,8 @@ if(!V3D){
         et vont se ranger. L'ennemi fait de même, puis son IA reprend la main. Un camp laissé sans défenseur peut être pillé :
         provisions perdues (res.pille pour la campagne), moral de l'armée qui s'effondre. -- */
   const SLOWK=1,KSP=19,KFL=50,KBK=120,KFR=38,LOOT_T=12;let KAMP=null;
-  const CAMPS_ON=()=>ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
+  const BANC=/[?&]banc=1/.test(location.search); // banc d'essai (outils/banc) : pas de camps, la bataille commence rangée
+  const CAMPS_ON=()=>!BANC&&ISCAMP()&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P;
   const krnd=s=>{let a=s>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}};
   function campGeom(side){const P=units.filter(u=>u.side===side&&!u.dead&&!u.pend),E=units.filter(u=>u.side!==side&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
     const pc=cen(P),ec=cen(E),dd=Math.hypot(pc.x-ec.x,pc.y-ec.y)||1,n={x:(pc.x-ec.x)/dd,y:(pc.y-ec.y)/dd},t={x:-n.y,y:n.x},N=P.length,sp=KSP;
@@ -2964,7 +2960,8 @@ if(!V3D){
     const V=window.__villes,bad=(x,y)=>{const RG=window.__rangees;try{if(RG&&((RG.wet&&RG.wet(x,y))||(RG.inMarsh&&RG.inMarsh(x,y))))return true}catch(e){}if(!V||!V.P||!V.W2P)return false;try{const q=V.W2P(x,y),o=V.dbgPt(q[0],q[1]);return !!(V.inCity(q[0],q[1])||o.town||o.water||o.wall)}catch(e){return false}};
     const mk=(la,de)=>{const q={x:pc.x+n.x*de+t.x*la,y:pc.y+n.y*de+t.y*la};q.x=Math.max(BX0()+R,Math.min(BX1()-R,q.x));q.y=Math.max(BY0()+R,Math.min(BY1()-R,q.y));return q};
     const cost=q=>{let b=0;for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)if(bad(q.x+t.x*i*(w/2+30)/3+n.x*j*(d/2+30)/3,q.y+t.y*i*(w/2+30)/3+n.y*j*(d/2+30)/3))b+=4;
-      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);for(let i=1;i<=10;i++)if(bad(gx+(pc.x-gx)*i/10,gy+(pc.y-gy)*i/10))b+=2;
+      const gx=q.x-n.x*(d/2+14),gy=q.y-n.y*(d/2+14);/* le chemin de la porte à l'armée, sondé tous les 25 m : un camp de l'autre côté d'un fleuve ou d'un marais bloquait toute l'armée sur la rive */
+      {const ns=Math.max(10,Math.ceil(Math.hypot(pc.x-gx,pc.y-gy)/25));let cut=0;for(let i=1;i<=ns;i++)if(bad(gx+(pc.x-gx)*i/ns,gy+(pc.y-gy)*i/ns))cut++;if(cut)b+=60+cut}
       for(const u of P){const dx=u.x-q.x,dy=u.y-q.y;if(Math.abs(dx*t.x+dy*t.y)<w/2+40&&Math.abs(dx*n.x+dy*n.y)<d/2+60)b+=.5}return b};
     const D0=EXT()?6000:mx+170+d/2;let c=mk(0,D0),best=cost(c);
     if(best)for(const de of (EXT()?[D0,mx+900,mx+500,mx+170+d/2]:[D0,D0*.6,mx*.3,0]))for(const la of [0,-260,260,-520,520,-800,800,-1100,1100,-1400,1400]){if(!la&&de<D0)continue;const q=mk(la,de);const v=cost(q)+Math.abs(la)/2000+(D0-de)/4000;if(v<best-1e-9){best=v;c=q}if(best<1)break}
@@ -3199,23 +3196,34 @@ if(!V3D){
       if(nEle&&ri>0)for(let i=0;i<Math.min(2,nEle);i++)eleph(Wd*.93-i*58*s+(ri===1?-8:0),y,s*.82)});
     gr=g.createRadialGradient(Wd/2,Hd/2,Hd*.5,Wd/2,Hd/2,Wd*.62);gr.addColorStop(0,'rgba(30,20,8,0)');gr.addColorStop(1,'rgba(30,20,8,.4)');g.fillStyle=gr;g.fillRect(0,0,Wd,Hd)}
   // ---- l'aperçu des forces ----
+  const DIRECT=()=>ISCAMP()&&!BANC&&!CAMP.pvp&&!CAMP.b.walls&&!(window.__villes&&window.__villes.MODE==='assaut')&&!REVUE&&!REVUE_P; // deux écrans : la fenêtre de la campagne, puis le déploiement
   function apercuForces(){if(!ISCAMP())return;const card=document.querySelector('#start .card');if(!card)return;const b=CAMP.b,esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     if(!document.getElementById('apercuCss')){const st=document.createElement('style');st.id='apercuCss';st.textContent=`#apercu{display:flex;flex-direction:column;gap:10px}
 #apercu canvas{width:100%;height:auto;display:block;border-radius:6px;border:1px solid rgba(214,184,120,.55)}
 #apercu .af{display:grid;grid-template-columns:1fr 1fr;gap:10px}#apercu .ac{border:1px solid rgba(214,184,120,.28);border-radius:6px;padding:8px 10px;background:rgba(0,0,0,.16);min-width:0}
 #apercu .an{font-family:var(--display,Georgia,serif);font-size:18px;display:flex;align-items:center;gap:7px}#apercu .an i{width:12px;height:12px;border-radius:2px;display:inline-block;border:1px solid rgba(0,0,0,.5);flex:none}
 #apercu .ag{font-size:13px;opacity:.9;margin:2px 0 5px}#apercu .at{font-size:15px;font-variant-numeric:tabular-nums}#apercu .ak{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;opacity:.92;margin-top:4px}
+#apVolet{position:absolute;left:20px;top:92px;width:292px;max-height:calc(100% - 432px);min-height:120px;overflow:auto;z-index:8;background:rgba(28,22,16,.95);border:1px solid rgba(214,184,120,.5);border-radius:8px;padding:8px 10px;color:var(--ink,#efe6d2);box-shadow:0 6px 18px rgba(0,0,0,.4)}
+#apVolet[hidden]{display:none}#apVolet .ah{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:var(--display,Georgia,serif);font-size:16px}#apVolet .ah button{padding:2px 9px;font-size:12px}
+#apVolet.plie{max-height:none;min-height:0;overflow:visible}#apVolet.plie #apercu{display:none}#apVolet #apercu{margin-top:8px}#apVolet #apercu .af{grid-template-columns:1fr}#apVolet .an{font-size:16px}
+#apVolet .ap{font-size:12.5px;opacity:.85;margin:0}
 #apercu .ar{font-size:13px;line-height:1.5}#apercu .ar b{font-weight:600}#apercu .ad{font-size:13px;opacity:.85;margin:0}
 @media (max-width:560px){#apercu .af{grid-template-columns:1fr}}`;document.head.appendChild(st)}
     for(const p of card.querySelectorAll(':scope > p'))if(!p.className||p.classList.contains('ech-p')||/^\s*Vous\s*:/.test(p.textContent))p.style.display='none';
     const h=card.querySelector('h2');if(h&&b.title)h.textContent=b.title;
-    let box=document.getElementById('apercu');if(!box){box=document.createElement('div');box.id='apercu';if(h)h.after(box);else card.prepend(box)}
+    let box=document.getElementById('apercu');if(!box){box=document.createElement('div');box.id='apercu'}
+    if(DIRECT()){let v=document.getElementById('apVolet');if(!v){v=document.createElement('div');v.id='apVolet';v.hidden=true;v.innerHTML='<div class="ah"><span></span><button type="button" aria-expanded="true">Replier</button></div>';$('app').appendChild(v);
+        v.querySelector('button').onclick=()=>{const p=v.classList.toggle('plie');v.querySelector('button').textContent=p?'Aperçu des forces':'Replier';v.querySelector('button').setAttribute('aria-expanded',p?'false':'true')}}
+      v.querySelector('.ah span').textContent=b.title||'Aperçu des forces';if(box.parentNode!==v)v.appendChild(box)}
+    else if(box.parentNode!==card){if(h)h.after(box);else card.prepend(box)}
+    // les remarques des autres modules sur la bataille (murs voisins, brume…) suivent dans le volet
+    const notes=DIRECT()?[...card.querySelectorAll(':scope > p')].filter(p=>p.style.display!=='none'&&p.textContent.trim()).map(p=>`<p class="ap">${esc(p.textContent.trim())}</p>`).join(''):'';
     const KN=[['inf','Infanterie'],['skirm','Tirailleurs'],['cav','Cavalerie'],['eleph','Éléphants']],kOf=k=>k==='lcav'?'cav':k;
     const col=s=>{const U=units.filter(u=>u.side===s&&!u.dead&&!u.pend),regs=new Map();for(const u of U){const id=rkey(u);if(!regs.has(id))regs.set(id,kOf(u.T.kind))}
       const men=Math.round(U.reduce((a,u)=>a+u.men*(u._ms||1),0)),cnt={};for(const k of regs.values())cnt[k]=(cnt[k]||0)+1;const cmd=String((b.cmd&&b.cmd[s?'e':'p'])||'');
       return `<div class="ac"><div class="an"><i style="background:${PAL[s].blk}"></i>${esc(PAL[s].n||(s?b.enemy:'Vous'))}</div><div class="ag">${esc(cmd||(s?'Commandement inconnu':''))}</div><div class="at"><b>${men.toLocaleString('fr-FR')}</b> hommes · ${regs.size} régiment${regs.size>1?'s':''}</div><div class="ak">${KN.filter(k=>cnt[k[0]]).map(k=>`<span>${k[1]} ${cnt[k[0]]}</span>`).join('')}</div></div>`};
     const R=resList().filter(r=>!r.done).slice().sort((a,c)=>a.arr-c.arr),rl=R.length?R.map(r=>`<div><b>${r.side?'Renfort ennemi':'Renfort'}</b> : ${esc(r.an||'une armée')}, ${resRegs(r)} régiment${resRegs(r)>1?'s':''}, ${resSide(r.e.dx,r.e.dy)}, vers ${mmss(r.arr)} de bataille</div>`).join(''):'<div>Aucun renfort attendu, ni pour vous ni pour l\'ennemi.</div>';
-    box.innerHTML=`<canvas width="1120" height="330" aria-label="Votre armée rangée face au camp ennemi"></canvas>${b.desc?`<p class="ad">${esc(b.desc)}</p>`:''}<div class="af">${col(0)}${col(1)}</div><div class="ar">${rl}</div>`;
+    box.innerHTML=`<canvas width="1120" height="330" aria-label="Votre armée rangée face au camp ennemi"></canvas>${b.desc?`<p class="ad">${esc(b.desc)}</p>`:''}<div class="af">${col(0)}${col(1)}</div><div class="ar">${rl}</div>${notes}`;
     try{fresque(box.querySelector('canvas'))}catch(e){console.warn('fresque',e)}}
   // ---- en bataille : compte à rebours et flèche d'arrivée des renforts ----
   function drawRes(){if(!ISCAMP()||ended)return;const R=resList();if(!R.length)return;const T=performance.now()/1000;
@@ -3232,7 +3240,9 @@ if(!V3D){
       g2.font='bold 13px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';const tw=g2.measureText(txt).width+16;lx=Math.max(tw/2+8,Math.min(SW-tw/2-8,lx));ly=Math.max(100,Math.min(SH-160,ly));
       g2.fillStyle='rgba(22,16,10,.88)';g2.fillRect(lx-tw/2,ly-11,tw,22);g2.strokeStyle=P.lt||'#c9a45a';g2.lineWidth=1;g2.strokeRect(lx-tw/2,ly-11,tw,22);g2.fillStyle=r.side?'#f3b9ab':'#f1e2b8';g2.fillText(txt,lx,ly);g2.restore()}}
   {const _db6=drawBanners;drawBanners=function(){const r=_db6.apply(this,arguments);try{drawRes()}catch(e){}return r}}
-  {const _su6=setup;setup=function(){const r=_su6.apply(this,arguments);try{extRes()}catch(e){console.warn('renforts',e)}try{apercuForces();setTimeout(()=>{try{if(!started&&!DEP)apercuForces()}catch(e){}},60)}catch(e){console.warn('aperçu',e)}return r}}
+  {const _su6=setup;setup=function(){const r=_su6.apply(this,arguments);try{extRes()}catch(e){console.warn('renforts',e)}try{apercuForces();setTimeout(()=>{try{if(!started&&!DEP){apercuForces();if(DIRECT()){startDep();apercuForces()}}}catch(e){console.warn('aperçu',e)}},60)}catch(e){console.warn('aperçu',e)}return r}}
+  {const _sd6=startDep;startDep=function(){const r=_sd6.apply(this,arguments);const v=document.getElementById('apVolet');if(v&&DEP&&DIRECT())v.hidden=false;return r}}
+  {const _ed6=endDep;endDep=function(){const v=document.getElementById('apVolet');if(v)v.hidden=true;return _ed6.apply(this,arguments)}}
   // ---- minicarte du champ étendu ----
   {const _dm=drawMinimap;drawMinimap=function(){if(!EXT()||!mmBg)return _dm.apply(this,arguments);
       const x0=BX0()-20,x1=BX1()+20,y0=BY0()-20,y1=BY1()+20,k=Math.min(480/(x1-x0),300/(y1-y0)),ox=(480-(x1-x0)*k)/2,oy=(300-(y1-y0)*k)/2,X=x=>ox+(x-x0)*k,Y=y=>oy+(y-y0)*k;
@@ -3246,7 +3256,58 @@ if(!V3D){
     document.addEventListener('pointerdown',e=>{if(e.target!==mm||!EXT())return;e.stopImmediatePropagation();drag=true;try{mm.setPointerCapture(e.pointerId)}catch(_){}go(e)},true);
     document.addEventListener('pointermove',e=>{if(!drag||!EXT())return;if(e.target===mm)e.stopImmediatePropagation();go(e)},true);
     for(const ev of ['pointerup','pointercancel'])document.addEventListener(ev,()=>{drag=false},true)}
-  window.__pilote={stance:k=>applyStance(k),regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
+  /* -- UNE BATAILLE JUSTE (plan de reprise, étape 2) --
+        RIPOSTE : un régiment du joueur resté sans ordre se défend seul quand on lui tire dessus, quand on le charge ou quand ses
+        voisins de régiment sont au contact, sauf s'il a l'ordre « Tenir » ou « Repli ». Il ne poursuit pas au-delà de 260 m de sa place.
+        VRAIE FIN : une armée qui n'a plus qu'une fraction de ses hommes debout (FIN_F), ou dont le moral s'est effondré, part en
+        déroute générale ; le vainqueur poursuit FIN_P secondes, puis vient le bilan. -- */
+  const FIN_F=.42,FIN_FM=.55,FIN_M=.34,FIN_P=22;let FIN=null,MSG2=null;
+  const say2=(tx,own)=>{MSG2={t:performance.now(),tx,own}};
+  function riposte(){if(!started||DEP||ended||(FIN&&FIN.gen!=null))return;const foes=units.filter(e=>e.side===1&&foeOk(e));if(!foes.length)return;
+    const near=(u,L,R)=>{let b=null,bd=R;for(const e of L){const d=Math.hypot(e.x-u.x,e.y-u.y);if(d<bd){bd=d;b=e}}return b};
+    for(const u of units){if(u.side!==0||u.dead||u.pend||u.routing||u._wait||u._ex||u._wd||u._st==='hold'||u._st==='back')continue;
+      if(u._rp&&!u.contacts.length&&Math.hypot(u.x-u._rp.x,u.y-u._rp.y)>260){u.order={type:'move',x:u._rp.x,y:u._rp.y,face:u._rp.a,run:false};u._rpT=time+12;u._rp=null;continue} // trop loin : on revient à sa place
+      if(u.order||u.contacts.length||(u._rpT||0)>time)continue;
+      if(u.T.kind==='skirm'){const n=near(u,foes.filter(e=>e.T.kind!=='skirm'),75);if(n){const d=Math.hypot(n.x-u.x,n.y-u.y)||1;u.order={type:'move',x:CLX(u.x-(n.x-u.x)/d*110),y:CLY(u.y-(n.y-u.y)/d*110),face:Math.atan2(n.y-u.y,n.x-u.x),run:true}}continue}
+      let t=null;const mates=regOf(u);
+      if(mates.some(v=>v!==u&&!v.dead&&v.contacts.length)){const L=[];for(const v of mates)for(const e of v.contacts)if(foeOk(e))L.push(e);t=near(u,foes,110)||near(u,L,200)}
+      if(!t&&u.underFire>0)t=near(u,foes.filter(e=>e.T.ranged),u.T.kind==='inf'?170:320)||near(u,foes,150);
+      if(!t){const n=near(u,foes,70);if(n&&(n.order&&n.order.type==='attack'||n.moving))t=n}
+      if(!t)continue;if(!u._rp)u._rp={x:u.x,y:u.y,a:u.ang};u._auto=true;u.order={type:'attack',target:t,run:Math.hypot(t.x-u.x,t.y-u.y)<160}}}
+  // forces debout de chaque camp, rapportées à ce qui est entré sur le champ
+  function finEtat(s){let m0=0,m=0,mo=0,n=0,pend=false;for(const u of units){if(u.side!==s)continue;if(u.pend){pend=true;continue}if(u._m0==null)u._m0=Math.max(u.men,u.T.men*.2);m0+=u._m0;if(!u.dead&&!u.routing){m+=u.men;mo+=Math.max(0,u.morale)/u.T.morale;n++}}
+    return {m0,m,f:m0?m/m0:0,mo:n?mo/n:0,n,pend}}
+  function finTick(){if(!started||ended||DEP)return;if(!FIN)FIN={gen:null,t:0,vide:[0,0]};
+    const E=[finEtat(0),finEtat(1)];
+    if(FIN.gen==null&&time>20)for(const s of [0,1]){const a=E[s],b=E[1-s];if(!a.n||!b.n||a.pend)continue;
+        // on ne lâche pied que si l'on est aussi le plus faible sur le terrain
+        if((a.f<FIN_F||(a.f<FIN_FM&&a.mo<FIN_M))&&a.m<b.m*1.15){FIN.gen=s;FIN.t=time;
+          for(const u of units)if(u.side===s&&!u.dead&&!u.pend){if(!u.routing)try{rout(u)}catch(e){}u.rallied=true}
+          say2(s===0?'Déroute générale : votre armée lâche pied !':'Déroute générale : l\'armée de '+PAL[s].n+' lâche pied !',s===0);break}}
+    // poursuite : les carrés libres du vainqueur courent sus aux fuyards
+    const w=FIN.gen!=null?1-FIN.gen:(E[0].n&&!E[1].n?0:E[1].n&&!E[0].n?1:null);
+    if(w!=null){if(!FIN.t)FIN.t=time;const run=units.filter(e=>e.side!==w&&!e.dead&&!e.pend&&e.routing&&!e.fled);
+      if(run.length&&Math.round(time*10)%8===0)for(const u of units){if(u.side!==w||u.dead||u.pend||u.routing||u.contacts.length||u._st==='hold'||u._st==='back'||u._wait||u._ex)continue;if(u.order&&u.order.type==='attack'&&u.order.target&&!u.order.target.dead)continue;
+          const R=u.T.kind==='cav'||u.T.kind==='lcav'?520:u.T.kind==='inf'?150:0;let b=null,bd=R;for(const e of run){const d=Math.hypot(e.x-u.x,e.y-u.y);if(d<bd){bd=d;b=e}}if(b){u.order={type:'attack',target:b,run:true};u._auto=true}}}
+    else if(FIN.gen==null)FIN.t=0}
+  // la fin attend la poursuite ; puis le bilan
+  {const _ce7=checkEnd;checkEnd=function(){if(!ended&&FIN&&FIN.t&&time<FIN.t+FIN_P&&units.some(e=>!e.dead&&!e.pend&&e.routing&&!e.fled)&&units.some(u=>!u.dead&&!u.pend&&!u.routing))return;
+      const was=ended,r=_ce7.apply(this,arguments);try{if(!was&&ended)bilan()}catch(e){console.warn('bilan',e)}return r}}
+  function bilan(){const S=$('endS');if(!S)return;const k=u=>(u.T.kind==='eleph'?0:1)*msOf(u);
+    const L=s=>{const U=units.filter(u=>u.side===s&&!u.pend&&u._m0!=null),eng=U.reduce((a,u)=>a+u._m0*k(u),0),left=U.reduce((a,u)=>a+(u.dead&&!u.fled?0:u.men)*k(u),0),fui=U.filter(u=>u.fled||(u.routing&&!u.dead)).reduce((a,u)=>a+u.men*k(u),0);
+      const regs=new Map();for(const u of U){const id=rkey(u),o=regs.get(id)||{n:0,ko:0};o.n++;if(u.dead||u.routing)o.ko++;regs.set(id,o)}let det=0;for(const o of regs.values())if(o.ko===o.n)det++;
+      return {eng,tues:Math.max(0,eng-left),fui,det,regs:regs.size}};
+    const a=L(0),b=L(1),pc=(x,t)=>t?Math.round(x/t*100)+' %':'',row=(s,o)=>`<span class="${s?'cr':'cp'}">${PAL[s].n}</span><span>${nf(o.eng)}</span><span>${nf(o.tues)} <small>(${pc(o.tues,o.eng)})</small></span><span>${nf(o.fui)}</span><span>${o.det} / ${o.regs}</span>`;
+    S.style.gridTemplateColumns='auto repeat(4,auto)';S.dataset.bilan='1';
+    S.innerHTML=`<span class="h">Armée</span><span class="h">Engagés</span><span class="h">Tués et blessés</span><span class="h">En fuite</span><span class="h">Régiments défaits</span>${row(0,a)}${row(1,b)}`+
+      `<span class="h" style="grid-column:1/-1;margin-top:6px">Durée : ${mmss(time)}${FIN&&FIN.gen!=null?' · déroute générale à '+mmss(FIN.t):''}${KAMP&&KAMP.s.some(c=>c.looted)?' · '+KAMP.s.filter(c=>c.looted).map(c=>'camp de '+PAL[c.side].n+' pillé').join(', '):''}</span>`;
+    const P=$('endP');if(P&&ISCAMP()&&FIN&&FIN.gen!=null)P.textContent=FIN.gen===1?'L\'armée ennemie a lâché pied et vos troupes l\'ont poursuivie : le champ de bataille est à vous.':'Votre armée a lâché pied. Les survivants se replient.'}
+  {const _ai7=ai;ai=function(){const r=_ai7.apply(this,arguments);try{riposte()}catch(e){console.warn('riposte',e)}return r}}
+  {const _sp7=step;step=function(dt){const r=_sp7.apply(this,arguments);try{finTick()}catch(e){console.warn('fin',e)}return r}}
+  {const _su7=setup;setup=function(){FIN=null;MSG2=null;return _su7.apply(this,arguments)}}
+  {const _db7=drawBanners;drawBanners=function(){const r=_db7.apply(this,arguments);const m=MSG2;if(m){const a=(performance.now()-m.t)/1000;if(a>7)MSG2=null;else{g2.save();g2.globalAlpha=a<.4?a/.4:a>6?7-a:1;g2.font='bold 18px Georgia,serif';g2.textAlign='center';g2.textBaseline='middle';const tw=g2.measureText(m.tx).width+40,x=SW/2,y=SH*.27;
+        g2.fillStyle='rgba(24,16,10,.9)';g2.fillRect(x-tw/2,y-20,tw,40);g2.strokeStyle=m.own?'#c0503c':'#c9a45a';g2.lineWidth=1.5;g2.strokeRect(x-tw/2,y-20,tw,40);g2.fillStyle=m.own?'#f3b0a0':'#f1e2b8';g2.fillText(m.tx,x,y);g2.restore()}}return r}}
+  window.__pilote={get fin(){return FIN},stance:k=>applyStance(k),regMode:a=>regMode(a||mine()),relieve,scr:u=>toScreen(u.x,u.y,2),sel:()=>[...selected],get step(){return step},get kamp(){return KAMP},kdbg:()=>{let r=[ISCAMP(),!!CAMP.pvp,!!CAMP.b.walls,!!(window.__villes&&window.__villes.MODE),CAMPS_ON()];try{campsInit();r.push(!!KAMP,!!campGeom(0),!!campGeom(1))}catch(e){r.push(String(e))}return r},dep:{start:()=>startDep(),get on(){return DEP},get zone(){return DZ},end:()=>endDep()},fiche:u=>fiche(u),par:()=>PAR(),om:(x,y)=>orderMove({x,y}),oa:t=>orderAttack(t),st:ST,get alt(){return ALT},set alt(v){ALT=v}};
   /* -- effectifs affichés à l'échelle de la campagne (fil Armées, v149) : la simulation garde l'ancienne échelle,
         la campagne envoie men/ms et b.ms=1 ; on remultiplie seulement ce que l'on montre (fiche, cartes, barre, bilan). -- */
   const MSON=()=>!!(CAMP&&CAMP.b&&CAMP.b.ms);
@@ -3260,7 +3321,7 @@ if(!V3D){
   {const _rs3=renderSel;renderSel=function(){const r=_rs3.apply(this,arguments);try{fixSel()}catch(e){}return r}}
   function fixTop(){if(!MSON())return;const sum=s=>units.filter(u=>u.side===s&&!u.dead&&!u.routing).reduce((a,u)=>a+(u.T.kind==='eleph'?u.men*40:u.men)*msOf(u),0);
     const a=$('fP'),b=$('fR');if(a&&/\d/.test(a.textContent))a.textContent=PAL[0].n+' '+nf(sum(0));if(b&&/\d/.test(b.textContent))b.textContent=nf(sum(1))+' '+PAL[1].n}
-  {const _ce=checkEnd;checkEnd=function(){const was=ended,r=_ce.apply(this,arguments);try{if(!was&&ended&&MSON()){const S=$('endS');if(S){const sp=S.children;
+  {const _ce=checkEnd;checkEnd=function(){const was=ended,r=_ce.apply(this,arguments);try{if(!was&&ended&&MSON()){const S=$('endS');if(S&&!S.dataset.bilan){const sp=S.children;
       const loss=s=>units.filter(u=>u.side===s&&u.T.kind!=='eleph').reduce((a,u)=>a+(u.fled?0:(u.T.men-u.men)*msOf(u)),0);
       if(sp[4])sp[4].textContent=nf(loss(0));if(sp[7])sp[7].textContent=nf(loss(1))}}}catch(e){}return r}}
   // étiquettes : seulement pour les carrés choisis ou survolés (les fissures montrent déjà l'usure)
@@ -3293,10 +3354,6 @@ const _ht=hudTick;hudTick=function(){const r=_ht.apply(this,arguments);try{fixTo
   // le sol se prépare au premier affichage (après l'arrivée éventuelle de l'image de la campagne)
   const _bt=buildTerrain;buildTerrain=function(){_bt();try{if(GROUND)groundFromCampaign();if(!GM)buildGround()}catch(e){console.warn('sol 2D',e);buildGround()}};
 }
-try{const o=document.querySelector('#sFig option[value="bellum"]');if(o)o.textContent='Roma Delenda Est (construites)'}catch(e){}
-// option « Vue 3D » (ancienne vue) sur l'écran d'accueil
-try{const sF=$('sFig'),lb=document.createElement('label');lb.innerHTML='<input type="checkbox" id="c3d"> Vue 3D (ancienne)';sF.parentElement.after(lb);
-  const c=$('c3d');c.checked=V3D;c.onchange=()=>{try{localStorage.setItem('bellum.vue',c.checked?'3d':'2d')}catch(e){}const u=new URL(location.href);u.searchParams.delete('vue');location.href=u.href}}catch(e){}
 /* ================= FIN BATAILLE 2D ================= */
 /* ================= BRUME ET EMBUSCADES (fil « Ajouter sons, embuscades et bataille à deux ») =================
    On ne voit l'ennemi que s'il est à portée de vue d'un de ses régiments : partout par temps clair, sauf s'il se cache
@@ -3329,7 +3386,7 @@ let BRUME=!!(CAMP&&CAMP.b&&CAMP.b.brume);
     const r=hide(_rr,0).apply(this,arguments);try{overlay()}catch(e){}return r}}
   // l'IA (camp 1) ne réagit qu'à ce qu'elle voit
   {const _ai=ai;ai=function(){const r=hide(_ai,1).apply(this,arguments);
-    if(!units.some(u=>u.side===0&&!u.dead&&!u.routing&&seenBy(1,u))){ // rien en vue : on avance prudemment vers le centre
+    if(!(window.__iaB&&window.__iaB.active)/*IA-BRUME*/&&!units.some(u=>u.side===0&&!u.dead&&!u.routing&&seenBy(1,u))){ // rien en vue : on avance prudemment vers le centre
       for(const u of units)if(u.side===1&&!u.dead&&!u.routing&&!u.amb&&!u.contacts.length&&(!u.order||u.order.type==='move')&&u.y<H*.55)u.order={type:'move',x:u.x,y:Math.min(H*.55,u.y+90*G),face:Math.PI/2}}
     // embuscades de l'IA : tenir le bois tant que l'ennemi n'est pas tout près, puis charger
     for(const u of units){if(u.side!==1||!u.amb||u.dead||u.routing)continue;const near=units.filter(e=>e.side===0&&!e.dead&&!e.routing&&!e.pend);
@@ -5174,6 +5231,7 @@ window.__sol2d=function(g2,M,DPR,s2){try{
     if(!best)return [];
     const nx=-best.uy,ny=best.ux,su=Math.sign((u.x-best.x)*nx+(u.y-best.y)*ny)||1,o=best.hw+30*K;
     return [[best.x+nx*su*o,best.y+ny*su*o],[best.x-nx*su*o,best.y-ny*su*o]]}
+  window.__rgGeo={water,segHit,crossAt,hAt,inMarsh};/*IA-RG*/
   /* --- déplacements --- */
   const _mv=moveUnit;
   moveUnit=function(u,dt){
@@ -5549,36 +5607,302 @@ function gaContacts(live){
   window.__bga={gaContacts};
 }
 /* ================= FIN PERFORMANCE DES GRANDES BATAILLES ================= */
+/* ================= IA : PLAN DE BATAILLE (fil « Améliorer l'IA du jeu », 10 nov., choix de Baptiste « batailles d'abord ») =================
+   L'IA (camp 1) commande par régiment, comme le joueur, au lieu de lancer chaque carré sur l'ennemi le plus proche :
+   - plan : elle compare les forces qu'elle voit et le terrain (colline, fleuve entre les armées, renforts attendus) et choisit
+     d'attaquer ou de tenir sa position ; si l'ennemi ne vient pas, elle finit par marcher sur lui ;
+   - ligne : l'infanterie marche en ligne, régiments côte à côte, au pas du plus lent, puis charge le régiment d'en face ;
+     chaque régiment garde ses deux rangs et relève ses carrés épuisés ; une réserve suit derrière et bouche les trous,
+     fait face à un débordement ou remplace un régiment usé, qui recule ;
+   - ailes : la cavalerie attaque la cavalerie ennemie si elle est assez forte, sinon garde le flanc et contre-charge ;
+     ailes libres, elle tourne la ligne ennemie et charge dans le dos des régiments engagés, puis poursuit les fuyards ;
+     la cavalerie légère esquive la cavalerie lourde et harcèle ;
+   - tirailleurs en écran devant la ligne, qui se replient derrière les ailes quand l'ennemi approche, puis tirent des flancs ;
+   - éléphants devant le centre, lâchés sur l'infanterie quand elle est à portée.
+   - doctrines (12 nov.) : chaque peuple a sa façon de se battre (table DOC : Rome, Carthage, Macédoine, Grecs, Gaulois, Ibères,
+     Thraces/Illyriens, Numides), choisie d'après le peuple reçu de la campagne (pk) ou, à défaut, d'après les troupes.
+   Bataille 2D seulement (carrés), pas à l'assaut des murs (l'ancienne IA garde les échelles et les tours).
+   Ancienne IA : ?ia=ancienne dans l'adresse, ou window.__iaB.on=false. Source : /mnt/project-files/ia/plan.js (ia/patch_bataille.py). */
+{
+const IB={on:true,active:false,sd:{},cfg:{res:4,trig:100,follow:0,vk:.85,stop:50}};
+const newS=()=>({post:null,pt:-99,A:null,f:null,M:null,E:null,lastE:null,roles:new Map(),why:'',t0:-1,tDef:0,contact:-1,hist:[],st:{relief:0,swap:0,commit:0,flank:0,rear:0}});
+let S=newS();
+try{if(/[?&]ia=ancienne/.test(location.search)||localStorage.getItem('bellum.ia')==='ancienne')IB.on=false}catch(e){}
+// ---- doctrines : chaque peuple a sa façon de se battre (12 nov., demande de Baptiste) ----
+// res : un régiment d'infanterie sur « res » en réserve (0 = aucune), resMax ; worn : seuil d'usure où la réserve relève ;
+// att / def : rapport de forces au-dessus duquel on attaque, en dessous duquel on tient ; eq : que faire à forces égales ;
+// terMax : on ne tient rive ou colline que sous ce rapport de forces ; stall : patience (s) avant de marcher sur un ennemi qui ne vient pas ;
+// vk : allure de la ligne ; trig : distance de charge ; rush : distance d'où la ligne se rue en courant ; stop : arrêt avant la charge ;
+// arc : centre en retrait (<0) ou en avant (>0), en m ; obl : ordre oblique, aile droite en avant, en m ;
+// cavK : audace de la cavalerie (<1 = attaque même plus faible) ; hammer : cavalerie lourde massée à droite ; harass : harcèlement ; eleR : portée de charge des éléphants.
+const DOC0={n:'',res:4,resMax:4,worn:.35,att:1.3,def:.75,eq:'att',terMax:9,stall:90,wait:true,vk:.85,trig:100,rush:0,stop:50,arc:0,obl:0,cavK:1,hammer:false,harass:false,eleR:280};
+const DOC={
+  rom:{n:'Rome : trois lignes qui se relèvent, attaque obstinée',res:3,resMax:6,worn:.5,att:1.1,def:.6,terMax:1,cavK:1.2,stall:60},
+  car:{n:'Carthage : centre en retrait, ailes fortes, cavalerie qui enveloppe',arc:-45,cavK:.75,eleR:400,att:1.25},
+  mac:{n:'Macédoine : la phalange fixe, la cavalerie frappe à droite',res:6,resMax:2,vk:.7,trig:80,obl:55,hammer:true,att:1.2,def:.7},
+  gre:{n:'Grecs : une seule ligne d\'hoplites, serrée et lente',res:0,vk:.75,trig:80,def:.8,cavK:1.1,stall:120},
+  gau:{n:'Gaulois : charge furieuse d\'emblée, sans réserve',res:0,vk:1.05,trig:200,rush:330,att:1,def:.45,terMax:0,wait:false,cavK:.8,stall:25},
+  ibe:{n:'Ibères : assaut rapide, peu de réserve',res:6,resMax:2,vk:.95,trig:150,rush:220,att:1.1,def:.6,terMax:.9,cavK:.85,stall:60},
+  bar:{n:'Thraces et Illyriens : ruée depuis les hauteurs',res:0,vk:.95,trig:160,rush:240,att:1.1,def:.65,terMax:1.1,stall:60},
+  num:{n:'Numides : harcèlement, on refuse la mêlée',res:0,att:1.5,def:.9,eq:'def',stall:200,harass:true,vk:.8}};
+const DOC_PEO={rom:'rom',ven:'rom',car:'car',pun:'car',mac:'mac',sel:'mac',epi:'mac',per:'mac',thr:'bar',bit:'bar',ill:'bar',dar:'bar',gau:'gau',ins:'gau',lig:'gau',
+  cel:'ibe',lus:'ibe',ibe:'ibe',bal:'ibe',num:'num',mae:'num',mau:'num',ath:'gre',syr:'gre',ach:'gre',eto:'gre',mas:'gre',cyr:'gre',cre:'gre',rho:'gre',ion:'gre',byz:'gre',spa:'gre'};
+const DOC_TYP={gaul:'gau',iber:'ibe',lib:'car',legion:'rom',hastati:'rom',principes:'rom',triarii:'rom',socii:'rom',phalange:'mac',hypasp:'mac',
+  spartiates:'gre',perieques:'gre',athoplites:'gre',thureo:'gre'};
+// le peuple vient de la campagne (pk) ; inconnu, on le devine aux troupes
+function docOf(side,my){let k=IB.force&&IB.force[side];
+  if(!k){try{const pk=typeof PK!=='undefined'&&PK[side];k=DOC_PEO[pk]}catch(e){}}
+  if(!k){const c={};let tot=0,lc=0;for(const R of my){const m=R.sq.reduce((a,v)=>a+v.men,0);tot+=m;if(R.k==='lcav')lc+=m;if(R.k==='inf'){const d=DOC_TYP[R.grp[0].type];if(d)c[d]=(c[d]||0)+m}}
+    k=lc>tot*.4?'num':Object.keys(c).sort((a,b)=>c[b]-c[a])[0]}
+  return Object.assign({k:k||''},DOC0,{res:IB.cfg.res,trig:IB.cfg.trig,vk:IB.cfg.vk,stop:IB.cfg.stop},DOC[k]||{})}
+const FSPb=17.6,FRKb=19,WR=5*FSPb,GAP=8;
+const okv=v=>!v.dead&&!v.routing&&!v.pend;
+const free=v=>okv(v)&&!v.contacts.length&&!v._wd&&!v.amb;
+const cenOf=a=>{let x=0,y=0;for(const u of a){x+=u.x;y+=u.y}return {x:x/a.length,y:y/a.length}};
+const pwv=v=>v.men*(v.T.atk+(v.T.ranged?v.T.ranged.dmg*.5:0))*(1+(v.T.charge-1)*.25)*Math.sqrt(v.T.def)*(.4+.6*Math.max(0,v.morale)/v.T.morale)*(v.T.tough||1);
+const KC=k=>k==='cav'||k==='lcav';
+const cx=x=>Math.max(RIVER+20,Math.min(W-20,x)),cy=y=>Math.max(20,Math.min(H-20,y));
+function gather(side){const C=window.__carres,L=[];if(!C)return L;
+  for(const [id,grp] of C.regs){const g0=grp[0];if(!g0||g0.side!==side)continue;const sq=grp.filter(okv);if(!sq.length)continue;
+    L.push({id,grp,sq,k:g0.T.kind,c:cenOf(sq),pw:sq.reduce((s,v)=>s+pwv(v),0),eng:sq.some(v=>v.contacts.length),rt:grp.filter(v=>!v.dead&&!v.pend&&v.routing).length})}
+  return L}
+// ordres : on ne remplace un ordre que s'il change vraiment (le détour par les gués se recalcule à chaque nouvel ordre)
+function mv(v,x,y,face,run){x=cx(x);y=cy(y);const o=v.order;if(o&&o.type==='move'&&Math.hypot(o.x-x,o.y-y)<3&&!!o.run===!!run&&(o.face==null||face==null||Math.abs(angDiff(o.face,face))<.08))return;
+  v.order={type:'move',x,y,face,run:!!run}}
+function atk(v,t,run){const o=v.order;if(o&&o.type==='attack'&&o.target===t){o.run=!!run;return}v.order={type:'attack',target:t,run:!!run}}
+// bloc de 5 carrés de front (ou moins), les frais devant ; rang fixé par v._ibRow (0 = front)
+function block(R,S,F,run){const fx=Math.cos(F),fy=Math.sin(F),rx=-fy,ry=fx,sq=R.sq.filter(free);if(!sq.length)return;
+  const n=sq.length,cols=Math.min(5,n);let front=sq.filter(v=>!v._ibRow);
+  if(front.length<cols){const rest=sq.filter(v=>v._ibRow).sort((a,b)=>frac(b)-frac(a));while(front.length<cols&&rest.length){const v=rest.shift();v._ibRow=0;front.push(v)}}
+  if(front.length>cols){front.sort((a,b)=>frac(b)-frac(a));for(const v of front.slice(cols))v._ibRow=1;front=front.slice(0,cols)}
+  const back=sq.filter(v=>!front.includes(v)),rows=[front];for(let i=0;i<back.length;i+=cols)rows.push(back.slice(i,i+cols));
+  rows.forEach((U,r)=>{const m=U.length,P=[];for(let c=0;c<m;c++){const o=(c-(m-1)/2)*FSPb;P.push([S.x+rx*o-fx*r*FRKb,S.y+ry*o-fy*r*FRKb])}
+    U.sort((a,b)=>(a.x*rx+a.y*ry)-(b.x*rx+b.y*ry));U.forEach((u,i)=>{u._pf=null;mv(u,P[i][0],P[i][1],F,run)})})}
+// mêlée d'un régiment contre un régiment : le front se répartit sur les carrés ennemis, le second rang suit sa file et relève
+function follow(u){const p=u._pf;if(!p||p.dead||p.routing)return;const t=p.order&&p.order.type==='attack'&&p.order.target&&!p.contacts.length?p.order.target:null,a=t?Math.atan2(t.y-p.y,t.x-p.x):p.ang;
+  mv(u,p.x-Math.cos(a)*FRKb,p.y-Math.sin(a)*FRKb,a,!!(p.order&&p.order.run))}
+// mêlée : chaque carré libre prend le carré ennemi le plus proche devant lui, à deux contre un au plus (S.hit compte
+// les attaquants de chaque carré ennemi, pour toute l'armée) ; le second rang suit sa file tant que son chef de file n'est pas au contact
+function fight(R,T,run){const TG=T.sq.length?T.sq:T.grp.filter(v=>!v.dead&&!v.pend);if(!TG.length)return;const tc=cenOf(TG),gc=R.c;let fx=tc.x-gc.x,fy=tc.y-gc.y;{const l=Math.hypot(fx,fy)||1;fx/=l;fy/=l}
+  const rx=-fy,ry=fx,la=u=>(u.x-gc.x)*rx+(u.y-gc.y)*ry,H=S.hit;
+  const pool=TG.slice();for(const e of S.enSq)if(!pool.includes(e)&&Math.abs(e.x-gc.x)<190*G&&Math.abs(e.y-gc.y)<190*G)pool.push(e);
+  const pick=u=>{let b=null,bd=1e9;for(const e of pool){const h=H.get(e)||0;if(h>=4)continue;const dx=e.x-u.x,dy=e.y-u.y,d=Math.hypot(dx,dy),fw=(dx*fx+dy*fy)/(d||1);
+      const sc=d-h*40+(fw<-.3?120:0)-(e.contacts.length?40:0)-(1-frac(e))*60-(e.morale<e.T.morale*.4?40:0)-(TG.includes(e)?10:0);if(sc<bd){bd=sc;b=e}}return b};
+  let heads=R.sq.filter(v=>!v._ibRow&&!v._wd);if(!heads.length){heads=[...R.sq].filter(v=>!v._wd).sort((a,b)=>frac(b)-frac(a)).slice(0,5);heads.forEach(v=>v._ibRow=0)}
+  for(const u of R.sq){if(u.contacts.length||u._wd||u.amb||u._ibRel)continue;
+    if(u._ibRow){if(!u._pf||u._pf.dead||u._pf.routing||u._pf._ibRow){let b=null,bd=1e9;for(const h of heads){const q=Math.abs(la(h)-la(u));if(q<bd){bd=q;b=h}}u._pf=b}
+      const p=u._pf;if(p&&(p.dead||p.routing)){u._pf=null;u._ibRow=0}
+      else if(p&&!p.contacts.length&&Math.hypot(p.x-u.x,p.y-u.y)<IB.cfg.follow*G){follow(u);continue}}
+    const cur=u.order&&u.order.type==='attack'&&u.order.target;
+    if(cur&&!cur.dead&&!cur.routing&&!cur.pend&&(H.get(cur)||0)<=4&&Math.hypot(cur.x-u.x,cur.y-u.y)<220*G){u.order.run=!!run||Math.hypot(cur.x-u.x,cur.y-u.y)<90*G;continue}
+    if(cur)H.set(cur,Math.max(0,(H.get(cur)||1)-1));
+    const e=pick(u);if(!e){follow(u);continue}H.set(e,(H.get(e)||0)+1);atk(u,e,!!run||Math.hypot(e.x-u.x,e.y-u.y)<90*G)}}
+// relève dans le régiment : un carré frais monte, le carré épuisé recule (même mécanique que pour le joueur : u._wd)
+function relieve(R){for(const v of R.sq)if(v.contacts.length)v._lastE=v.contacts[0];
+  for(const v of R.sq)if(v._ibRel){const w=v._ibRel;if(w.dead||w.routing||!w.contacts.length){v._ibRel=null;continue}
+    if(v.contacts.length){v._ibRel=null;v._ibRow=0;w._ibRow=1;w._wd=time;w._pf=v;w._row=1;w.order=null;S.st.swap++}}
+  if(time<(R.grp._ibR||0))return;const eng=R.sq.filter(v=>v.contacts.length&&!v._wd);
+  const weak=eng.filter(v=>(frac(v)<.45||v.morale<v.T.morale*.4)&&!R.sq.some(f=>f._ibRel===v)).sort((a,b)=>frac(a)-frac(b))[0];if(!weak)return;
+  const fresh=R.sq.filter(v=>free(v)&&!v._ibRel&&frac(v)>.65&&v.morale>v.T.morale*.6&&Math.hypot(v.x-weak.x,v.y-weak.y)<90).sort((a,b)=>Math.hypot(a.x-weak.x,a.y-weak.y)-Math.hypot(b.x-weak.x,b.y-weak.y))[0];if(!fresh)return;
+  fresh._ibRel=weak;fresh._pf=null;atk(fresh,weak.contacts[0],true);R.grp._ibR=time+2.5;S.st.relief++}
+// ---- terrain : colline proche, fleuve entre les armées ----
+function hillNear(M,E){let best=null,bv=-1e9;const L=[];try{if(HILLg&&HILLg.r>1)L.push(HILLg);for(const q of HILLS||[])L.push({x:q.x*G,y:q.y*G,r:q.r*G})}catch(e){}
+  for(const h of L){const dM=Math.hypot(h.x-M.x,h.y-M.y),dE=E?Math.hypot(h.x-E.x,h.y-E.y):1e9;if(dM>520*G||dE<dM*.9)continue;const v=h.r-dM*.6;if(v>bv){bv=v;best=h}}return best}
+function riverBetween(M,E){const g=window.__rgGeo;if(!g||!E)return null;try{return g.segHit(M.x,M.y,E.x,E.y)}catch(e){return null}}
+// ---- rôles ----
+function assign(my,f,M){const rx=-f.y,ry=f.x,lat=R=>(R.c.x-M.x)*rx+(R.c.y-M.y)*ry,D=S.D;
+  for(const R of my){if(S.roles.has(R.id))continue;const k=R.k;let ro;
+    if(k==='inf')ro=S.t0<0?'line':'res';else if(KC(k))ro=lat(R)<0?'wL':'wR';else if(k==='skirm')ro='scr';else ro='ele';
+    S.roles.set(R.id,{ro,pw0:R.pw,st:'',t:null});for(const v of R.grp){v.res=false;if(v._ibRow==null)v._ibRow=v._sr<0?1:0}}
+  if(S.t0<0){// réserve : un régiment d'infanterie sur quatre (jusqu'à quatre), pris à intervalles réguliers dans la ligne
+    const L=my.filter(R=>R.k==='inf').sort((a,b)=>lat(a)-lat(b)),n=L.length,r=D.res&&n>=D.res?Math.min(D.resMax,Math.round(n/D.res)):0;
+    if(r){const st=n/r;for(let j=0;j<r;j++){const R=L[Math.min(n-1,Math.floor(st*j+st/2))];S.roles.get(R.id).ro='res'}}
+    // une aile vide reçoit la moitié de l'autre
+    const wl=my.filter(R=>S.roles.get(R.id).ro==='wL'),wr=my.filter(R=>S.roles.get(R.id).ro==='wR');
+    if(wl.length+wr.length>=2&&(!wl.length||!wr.length)){const A=(wl.length?wl:wr).sort((a,b)=>lat(a)-lat(b)),h=Math.floor(A.length/2);
+      (wl.length?A.slice(A.length-h):A.slice(0,h)).forEach(R=>S.roles.get(R.id).ro=wl.length?'wR':'wL')}
+    // marteau : la cavalerie lourde se masse à l'aile droite, la légère garde la gauche
+    if(D.hammer){const C=my.filter(R=>KC(R.k)).sort((a,b)=>(b.k==='cav')-(a.k==='cav')||b.pw-a.pw),h=Math.max(1,Math.min(C.length-1,Math.ceil(C.length*.7)));
+      if(C.length>=2)C.forEach((R,i)=>S.roles.get(R.id).ro=i<h?'wR':'wL')}
+    S.t0=time}}
+// ---- le plan ----
+function tick(side){side=side==null?1:side;
+  if(side===1)IB.active=false;
+  if(side===1&&!IB.on||typeof MODE!=='undefined'&&MODE==='assaut'||REVUE||REVUE_P||window.__vue3d)return false;
+  if(!window.__carres||!window.__carres.regs.size)return false;
+  const my=gather(side);if(!my.length)return false;S=IB.sd[side]||(IB.sd[side]=newS());if(side===1)IB.active=true;
+  const en=gather(1-side),enF=en.filter(R=>!R.rt||R.sq.length>R.rt);
+  S.enSq=[];for(const R of en)for(const v of R.sq)S.enSq.push(v);S.hit=new Map();for(const R of my)for(const v of R.sq){const t=v.contacts[0]||(v.order&&v.order.type==='attack'&&v.order.target);if(t)S.hit.set(t,(S.hit.get(t)||0)+1)}
+  const M=cenOf(my.map(R=>R.c));let E=enF.length?cenOf(enF.map(R=>R.c)):S.lastE;
+  if(enF.length)S.lastE=E;if(!E)E={x:W-M.x+RIVER*.5,y:H-M.y};
+  let fx=E.x-M.x,fy=E.y-M.y;{const l=Math.hypot(fx,fy)||1;fx/=l;fy/=l}
+  if(S.f){const a=S.f.x*.85+fx*.15,b=S.f.y*.85+fy*.15,l=Math.hypot(a,b)||1;fx=a/l;fy=b/l}S.f={x:fx,y:fy};
+  const f=S.f,rx=-f.y,ry=f.x,F=Math.atan2(f.y,f.x);S.M=M;S.E=E;
+  if(!S.D)S.D=docOf(side,my);const D=S.D;
+  assign(my,f,M);const role=R=>S.roles.get(R.id);
+  const myP=my.reduce((s,R)=>s+R.pw,0),enP=enF.reduce((s,R)=>s+R.pw,0)||0,ratio=enP?myP/enP:1;
+  S.enP0=Math.max(S.enP0||0,enP);S.myP0=Math.max(S.myP0||0,myP);
+  const anyEng=my.some(R=>R.eng);if(anyEng&&S.contact<0)S.contact=time;if(anyEng)S.lastEng=time;
+  // posture : toutes les 8 s
+  if(!S.post||time-S.pt>8){
+    const RES=(window.__echelle&&window.__echelle.res)||[],pM=RES.some(r=>r.side===side&&!r.done),pE=RES.some(r=>r.side!==side&&!r.done);
+    let hill=hillNear(M,enF.length?E:null),riv=enF.length?riverBetween(M,E):null,p,why;
+    // le terrain choisi à la première vue de l'ennemi est gardé tant que le combat n'a pas commencé
+    if(enF.length&&S.ter===undefined)S.ter=hill||riv?{hill,riv}:null;
+    const lineEng=my.some(R=>R.eng&&role(R)&&role(R).ro==='line');
+    if(S.ter&&!lineEng&&!hill&&!riv){hill=S.ter.hill;riv=S.ter.riv}
+    if(!enF.length){p=hill||riv?'def':'avance';why=hill||riv?'tient sa position sans voir l\'ennemi':'avance prudemment, sans voir l\'ennemi'}
+    else if(D.wait&&pM&&ratio<1.5&&!anyEng){p='def';why='attend ses renforts'}
+    else if(pE&&ratio>=.8){p='att';why='attaque avant l\'arrivée des renforts ennemis'}
+    else if(ratio>=Math.max(D.att,1.15)){p='att';why='plus forte : attaque'}
+    else if(ratio>=D.att&&!(hill||riv)){p='att';why='se croit assez forte : attaque'}
+    else if(ratio<D.def){p='def';why='plus faible : tient '+(hill?'la colline':riv?'la rive':'sa position')}
+    else if((hill||riv)&&ratio<D.terMax+(S.post==='def'?.2:0)){p='def';why='tient '+(hill?'la colline':'la rive')}
+    else if(D.eq==='def'){p='def';why='refuse la mêlée et laisse venir'}
+    else{p='att';why=hill||riv?'attaque malgré le terrain':'forces égales, terrain plat : attaque'}
+    // l'ennemi ne vient pas : au bout d'une minute et demie sans combat, on marche sur lui
+    if(p==='def'&&S.post!=='def')S.tDef=time;
+    if(p==='def'&&!anyEng&&time-Math.max(S.tDef,S.lastEng??-1e9)>D.stall&&enF.length&&ratio>=.6&&Math.hypot(E.x-M.x,E.y-M.y)>380*G){p='att';why='l\'ennemi ne vient pas : marche sur lui';S.march=time}
+    if(p==='def'&&S.march!=null&&(S.lastEng??-1)<S.march&&time-S.march<150&&ratio>=.6){p='att';why='l\'ennemi ne vient pas : marche sur lui'}
+    // au contact, on ne change pas d'avis pour un rien
+    if(anyEng&&S.post&&p!==S.post&&!(S.post==='att'&&p==='def'&&ratio<.6)&&!(S.post==='def'&&p==='att'&&ratio>=1.3)){p=S.post;why=S.why}
+    // poursuite : l'ennemi s'effondre
+    if(enF.length&&S.enP0&&enP<S.enP0*.3&&ratio>2)p='att',why='poursuite';
+    if(p!==S.post){S.hist.push([Math.round(time),p,why]);if(p==='def'&&S.post==null)S.Adef=hill?{x:hill.x+f.x*Math.min(hill.r*.25,40*G),y:hill.y+f.y*Math.min(hill.r*.25,40*G)}:riv?{x:riv.x-f.x*(riv.R.hw+110*G),y:riv.y-f.y*(riv.R.hw+110*G)}:null}
+    S.post=p;S.why=why;S.pt=time;S.hill=hill;S.riv=riv}
+  // ---- ligne d'infanterie ----
+  const line=my.filter(R=>role(R).ro==='line'),res=my.filter(R=>role(R).ro==='res'||role(R).ro==='worn'),lat=p=>(p.x-M.x)*rx+(p.y-M.y)*ry;
+  line.sort((a,b)=>(role(a).ord??lat(a.c))-(role(b).ord??lat(b.c)));line.forEach((R,i)=>{if(role(R).ord==null)role(R).ord=lat(R.c)});
+  const n=line.length,Lw=Math.max(1,n)*(WR+GAP);
+  if(!S.A){const L0=line.length?line:my;S.A=cenOf(L0.map(R=>R.c))}
+  if(S.post==='def'&&S.Adef&&S.contact<0){const d=Math.hypot(S.Adef.x-S.A.x,S.Adef.y-S.A.y),st=Math.min(d,9*.8);if(d>1){S.A={x:S.A.x+(S.Adef.x-S.A.x)/d*st,y:S.A.y+(S.Adef.y-S.A.y)/d*st}}}
+  const inM=line.filter(R=>role(R).st==='m').length;
+  if(S.post!=='def'&&inM<Math.max(1,n/3)){// la ligne avance au pas du plus lent
+    let v=1e9;for(const R of line)for(const s of R.sq)v=Math.min(v,s.T.speed);if(v>1e8)v=12;v*=S.post==='avance'?.5:D.vk;
+    // on s'arrête à 70 m du premier régiment ennemi qui fait face (la charge part de là)
+    let gap=1e9;for(const R of enF){if(R.k==='skirm')continue;const d=(R.c.x-S.A.x)*f.x+(R.c.y-S.A.y)*f.y;if(d>0&&Math.abs(lat(R.c)-lat(S.A))<Lw/2+250*G)gap=Math.min(gap,d)}
+    S.rush=!!(D.rush&&S.post==='att'&&gap<D.rush*G);if(S.rush)v*=RUN*.9;
+    const st=Math.max(0,Math.min(v*.8,gap-D.stop*G));S.A={x:S.A.x+f.x*st,y:S.A.y+f.y*st}}
+  else S.rush=false;
+  const A=S.A;
+  // le régiment ennemi d'en face (le plus proche dans un cône devant)
+  const facing=(R,rad,cone)=>{let b=null,bd=1e9;for(const T of enF){if(T.k==='skirm'&&rad<200*G)continue;const dx=T.c.x-R.c.x,dy=T.c.y-R.c.y,d=Math.hypot(dx,dy);if(d>rad)continue;
+      const along=(dx*f.x+dy*f.y)/(d||1);if(along<cone)continue;const sc=d*(1.4-along)*(T.eng?.85:1);if(sc<bd){bd=sc;b=T}}return b};
+  const S0=S;
+  line.forEach((R,i)=>{const ro=role(R);relieve(R);
+    // forme de la ligne : centre en retrait ou en avant (arc), ordre oblique (obl) ; seulement en marchant à l'ennemi
+    const q=n>1?i/(n-1)-.5:0,off=S0.post==='def'?0:(D.arc*(1-4*q*q)+D.obl*q)*G;
+    const S={x:A.x+rx*(i-(n-1)/2)*(WR+GAP)+f.x*off,y:A.y+ry*(i-(n-1)/2)*(WR+GAP)+f.y*off};
+    if(ro.st==='m'){const T=ro.t&&en.find(x=>x.id===ro.t);if(T&&T.sq.length>T.rt&&T.sq.some(okv)){fight(R,T,Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y)<90*G);return}
+      const N2=facing(R,220*G,-.2);if(N2){ro.t=N2.id;fight(R,N2,true);return}ro.st='';ro.t=null}
+    const trig=R.eng?999:S0.post==='def'?(S0.contact>=0?120*G:60*G):S0.post==='avance'?90*G:inM>=n/3?260*G:D.trig*G;
+    const T=facing(R,trig,R.eng?-1:.25);
+    if(T){ro.st='m';ro.t=T.id;fight(R,T,true);return}
+    block(R,S,F,S0.rush)});
+  // ---- réserve : bouche les trous, fait face aux débordements, remplace les régiments usés ----
+  const lineEnds=[A.x-rx*Lw/2,A.y-ry*Lw/2,A.x+rx*Lw/2,A.y+ry*Lw/2];
+  const resFree=res.filter(R=>role(R).ro==='res'&&role(R).st!=='m');
+  // menace de flanc : un régiment ennemi (pas des tirailleurs) au-delà du bout de la ligne, à moins de 220 m
+  for(const T of enF){if(T.k==='skirm')continue;const lt=lat(T.c)-lat(A),ov=Math.abs(lt)-Lw/2;if(ov<0)continue;
+    const end=lt<0?{x:lineEnds[0],y:lineEnds[1]}:{x:lineEnds[2],y:lineEnds[3]};if(Math.hypot(T.c.x-end.x,T.c.y-end.y)>220*G)continue;
+    if(my.some(R=>role(R).t===T.id&&role(R).st==='m'))continue;
+    const c=resFree.filter(R=>role(R).st!=='m').sort((a,b)=>Math.hypot(a.c.x-T.c.x,a.c.y-T.c.y)-Math.hypot(b.c.x-T.c.x,b.c.y-T.c.y))[0];
+    if(c){role(c).st='m';role(c).t=T.id;S.st.flank++;resFree.splice(resFree.indexOf(c),1)}}
+  // régiment de ligne usé ou en miettes : la réserve prend sa place, il recule
+  for(const R of line){const ro=role(R);const worn=R.sq.length<=3||R.pw<ro.pw0*D.worn;if(!worn||!resFree.length)continue;
+    const c=resFree.sort((a,b)=>Math.hypot(a.c.x-R.c.x,a.c.y-R.c.y)-Math.hypot(b.c.x-R.c.x,b.c.y-R.c.y)).shift(),rc=role(c);
+    rc.ro='line';rc.ord=ro.ord;rc.st=ro.st;rc.t=ro.t;ro.ro='worn';ro.st='';ro.t=null;S.st.commit++;
+    for(const v of R.sq)if(!v.contacts.length){v._pf=null}}
+  // régiment de ligne détruit : la réserve vient prendre sa place dans l'ordre de la ligne (le trou se referme de lui-même sinon)
+  res.forEach((R,j)=>{const ro=role(R);relieve(R);
+    if(ro.st==='m'){const T=en.find(x=>x.id===ro.t);if(T&&T.sq.length>T.rt){fight(R,T,true);return}ro.st='';ro.t=null}
+    if(R.eng){const T=facing(R,200*G,-1);if(T){ro.st='m';ro.t=T.id;fight(R,T,true);return}}
+    const m=res.length,o=(j-(m-1)/2)*(WR+GAP*3),back=ro.ro==='worn'?220*G:FRKb*2+80*G;
+    block(R,{x:A.x-f.x*back+rx*o,y:A.y-f.y*back+ry*o},F,false)});
+  // ---- ailes de cavalerie ----
+  for(const [wk,s] of [['wL',-1],['wR',1]]){const C=my.filter(R=>role(R).ro===wk);if(!C.length)continue;
+    const base={x:A.x+rx*s*(Lw/2+WR/2+30*G),y:A.y+ry*s*(Lw/2+WR/2+30*G)};
+    const EC=enF.filter(T=>KC(T.k)&&(Math.sign(lat(T.c)-lat(A))===s||Math.hypot(T.c.x-base.x,T.c.y-base.y)<380*G)&&Math.hypot(T.c.x-base.x,T.c.y-base.y)<750*G);
+    const cp=C.reduce((a,R)=>a+R.pw,0),ep=EC.reduce((a,T)=>a+T.pw,0),wK=D.cavK*(D.hammer?(s>0?.7:1.3):1),strong=!EC.length||cp>=ep*(S.post==='att'?.75:.9)*wK;
+    // proie : régiment d'infanterie ennemi engagé le plus au bout de la ligne, de notre côté
+    const prey=enF.filter(T=>!KC(T.k)&&T.eng).sort((a,b)=>s*(lat(b.c)-lat(a.c)))[0];
+    const runners=enF.filter(T=>T.rt>0||T.k==='skirm');
+    C.forEach((R,k)=>{const ro=role(R),light=R.k==='lcav';
+      const slot={x:base.x+rx*s*k*(WR+GAP)-f.x*10*G,y:base.y+ry*s*k*(WR+GAP)-f.y*10*G};
+      if(R.eng){const T=facing(R,160*G,-1);if(T){fight(R,T,true);return}}
+      // cavalerie légère : elle ne se mesure pas à la cavalerie lourde ; menacée, elle s'écarte (elle est plus rapide)
+      if(light&&D.harass&&!R.eng){const ti=enF.filter(T=>!KC(T.k)&&T.k!=='skirm').map(T=>[T,Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y)]).filter(q=>q[1]<95*G).sort((a,b)=>a[1]-b[1])[0];
+        if(ti){const dx=R.c.x-ti[0].c.x,dy=R.c.y-ti[0].c.y,l=Math.hypot(dx,dy)||1;block(R,{x:R.c.x+dx/l*150*G,y:R.c.y+dy/l*150*G},Math.atan2(-dy,-dx),true);ro.st='esq';return}}
+      if(light){const th=EC.filter(T=>T.k==='cav').map(T=>[T,Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y)]).filter(q=>q[1]<260*G).sort((a,b)=>a[1]-b[1])[0];
+        if(th&&th[0].pw>R.pw*.6){const dx=R.c.x-th[0].c.x,dy=R.c.y-th[0].c.y,l=Math.hypot(dx,dy)||1,bx=-f.x*.5+dx/l,by=-f.y*.5+dy/l,bl=Math.hypot(bx,by)||1;
+          block(R,{x:R.c.x+bx/bl*200*G,y:R.c.y+by/bl*200*G},Math.atan2(-dy,-dx),true);ro.st='esq';return}}
+      const ECr=light?EC.filter(T=>T.k==='lcav'):EC,cpr=C.filter(Q=>(Q.k==='lcav')===light).reduce((a,Q)=>a+Q.pw,0),epr=ECr.reduce((a,T)=>a+T.pw,0),strongr=!ECr.length||cpr>=epr*(S.post==='att'?.75:.9)*wK;
+      if(ECr.length){const T=ECr.sort((a,b)=>Math.hypot(a.c.x-R.c.x,a.c.y-R.c.y)-Math.hypot(b.c.x-R.c.x,b.c.y-R.c.y))[0],d=Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y);
+        if(strongr){ro.st='m';fight(R,T,d<300*G);return}
+        // trop faible : garder le flanc, en retrait, et contre-charger ce qui s'approche de la ligne
+        const near=ECr.find(T=>line.some(L=>Math.hypot(T.c.x-L.c.x,T.c.y-L.c.y)<150*G)||Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y)<130*G);
+        if(near){ro.st='m';fight(R,near,true);return}
+        if(!light){ro.st='garde';block(R,{x:base.x-rx*s*20*G-f.x*90*G+rx*s*k*(WR+GAP),y:base.y-ry*s*20*G-f.y*90*G+ry*s*k*(WR+GAP)},F,false);return}}
+      // cavalerie légère libre : tirailleurs ennemis à portée, sinon harcèlement d'un flanc ennemi à portée de javelot
+      const shaken=prey&&prey.sq.reduce((a,v)=>a+v.morale/v.T.morale,0)/Math.max(1,prey.sq.length)<.55;
+      if(light&&(!prey||D.harass&&!shaken)){const sk=enF.filter(T=>T.k==='skirm'&&Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y)<320*G)[0];if(sk){ro.st='m';fight(R,sk,true);return}
+        const tg=enF.filter(T=>T.k==='inf').sort((a,b)=>s*(lat(b.c)-lat(a.c)))[0];
+        if(tg&&R.sq.some(v=>v.T.ranged)){const P={x:tg.c.x+rx*s*(WR*.5+100*G),y:tg.c.y+ry*s*(WR*.5+100*G)};ro.st='har';block(R,P,Math.atan2(tg.c.y-P.y,tg.c.x-P.x),false);return}}
+      // aile libre : on tourne la ligne ennemie et l'on charge dans le dos d'un régiment engagé
+      if(prey){const tsq=prey.sq.length?prey.sq:prey.grp,fa=Math.atan2(tsq.reduce((a,v)=>a+Math.sin(v.ang),0),tsq.reduce((a,v)=>a+Math.cos(v.ang),0)),P={x:prey.c.x-Math.cos(fa)*110*G,y:prey.c.y-Math.sin(fa)*110*G};
+        const side={x:prey.c.x+rx*s*170*G,y:prey.c.y+ry*s*170*G},past=s*(lat(R.c)-lat(prey.c))>WR*.8||Math.hypot(R.c.x-P.x,R.c.y-P.y)<160*G;
+        if(Math.hypot(R.c.x-P.x,R.c.y-P.y)<90*G||ro.st==='dos'&&R.sq.some(v=>v.order&&v.order.type==='attack')){ro.st='dos';fight(R,prey,true);if(!ro.cnt){ro.cnt=1;S.st.rear=(S.st.rear||0)+1}return}
+        ro.st='tour';const Q=past?P:side;block(R,Q,Math.atan2(prey.c.y-Q.y,prey.c.x-Q.x),true);return}
+      // fuyards et tirailleurs à portée : la cavalerie les ramasse
+      const r=runners.filter(T=>Math.hypot(T.c.x-R.c.x,T.c.y-R.c.y)<(S.post==='def'?220:340)*G).sort((a,b)=>Math.hypot(a.c.x-R.c.x,a.c.y-R.c.y)-Math.hypot(b.c.x-R.c.x,b.c.y-R.c.y))[0];
+      if(r){const tg=r.grp.filter(v=>!v.dead&&!v.pend);const t=tg.sort((a,b)=>Math.hypot(a.x-R.c.x,a.y-R.c.y)-Math.hypot(b.x-R.c.x,b.y-R.c.y))[0];
+        if(t){for(const v of R.sq)if(free(v))atk(v,t,true);ro.st='chasse';return}}
+      ro.st='';block(R,slot,F,false)})}
+  // ---- tirailleurs : écran devant, repli derrière les ailes, tir depuis les flancs ----
+  const scr=my.filter(R=>role(R).ro==='scr'),ns=scr.length;
+  scr.forEach((R,j)=>{const ro=role(R);const o=ns>1?(j/(ns-1)-.5)*Math.max(Lw,ns*WR*.9):0,sd=o<0?-1:1;
+    const thr=enF.filter(T=>T.k!=='skirm').map(T=>{let d=1e9;for(const v of T.sq)for(const u of R.sq)d=Math.min(d,Math.hypot(v.x-u.x,v.y-u.y));return [T,d]}).sort((a,b)=>a[1]-b[1])[0];
+    const close=thr&&thr[1]<(KC(thr[0].k)?170:120)*G;
+    if(close||ro.st==='back'&&inM===0&&thr&&thr[1]<260*G){ro.st='back';block(R,{x:A.x-f.x*75*G+rx*sd*(Lw/2+20*G+Math.abs(o)*.15),y:A.y-f.y*75*G+ry*sd*(Lw/2+20*G+Math.abs(o)*.15)},F,true);return}
+    if(inM>0||ro.st==='back'){ro.st='flanc';block(R,{x:A.x+f.x*25*G+rx*sd*(Lw/2+WR*.6+40*G),y:A.y+f.y*25*G+ry*sd*(Lw/2+WR*.6+40*G)},Math.atan2(E.y-A.y,E.x-A.x),false);return}
+    ro.st='ecran';block(R,{x:A.x+f.x*95*G+rx*o,y:A.y+f.y*95*G+ry*o},F,false)});
+  // ---- éléphants : devant le centre, lâchés sur l'infanterie à portée ----
+  const el=my.filter(R=>role(R).ro==='ele');
+  el.forEach((R,j)=>{const ro=role(R);if(ro.st==='m'){const T=en.find(x=>x.id===ro.t);if(T&&T.sq.length>T.rt){fight(R,T,true);return}}
+    const T=facing(R,S.post==='def'?170*G:D.eleR*G,.2);if(T&&T.k!=='skirm'){ro.st='m';ro.t=T.id;fight(R,T,true);return}
+    const o=(j-(el.length-1)/2)*Math.min(260*G,Lw/Math.max(1,el.length));block(R,{x:A.x+f.x*60*G+rx*o,y:A.y+f.y*60*G+ry*o},F,false)});
+  return true}
+IB.tick=tick;for(const k of ['post','why','hist','st','roles','A','D'])Object.defineProperty(IB,k,{get(){return (IB.sd[1]||{})[k]}});
+// nouvelle bataille : on oublie le plan précédent
+{const _st=setup;setup=function(){IB.sd={};return _st.apply(this,arguments)}}
+window.__iaB=IB;
+// choix de l'IA sur l'écran d'accueil (gardé dans le navigateur)
+try{const box=document.getElementById('taille');if(box&&!document.getElementById('sIA')){const l=document.createElement('label');
+  l.innerHTML='IA ennemie <select id="sIA"><option value="nouvelle">Nouvelle (plan de bataille)</option><option value="ancienne">Ancienne</option></select>';
+  box.appendChild(l);const sel=l.querySelector('select');sel.value=IB.on?'nouvelle':'ancienne';
+  sel.addEventListener('change',()=>{IB.on=sel.value==='nouvelle';IB.sd={};try{localStorage.setItem('bellum.ia',sel.value)}catch(e){}})}}catch(e){}
+}
+/* ================= FIN IA PLAN DE BATAILLE ================= */
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   GROUND=await groundP;
   buildTerrain();buildScenery();buildMinimap();
   $('loading').textContent='Rassemblement des troupes…';
-  try{beelimReady=FIG==='beelim'&&await loadBeelim()}catch(e){console.warn('Modèles Beelim indisponibles, figurines simples utilisées',e);beelimReady=false}
   for(const id in BM)if(!BM[id].nv)delete BM[id];
   setup();resize();updateCamera();if(INTRO)introStart();
-  {const sT=$('sTaille'),cO=$('cOmbres'),sF=$('sFig');sT.value=String(SIZE);cO.checked=SHADOWS;sF.value=FIG;
-   const apply=()=>{try{localStorage.setItem('bellum.taille',sT.value);localStorage.setItem('bellum.ombres',cO.checked?'1':'0');localStorage.setItem('bellum.figurines',sF.value)}catch(e){}
-     const u=new URL(location.href);u.searchParams.delete('taille');history.replaceState(null,'',u.href);location.reload()};
-   sT.onchange=apply;cO.onchange=apply;sF.onchange=apply}
   $('loading').remove();
   window.addEventListener('resize',resize);
-  let last=performance.now(),hudT=0,mmT=0,fpsN=0,fpsT=0,fpsL=performance.now();
-  const fpsEl=document.createElement('div');fpsEl.id='fps';document.body.appendChild(fpsEl);
+  let last=performance.now(),hudT=0,mmT=0;
   function frame(now){
     const raw=Math.min(.05,(now-last)/1000);last=now;
     if(!paused&&started){let t=raw*speed;while(t>0){const s=Math.min(t,1/30);step(s);t-=s}rt+=raw*speed}
     else rt+=raw*.15;
     flagTime.value+=raw;
     keyPan(raw);updateCamera();
-    if(waterTex)waterTex.offset.y-=raw*.035;
-    updateFigures();if(beelimReady)updateBeelim(paused?0:raw*speed);updateFx();updateParticles(paused?0:raw*speed);updateTags();
+    updateTags(); /* l'ancienne vue 3D n'est plus animée : figurines, effets et particules ne tournent plus */
     hudT-=raw;if(hudT<=0){hudT=.2;hudTick()}
     mmT-=raw;if(mmT<=0){mmT=.12;drawMinimap()}
     renderer.render(scene,camera);
-    fpsN++;fpsT+=now-fpsL;fpsL=now;if(fpsT>=500){const f=Math.round(fpsN*1000/fpsT);fpsN=0;fpsT=0;
-      let alive=0;for(const u of units)if(!u.fled)alive+=u.shown;
-      fpsEl.textContent=f+' i/s · '+alive.toLocaleString('fr-FR')+' figurines · taille ×'+SIZE+(SHADOWS?'':' · sans ombres');fpsEl.style.color=f>=50?'#cfe8b0':f>=30?'#f0d890':'#f2a08a'}
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
