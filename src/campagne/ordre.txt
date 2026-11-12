@@ -88,4 +88,5 @@
 087-traites-fil-mecaniques-de-campagne-11-no.part
 088-performance-des-grandes-armees-fil-perfo.part
 089-garnisons-population-et-journal-etape-3.part
-090-boucle.part
+090-premiere-partie-et-regles-simples-etape.part
+091-boucle.part

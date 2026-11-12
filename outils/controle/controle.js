@@ -10,7 +10,8 @@
 //   3. qu'un an de campagne de Carthage passe sans erreur ;
 //   4. qu'une bataille Hannibal contre Scipion s'ouvre, se déploie et se joue 3 minutes ;
 //   5. qu'une sauvegarde se reprend au bon jour ;
-//   6. qu'une partie à deux (deux onglets) reste synchronisée.
+//   6. qu'une partie à deux (deux onglets) reste synchronisée ;
+//   7. que la première partie guidée (Cannes) amène une bataille en moins de 15 jours de jeu.
 // Toute erreur JavaScript de la page fait échouer le contrôle. Le rapport et les captures
 // vont dans outils/controle/rapport/.
 //
@@ -145,6 +146,21 @@ async function main() {
       note('Bataille : ouverture, déploiement direct, 8 minutes de combat', ok, `Carthage ${r.a[0]} → ${r.b[0]}, Rome ${r.a[1]} → ${r.b[1]}` + (r.err ? ' · ' + r.err : '') + (p.errs.length ? ' · ' + p.errs.slice(0, 3).join(' | ') : ''));
     } catch (e) { note('Bataille : ouverture, déploiement direct, 8 minutes de combat', false, String(e.message || e).slice(0, 300)); if (p) await p.screenshot({ path: path.join(RAPPORT, 'echec-bataille.png') }).catch(() => {}); }
     if (p) { await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await p.close(); }
+  }
+
+  // 7. première partie guidée (Cannes) : règles simples, guide, et les consuls viennent livrer bataille
+  {
+    let p;
+    try {
+      p = await page(); await p.click('#chgNew'); await p.waitForTimeout(600);
+      await p.click('#ppGo');
+      await p.waitForFunction(() => typeof window.__ev === 'function' && document.getElementById('mGo') && /Première partie/.test(document.getElementById('mcard').innerText), null, { timeout: 90000 });
+      await p.click('#mGo'); await p.waitForTimeout(800);
+      const r = await p.ev(`(()=>{const d0=S.day,todo=nvTodoList().map(x=>x.t).join(' | ');for(let i=0;i<4*15&&!S.cur;i++){S.paused=false;tick(.25)}
+        return JSON.stringify({jours:+(S.day-d0).toFixed(1),bataille:!!S.cur,simple:S.simple,guide:/Premiers pas 1/.test(todo)})})()`).then(JSON.parse);
+      note('Première partie guidée : bataille en moins de 15 jours', r.bataille && r.simple === 1 && r.guide && !p.errs.length, JSON.stringify(r) + (p.errs.length ? ' · ' + p.errs.slice(0, 3).join(' | ') : ''));
+    } catch (e) { note('Première partie guidée : bataille en moins de 15 jours', false, String(e.message || e).slice(0, 300)); if (p) await p.screenshot({ path: path.join(RAPPORT, 'echec-premiere.png') }).catch(() => {}); }
+    if (p) { await p.evaluate(() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }); await p.close(); }
   }
 
   // 6. partie à deux entre deux onglets (connexion locale ?mplocal)
