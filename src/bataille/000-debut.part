@@ -138,16 +138,12 @@ button.on{background:var(--gold);color:#1d1a12;border-color:var(--gold)}
       <p>Placez vos troupes pendant que le temps est arrêté, puis lancez la bataille. Les mêlées sont longues : c'est la charge, les flancs et le moral qui décident. Tenez le centre, écrasez les cavaleries adverses et prenez les légions à revers.</p>
       <p style="font-size:13px">Commandes au clic droit comme dans Total War : clic pour marcher, double clic pour courir, glisser pour tracer la ligne de front. Le bouton « ? » en haut à droite détaille tout.</p>
       <div id="taille" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px">
-        <label>Taille des unités <select id="sTaille"><option value="1">×1 (60 hommes)</option><option value="2">×2 (120)</option><option value="3">×3 (180)</option><option value="4">×4 (240)</option><option value="6">×6 (360, test)</option><option value="8">×8 (480, test)</option></select></label>
-        <label><input type="checkbox" id="cOmbres"> Ombres</label>
-        <label>Figurines <select id="sFig"><option value="bellum">Bellum (construites)</option><option value="beelim">Modèles Beelim</option></select></label>
       </div>
       <button class="go" id="bGo" type="button">Lancer la bataille</button>
       <button id="bPrep" type="button" style="align-self:flex-start">Préparer le déploiement d'abord</button>
       <button id="bCamp" type="button" style="align-self:flex-start">Mode campagne</button>
       <button id="bRevue" type="button" style="align-self:flex-start">Revue des troupes (toutes les unités et équipements)</button>
       <button id="bPeuples" type="button" style="align-self:flex-start">Revue des peuples (Rome, Macédoine, Sparte, Athènes)</button>
-      <p style="font-size:12px">Modèles Beelim : Beelim Solutions.</p>
     </div>
   </div>
 
@@ -162,7 +158,6 @@ button.on{background:var(--gold);color:#1d1a12;border-color:var(--gold)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 (function(){
 /* Taille des unités (test de charge) : ×1 = 60 fantassins par régiment. Réglée sur l'écran d'accueil ou par ?taille=4 dans l'adresse. */

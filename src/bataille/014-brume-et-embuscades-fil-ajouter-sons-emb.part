@@ -29,7 +29,7 @@ let BRUME=!!(CAMP&&CAMP.b&&CAMP.b.brume);
     const r=hide(_rr,0).apply(this,arguments);try{overlay()}catch(e){}return r}}
   // l'IA (camp 1) ne réagit qu'à ce qu'elle voit
   {const _ai=ai;ai=function(){const r=hide(_ai,1).apply(this,arguments);
-    if(!units.some(u=>u.side===0&&!u.dead&&!u.routing&&seenBy(1,u))){ // rien en vue : on avance prudemment vers le centre
+    if(!(window.__iaB&&window.__iaB.active)/*IA-BRUME*/&&!units.some(u=>u.side===0&&!u.dead&&!u.routing&&seenBy(1,u))){ // rien en vue : on avance prudemment vers le centre
       for(const u of units)if(u.side===1&&!u.dead&&!u.routing&&!u.amb&&!u.contacts.length&&(!u.order||u.order.type==='move')&&u.y<H*.55)u.order={type:'move',x:u.x,y:Math.min(H*.55,u.y+90*G),face:Math.PI/2}}
     // embuscades de l'IA : tenir le bois tant que l'ennemi n'est pas tout près, puis charger
     for(const u of units){if(u.side!==1||!u.amb||u.dead||u.routing)continue;const near=units.filter(e=>e.side===0&&!e.dead&&!e.routing&&!e.pend);

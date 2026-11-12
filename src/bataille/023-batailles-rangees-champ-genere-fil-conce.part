@@ -54,6 +54,7 @@
     if(!best)return [];
     const nx=-best.uy,ny=best.ux,su=Math.sign((u.x-best.x)*nx+(u.y-best.y)*ny)||1,o=best.hw+30*K;
     return [[best.x+nx*su*o,best.y+ny*su*o],[best.x-nx*su*o,best.y-ny*su*o]]}
+  window.__rgGeo={water,segHit,crossAt,hAt,inMarsh};/*IA-RG*/
   /* --- déplacements --- */
   const _mv=moveUnit;
   moveUnit=function(u,dt){
