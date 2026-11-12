@@ -207,7 +207,7 @@ kbd{font-family:var(--ui);border:1px solid var(--line);border-radius:3px;padding
 <div id="chg" class="charge"><canvas></canvas><div class="chg-fr t"></div><div class="chg-fr b"></div>
  <div class="chg-tt"><h1>Roma Delenda Est</h1><p>La deuxième guerre punique · 218 – 201 av. J.-C.</p><hr><div id="chgMenu"></div></div>
  <div class="chg-lo"><p class="chg-fait" id="chgFait"></p><div class="chg-bar"><i></i></div><span class="chg-et" id="chgEtape">Chargement…</span></div>
- <span class="chg-ver">v225</span>
+ <span class="chg-ver">v226</span>
 </div>
 <script>
 window.__chgT0=performance.now();
@@ -13634,6 +13634,16 @@ if(typeof chgBataille==='function'){const _cbE=chgBataille;chgBataille=function(
   const M={gau:'ins'},ks=[o&&o.pp,o&&o.ep].map(k=>M[k]||k),cs=document.querySelectorAll('#chgB .chgB-c > i');
   cs.forEach((el,i)=>{const k=ks[i];if(k&&(PEO_EMB_D[k]||PEO_IMG[k])){el.classList.add('peMed');el.innerHTML=PEO_EMB(k,48)}})}catch(e){}return r}}
 {const st=document.createElement('style');st.textContent='.chgB-c i.peMed{background:none!important;border:0!important;box-shadow:none!important;width:52px!important;height:52px!important}.chgB-c i.peMed svg{padding:0!important;width:100%;height:100%}';document.head.appendChild(st)}
+// portrait générique des généraux : le signe de Tanit ne vaut que pour Carthage ; les autres peuples ont le médaillon de leur drapeau
+// (bannières et bandeau de la bataille, corps d'armée, conseil de guerre). Peuple sans drapeau : étoile sur sa couleur.
+const peoOfSide=s=>{try{if(s==='car')return peoCur();if(s==='pun')return 'car';if(s==='rom'&&S&&S.mirror)return 'car';return {gau:'ins'}[s]||s}catch(e){return s}};
+const PEO_GEN={};
+function peoGenURL(side){const k=peoOfSide(side);if(k==='car')return null;if(PEO_IMG[k])return PEO_IMG[k];if(PEO_GEN[side])return PEO_GEN[side];
+  const c=(typeof FAC!=='undefined'&&FAC[side]&&FAC[side].c)||[120,110,90],f=m=>'rgb('+c.map(v=>Math.round(v*m)).join(',')+')';
+  return PEO_GEN[side]='data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><radialGradient id="g" cx=".4" cy=".32" r=".85"><stop offset="0" stop-color="${f(1)}"/><stop offset="1" stop-color="${f(.35)}"/></radialGradient></defs><circle cx="32" cy="32" r="32" fill="url(#g)"/><circle cx="32" cy="32" r="25" fill="none" stroke="#f3e6c4" stroke-width="1.6" opacity=".7"/><path d="M32 13l4.6 12.300l13.100 .600l-10.300 8.200l3.500 12.700L32 39.500l-10.900 7.300l3.500 -12.700l-10.300 -8.200l13.100 -.600Z" fill="#f3e6c4"/></svg>`)}
+if(typeof porGenURL==='function'&&typeof POR_IMG!=='undefined'){const _pgE=porGenURL;porGenURL=function(g){const r=_pgE.apply(this,arguments);
+  try{if(g&&r&&r===POR_IMG.gc){const u=peoGenURL(g.side);if(u)return u}}catch(e){}return r}}
+window.__peoEmb=sz=>{try{return PEO_EMB(peoCur(),sz||34)}catch(e){return ''}};
 /* ---------- MENUS SIMPLIFIÉS (fil Interface, 11 nov.) ----------
    1. barre du haut : les boutons d'origine (.ui-menu) restent dans la page mais sont cachés ; cinq boutons nommés les regroupent.
       Tout bouton ajouté plus tard à .ui-menu par un autre fil apparaît tout seul dans « Partie » (ou dans NV_G si on l'y range).

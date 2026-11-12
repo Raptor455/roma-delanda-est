@@ -5662,6 +5662,141 @@ const _hudTick=hudTick;
 hudTick=function(){_hudTick();try{updCards()}catch(e){}};
 }
 /* ================= FIN INTERFACE BRONZE : bataille ================= */
+/* ================= BANDEAU D'ARMÉE (fil Interface, 12 nov.) =================
+   Le bandeau du bas (#uiCards) rangé par corps : un onglet par général (portrait, corps, effectifs, état), et dessous
+   les régiments du corps choisi, en cartes larges au nom lisible. Premier onglet « Toute l'armée » : toutes les cartes
+   en petit, chacune avec le liseré de couleur de son corps. Cliquer un onglet choisit le corps entier (Maj : ajouter),
+   double clic : y aller. Choisir un régiment sur la carte ouvre l'onglet de son corps.
+   Les cartes d'origine (.ui-uc) sont déplacées, pas recréées : effectifs, jauges, états et clics restent ceux des autres blocs.
+   Sans corps (bataille libre) : onglets par arme. Source : /mnt/project-files/interface/bandeau-bataille.js, posé par
+   interface/patch_bataille.py juste avant « window.__bellum={cam, ». */
+try{(function(){
+const bar=document.getElementById('uiCards');if(!bar)return;
+const COL=['#e8c77e','#7fc4d8','#e59a86','#9fd18c','#c9a6ef','#d8b25e','#8fa8e8','#d88ac0','#a8c070','#e0a0a0'];
+const KG={cav:'cav',lcav:'cav',inf:'inf',skirm:'skirm',eleph:'eleph'},KGN={cav:'Cavalerie',inf:'Infanterie',skirm:'Tirailleurs',eleph:'Éléphants'};
+const regOf=u=>{try{return (window.__carres&&window.__carres.regOf(u))||[u]}catch(e){return [u]}};
+const escB=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const PARW=()=>{try{return window.parent&&window.parent!==window?window.parent:null}catch(e){return null}};
+const st=document.createElement('style');st.textContent=`
+#uiCards.abOn{display:block;padding:0;overflow:visible;gap:0}
+#uiCards.abOn .abTabs{display:flex;gap:3px;padding:5px 6px 0;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid rgba(210,174,108,.5)}
+#uiCards.abOn .abTabs::-webkit-scrollbar{display:none}
+.abT{flex:1 1 0;min-width:108px;max-width:230px;display:flex;align-items:center;gap:7px;padding:4px 8px 5px 5px;margin:0 0 -1px;border:1px solid rgba(210,174,108,.3);border-bottom:0;border-top:3px solid var(--abc,#d2ae6c);border-radius:3px 3px 0 0;
+  background:rgba(14,10,7,.7);color:#b9a98a;opacity:.82;cursor:pointer;text-align:left;font:inherit;position:relative;min-height:0}
+.abT:hover{background:rgba(58,44,30,.9);color:#efe4cc;opacity:1}
+.abT.on{background:linear-gradient(180deg,#6a5236,#33281c);border-color:#e2c27e;border-top-color:var(--abc,#d2ae6c);color:#efe4cc;opacity:1;box-shadow:0 -2px 10px rgba(241,208,138,.25)}
+.abT.has::after{content:"";position:absolute;left:6px;right:6px;bottom:1px;height:2px;background:#f1d08a;border-radius:1px}
+.abT.all{flex:0 0 auto;min-width:0;padding:4px 10px}
+.abPo{flex:none;width:34px;height:34px;border-radius:50%;overflow:hidden;border:1.5px solid var(--abc,#d2ae6c);background:#1b1510;display:grid;place-items:center;color:var(--abc,#d2ae6c);font:bold 16px Georgia,serif}
+.abPo img{width:100%;height:100%;object-fit:cover;display:block}.abPo>span,.abPo>svg{width:100%!important;height:100%!important;display:block}
+.abTx{flex:1;min-width:0;display:grid;gap:1px;line-height:1.12}
+.abTx small{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--abc,#d2ae6c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.abTx b{font-size:13px;font-weight:600;color:#efe4cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.abTx i{font-style:normal;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.abTx s{display:block;height:3px;background:rgba(255,255,255,.12);text-decoration:none;border-radius:1px;margin-top:1px}.abTx s u{display:block;height:100%;background:#9fd18c;border-radius:1px;text-decoration:none}
+.abT em{font-style:normal;font-size:10px;font-weight:700;border-radius:8px;padding:0 5px;line-height:15px;position:absolute;right:4px;top:3px}
+.abT em.f{background:#e0883c;color:#1b1510}.abT em.r{background:#d24a3a;color:#fff}.abT em.r+em.f,.abT em.f+em.r{right:auto}
+.abT.gone{opacity:.45}
+#uiCards.abOn .abBody{display:flex;gap:4px;padding:6px;height:92px;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;align-items:flex-start}
+.abP{display:flex;gap:4px;flex:1;min-width:0}.abP[hidden]{display:none}
+.abP .abE{align-self:center;color:#b9a98a;font-size:12.5px;padding:0 8px}
+#uiCards.abOn .ui-uc{flex:1 1 66px;min-width:48px;max-width:78px;width:auto;height:80px;padding-top:5px;border-top:3px solid var(--abc,#d2ae6c);box-sizing:border-box}
+#uiCards.abOn .ui-uc svg{width:26px;height:18px}
+#uiCards.abOn .ui-uc .n{max-width:none;width:100%;padding:0 3px;box-sizing:border-box;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.08;font-size:10.5px}
+#uiCards.abOn .ui-uc.on{transform:translateY(-3px)}
+#uiCards.abOn .ui-uc .g{bottom:3px}
+#uiCards.abOn.abAll .abBody{flex-wrap:wrap;overflow-y:auto;overflow-x:hidden;align-content:flex-start;gap:3px}
+#uiCards.abOn.abAll .abP{display:contents}#uiCards.abOn.abAll .abP[hidden]{display:contents}
+#uiCards.abOn.abAll .abP .abE{display:none}
+#uiCards.abOn.abAll .ui-uc{flex:0 0 40px;min-width:0;max-width:none;width:40px;height:38px;padding-top:2px;gap:0}
+#uiCards.abOn.abAll .ui-uc .n{display:none}#uiCards.abOn.abAll .ui-uc svg{width:17px;height:12px}
+#uiCards.abOn.abAll .ui-uc b{font-size:10.5px}
+#uiCards.abOn.abAll .ui-uc.on{transform:none}
+#uiCards.abOn .abStash{display:none}
+#app:has(#uiCards.abOn) #corpsBtns{display:none}
+@media (max-width:1100px){.abT{min-width:84px}.abPo{width:28px;height:28px}}`;
+document.head.appendChild(st);
+
+let GR=null,act=null,sig='',selSig='',porT=0;
+// groupes : les corps de la campagne (au moins deux), sinon les armes
+function mkGroups(heads){
+  let C=[];try{C=((window.__echelle&&window.__echelle.corps)||[[]])[0].filter(o=>o.us&&o.us.length)}catch(e){}
+  const L=[];
+  if(C.length>=2){const chief=(C.find(o=>o.chef)||C[0]).armee;
+    C.forEach((o,i)=>{const nog=!o.n||o.n==='sans général';
+      L.push({k:'c'+o.k,o,up:o.chef?'Général en chef':o.corps==='corps du chef'?(nog||/^Garnison/.test(o.n)?'Garnison':'Autre armée'):o.corps+(o.armee&&o.armee!==chief?' · '+o.armee:''),
+        name:nog?(o.armee||'Sans général'):o.n,stars:o.st||0,glyph:o.chef?'★':'✦',tip:`${o.corps}${o.armee?' ('+o.armee+')':''}${o.tr&&o.tr.length?' · '+o.tr.join(', '):''}`,has:u=>u.cp===o.k})});
+    if(heads.some(u=>!L.some(g=>g.has(u))))L.push({k:'c?',up:'Hors corps',name:'Sans général',stars:0,glyph:'·',tip:'Régiments sans chef de corps',has:u=>!L.slice(0,-1).some(g=>g.has(u))})}
+  else for(const k of ['cav','inf','skirm','eleph'])if(heads.some(u=>KG[u.T.kind]===k))L.push({k:'k'+k,up:'Arme',name:KGN[k],stars:0,glyph:{cav:'◣',inf:'✕',skirm:'∴',eleph:'◗'}[k],tip:KGN[k],has:u=>KG[u.T.kind]===k});
+  L.forEach((g,i)=>g.col=COL[i%COL.length]);return L}
+function portrait(g){if(g.porOk||!g.po)return;let src=null,emb=null;const P=PARW();
+  try{if(g.o&&P&&P.__apercu)src=P.__apercu.por(g.o.k)}catch(e){}
+  if(!src){try{if(P&&P.__peoEmb)emb=P.__peoEmb(34)}catch(e){}}
+  if(src){g.po.innerHTML=`<img src="${src}" alt="">`;g.porOk=true}else if(emb&&!g.po.dataset.emb){g.po.dataset.emb=1;g.po.innerHTML=emb}}
+function build(){
+  const all=[...bar.querySelectorAll('.ui-uc')];if(!all.length||!all.some(d=>d._u))return false;
+  const heads=all.filter(d=>d._u&&d.style.display!=='none'),rest=all.filter(d=>!heads.includes(d));
+  GR=mkGroups(heads.map(d=>d._u));if(!GR.length){GR=null;return false}
+  const tabs=document.createElement('div');tabs.className='abTabs';tabs.setAttribute('role','tablist');
+  const body=document.createElement('div');body.className='abBody';const stash=document.createElement('div');stash.className='abStash';
+  const tAll=document.createElement('button');tAll.type='button';tAll.className='abT all';tAll.dataset.k='*';tAll.title='Voir tous les régiments ; la couleur du liseré est celle du corps';
+  tAll.innerHTML=`<span class="abTx"><small>Vue d'ensemble</small><b>Toute l'armée</b><i></i></span>`;tabs.appendChild(tAll);
+  for(const g of GR){
+    const t=document.createElement('button');t.type='button';t.className='abT';t.dataset.k=g.k;t.style.setProperty('--abc',g.col);t.title=g.tip+' · clic : choisir le corps (Maj : ajouter), double clic : y aller';
+    t.innerHTML=`<span class="abPo">${g.glyph}</span><span class="abTx"><small>${escB(g.up)}</small><b>${escB(g.name)}${g.stars?' <span style="color:#e8c77e;font-size:10px">'+'★'.repeat(g.stars)+'</span>':''}</b><i></i><s><u></u></s></span>`;
+    g.tab=t;g.po=t.querySelector('.abPo');g.inf=t.querySelector('i');g.gau=t.querySelector('u');g.cards=[];tabs.appendChild(t);
+    const p=document.createElement('div');p.className='abP';p.dataset.k=g.k;g.pane=p;body.appendChild(p)}
+  for(const d of heads){const g=GR.find(g=>g.has(d._u))||GR[GR.length-1];d.style.setProperty('--abc',g.col);g.pane.appendChild(d);g.cards.push(d);
+    const n=d.querySelector('.n');if(n&&d._u.label)n.textContent=String(d._u.label).replace(/^Infanterie /,'').replace(/^Cavalerie /,'Cav. ')}
+  for(const d of rest)stash.appendChild(d);
+  bar.textContent='';bar.appendChild(tabs);bar.appendChild(body);bar.appendChild(stash);bar.classList.add('abOn');
+  GR.all=tAll;GR.allInf=tAll.querySelector('i');
+  if(act!=='*'&&!GR.some(g=>g.k===act))act=GR[0].k;
+  tabs.onclick=e=>{const t=e.target.closest('.abT');if(!t)return;act=t.dataset.k;const g=GR.find(g=>g.k===act);
+    if(g){const us=[];for(const d of g.cards)for(const v of regOf(d._u))if(!v.dead&&!v.routing&&!v.pend)us.push(v);
+      try{selectSet(us,e.shiftKey||e.ctrlKey)}catch(x){}selSig=selKey()}
+    show();upd()};
+  tabs.ondblclick=e=>{const t=e.target.closest('.abT');const g=t&&GR.find(g=>g.k===t.dataset.k);if(!g)return;let x=0,y=0,n=0;
+    for(const d of g.cards)for(const v of regOf(d._u))if(!v.dead&&!v.pend){x+=v.x;y+=v.y;n++}if(n){cam.tx=x/n;cam.ty=y/n}};
+  for(const k of ['pointerdown','wheel'])tabs.addEventListener(k,e=>e.stopPropagation());
+  tabs.addEventListener('wheel',e=>{tabs.scrollLeft+=e.deltaY||e.deltaX},{passive:true});
+  show();return true}
+function show(){if(!GR)return;bar.classList.toggle('abAll',act==='*');GR.all.classList.toggle('on',act==='*');
+  for(const g of GR){g.tab.classList.toggle('on',g.k===act);g.pane.hidden=act!=='*'&&g.k!==act}}
+const selKey=()=>{let s='';try{for(const u of selected)s+=(u.reg!=null?u.reg:u.id)+','}catch(e){}return s};
+function upd(){if(!GR)return;let tm=0,tr=0;
+  for(const g of GR){let men=0,max=0,alive=0,fight=0,rout=0,pend=0,has=false;
+    for(const d of g.cards){const u=d._u,q=regOf(u),ms=u._ms||1;let a=0,f=false,r=0,m=0;
+      for(const v of q){if(v.dead)continue;a++;m+=v.men;if(v.routing)r++;else if(v.contacts&&v.contacts.length)f=true;if(selected.has(v))has=true}
+      max+=u.T.men*q.length*ms;men+=m*ms;if(a){alive++;if(u.pend)pend++;else if(r===a)rout++;else if(f)fight++}}
+    tm+=men;tr+=alive;
+    g.inf.textContent=alive?`${alive} rég. · ${Math.round(men).toLocaleString('fr-FR')} h.${pend?' · en route':''}`:'anéanti';
+    const fr=max?men/max:0;g.gau.style.width=Math.max(0,Math.min(100,fr*100))+'%';g.gau.style.background=fr>.6?'#9fd18c':fr>.35?'#e0b24c':'#d24a3a';
+    g.tab.classList.toggle('has',has);g.tab.classList.toggle('gone',!alive);
+    const want=(rout?'r'+rout:'')+(fight?'f'+fight:'');
+    if(g.tab.dataset.b!==want){g.tab.dataset.b=want;g.tab.querySelectorAll('em').forEach(e=>e.remove());
+      if(fight)g.tab.insertAdjacentHTML('beforeend',`<em class="f" title="${fight} régiment${fight>1?'s':''} au contact">⚔ ${fight}</em>`);
+      if(rout)g.tab.insertAdjacentHTML('beforeend',`<em class="r" title="${rout} régiment${rout>1?'s':''} en fuite" style="${fight?'right:38px':''}">↯ ${rout}</em>`)}
+    if(!g.cards.length&&!g.pane.firstChild)g.pane.innerHTML='<span class="abE">Aucun régiment.</span>';
+    portrait(g)}
+  GR.allInf.textContent=`${tr} rég. · ${Math.round(tm).toLocaleString('fr-FR')} h.`}
+function tick(){
+  const n=bar.querySelectorAll('.ui-uc').length;let ck='';try{ck=((window.__echelle&&window.__echelle.corps)||[[]])[0].filter(o=>o.us&&o.us.length).map(o=>o.k+':'+o.us.length).join('|')}catch(e){}
+  const s=n+'#'+ck;
+  if(!bar.querySelector(':scope > .abTabs')||s!==sig){
+    // (re)construction : cartes refaites par le jeu, renforts, nouveaux corps
+    if(GR){const tmp=[...bar.querySelectorAll('.ui-uc')];bar.textContent='';for(const d of tmp)bar.appendChild(d);GR=null}
+    if(build())sig=s;else{bar.classList.remove('abOn','abAll');return}}
+  // une carte restée hors des volets (doublon devenu tête, ou l'inverse) : on la range
+  for(const d of bar.querySelectorAll('.abStash > .ui-uc')){if(d._u&&d.style.display!=='none'){sig='';return}}
+  const k=selKey();
+  if(k!==selSig){selSig=k;if(k&&act!=='*'){const gs=GR.filter(g=>g.cards.some(d=>regOf(d._u).some(v=>selected.has(v))));if(gs.length===1&&gs[0].k!==act){act=gs[0].k;show()}}}
+  upd();
+  const h=bar.offsetHeight;if(h&&h!==bar._abH){bar._abH=h;const sl=document.getElementById('sel');if(sl&&getComputedStyle(bar).display!=='none')sl.style.setProperty('bottom',(h+18)+'px','important')}}
+const _htAB=hudTick;hudTick=function(){const r=_htAB.apply(this,arguments);try{tick()}catch(e){if(!bar._abErr){bar._abErr=1;console.warn('bandeau',e)}}return r};
+window.__bandeau={get groups(){return GR},get act(){return act},set act(v){act=v;show()},tick};
+})()}catch(e){console.warn('bandeau d\'armée',e)}
+/* ================= FIN BANDEAU D'ARMÉE ================= */
   window.__bellum={cam,get units(){return units},begin,BM,step,rebuild:buildUnitMeshes};
 },30);
 })();
