@@ -1,0 +1,617 @@
+/* ================= GÉNIE : matériel, ponts, machines et défense des sièges (fil « Améliorer les armées ») =================
+   Demande de Baptiste (9 nov.) : construire ponts et machines contre une ressource et du temps.
+   - Matériel (a.mat) : bois, fer, cordes, outils, porté par les chariots. On l'obtient en coupant du bois (l'armée s'arrête
+     et se fatigue), en l'achetant en ville, ou à l'arsenal d'une ville (nouveau bâtiment). Trait de général « Ingénieur ».
+   - Ponts du génie (S.gb) : pont de bateaux ou pont de bois jeté sur un fleuve, en temps réel ; l'ennemi qui approche arrête
+     le chantier ; une fois fini, c'est un passage pour tout le monde, qu'on peut brûler (ou replier, pour un pont de bateaux).
+   - Machines de siège (section 11 du fil Mécaniques) payées en matériel pour le joueur, plus les échelles ; dessinées aux murs.
+   - Défense des assiégés : contre-mur et contre-mine, avec les réserves de la ville (sg.mat) et le matériel de la garnison. */
+const GEN_HUM=side=>side==='car'||(typeof MPRH==='function'&&MPRH(side));
+const matCap=a=>a.g?10+a.units.length:a.bag?20+4*a.units.length:4+a.units.length;
+const matOf=a=>Math.floor(a.mat||0);
+const genIng=a=>hasTr(genOf(a),'ing');
+// jours de chantier : petites armées plus lentes, ingénieur 30 % plus rapide
+const genDays=(a,d)=>Math.max(1,Math.round(d*(a.units.length<4?1.5:1)*(genIng(a)?.7:1)));
+TRAITS.ing={n:'Ingénieur',d:'chantiers du génie 30 % plus rapides, +50 % de bois coupé'};
+if(!GOOD_TR.includes('ing'))GOOD_TR.push('ing');
+BLD.ars={n:'Arsenal',max:1,cost:[90],days:[40],txt:'chaque mois +12 de matériel aux armées présentes ; matériel vendu moins cher (15 or les 10)'};
+// ---- coupe du bois et achat ----
+function woodRate(a){if(!a.units.length)return 0;const n=a.units.length;let k=.1;
+  const t=terrainAt(a.x,a.y);let forest=t==='foret';
+  if(!forest)for(let q=0;q<8&&!forest;q++){const an=q*Math.PI/4;try{forest=forestAt(a.x+Math.cos(an)*5,a.y+Math.sin(an)*5)}catch(e){}}
+  k=forest?.8:t==='desert'||t==='marais'?.08:.3;
+  return Math.round(n*k*(genIng(a)?1.5:1)*10)/10}
+const woodKind=a=>{const r=woodRate(a)/Math.max(1,a.units.length);return r>=.7?'forêt':r>=.25?'bosquets et vergers':'presque rien à couper'};
+const matPrice=a=>a.at!=null&&bl(N[a.at].id,'ars')?15:25;
+const canBuy=a=>a.at!=null&&!a.legs.length&&!a.ship&&!N[a.at].col&&ownerN(a.at)===a.side&&Math.hypot(a.x-N[a.at].x,a.y-N[a.at].y)<3;
+function buyMat(a){if(!canBuy(a))return false;const c=matPrice(a),side=a.side;if((S.gold[side]||0)<c||matOf(a)+1>matCap(a))return false;
+  return engPay(a,()=>{S.gold[side]-=c;a.mat=Math.min(matCap(a),(a.mat||0)+10);if(side==='car')log(`${a.name} achète du matériel à ${N[a.at].n} (−${c} or).`);return true})}
+// ---- ponts du génie ----
+const GBRK={bat:{n:'Pont de bateaux',d:3,m:15,t:"Des barques liées et recouvertes de planches : vite fait, et on peut le replier pour reprendre une partie du matériel."},
+  bois:{n:'Pont de bois',d:6,m:30,t:"Des pieux enfoncés dans le lit et un tablier de poutres : plus long à bâtir, il reste jusqu'à ce qu'on le brûle."}};
+const gbOn=()=>typeof S!=='undefined'&&S&&S.gb&&S.gb.length;
+// point du fleuve le plus proche (à moins de maxd km)
+function rivNear(x,y,maxd){let best=null,bd=maxd;
+  for(let r=0;r<RIVD.length;r++){const R=RIVD[r];if(R.b[0]>x+maxd||R.b[2]<x-maxd||R.b[1]>y+maxd||R.b[3]<y-maxd)continue;const P=R.P;
+    for(let q=1;q<P.length;q++){const [ax,ay]=P[q-1],[bx,by]=P[q],dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;let t=l2?((x-ax)*dx+(y-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));
+      const px=ax+dx*t,py=ay+dy*t,d=Math.hypot(px-x,py-y);if(d<bd){bd=d;best={r,x:px,y:py,d,ang:Math.atan2(dy,dx)+Math.PI/2,riv:RIVN[r]||'le fleuve'}}}}
+  return best}
+const gbNear=(x,y,d)=>(S.gb||[]).find(b=>Math.hypot(b.x-x,b.y-y)<d);
+// emplacement possible pour un pont : fleuve à moins de 2,5 km, aucun pont (de route ou du génie) à moins de 5 km
+function bridgeSite(a){if(a.legs.length||a.ship||a.inG||a.g)return null;const p=rivNear(a.x,a.y,2.5);if(!p)return null;
+  if(BR.some(b=>!b.sea&&Math.hypot(b.x-p.x,b.y-p.y)<5)||gbNear(p.x,p.y,5))return null;return p}
+function startBridge(a,k){const p=bridgeSite(a),K=GBRK[k];if(!p||a.gch||matOf(a)<K.m)return false;
+  a.mat-=K.m;const d=genDays(a,K.d);a.gch={k,x:p.x,y:p.y,ang:p.ang,riv:p.riv,left:d,tot:d};
+  if(a.side==='car')log(`${a.name} commence un ${K.n.toLowerCase()} sur ${p.riv} (${d} jours, ${K.m} de matériel).`);return true}
+function stopBridge(a){if(!a.gch)return;const K=GBRK[a.gch.k],back=Math.floor(K.m*(1-.5*(1-a.gch.left/a.gch.tot)));a.mat=Math.min(matCap(a),(a.mat||0)+back);
+  if(a.side==='car')log(`${a.name} abandonne le chantier du pont (${back} de matériel récupéré).`);a.gch=null}
+const gbName=b=>`le ${GBRK[b.k].n.toLowerCase()} sur ${b.riv}`;
+function gbGrid(){RIVG=null;TGEN++}
+function burnGb(b,a){S.gb=S.gb.filter(x=>x!==b);gbGrid();
+  if(a&&(a.side==='car'||b.side==='car'||visAt(b.x,b.y)>=1))log(a?`${a.side===b.side?a.name+' brûle':(a.side==='car'?a.name:"L'ennemi")+' incendie'} ${gbName(b)}.`:`${gbName(b)} est détruit.`)}
+function foldGb(b,a){S.gb=S.gb.filter(x=>x!==b);gbGrid();a.mat=Math.min(matCap(a),(a.mat||0)+10);if(a.side==='car')log(`${a.name} replie ${gbName(b)} (+10 de matériel).`)}
+// les fleuves se traversent sur un pont du génie
+{const _cr=crossRiv;crossRiv=function(ax,ay,bx,by){let c=_cr(ax,ay,bx,by);if(!c||!gbOn())return c;
+  let t0=0;for(let it=0;it<6&&c;it++){const t=t0+(1-t0)*c.t,px=ax+(bx-ax)*t,py=ay+(by-ay)*t;if(!gbNear(px,py,.6))return Object.assign({},c,{t});
+    t0=Math.min(1,t+.6/Math.max(.6,Math.hypot(bx-ax,by-ay)));if(t0>=1)return null;c=_cr(ax+(bx-ax)*t0,ay+(by-ay)*t0,bx,by)}return null}}
+// la marche hors route passe par la case du pont
+{const _rg=rivGrid;rivGrid=function(){const fresh=!RIVG,G=_rg();if(fresh&&gbOn()){const L=DEM.lv[0],r=L.r,w=L.w;
+  for(const b of S.gb){const i0=Math.floor(b.x/r),j0=Math.floor(b.y/r);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const i=i0+di,j=j0+dj;if(i>=0&&j>=0&&i<w&&j<L.h)G[j*w+i]=0}}}return G}}
+// la marche hors route ne traverse jamais un fleuve hors d'un pont (la grille de 1,5 km laissait passer les courts trajets)
+{const _hl=horsLegs;horsLegs=function(x0,y0,x1,y1){const L=_hl.apply(this,arguments);if(!L)return L;let px=x0,py=y0;for(const l of L){if(crossRiv(px,py,l.x,l.y))return null;px=l.x;py=l.y}return L}}
+// ---- machines de siège en matériel (joueur) ; l'ordinateur paie toujours en or ----
+{const K0=['rams','tow','cat'].map(k=>[k,ENG[k]]);for(const [k] of K0)delete ENG[k];
+  ENG.lad={n:'Échelles',d:2,c:10,w:.94,t:"Des dizaines d'échelles pour l'escalade : à l'assaut, les murs comptent 6 % de moins."};for(const [k,v] of K0)ENG[k]=v}
+const ENG_M={lad:6,rams:12,tow:30,cat:20};
+{const _ew=engW;engW=function(i){let m=_ew(i);const sg=S.siege[N[i].id];if(engOk(sg,'lad'))m*=ENG.lad.w;return m}}
+{const _be=buildEng;buildEng=function(a,i,k){if(!GEN_HUM(a.side))return _be.apply(this,arguments);
+  const sg=S.siege[N[i].id],E=ENG[k],c=ENG_M[k];if(!sg||sg.side!==a.side||!E)return false;sg.eng=sg.eng||{};if(sg.eng[k])return false;if(E.min&&N[i].size<E.min)return false;
+  if(matOf(a)<c)return false;a.mat-=c;const d=genDays(a,lineDays(a,E.d));sg.eng[k]={t0:Math.floor(S.day),t:Math.floor(S.day)+d};
+  if(a.side==='car')log(`${a.name} fait construire des ${E.n.toLowerCase()} devant ${N[i].n} (${d} jours, ${c} de matériel).`);return true}}
+// machine prête (1) ou non (0), pour le dessin du siège (module ARMÉES)
+function genSV(sg,k){return engOk(sg,k)?1:0}
+// ---- défense : contre-mur et contre-mine ----
+const DEF={cmur:{n:'Contre-mur',d:8,m:12,t:"Un second mur en arc derrière le rempart menacé : à l'assaut, les murs comptent 20 % de plus."},
+  cmin:{n:'Contre-mine',d:4,m:6,t:"Des galeries d'écoute sous les murs : une mine ennemie a trois chances sur quatre d'être découverte et effondrée."}};
+function cityMat(i){const sg=S.siege[N[i].id];if(!sg)return 0;if(sg.mat==null)sg.mat=6+8*N[i].size+(bl(N[i].id,'ars')?20:0);return sg.mat}
+const defOk=(sg,k)=>!!(sg&&sg[k]&&S.day>=sg[k].t);
+function buildDef(i,k,a){const sg=S.siege[N[i].id],D=DEF[k];if(!sg||sg[k])return false;if(k==='cmur'&&N[i].size<1)return false;
+  if(a&&GEN_HUM(a.side)){const have=cityMat(i)+matOf(a);if(have<D.m)return false;let need=D.m;const c=Math.min(sg.mat,need);sg.mat-=c;need-=c;if(need>0)a.mat-=need}
+  const d=a?genDays(a,D.d):D.d;sg[k]={t0:Math.floor(S.day),t:Math.floor(S.day)+d};
+  if(ownerN(i)==='car'||sg.side==='car')log(ownerN(i)==='car'?`${N[i].n} : ${k==='cmur'?'on élève un contre-mur':'on creuse des contre-mines'} (${d} jours).`:`Les assiégés de ${N[i].n} ${k==='cmur'?'élèvent un contre-mur':'creusent des contre-mines'}.`);return true}
+// contre-mur : l'assaut compte des murs plus forts (résolution automatique et bataille)
+{const _od=odds;odds=function(b){const p=_od.apply(this,arguments);try{if(b&&b.assault!=null&&defOk(S.siege[N[b.assault].id],'cmur')){const q=Math.min(.999,Math.max(.001,p)),r=q/(1-q)/(1.2*1.2);return r/(1+r)}}catch(e){}return p}}
+{const _dv=dive;dive=function(payload){try{const b=S.cur;if(b&&b.assault!=null&&payload&&payload.b&&payload.b.walls){const sg=S.siege[N[b.assault].id],W=payload.b.walls;
+  if(defOk(sg,'cmur')){W.k=Math.round(W.k*1.2*100)/100;payload.b.desc=(payload.b.desc||'')+' Un contre-mur renforce les remparts (×1,2).'}
+  // pour la carte d'assaut (module villes du fil Terrains) : machines prêtes et nombre de brèches (0 à 3)
+  W.eng={rams:engOk(sg,'rams'),tow:engOk(sg,'tow'),lad:engOk(sg,'lad'),cat:engOk(sg,'cat')};
+  const f=sg&&sg.need?sg.d/sg.need:0;let br=f>=.7?(W.eng.cat?3:2):f>=.4?1:0;if(sg&&sg.breach)br=Math.max(br,1);if(defOk(sg,'cmur'))br=Math.max(0,br-1);W.br=Math.min(3,br)}}catch(e){}return _dv.apply(this,arguments)}}
+// ---- chaque jour ----
+{const _dG=daily;daily=function(d){
+  try{if(S&&!S.cur&&!S.over){S.gb=S.gb||[];
+    // contre-mine prête : la mine qui arrive à terme a trois chances sur quatre d'être effondrée
+    for(const id in S.siege){const sg=S.siege[id],i=NI[id];if(i==null||!sg.mine||S.day<sg.mine.t||!defOk(sg,'cmin'))continue;
+      if(Math.random()<.75){sg.mine=null;if(sg.side==='car'||ownerN(i)==='car')log(`Les contre-mines de ${N[i].n} ont trouvé la galerie des assiégeants : elle est effondrée.`)}}}}catch(e){console.error(e)}
+  const r=_dG.apply(this,arguments);if(!S||S.cur||S.over)return r;
+  try{if(!S.gen0){S.gen0=1;for(const a of S.armies)if(!a.dead&&a.mat==null)a.mat=a.bag?20:a.g?4:2}
+    for(const a of S.armies){if(a.dead)continue;if(a.mat==null)a.mat=0;
+      // coupe du bois
+      if(a.wood){if(a.legs.length||a.ship||a.inG){a.wood=false}else{a.mat=Math.min(matCap(a),a.mat+woodRate(a));a.fat=Math.min(100,(a.fat||0)+4);
+        if(a.mat>=matCap(a)){a.wood=false;if(a.side==='car')log(`${a.name} a rempli ses chariots de matériel.`)}}}
+      // arsenal : un peu chaque jour aux armées présentes (≈ 12 par mois)
+      if(a.at!=null&&!a.legs.length&&!N[a.at].col&&ownerN(a.at)===a.side&&bl(N[a.at].id,'ars')&&Math.hypot(a.x-N[a.at].x,a.y-N[a.at].y)<3)a.mat=Math.min(matCap(a),a.mat+.4);
+      if(a.mat>matCap(a))a.mat=matCap(a);
+      // chantier de pont
+      const c=a.gch;if(c){if(a.legs.length||a.ship||Math.hypot(a.x-c.x,a.y-c.y)>3.2){stopBridge(a);continue}
+        const foe=S.armies.find(o=>!o.dead&&!o.ship&&hostile(o,a)&&Math.hypot(o.x-c.x,o.y-c.y)<8);
+        if(foe){if(!c.halt&&a.side==='car')log(`Le chantier du pont sur ${c.riv} est interrompu : l'ennemi approche.`);c.halt=1;continue}
+        if(c.halt){c.halt=0;if(a.side==='car')log(`Le chantier du pont sur ${c.riv} reprend.`)}
+        if(--c.left<=0){const b={id:'gb'+(S.gbN=(S.gbN||0)+1),k:c.k,x:c.x,y:c.y,ang:c.ang,riv:c.riv,side:a.side,day:Math.floor(S.day)};S.gb.push(b);a.gch=null;gbGrid();
+          if(a.side==='car'||visAt(b.x,b.y)>=1)log(`${a.side==='car'?a.name+' a fini':"L'ennemi a jeté"} ${gbName(b)} : le fleuve se passe ici.`)}}}
+    // l'ennemi brûle les ponts du génie qu'il atteint quand personne ne les garde
+    for(const b of S.gb.slice()){const foe=S.armies.find(o=>!o.dead&&!o.ship&&!GEN_HUM(o.side)&&hostileSides(o.side,b.side)&&Math.hypot(o.x-b.x,o.y-b.y)<2);
+      if(foe&&!S.armies.some(o=>!o.dead&&o.side===b.side&&Math.hypot(o.x-b.x,o.y-b.y)<6)&&Math.random()<.3)burnGb(b,foe)}
+    // défense des villes tenues par l'ordinateur
+    for(const id in S.siege){const sg=S.siege[id],i=NI[id];if(i==null)continue;const o=ownerN(i);if(!o||GEN_HUM(o)||sg.side===o||!shutIn(i).length)continue;
+      if(sg.mine&&!sg.cmin&&Math.random()<.35)buildDef(i,'cmin',null);
+      if(!sg.cmur&&N[i].size>=1&&sg.eng&&(sg.eng.rams||sg.eng.tow||sg.eng.lad)&&Math.random()<.2)buildDef(i,'cmur',null)}
+  }catch(e){console.error(e)}return r}}
+// ---- panneau de l'armée ----
+{const _rsG=renderSide;renderSide=function(){const r=_rsG.apply(this,arguments);try{if(!S||!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return r;const a=sel.a,el=$('side'),box=el&&el.querySelector('.genbox');if(!box||a.ship)return r;
+  if(a.mat==null)a.mat=0;const B=(id,t,tt,on,dis,cl)=>`<button id="${id}" type="button" class="${on?'on':''} ${cl||''}" title="${esc(tt)}" ${dis?'disabled':''}>${t}</button>`;
+  const cap=matCap(a),m=matOf(a);let h=`<div class="sub" style="margin-top:6px">Matériel : <b>${m}</b> / ${cap}${a.bag||a.g?'':' (sans bagages, on porte peu)'}${a.wood?` · coupe du bois : +${woodRate(a)} par jour`:''}</div>`;
+  const still=!a.legs.length&&!a.inG;
+  h+=`<div class="row" style="margin:6px 0 0">${B('gWood',a.wood?'Couper du bois ✓':'Couper du bois',`L'armée s'arrête et abat des arbres : +${woodRate(a)} de matériel par jour ici (${woodKind(a)}), mais elle se fatigue. Les forêts rendent le plus.`,a.wood,!still||m>=cap)}`;
+  if(canBuy(a))h+=B('gBuy',`Acheter 10 (${matPrice(a)} or)`,"Bois, fer, cordes et outils achetés aux artisans de la ville. Moins cher avec un arsenal.",false,(S.gold[a.side]||0)<matPrice(a)||m+1>cap);
+  h+='</div>';
+  // pont : chantier, pont du génie à proximité, ou emplacement possible
+  const gb=!a.legs.length&&gbNear(a.x,a.y,2);
+  if(a.gch){const c=a.gch;h+=`<div class="sub" style="margin-top:6px">Chantier : ${GBRK[c.k].n.toLowerCase()} sur ${esc(c.riv)}, encore ${c.left} jour${c.left>1?'s':''}${c.halt?' · <b style="color:var(--bad)">interrompu, l\'ennemi est proche</b>':''}.</div><div class="row" style="margin:6px 0 0">${B('gBrX','Abandonner le chantier',"On récupère une partie du matériel.")}</div>`}
+  else if(gb){h+=`<div class="sub" style="margin-top:6px">${GBRK[gb.k].n} sur ${esc(gb.riv)}${gb.side===a.side?', bâti par vos hommes':', bâti par '+esc(sideName(gb.side))}.</div><div class="row" style="margin:6px 0 0">${B('gBrBurn','Brûler le pont',"Le pont disparaît : plus personne ne passe ici.",false,false,'warn')}${gb.k==='bat'&&gb.side===a.side?B('gBrFold','Replier (+10)',"On démonte les barques et on reprend 10 de matériel."):''}</div>`}
+  else{const p=bridgeSite(a);if(p)h+=`<div class="sub" style="margin-top:6px">Génie : ${esc(p.riv)} coule à ${p.d<1?'moins d\'un':Math.round(p.d)} km, sans pont à moins de 5 km.</div><div class="row" style="margin:6px 0 0">${Object.keys(GBRK).map(k=>B('gBr_'+k,`${GBRK[k].n} (${genDays(a,GBRK[k].d)} j, ${GBRK[k].m})`,GBRK[k].t+" L'armée doit rester sur place ; l'ennemi qui approche arrête le chantier.",false,m<GBRK[k].m)).join('')}</div>`}
+  // à placer après le ravitaillement (onglet Intendance) ; sinon à la fin
+  const rv=[...box.children].find(n=>/^Ravitaillement/.test((n.textContent||'').trim()));let anchor=rv;if(rv&&rv.nextElementSibling&&rv.nextElementSibling.classList.contains('row'))anchor=rv.nextElementSibling;
+  if(anchor)anchor.insertAdjacentHTML('afterend',h);else box.insertAdjacentHTML('beforeend',h);
+  const on=(id,f)=>{const e=$(id);if(e)e.onclick=()=>{f();renderAll()}};
+  on('gWood',()=>{a.wood=!a.wood;if(a.wood&&a.side==='car')log(`${a.name} s'arrête pour couper du bois.`)});on('gBuy',()=>buyMat(a));
+  on('gBrX',()=>stopBridge(a));if(gb){on('gBrBurn',()=>burnGb(gb,a));on('gBrFold',()=>foldGb(gb,a))}
+  for(const k in GBRK)on('gBr_'+k,()=>startBridge(a,k));
+  // machines de siège : en matériel
+  const rb=$('aEng_rams'),row=rb&&rb.parentElement;
+  if(row&&a.at!=null){const n=N[a.at],sg=S.siege[n.id];
+    if(sg){const st=k=>{const e=sg.eng&&sg.eng[k];return !e?` (${ENG_M[k]})`:S.day>=e.t?' ✓':` (${Math.max(0,Math.ceil(e.t-S.day))} j)`};
+      row.innerHTML=Object.keys(ENG).map(k=>B('aEng_'+k,ENG[k].n+st(k),ENG[k].t+` Construction : ${genDays(a,lineDays(a,ENG[k].d))} jours, ${ENG_M[k]} de matériel.`,engOk(sg,k),!!(sg.eng&&sg.eng[k])||(ENG[k].min&&n.size<ENG[k].min)||m<ENG_M[k])).join('');
+      const pp=row.previousElementSibling;if(pp&&/^Machines de siège/.test(pp.textContent))pp.textContent=`Machines de siège (en matériel : vous en avez ${m})`;
+      for(const k of Object.keys(ENG))on('aEng_'+k,()=>buildEng(a,a.at,k))}}
+  // défense de la ville : contre-mur, contre-mine
+  const rr=$('aRat'),drow=rr&&rr.parentElement;
+  if(drow&&a.at!=null){const i=a.at,n=N[i],sg=S.siege[n.id];if(sg){const have=cityMat(i)+m;
+    const st=k=>!sg[k]?` (${DEF[k].m})`:S.day>=sg[k].t?' ✓':` (${Math.max(0,Math.ceil(sg[k].t-S.day))} j)`;
+    drow.insertAdjacentHTML('beforeend',Object.keys(DEF).map(k=>B('gDef_'+k,DEF[k].n+st(k),DEF[k].t+` ${genDays(a,DEF[k].d)} jours, ${DEF[k].m} de matériel (réserves de la ville d'abord).`,defOk(sg,k),!!sg[k]||have<DEF[k].m||(k==='cmur'&&n.size<1))).join(''));
+    const pp=drow.previousElementSibling;if(pp&&/^Défense de/.test(pp.textContent))pp.textContent+=` · réserves de la ville : ${Math.floor(sg.mat)} de matériel`;
+    for(const k in DEF)on('gDef_'+k,()=>buildDef(i,k,a))}}
+}catch(e){console.error('[GÉNIE]',e)}return r}}
+// ---- dessin : chantiers et ponts du génie (coordonnées du monde) ----
+function gbDeck(L,W,k,prog){// tablier de -L à -L+2L*prog
+  const a1=-L+2*L*prog;
+  if(k==='bat'){ctx.fillStyle='#5a3f26';const nb=Math.max(3,Math.round(2*L/(W*1.3)));for(let q=0;q<nb;q++){const u=-L+(q+.5)*2*L/nb;if(u>a1)break;ctx.beginPath();ctx.ellipse(u,0,W*.42,W*.85,0,0,7);ctx.fill()}}
+  else{ctx.fillStyle='#4a3420';const np=Math.max(2,Math.round(2*L/(W*1.6)));for(let q=0;q<=np;q++){const u=-L+q*2*L/np;if(u>a1)break;ctx.fillRect(u-W*.12,-W*.75,W*.24,W*.3);ctx.fillRect(u-W*.12,W*.45,W*.24,W*.3)}}
+  if(a1>-L){ctx.fillStyle='rgba(30,22,14,.4)';ctx.fillRect(-L+W*.15,-W/2+W*.2,a1+L,W);ctx.fillStyle=k==='bat'?'#a9865a':'#8d6a43';ctx.fillRect(-L,-W/2,a1+L,W);
+    ctx.strokeStyle='rgba(60,40,22,.9)';ctx.lineWidth=W*.16;ctx.beginPath();ctx.moveTo(-L,-W/2);ctx.lineTo(a1,-W/2);ctx.moveTo(-L,W/2);ctx.lineTo(a1,W/2);ctx.stroke()}}
+{const _dB=drawBridges;drawBridges=function(s,z,x0,y0,x1,y1){_dB.apply(this,arguments);try{if(!S)return;
+  const items=(S.gb||[]).map(b=>({b,p:1}));for(const a of S.armies)if(!a.dead&&a.gch)items.push({b:Object.assign({side:a.side},a.gch),p:Math.max(.08,1-a.gch.left/a.gch.tot),site:1});
+  for(const {b,p,site} of items){if(b.x<x0-2||b.x>x1+2||b.y<y0-2||b.y>y1+2)continue;if(b.side!=='car'&&visAt(b.x,b.y)<1)continue;
+    if(s<1.4){const r=Math.max(3.5*z,.1);ctx.fillStyle=site?'rgba(214,184,120,.9)':'#8d6a43';ctx.strokeStyle='rgba(30,20,10,.9)';ctx.lineWidth=Math.max(1.2*z,.02);ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.ang);ctx.fillRect(-r*1.6,-r*.45,r*3.2,r*.9);ctx.strokeRect(-r*1.6,-r*.45,r*3.2,r*.9);ctx.restore();continue}
+    const L=Math.max(.45,15*z),W=Math.max(6*z,.11);ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.ang);gbDeck(L,W,b.k,p);
+    if(site){// piles de poutres et grue sur la rive
+      ctx.fillStyle='#7a5632';ctx.strokeStyle='rgba(30,20,10,.9)';ctx.lineWidth=W*.08;for(let q=0;q<3;q++){ctx.fillRect(-L-W*2.2,-W*.9+q*W*.62,W*1.6,W*.42);ctx.strokeRect(-L-W*2.2,-W*.9+q*W*.62,W*1.6,W*.42)}
+      const T=S.day*DAY_S;ctx.strokeStyle='#3a2a18';ctx.lineWidth=W*.14;const gx=-L+2*L*p;ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx+Math.cos(T*.8)*W*1.6,-W*1.4);ctx.stroke()}
+    ctx.restore()}}catch(e){console.error(e)}}}
+// ---- dessin : machines et contre-mur au pied des murs (coordonnées de l'écran, comme le siège animé) ----
+{const _sF=siegeFormation;siegeFormation=function(a,s,sg){_sF.apply(this,arguments);try{if(!sg||s<1.2)return;const n=N[a.at],g=cityGeom(n),SX=x=>view.ox+x*s,SY=y=>view.oy+y*s,T=S.day*DAY_S;
+  const R=g.wall.map(w=>({ang:Math.atan2(w[1]-g.cy,w[0]-g.cx),rr:Math.hypot(w[0]-g.cx,w[1]-g.cy)})),at=(r,d)=>[g.cx+Math.cos(r.ang)*(r.rr+d),g.cy+Math.sin(r.ang)*(r.rr+d)];
+  const cand=R.map((r,k)=>k).filter(k=>{const p=at(R[k],.6);return landFast(p[0],p[1])});if(!cand.length)return;
+  const lw=Math.max(1,.03*s),dark='#2b1c0e';ctx.save();ctx.lineCap='round';
+  // échelles posées contre le rempart
+  if(engOk(sg,'lad'))for(let j=0;j<Math.min(cand.length,3+n.size);j++){const r=R[cand[Math.floor((j+.3)*cand.length/(3+n.size))]],p0=at(r,.32),p1=at(r,-.03),x0=SX(p0[0]),y0=SY(p0[1]),x1=SX(p1[0]),y1=SY(p1[1]),nx=-(y1-y0),ny=x1-x0,l=Math.hypot(nx,ny)||1,o=Math.max(1.5,.03*s);
+    const ox=nx/l*o,oy=ny/l*o;ctx.strokeStyle='#8a6438';ctx.lineWidth=lw;ctx.beginPath();ctx.moveTo(x0+ox,y0+oy);ctx.lineTo(x1+ox,y1+oy);ctx.moveTo(x0-ox,y0-oy);ctx.lineTo(x1-ox,y1-oy);
+    for(let q=1;q<6;q++){const t=q/6,x=x0+(x1-x0)*t,y=y0+(y1-y0)*t;ctx.moveTo(x+ox,y+oy);ctx.lineTo(x-ox,y-oy)}ctx.stroke()}
+  // béliers sous leur tortue, qui frappent le mur face au camp
+  if(engOk(sg,'rams')){const r=R[cand[Math.floor(cand.length/2)]],hit=Math.max(0,Math.sin(T*5)),p=at(r,.12+.05*hit),x=SX(p[0]),y=SY(p[1]),w=Math.max(8,.2*s);
+    ctx.save();ctx.translate(x,y);ctx.rotate(r.ang+Math.PI);ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(-w*.5+2,-w*.32+2,w,w*.64);ctx.fillStyle='#7a5632';ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1,w*.08);ctx.fillRect(-w*.5,-w*.32,w,w*.64);ctx.strokeRect(-w*.5,-w*.32,w,w*.64);
+    ctx.strokeStyle='rgba(43,28,14,.7)';for(let q=1;q<4;q++){ctx.beginPath();ctx.moveTo(-w*.5+q*w/4,-w*.32);ctx.lineTo(-w*.5+q*w/4,w*.32);ctx.stroke()}
+    ctx.fillStyle='#4a3218';ctx.fillRect(w*.5,-w*.07,w*.25,w*.14);ctx.restore()}
+  // chantiers des machines : échafaudage qui monte
+  if(sg.eng)Object.keys(sg.eng).forEach((k,j)=>{const e=sg.eng[k];if(S.day>=e.t)return;const t0=e.t0!=null?e.t0:e.t-ENG[k].d,pr=Math.max(.1,Math.min(1,(S.day-t0)/Math.max(1,e.t-t0)));
+    const r=R[cand[Math.floor((j+.65)*cand.length/4)%cand.length]],p=at(r,.95),x=SX(p[0]),y=SY(p[1]),w=Math.max(10,.22*s),h=w*1.6*pr;
+    ctx.strokeStyle='#7a5632';ctx.lineWidth=Math.max(1,w*.1);ctx.beginPath();ctx.moveTo(x-w/2,y);ctx.lineTo(x-w/2,y-h);ctx.moveTo(x+w/2,y);ctx.lineTo(x+w/2,y-h);ctx.moveTo(x-w/2,y);ctx.lineTo(x+w/2,y-h);ctx.moveTo(x+w/2,y);ctx.lineTo(x-w/2,y-h);ctx.moveTo(x-w/2,y-h);ctx.lineTo(x+w/2,y-h);ctx.stroke();
+    ctx.fillStyle='rgba(20,15,10,.75)';ctx.fillRect(x-w/2,y+3,w,3);ctx.fillStyle='#d6b878';ctx.fillRect(x-w/2,y+3,w*pr,3)});
+  // contre-mur des assiégés : un arc de pierre derrière le rempart, face au camp
+  if(sg.cmur){const pr=Math.max(.1,Math.min(1,(S.day-sg.cmur.t0)/Math.max(1,sg.cmur.t-sg.cmur.t0))),ang0=Math.atan2(a.y-g.cy,a.x-g.cx);
+    const K=R.map((r,k)=>k).filter(k=>Math.abs(((R[k].ang-ang0+9.42478)%6.28319)-3.14159)<.95*pr+.1);
+    ctx.strokeStyle=S.day>=sg.cmur.t?'#6e5a3c':'rgba(110,90,60,.75)';ctx.lineWidth=Math.max(2.5,.07*s);ctx.setLineDash(S.day>=sg.cmur.t?[]:[lw*2,lw*2]);ctx.beginPath();
+    K.sort((p,q)=>(((R[p].ang-ang0+9.42478)%6.28319))-(((R[q].ang-ang0+9.42478)%6.28319))).forEach((k,q)=>{const p=at(R[k],-.22),x=SX(p[0]),y=SY(p[1]);q?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.setLineDash([])}
+  ctx.restore()}catch(e){console.error(e)}}}
+// ---- colonne de marche : un chariot de poutres derrière les vivres quand l'armée porte du matériel ----
+{const _cD=colDeco;colDeco=function(a,s,P,heads){_cD.apply(this,arguments);try{if(matOf(a)<5)return;const q=UNIT_KM*s,n=a.units.length,need=Math.max(11,q*.9),sp=q*1.22,w=Math.max(9,q*.95);
+  const nw=Math.min(6,Math.max(1,Math.ceil(n/4)+(a.bag?1:0))),kind=n<=3&&!a.bag?'mule':'char',gap=w*(kind==='mule'?2.2:1.8);
+  const p=trailAt(a,s,need+(n-1)*sp+q*.8+w*1.2+nw*gap);wagon(p.x,p.y,p.ux,p.uy,w,'char',0);
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(p.uy,p.ux));const nl=Math.min(4,1+Math.floor(matOf(a)/Math.max(5,matCap(a)/4)));
+  for(let k=0;k<nl;k++){const y=-w*.22+k*w*.44/Math.max(1,nl-1)*(nl>1?1:0);ctx.fillStyle=k%2?'#8a6438':'#a07444';ctx.fillRect(-w*.72,y-w*.08,w*1.3,w*.16);ctx.strokeStyle='rgba(26,18,10,.9)';ctx.lineWidth=Math.max(.8,w*.04);ctx.strokeRect(-w*.72,y-w*.08,w*1.3,w*.16)}
+  ctx.restore()}catch(e){console.error(e)}}}
+/* ---- GARNISON (9 nov., demande de Baptiste) : clic droit d'une armée sur une de vos villes = elle y entre en garnison ;
+   au début de la partie, armées et flottes commencent en garnison dans une ville (ou un port) de leur camp ---- */
+const garCity=(i,side)=>i!=null&&!N[i].col&&ownerN(i)===side;
+function garEnter(a){if(!canGar(a))return false;a.inG=true;a.garGo=null;a.x=N[a.at].x;a.y=N[a.at].y;if(a.side==='car')log(`${a.name} entre en garnison à ${N[a.at].n}.`);return true}
+{const _or=order;order=function(a,tx,ty,node,vil){const r=_or.apply(this,arguments);try{if(a&&!a.g&&GEN_HUM(a.side)){a.garGo=r&&node!=null&&!vil&&garCity(node,a.side)?node:null;
+  if(a.garGo!=null&&a.at===node&&!a.legs.length)garEnter(a)}}catch(e){console.error(e)}return r}}
+{const _ar=arrive;arrive=function(a){const r=_ar.apply(this,arguments);try{if(a.garGo!=null&&a.at===a.garGo&&!a.legs.length){if(!garEnter(a))a.garGo=null}}catch(e){console.error(e)}return r}}
+function garStart(){if(!S||S.gar0)return;S.gar0=1;if(S.day>=1)return;
+  const near=(x,y,side,port,R)=>{let b=null,bd=R;for(const n of N){if(n.col||ownerN(n.i)!==side||(port&&!n.anch))continue;const d=Math.hypot(n.x-x,n.y-y);if(d<bd){bd=d;b=n}}return b};
+  for(const a of S.armies){if(a.dead||a.ship||a.g||a.reinf!=null||a.legs.length)continue;
+    if(!garCity(a.at,a.side)){const n=near(a.x,a.y,a.side,false,40);if(!n)continue;a.at=n.i}
+    a.x=N[a.at].x;a.y=N[a.at].y;a.inG=true;a.gate=null}
+  for(const f of S.fleets||[]){if(f.dead||f.legs&&f.legs.length)continue;let n=f.at!=null&&N[f.at].anch&&ownerN(f.at)===f.side?N[f.at]:near(f.x,f.y,f.side,true,60);if(!n)continue;
+    f.at=n.i;f.x=n.anch[0];f.y=n.anch[1];f.inG=true;f.task=null}}
+{const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);try{garStart()}catch(e){console.error(e)}return r}}
+{const _dS=daily;daily=function(d){try{garStart()}catch(e){console.error(e)}return _dS.apply(this,arguments)}}
+/* ---- ÉCHELLE DES HOMMES (9 nov., choix de Baptiste « ×4 ») : un régiment = 5 carrés de bataille ; un carré = 480 fantassins,
+   240 cavaliers ou tirailleurs, 4 éléphants. Seuls les effectifs changent : coûts, entretien, force relative restent par régiment.
+   La bataille garde son ancienne échelle de calcul : on lui envoie les hommes divisés par r.ms, avec r.ms pour l'affichage,
+   et on remultiplie les hommes qui reviennent. UT[k].m0 = ancien effectif. ---- */
+const MEN_K=4,ELE_MEN=20;
+function menScale(){for(const k in UT){const t=UT[k];if(!t||t.m0!=null)continue;t.m0=t.men;t.men=t.k==='eleph'?ELE_MEN:t.men*MEN_K}}
+const menMs=t=>{const T=UT[t];return T&&T.m0?T.men/T.m0:1};
+menScale();
+{const _ng=newGame;newGame=function(){menScale();const r=_ng.apply(this,arguments);try{if(S)S.men4=1}catch(e){}return r}}
+{const _al=afterLoad;afterLoad=function(){try{menScale();if(S&&!S.men4){S.men4=1;for(const a of S.armies||[])for(const u of a.units||[])u.men*=menMs(u.t)}}catch(e){console.error(e)}return _al.apply(this,arguments)}}
+/* v191 (choix de Baptiste « vrais effectifs partout ») : la bataille compte les mêmes hommes que la campagne
+   (armees/effectifs/patch.py sur bataille.html). Plus de division à l'envoi ni de remultiplication au retour. */
+/* ---- SIÈGE EN TÊTE DES ORDRES (9 nov. : Baptiste ne trouvait pas « Donner l'assaut aux murs », rangé dans Intendance) ----
+   Après le rangement en onglets (interface), on remonte tout ce qui concerne le siège en haut de l'onglet Ordres, sous « Siège ». */
+const SIEGE_RX=/^(La garnison|Ville sans armée|Enfermée dans|Travaux de siège|Machines de siège|À la prise de|Défense de)/;
+function siegeTab(){const el=$('side'),or=el&&el.querySelector('.ua-pane[data-k="or"]');if(!or)return;const got=[];
+  for(const pane of el.querySelectorAll('.ua-pane')){const kids=[...pane.children];for(let i=0;i<kids.length;i++){const k=kids[i],t=(k.textContent||'').trim();if(!SIEGE_RX.test(t))continue;const g=[k];
+    while(i+1<kids.length&&kids[i+1].classList.contains('row')){g.push(kids[++i])}got.push({g,first:/^(La garnison|Ville sans armée|Enfermée dans)/.test(t)?0:1})}}
+  if(!got.length)return;got.sort((a,b)=>a.first-b.first);const lb=document.createElement('p');lb.className='ua-lbl';lb.textContent='Siège';or.prepend(lb,...got.flatMap(x=>x.g))}
+setTimeout(()=>{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{siegeTab()}catch(e){console.error(e)}try{uiPieces()}catch(e){console.error(e)}return r};try{if(sel&&sel.a)renderSide()}catch(e){}},80);
+/* ---- PEUPLES EN ARMES (9 nov., choix de Baptiste « levée en guerre + armée de départ ») : les grands peuples neutres
+   ont une armée de campagne en garnison dans leur capitale ; un peuple en guerre lève une armée tribale (tous les 45 jours
+   s'il est en dessous de sa cible) qui marche secourir ses villes assiégées, puis rentre. S.peu[f]={mix,t,cap}. ---- */
+const PEU_WAR=new Set(['ibe','cel','lus','vac','carp','olc','gau','ins','lig','ven','ill','dar','thr','num','mae','mau','eto']);
+function peuTowns(f){return N.filter(n=>!n.col&&ownerN(n.i)===f&&n.size>=1)}
+function peuP(f){let p=0;for(const n of peuTowns(f))p+=n.size;return p*(PEU_WAR.has(f)?1.3:1)}
+function peuCap(f){const T=peuTowns(f).filter(n=>!S.siege[n.id]);return T.sort((a,b)=>b.size-a.size||a.i-b.i)[0]||null}
+function peuMix(f){const L=[];for(const a of S.armies)if(a.side===f&&!a.dead)for(const u of a.units)if(UT[u.t])L.push(u.t);return L.length?L:['iber']}
+function peuUnits(f,k){const M=(S.peu[f]&&S.peu[f].mix)||['iber'];const o=[];for(let j=0;j<k;j++){const t=M[(j*3+1)%M.length];o.push({t,men:UT[t].men})}return o}
+const peuField=f=>S.armies.filter(a=>a.side===f&&!a.dead&&!a.g&&!a.ship&&!a.conv);
+const peuRegs=f=>peuField(f).reduce((s,a)=>s+a.units.length,0);
+function peuName(f,lev){const n=FAC[f].n,w=n.split(' ')[0],h=lev?'Levée':'Armée';
+  if(/^(Ligue)/.test(n))return h+' de la '+n;if(/^[AEIOUÉÈ]/.test(n)&&!/s$/.test(w))return h+" de l'"+n;
+  return /s$/.test(w)&&!/^(Athènes|Rhodes|Thèbes|Syracuse)$/.test(n)?h+' des '+n:h+' de '+n}
+function peuArmy(f,n,k,lev){const a={id:S.uid++,side:f,name:peuName(f,lev),x:n.x,y:n.y,at:n.i,legs:[],units:peuUnits(f,k),scout:0,cool:0,mor:65,peu:1};a.food=armyFoodMax(a);a.inG=true;S.armies.push(a);return a}
+function peuInit(){if(!S||S.peu)return;S.peu={};
+  for(const f in S.fac){if(!FAC[f]||!FAC[f].a)continue;S.peu[f]={mix:peuMix(f),t:0};
+    const st=S.fac[f].st||'';if(st.startsWith('allie_'))continue;const P=peuP(f),k=P>=4?Math.min(10,Math.round(P*.9)):0,c=peuCap(f);
+    if(k>=3&&c)peuArmy(f,c,k,false)}}
+function peuWarOf(f){const st=(S.fac[f]&&S.fac[f].st)||'';return st.startsWith('guerre_')?st.slice(7):null}
+function peuDaily(){if(!S||!S.peu)return;const d=Math.floor(S.day);
+  for(const f in S.peu){if(!S.fac[f]||!FAC[f])continue;const e=peuWarOf(f),F=peuField(f);
+    for(const a of F)if(a.food!=null&&ownerAt(a.x,a.y)===f)a.food=armyFoodMax(a);
+    if(!e){for(const a of F)if(!a.legs.length&&a.at!=null&&ownerN(a.at)===f&&!a.inG)a.inG=true;continue}
+    const P=peuP(f);if(!P)continue;const T=Math.max(3,Math.min(16,Math.round(P*1.2)+2)),R=peuRegs(f),pu=S.peu[f];
+    if(R<T&&d>=(pu.t||0)){const c=peuCap(f);if(c){const k=Math.min(T-R,Math.max(2,Math.round(P*.6)));const h=F.find(a=>a.at===c.i&&!a.legs.length);
+      if(h)h.units.push(...peuUnits(f,k));else peuArmy(f,c,k,true);pu.t=d+45;
+      if(e==='car')log(`${FAC[f].n} lèvent ${k} régiments à ${c.n} contre vous !`)}}
+    // secours : la ville assiégée la plus proche que l'armée peut raisonnablement attaquer
+    for(const a of peuField(f)){if(a.cool>0||a.mut)continue;const men=armyMen(a);
+      const B=peuTowns(f).map(n=>({n,sg:S.siege[n.id]})).filter(x=>x.sg&&x.sg.side!==f).map(x=>{const b=S.armies.find(o=>o.id===x.sg.a&&!o.dead);return {n:x.n,b,dd:Math.hypot(x.n.x-a.x,x.n.y-a.y)}}).filter(x=>x.b&&men>=armyMen(x.b)*.55&&x.dd<700).sort((p,q)=>p.dd-q.dd)[0];
+      if(B){if(a.target!==B.n.i||!a.legs.length&&a.at!==B.n.i){if(a.at!==B.n.i&&order(a,0,0,B.n.i)){a.peuGo=B.n.i;if(e==='car'&&!a._peuLog){a._peuLog=1;log(`${a.name} marche au secours de ${B.n.n}.`)}}}continue}
+      a._peuLog=0;
+      if(!a.legs.length&&(a.at==null||ownerN(a.at)!==f)){const c=peuCap(f);if(c)order(a,0,0,c.i)}
+      else if(!a.legs.length&&a.at!=null&&ownerN(a.at)===f)a.inG=true}}}
+{const _dP=daily;daily=function(d){const r=_dP.apply(this,arguments);try{peuInit();peuDaily()}catch(e){console.error(e)}return r}}
+{const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);try{if(S&&S.day>=1)peuInit()}catch(e){console.error(e)}return r}}
+/* ---- PANNEAU D'ARMÉE (9 nov., demande de Baptiste) : grand portrait du général, régiments dessinés comme en bataille :
+   chaque régiment = ses 5 carrés de bataille (3 pour les éléphants), pièces à cadre sombre et plaque bombée, symbole gravé ;
+   les carrés perdus restent en creux. Noms en entier sur deux lignes, 4 régiments par rangée. ---- */
+(function(){const st=document.createElement('style');st.textContent=`
+#side.ua{width:392px!important;max-height:min(84%,calc(100% - 76px))!important}
+#side.ua .ui-head{gap:12px;align-items:center;margin-bottom:6px}
+#side.ua .ui-hcol{display:flex;flex-direction:column;gap:5px;min-width:0}
+#side.ua .ui-hcol .ua-gen{margin:0}
+#side.ua .ui-head .ui-med{width:92px!important;height:92px!important;border-radius:50%;box-shadow:0 0 0 3px var(--bzD),0 0 0 5px var(--bz),0 6px 14px rgba(0,0,0,.5)}
+#side.ua .ui-head .ui-med img{width:100%;height:100%;object-fit:cover;display:block}
+#side.ua .ui-head h2{font-size:22px}
+#side.ua .ui-tiles{grid-template-columns:repeat(4,1fr)!important;gap:5px!important}
+#side.ua .ui-tile.pc{height:auto!important;min-height:66px;padding:13px 3px 9px!important;align-content:start;gap:2px}
+#side.ua .ui-tile.pc .ui-pcs{display:block;margin:0 auto 1px;filter:drop-shadow(1px 2px 0 rgba(10,6,2,.45))}
+#side.ua .ui-tile.pc .n{white-space:normal;overflow:visible;font-size:10px;line-height:1.05;min-height:2.1em;display:flex;align-items:center;justify-content:center}
+#side.ua .ui-tile.pc b{font-size:11.5px}
+@media (max-width:700px){#side.ua{width:auto!important;max-height:60%!important}#side.ua .ui-head .ui-med{width:64px!important;height:64px!important}#side.ua .ui-tiles{grid-template-columns:repeat(3,1fr)!important}}`;document.head.appendChild(st)})();
+const PC_DEF=new Set();
+function pcDefs(side){const id='pcg_'+side;if(PC_DEF.has(id))return id;PC_DEF.add(id);const c=(FAC[side]&&FAC[side].c)||[160,120,200];
+  const sh=(k)=>`rgb(${c.map(v=>Math.max(0,Math.min(255,Math.round(v*k)))).join(',')})`;
+  let d=document.getElementById('pcDefs');if(!d){d=document.createElementNS('http://www.w3.org/2000/svg','svg');d.id='pcDefs';d.setAttribute('width','0');d.setAttribute('height','0');d.style.position='absolute';d.innerHTML='<defs></defs>';document.body.appendChild(d)}
+  d.querySelector('defs').insertAdjacentHTML('beforeend',`<radialGradient id="${id}" cx="40%" cy="38%" r="70%"><stop offset="0" stop-color="${sh(1.42)}"/><stop offset=".5" stop-color="${sh(1.05)}"/><stop offset="1" stop-color="${sh(.52)}"/></radialGradient>`);
+  d.querySelector('defs').insertAdjacentHTML('beforeend',`<radialGradient id="${id}w" cx="40%" cy="38%" r="70%"><stop offset="0" stop-color="${sh(1.05)}"/><stop offset=".5" stop-color="${sh(.75)}"/><stop offset="1" stop-color="${sh(.38)}"/></radialGradient>`);
+  PC_DEF[id+'t']=sh(.38);return id}
+function pcSym(k,x,y,z,col){const m=z*.08,w=Math.max(.9,z*.11);
+  if(k==='inf'||k==='eleph')return `<path d="M${x+m} ${y+m}L${x+z-m} ${y+z-m}M${x+z-m} ${y+m}L${x+m} ${y+z-m}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`+(k==='eleph'?`<circle cx="${x+z/2}" cy="${y+z/2}" r="${z*.2}" fill="none" stroke="${col}" stroke-width="${w}"/>`:'');
+  if(k==='cav'||k==='lcav')return `<path d="M${x+z-m} ${y+m}L${x+m} ${y+z-m}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`+(k==='lcav'?`<circle cx="${x+z*.7}" cy="${y+z*.7}" r="${z*.1}" fill="${col}"/>`:'');
+  return [[.3,.33],[.7,.33],[.5,.7]].map(([a,b])=>`<circle cx="${x+z*a}" cy="${y+z*b}" r="${z*.12}" fill="${col}"/>`).join('')}
+function pcSVG(u,side){const T=UT[u.t];if(!T)return '';const k=T.k==='skirm'?'skirm':T.k,n=k==='eleph'?3:5,max=T.men||1,fr=Math.max(0,Math.min(1,u.men/max));
+  const up=Math.max(0,Math.ceil(fr*n-1e-6)),loc=1-(fr*n-(up-1)),id=pcDefs(side),tint=PC_DEF[id+'t'],z=13,g=1.8,W=n*z+(n-1)*g;
+  let s=`<svg class="ui-pcs" viewBox="-.5 -.5 ${W+1} ${z+1.5}" width="${W+1}" height="${z+1.5}" aria-hidden="true">`;
+  for(let j=0;j<n;j++){const x=j*(z+g);if(j>=up){s+=`<rect x="${x+.5}" y=".5" width="${z-1}" height="${z-1}" fill="rgba(0,0,0,.28)" stroke="rgba(210,174,108,.28)" stroke-width=".8" stroke-dasharray="1.6 1.2"/>`;continue}
+    const worn=j===up-1&&fr<1&&loc>.35,b=1.4,pz=z-2*b;
+    s+=`<rect x="${x}" y="0" width="${z}" height="${z}" fill="#16110c"/><rect x="${x+b}" y="${b}" width="${pz}" height="${pz}" fill="url(#${id}${worn?'w':''})"/>`+
+      `<path d="M${x+b} ${z-b}V${b}H${z-b+x}" fill="none" stroke="rgba(0,0,0,.35)" stroke-width=".7"/>`+pcSym(k,x+b,b,pz,tint);
+    if(worn)s+=`<path d="M${x+z} ${z*.45}L${x+z*.62} ${z*.62}L${x+z*.5} ${z}L${x+z} ${z}Z" fill="#16110c" opacity=".9"/>`}
+  return s+'</svg>'}
+function uiPieces(){const a=sel&&sel.a;if(!a||!a.units)return;const side=document.getElementById('side');if(!side)return;
+  {const hd=side.querySelector('.ua-head .ui-head'),gn=side.querySelector('.ua-head > .ua-gen');if(hd&&!hd.querySelector('.ui-hcol')){const h2=hd.querySelector('h2');if(h2){const c=document.createElement('div');c.className='ui-hcol';hd.insertBefore(c,h2);c.appendChild(h2);if(gn)c.appendChild(gn)}}}
+  side.querySelectorAll('.ui-tile input[data-k]').forEach(inp=>{const t=inp.closest('.ui-tile'),u=a.units[+inp.dataset.k];if(!t||!u||t.classList.contains('pc'))return;
+    const sv=t.querySelector('svg.ui-sym');const h=pcSVG(u,a.side);if(!h)return;if(sv)sv.outerHTML=h;else t.insertAdjacentHTML('afterbegin',h);t.classList.add('pc')})}
+/* ---- CARTOUCHE DE L'ARMÉE (9 nov., Baptiste « règle aussi ce menu ») : patch.py retouche genCard (repère CARTE-PC) :
+   médaillon/portrait 27 px de rayon au lieu de 18, régiments dessinés comme les pièces de bataille (cadre sombre, plaque bombée,
+   symbole gravé), coin arraché puis plaque assombrie selon les pertes. ---- */
+const CP_G={};
+function cardPiece(x,y,q,u,c){const T=UT[u.t];if(!T)return;const k=T.k==='skirm'?'skirm':T.k,fr=Math.max(0,Math.min(1,u.men/(T.men||1))),x0=x-q/2,y0=y-q/2,b=Math.max(1.3,q*.13),pz=q-2*b;
+  const sh=(m)=>`rgb(${c.map(v=>Math.max(0,Math.min(255,Math.round(v*m)))).join(',')})`;
+  ctx.save();ctx.fillStyle='rgba(12,8,3,.42)';ctx.fillRect(x0+q*.1,y0+q*.13,q,q);
+  ctx.beginPath();if(fr<.6){const cut=q*(fr<.3?.5:.32);ctx.moveTo(x0,y0);ctx.lineTo(x0+q,y0);ctx.lineTo(x0+q,y0+q-cut);ctx.lineTo(x0+q-cut*.45,y0+q-cut*.4);ctx.lineTo(x0+q-cut,y0+q);ctx.lineTo(x0,y0+q);ctx.closePath()}else ctx.rect(x0,y0,q,q);
+  ctx.fillStyle='#16110c';ctx.fill();ctx.save();ctx.clip();
+  const g=ctx.createRadialGradient(x-q*.1,y-q*.12,q*.04,x,y,q*.66),w=(1-fr)*.35;g.addColorStop(0,sh(1.42-w));g.addColorStop(.5,sh(1.05-w));g.addColorStop(1,sh(.52-w*.4));
+  ctx.fillStyle=g;ctx.fillRect(x0+b,y0+b,pz,pz);
+  ctx.lineWidth=Math.max(.8,b*.55);ctx.strokeStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.moveTo(x0+b,y0+q-b);ctx.lineTo(x0+b,y0+b);ctx.lineTo(x0+q-b,y0+b);ctx.stroke();
+  const tint=sh(.38),m=pz*.06,X0=x0+b,Y0=y0+b;ctx.strokeStyle=tint;ctx.fillStyle=tint;ctx.lineCap='round';ctx.lineWidth=Math.max(1,pz*.11);ctx.beginPath();
+  if(k==='inf'||k==='eleph'){ctx.moveTo(X0+m,Y0+m);ctx.lineTo(X0+pz-m,Y0+pz-m);ctx.moveTo(X0+pz-m,Y0+m);ctx.lineTo(X0+m,Y0+pz-m);ctx.stroke();if(k==='eleph'){ctx.beginPath();ctx.arc(X0+pz/2,Y0+pz/2,pz*.2,0,7);ctx.stroke()}}
+  else if(k==='cav'||k==='lcav'){ctx.moveTo(X0+pz-m,Y0+m);ctx.lineTo(X0+m,Y0+pz-m);ctx.stroke();if(k==='lcav'){ctx.beginPath();ctx.arc(X0+pz*.7,Y0+pz*.7,pz*.1,0,7);ctx.fill()}}
+  else{for(const [a2,b2] of [[.3,.33],[.7,.33],[.5,.7]]){ctx.beginPath();ctx.arc(X0+pz*a2,Y0+pz*b2,pz*.12,0,7);ctx.fill()}}
+  ctx.restore();ctx.restore()}
+/* ---- VITESSES (10 nov., Baptiste) : armées et flottes à leur vitesse d'origine ; c'est le jour qui dure deux fois plus longtemps
+   (DAY_S 9 → 18 s à ×1, retouche faite par patch.py, repère JOUR-18) : tout défile deux fois plus lentement, distances par jour intactes. ---- */
+/* ---- PILLAGE PAR DÉTACHEMENT (10 nov., Baptiste : « l'animation de destruction des villages doit commencer seulement quand le carré
+   est arrivé ») : « Piller et brûler » et « Brûler les champs » du panneau de village n'agissent plus sur-le-champ : un petit carré
+   part de l'armée (ou du camp de siège), va au village, le brûle à son arrivée (butin et vivres à ce moment-là), puis revient. ---- */
+function pilSend(v,a,mk){if(!v||!a)return;const p=newPar(a,'raid',{state:'out',v:v.id,mk});goStraight(p,v.x,v.y);
+  if(a.side==='car')log(mk==='brn'?`${a.name} envoie un détachement brûler les champs ${deN(v.n)}.`:`${a.name} envoie un détachement piller ${v.n}.`);renderAll()}
+{const _bv=bindVillage;bindVillage=function(v,a){const r=_bv.apply(this,arguments);try{if(!v||!a)return r;
+  const busy=S.par.some(p=>p.k==='raid'&&p.v===v.id&&p.state!=='back');
+  for(const id of ['vPil','vBrn']){const e=document.getElementById(id);if(!e)continue;
+    if(busy){e.disabled=true;e.title='Un détachement est déjà en route vers ce village';continue}
+    e.onclick=()=>{if(id==='vBrn'){pilSend(v,a,'brn');return}
+      if(vRel(v,'car')==='neutre'){const o=ownerN(v.t);modal(`<h2>Piller ${esc(v.n)} ?</h2><p>Ce village dépend ${deN(N[v.t].n)}, chez les ${FAC[o].n}, qui sont neutres. Ils s'en souviendront, et leurs voisins aussi.</p><div class="row"><button class="warn" id="mYes" type="button">Piller quand même</button><button class="go" id="mNo" type="button">Annuler</button></div>`);
+        $('mYes').onclick=()=>{closeModal();pilSend(v,a,'pil')};$('mNo').onclick=closeModal}else pilSend(v,a,'pil')}}}catch(e){console.error(e)}return r}}
+// à l'arrivée d'un détachement « brûler les champs » : terre brûlée au lieu du pillage
+{const _vp=vPillage;vPillage=function(v,a){const p=S.par&&S.par.find(q=>q.k==='raid'&&q.v===(v&&v.id)&&q.state==='burn'&&q.mk==='brn');
+  if(p){vBurn(v,a.side);p._rl=1;if(a.side==='car')log(`${a.name} a brûlé les champs ${deN(v.n)} : l'ennemi n'y trouvera rien.`);return {got:0,g:0}}
+  if(S.par&&S.par.some(q=>q.k==='raid'&&q.v===(v&&v.id)&&q.state==='burn'&&q.mk==='pil'))a._rl=0;return _vp.apply(this,arguments)}}
+{const _lg=log;log=function(t){if(typeof t==='string'&&/pillent et brûlent .*\(0 rations, 0 or\)/.test(t))return;return _lg.apply(this,arguments)}}
+
+/* ---- CORPS EN AVANT (10 nov., Baptiste : « l'option pour envoyer un corps plus en avant et le rappeler a disparu ») ----
+   Le détachement existait encore (Registre › Corps et garde › « Détacher en mission »), mais caché. On le remet dans l'onglet Corps
+   du panneau, à côté de chaque second, et le détachement reçoit « Rappeler » : il marche vers son armée et la rejoint seul. */
+function cfwdSend(a,k){const d=splitCorps(a,k,'det');if(!d)return;sel={a:d};if(a.side==='car'||isMine(a))log(`${corpsN(k).replace(/^./,m=>m.toUpperCase())} part en avant : donnez-lui sa destination.`);renderAll()}
+function cfwdRecall(d){const p=d&&d.det&&S.armies.find(x=>x.id===d.det.p&&!x.dead);if(!p)return;
+  if(rejoin(d)){d._recall=0;if(sel&&sel.a===d)sel={a:p};log(`${esc(genOf(p)?genOf(p).name:p.name)} : le détachement a rejoint l'armée.`);renderAll();return true}
+  d._recall=1;try{order(d,p.x+.6,p.y+.3,null)}catch(e){}return false}
+{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{const a=sel&&sel.a;if(!a||a.dead||!isMine(a))return r;const side=$('side');
+  side.querySelectorAll('[data-csub]').forEach(x=>{if(x.previousElementSibling&&x.previousElementSibling.dataset&&x.previousElementSibling.dataset.cfwd)return;const k=+x.dataset.csub,n=a.units.filter(u=>(u.cp||0)===k).length;
+    const ok=n&&n<a.units.length&&!a.ship;x.insertAdjacentHTML('beforebegin',`<button type="button" data-cfwd="${k}" ${ok?'':'disabled'} style="min-height:24px;font-size:12px;padding:0 8px;margin-left:auto" title="Le corps quitte l'armée avec son général (avant-garde, flanc-garde, poursuite) ; vous lui donnez sa destination, puis vous le rappelez">Envoyer en avant</button>`)});
+  side.querySelectorAll('[data-cfwd]').forEach(x=>x.onclick=()=>cfwdSend(a,+x.dataset.cfwd));
+  if(a.det&&$('cGoP')&&!$('cRecall')){const g=$('cGoP');g.insertAdjacentHTML('afterend',`<button type="button" id="cRecall" class="${a._recall?'on':''}" title="Le détachement marche vers son armée et la rejoint dès qu'il l'atteint">${a._recall?'Rappel en cours…':'Rappeler'}</button>`);g.remove();
+    $('cRecall').onclick=()=>{cfwdRecall(a);renderAll()}}}catch(e){console.error('[corps en avant]',e)}return r}}
+{const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{for(const x of S.armies)if(x._recall&&!x.dead&&x.det)cfwdRecall(x)}catch(e){console.error(e)}return r}}
+
+/* ---- RECRUTER DES GÉNÉRAUX (10 nov., Baptiste : « recruter de nouveaux généraux, les faire intégrer les armées existantes ou créer de nouvelles armées ») ----
+   Dans chaque ville à soi (taille ≥ 1) : deux candidats à engager (renouvelés tous les 90 jours, mêmes listes S.cand que « Organiser l'armée »).
+   Un général sans commandement, dans la ville : second d'une armée présente, commandant d'une armée présente, ou chef d'une nouvelle armée
+   formée de régiments pris aux armées de la ville (garnison comprise). Il peut aussi partir rejoindre une armée éloignée comme second (g.trav). */
+const GR_KMD=40;
+const grCost=x=>40+30*stars(x)+(x.tr.some(k=>TRAITS[k].neg)?-15:0);
+function grCand(i){const n=N[i],k=n.id;S.cand=S.cand||{};const c=S.cand[k];
+  if(!c||S.day-c.d>90)S.cand[k]={d:Math.floor(S.day),L:[0,1].map(()=>{const x=mkGen('car',nextGen('car'));S.guid--;x.id=null;return x})};return S.cand[k].L}
+function grHere(i){return S.armies.filter(a=>!a.dead&&a.side==='car'&&a.at===i&&a.reinf==null&&isMine(a)&&!a.ship)}
+function grFree(i){return S.gens.filter(g=>g.side==='car'&&!g.dead&&g.army==null&&g.sub==null&&!g.trav&&g.at===i)}
+function grHire(i,j){const L=grCand(i),x=L[j];if(!x)return;const c=grCost(x);if(S.gold.car<c)return;
+  const go=()=>{S.gold.car-=c};if(typeof mpdWith==='function'&&N[i].dm)try{mpdWith(N[i].dm,go)}catch(e){go()}else go();
+  x.id=S.guid++;L.splice(j,1);x.army=null;x.sub=null;x.at=i;S.gens.push(x);log(`${x.name} est engagé à ${N[i].n} (${c} or).`);renderAll()}
+function grNewArmy(g,i){const A=grHere(i).filter(a=>a.units.length);if(!A.length)return;
+  let h=`<h2>Nouvelle armée de ${esc(g.name)}</h2><p class="sub">Cochez les régiments qui partent avec lui. Ils quittent leur armée ou la garnison de ${esc(N[i].n)}.</p>`;
+  for(const a of A){h+=`<h3>${esc(a.g?'Garnison de '+N[i].n:a.name)}</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px">`+
+    a.units.map((u,k)=>`<label class="unit" style="grid-template-columns:18px 1fr"><input type="checkbox" data-gra="${a.id}" data-grk="${k}"><span>${esc(typeof uName==='function'?uName(u):u.t)} <span class="sub">${Math.round(u.men)}</span></span></label>`).join('')+`</div>`}
+  h+=`<div class="row" style="margin-top:12px"><button type="button" class="go" id="grOk">Former l'armée</button><button type="button" id="grNo">Annuler</button></div>`;
+  modal(h);$('mcard').classList.add('wide');$('grNo').onclick=closeModal;
+  $('grOk').onclick=()=>{const pick=[...document.querySelectorAll('#mcard [data-gra]:checked')].map(c=>[+c.dataset.gra,+c.dataset.grk]);if(!pick.length)return;
+    const units=[];for(const a of A){const ks=pick.filter(p=>p[0]===a.id).map(p=>p[1]);if(!ks.length)continue;ks.forEach(k=>{const u=a.units[k];if(u){u.cp=0;u.gd=false;units.push(u)}});a.units=a.units.filter((u,k)=>!ks.includes(k));
+      if(!a.units.length&&!a.g){a.dead=true}if(typeof fixCorps==='function'&&!a.dead)try{fixCorps(a)}catch(e){}}
+    const n=N[i],b={id:S.uid++,side:'car',name:g.name,x:n.x+1,y:n.y+.4,at:i,legs:[],units:units.slice(0,MAXU),scout:0,cool:0,mor:70,food:0,bag:true};
+    try{b.food=armyFoodMax(b)}catch(e){}if(N[i].dm)b.dm=N[i].dm;S.armies.push(b);giveGen(b,g);syncGens();
+    log(`${g.name} prend la tête d'une nouvelle armée à ${n.n} (${b.units.length} régiments).`);closeModal();sel={a:b};renderAll()}}
+function grTravel(g,a){const n=N[g.at],km=Math.hypot(a.x-n.x,a.y-n.y);g.trav={a:a.id,t:Math.max(1,Math.ceil(km/GR_KMD))};log(`${g.name} part rejoindre ${a.name} (${g.trav.t} jour${g.trav.t>1?'s':''}).`);renderAll()}
+{const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{for(const g of S.gens||[]){if(!g.trav||g.dead)continue;if(--g.trav.t>0)continue;
+    const a=S.armies.find(x=>x.id===g.trav.a&&!x.dead);g.trav=null;
+    if(a&&(a.sub||[]).length<MAXSUB&&addSub(a,g)){try{autoCorps(a,'eq')}catch(e){}if(g.side==='car')log(`${g.name} rejoint ${a.name} comme second.`)}
+    else if(g.side==='car')log(`${g.name} n'a pas pu rejoindre son armée et attend à ${N[g.at].n}.`)}}catch(e){console.error(e)}return r}}
+{const _tb=townBlock;townBlock=function(i,main){let h=_tb.apply(this,arguments);try{const n=N[i];if(!S.gens||n.col||ownerN(i)!=='car')return h;
+  const here=grHere(i),free=grFree(i),far=S.armies.filter(a=>!a.dead&&a.side==='car'&&a.reinf==null&&!a.g&&isMine(a)&&a.at!==i&&(a.sub||[]).length<MAXSUB);
+  h=h.replace(`<p class="sub">Pour leur confier une armée : amenez-la ici, puis « Organiser l'armée… ».</p>`,'');
+  for(const g of free){h+=`<div class="row" style="margin:2px 0 8px;flex-wrap:wrap;gap:4px"><span class="sub" style="width:100%">${esc(g.name)} :</span>`;
+    for(const a of here.filter(a=>!a.g)){if((a.sub||[]).length<MAXSUB)h+=`<button type="button" data-grs="${g.id}:${a.id}" title="Il devient sous-général et prend un corps de l'armée">Second de ${esc(a.name)}</button>`;
+      h+=`<button type="button" data-grc="${g.id}:${a.id}" title="Il remplace ${esc(a.name)} à la tête de l'armée ; l'ancien chef reste en ville">Commander l'armée de ${esc(a.name)}</button>`}
+    if(here.some(a=>a.units.length))h+=`<button type="button" class="go" data-grn="${g.id}" title="Choisir des régiments présents en ville pour former une nouvelle armée">Nouvelle armée…</button>`;
+    if(far.length)h+=`<select data-grt="${g.id}" style="font:inherit;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:4px;padding:3px"><option value="">Rejoindre une armée éloignée…</option>${far.map(a=>`<option value="${a.id}">${esc(a.name)} (${Math.round(Math.hypot(a.x-n.x,a.y-n.y))} km)</option>`).join('')}</select>`;
+    h+=`</div>`}
+  const tr=S.gens.filter(g=>g.side==='car'&&!g.dead&&g.trav&&g.at===i);if(tr.length)h+=`<p class="sub">En route : ${tr.map(g=>`${esc(g.name)} → ${esc((S.armies.find(a=>a.id===g.trav.a)||{name:'?'}).name)} (${g.trav.t} j)`).join(', ')}</p>`;
+  if(n.size>=1){const L=grCand(i);h+=`<h3>Recruter un général</h3>`+(L.length?L.map((x,j)=>`<div class="rec"><span>${genHtml(x,false)}</span><button type="button" data-grh="${i}:${j}" ${S.gold.car<grCost(x)?'disabled':''}>Engager ${grCost(x)}</button></div>`).join(''):`<p class="sub">Plus de candidat ici pour le moment.</p>`)}
+}catch(e){console.error('[généraux]',e)}return h}}
+{const _bt=bindTown;bindTown=function(){const r=_bt.apply(this,arguments);try{const G=id=>S.gens.find(g=>g.id===+id),A=id=>S.armies.find(a=>a.id===+id);
+  document.querySelectorAll('[data-grh]').forEach(b=>b.onclick=()=>{const [i,j]=b.dataset.grh.split(':').map(Number);grHire(i,j)});
+  document.querySelectorAll('[data-grs]').forEach(b=>b.onclick=()=>{const [g,a]=b.dataset.grs.split(':');const x=G(g),y=A(a);if(x&&y&&addSub(y,x)){try{autoCorps(y,'eq')}catch(e){}log(`${x.name} devient le second de ${y.name}.`)}renderAll()});
+  document.querySelectorAll('[data-grc]').forEach(b=>b.onclick=()=>{const [g,a]=b.dataset.grc.split(':');const x=G(g),y=A(a);if(!x||!y)return;const old=y.name;giveGen(y,x);syncGens();log(`${x.name} prend le commandement de l'armée de ${old}.`);sel={a:y};renderAll()});
+  document.querySelectorAll('[data-grn]').forEach(b=>b.onclick=()=>{const g=G(b.dataset.grn);if(g)grNewArmy(g,g.at)});
+  document.querySelectorAll('[data-grt]').forEach(s=>s.onchange=()=>{const g=G(s.dataset.grt),a=A(s.value);if(g&&a)grTravel(g,a)});
+}catch(e){console.error('[généraux]',e)}return r}}
+
+/* ---- CAPITAINES ET GARNISONS (11 nov., Baptiste : « une armée sans général commandée par un Capitaine, visible quand elle se déplace ;
+   changer les icônes des armées en garnison ») ----
+   Renforts en marche et garnisons qui sortent reçoivent un capitaine (g.capt : sans trait, sans renommée), qui disparaît quand son armée
+   se fond dans une autre. Une garnison en marche est dessinée comme une armée (texte retouché par genie/patch.py, repère CAPT-VIS).
+   Garnisons : tour crénelée à la couleur du camp, au pied de la ville, avec le nombre de régiments. */
+const CAP_N={car:['Bodo','Adherbal','Bostar','Himilcon','Magon','Mutin','Abdmelqart','Hannon','Giscon','Carthalon'],rom:['Caius','Lucius','Marcus','Quintus','Titus','Publius','Sextus','Aulus','Decimus','Gnaeus']};
+function capName(side){const r=typeof realSide==='function'?realSide(side):side,L=CAP_N[r]||CAP_N.car;return 'Capitaine '+L[Math.floor(Math.random()*L.length)]}
+function capNeed(a){return !a.dead&&!a.ship&&(a.reinf!=null||(a.g&&a.legs&&a.legs.length))}
+function capSync(){if(!S||!S.gens)return;
+  for(const g of S.gens){if(!g.capt||g.dead)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(!a||a.gen!==g.id||!capNeed(a)){if(a&&a.gen===g.id){a.gen=null;if(a.g&&a.at!=null)a.name='Garnison de '+N[a.at].n;else if(a.reinf!=null)a.name='Renforts'}g.dead=true;g.army=null}}
+  S.gens=S.gens.filter(g=>!(g.capt&&g.dead));
+  for(const a of S.armies){if(!capNeed(a)||(a.gen!=null&&S.gens.some(g=>g.id===a.gen&&!g.dead&&g.army===a.id)))continue;
+    const g=mkGen(a.side,capName(a.side));g.tr=[];g.xp=0;g.capt=1;g.army=a.id;g.at=null;g.lx=a.x;g.ly=a.y;S.gens.push(g);a.gen=g.id;a.name=g.name}}
+{const _sg=syncGens;syncGens=function(){try{capSync()}catch(e){console.error(e)}const r=_sg.apply(this,arguments);try{capSync()}catch(e){console.error(e)}return r}}
+{const _dl=daily;daily=function(d){const r=_dl.apply(this,arguments);try{capSync()}catch(e){console.error(e)}return r}}
+{const _od=order;order=function(a){const r=_od.apply(this,arguments);try{if(a&&capNeed(a))capSync()}catch(e){}return r}}
+// icône de garnison : tour crénelée, fanion du camp, nombre de régiments
+function towerIcon(x,y,side,n,selected,field){const c=FAC[side]?FAC[side].c:[120,120,120],col=`rgb(${c[0]},${c[1]},${c[2]})`,dk=`rgb(${c[0]*.55|0},${c[1]*.55|0},${c[2]*.55|0})`;
+  ctx.save();ctx.translate(x,y);const w=field?9:7.5,h=field?15:12;
+  ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(0,h*.5+1,w+3,2.2,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.moveTo(-w,h*.5);ctx.lineTo(-w*.85,-h*.5);for(let i=0;i<4;i++){const x0=-w*.85+i*(w*1.7/3.5);ctx.lineTo(x0,-h*.5-3);ctx.lineTo(x0+w*.28,-h*.5-3);ctx.lineTo(x0+w*.28,-h*.5)}ctx.lineTo(w*.85,-h*.5);ctx.lineTo(w,h*.5);ctx.closePath();
+  const gr=ctx.createLinearGradient(-w,0,w,0);gr.addColorStop(0,'#d9cba8');gr.addColorStop(.55,'#b9a77e');gr.addColorStop(1,'#8f7f5c');ctx.fillStyle=gr;ctx.fill();
+  ctx.lineWidth=selected?2.4:1.2;ctx.strokeStyle=selected?'#fff3c4':'#2a2014';ctx.stroke();
+  ctx.fillStyle=col;ctx.fillRect(-w*.85+1,-h*.5+1.5,w*1.7-2,3);
+  ctx.fillStyle='#2a2014';ctx.beginPath();ctx.moveTo(-2.6,h*.5);ctx.lineTo(-2.6,h*.5-4.5);ctx.arc(0,h*.5-4.5,2.6,Math.PI,0);ctx.lineTo(2.6,h*.5);ctx.fill();
+  ctx.strokeStyle='#2a2014';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,-h*.5-3);ctx.lineTo(0,-h*.5-11);ctx.stroke();
+  ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(0,-h*.5-11);ctx.lineTo(8,-h*.5-8.6);ctx.lineTo(0,-h*.5-6.2);ctx.fill();ctx.strokeStyle=dk;ctx.lineWidth=.8;ctx.stroke();
+  if(field){ctx.strokeStyle='#e6c27a';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(0,0,w+4.5,0,7);ctx.stroke()}
+  if(n!=null){ctx.font='700 10px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';const t=String(n),tw=ctx.measureText(t).width+6;
+    ctx.fillStyle=dk;ctx.beginPath();ctx.roundRect?ctx.roundRect(-tw/2,h*.5-1,tw,11,3):ctx.rect(-tw/2,h*.5-1,tw,11);ctx.fill();ctx.strokeStyle='#e9dcc0';ctx.lineWidth=.8;ctx.stroke();ctx.fillStyle='#fff6e0';ctx.fillText(t,0,h*.5+4.6)}
+  ctx.restore()}
+{const _tk=token;token=function(x,y,side,txt,selected,a){if(a&&a.g&&!(a.legs&&a.legs.length)&&!a.dead){try{towerIcon(x+13,y-4,side,/^\d+$/.test(txt||'')?txt:null,selected,false);return}catch(e){}}return _tk.apply(this,arguments)}}
+{const _gt=garToken;garToken=function(x,y,side,txt,selected,ship){if(ship)return _gt.apply(this,arguments);try{towerIcon(x+16,y-6,side,txt,selected,true)}catch(e){return _gt.apply(this,arguments)}}}
+
+/* ---- ARMÉE AU CAMP (11 nov., choix de Baptiste « Camp de tentes ») ----
+   Vue dézoomée : une armée arrêtée (hors garnison, hors navire) garde médaillon et nom, mais sa grille de régiments devient un camp :
+   terre battue, palissade de pieux, tentes (une par régiment, jusqu'à 15), tente du chef aux couleurs du camp avec l'étendard, feu de camp.
+   En marche, la grille de régiments revient. */
+let CAMP_ON=false;
+{const _cp=cardPiece;cardPiece=function(){if(CAMP_ON)return;return _cp.apply(this,arguments)}}
+function campStill(a){return a&&!a.dead&&!a.g&&!a.inG&&!a.ship&&!(a.legs&&a.legs.length)&&a.units&&a.units.length}
+function campTent(x,y,w,fill,line){const h=w*.78;ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(x+w*.12,y+1,w*.62,w*.16,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.moveTo(x-w/2,y);ctx.lineTo(x,y-h);ctx.lineTo(x+w/2,y);ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.lineWidth=Math.max(.7,w*.07);ctx.strokeStyle=line;ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x,y-h);ctx.lineTo(x+w/2,y);ctx.lineTo(x+w*.1,y);ctx.closePath();ctx.fillStyle='rgba(0,0,0,.16)';ctx.fill();
+  ctx.beginPath();ctx.moveTo(x-w*.11,y);ctx.lineTo(x,y-h*.45);ctx.lineTo(x+w*.11,y);ctx.fillStyle='rgba(40,28,14,.75)';ctx.fill()}
+function campDraw(a,pts,q,k){if(!pts.length)return;const c=FAC[a.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,n=a.units.length;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const [x,y] of pts){x0=Math.min(x0,x-q/2);x1=Math.max(x1,x+q/2);y0=Math.min(y0,y-q/2);y1=Math.max(y1,y+q/2)}
+  const W=Math.max(x1-x0,q*3.2),H=Math.min(Math.max(y1-y0,q*1.7),q*1.15*Math.ceil(Math.min(15,a.units.length)/5)+q*.3)+3*k,cx=(x0+x1)/2;x0=cx-W/2;x1=cx+W/2;y1=y0+H;
+  ctx.save();
+  // terre battue et palissade
+  const r=5*k;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,y0,W,H,r);else ctx.rect(x0,y0,W,H);
+  const g=ctx.createLinearGradient(0,y0,0,y1);g.addColorStop(0,'#b59a68');g.addColorStop(1,'#8e744a');ctx.fillStyle=g;ctx.fill();
+  ctx.lineWidth=(a.camp?2.6:1.8)*k;ctx.strokeStyle='#4a321a';ctx.stroke();
+  ctx.fillStyle='#5e4224';const st=4*k;for(let x=x0+st/2;x<=x1;x+=st){ctx.fillRect(x-.7*k,y0-2*k,1.4*k,2.6*k);ctx.fillRect(x-.7*k,y1-.6*k,1.4*k,2.6*k)}
+  for(let y=y0+st/2;y<=y1;y+=st){ctx.fillRect(x0-2*k,y-.7*k,2.6*k,1.4*k);ctx.fillRect(x1-.6*k,y-.7*k,2.6*k,1.4*k)}
+  // porte
+  ctx.fillStyle='#8e744a';ctx.fillRect(cx-3*k,y1-1.5*k,6*k,3.5*k);
+  // tentes : une par régiment (15 au plus), en rangs
+  const nt=Math.min(15,n),per=Math.min(5,Math.max(3,Math.ceil(nt/2))),rows=Math.ceil(nt/per),tw=Math.min(q*1.05,(W-6*k)/per*.86),rh=(H-4*k)/Math.max(rows,1);
+  for(let i=0;i<nt;i++){const rr=Math.floor(i/per),m=Math.min(per,nt-rr*per),x=cx-(m-1)*(W-6*k)/per/2+(i%per)*(W-6*k)/per,y=y0+2.5*k+rh*(rr+1)-1*k;
+    const chief=i===Math.floor(Math.min(per,nt)/2)&&rr===0;campTent(x,y,chief?tw*1.25:tw,chief?col:'#efe4c8',chief?'#2b1c0e':'rgba(90,70,40,.9)');
+    if(chief){const h=(chief?tw*1.25:tw)*.78;ctx.strokeStyle='#2b1c0e';ctx.lineWidth=.9*k;ctx.beginPath();ctx.moveTo(x,y-h);ctx.lineTo(x,y-h-7*k);ctx.stroke();
+      ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y-h-7*k);ctx.lineTo(x+6*k,y-h-5.4*k);ctx.lineTo(x,y-h-3.8*k);ctx.fill()}}
+  // feu de camp
+  const T=(S.day||0)*DAY_S,fx=x1-4.5*k,fy=y1-3.5*k,fl=.8+.2*Math.sin(T*8+a.id);
+  ctx.fillStyle='rgba(255,190,80,.35)';ctx.beginPath();ctx.arc(fx,fy,3.4*k*fl,0,7);ctx.fill();ctx.fillStyle='#ffb347';ctx.beginPath();ctx.arc(fx,fy,1.6*k*fl,0,7);ctx.fill();
+  // nombre de régiments
+  ctx.font=`700 ${Math.round(10*k)}px Barlow Semi Condensed, Arial Narrow, sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';const t=String(n),bw=ctx.measureText(t).width+6*k;
+  ctx.fillStyle='#3b2814';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0-1*k,y1-6*k,bw,11*k,3*k);else ctx.rect(x0-1*k,y1-6*k,bw,11*k);ctx.fill();ctx.fillStyle='#f4e2b0';ctx.fillText(t,x0-1*k+bw/2,y1-.4*k);
+  ctx.restore()}
+{const _gc=genCard;genCard=function(a,s){if(!campStill(a))return _gc.apply(this,arguments);CAMP_ON=true;let r;try{r=_gc.apply(this,arguments)}finally{CAMP_ON=false}
+  try{if(a._sq&&a._sq.length>2){const k=s<.5?.78:s<.8?.9:1,q=Math.round(14*k);campDraw(a,a._sq.slice(0,a._sq.length-2),q,k)}}catch(e){console.error('[camp]',e)}return r}}
+/* ---- BIVOUAC AU ZOOM PROCHE (11 nov., Baptiste : « ils marchent et d'un coup sont tous en liste ») ----
+   Vue rapprochée (carrés de 300 m) : une armée arrêtée ne se range plus en ligne de bataille. Elle bivouaque : régiments en îlots serrés,
+   une rangée de tentes derrière chaque rang, feux, tente du chef à l'emplacement de l'armée (à côté des murs si elle est dans une ville).
+   Le camp fortifié (a.camp), le siège, le démontage et le débarquement gardent leur dessin.
+   Tout changement de disposition (marche -> bivouac, bivouac -> colonne, camp...) glisse en 0,9 s au lieu de sauter : unitSq est enveloppé
+   pendant l'appel de formation et interpole chaque carré depuis sa dernière place (u._fw, coordonnées carte).
+   Camp fortifié établi (a.camp tout neuf) : les régiments entrent en file par la porte sud puis gagnent leur quartier, les tentes et le
+   pavillon se montent à mesure (a._ce, a._cp avancement calé sur la palissade, u._ci rang, a._fold repris du démontage).
+   Levée du camp (a.decamp) : sortie en file par la porte du côté du départ, puis rangs de quatre dehors (a._dx, u._di) avant la colonne.
+   Une garnison ou une armée de capitaine en marche porte le même écu sur hampe qu'une armée (plus le petit bouclier seul). */
+let BIV_A=null,BIV_S=1,BIV_NOW=0;const BIV_MS=900,CAMP_RUN=.3,DEC_RUN=.4,CAMP_RUN_GAP=n=>(1-CAMP_RUN)/Math.max(1,n-1);
+// point à la fraction tt (adoucie) d'un chemin brisé
+function bivPath(P,tt){const D=[];let L=0;for(let k=1;k<P.length;k++){const d=Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]);D.push(d);L+=d}
+  let d=L*(tt*tt*(3-2*tt)),k=0;while(k<D.length-1&&d>D[k]){d-=D[k];k++}const f=D[k]>1e-6?Math.min(1,d/D[k]):1;return [P[k][0]+(P[k+1][0]-P[k][0])*f,P[k][1]+(P[k+1][1]-P[k][1])*f]}
+{const _us=unitSq;unitSq=function(x,y,q,u,c,dark){const a=BIV_A;if(!a||!u)return _us.apply(this,arguments);
+  let wx=(x-view.ox)/BIV_S,wy=(y-view.oy)/BIV_S;const t=(BIV_NOW-(a._bt||0))/BIV_MS;
+  if(a._ce&&a.camp&&u._f0&&u._ci!=null){
+    // entrée au camp fortifié : en file par la porte sud, puis par la rue centrale jusqu'au quartier du régiment
+    const tt=Math.max(0,Math.min(1,((a._cp||0)-u._ci*CAMP_RUN_GAP(a._cn))/CAMP_RUN));
+    if(tt<1){const w=bivPath([u._f0,[a._cg[0],a._cg[1]+.35],[a._cg[0],a._cg[1]-.3],[a._cg[0],wy],[wx,wy]],tt);wx=w[0];wy=w[1];x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}}
+  else if(a._bk==='d'&&a.decamp&&a._dx&&u._f0&&u._di!=null){
+    // levée du camp : les régiments sortent en file par la porte du départ et se rangent dehors par rangs de quatre
+    const X=a._dx,d=a.decamp,p=Math.max(0,Math.min(1,(S.day-d.t0)/(d.end-d.t0))),tt=Math.max(0,Math.min(1,(p-u._di*(.97-DEC_RUN)/Math.max(1,X.n-1))/DEC_RUN));
+    const r=Math.floor(u._di/4),m=Math.min(4,X.n-r*4),f=(u._di%4)-(m-1)/2,dist=UNIT_KM*(2+(X.R-1-r)*1.35),sl=[X.g[0]+X.d[0]*dist-X.d[1]*f*UNIT_KM*1.35,X.g[1]+X.d[1]*dist+X.d[0]*f*UNIT_KM*1.35];
+    const st=X.d[0]?[u._f0[0],X.c[1]]:[X.c[0],u._f0[1]];
+    const w=bivPath([u._f0,st,X.g,[X.g[0]+X.d[0]*UNIT_KM*1.2,X.g[1]+X.d[1]*UNIT_KM*1.2],sl],tt);wx=w[0];wy=w[1];x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}
+  else if(t<1&&u._f0){const dx=wx-u._f0[0],dy=wy-u._f0[1];if(dx*dx+dy*dy<64){const e=t<=0?0:t*t*(3-2*t);wx=u._f0[0]+dx*e;wy=u._f0[1]+dy*e;x=view.ox+wx*BIV_S;y=view.oy+wy*BIV_S}}
+  u._fw=[wx,wy];u._ff=BIV_NOW;return _us.call(this,x,y,q,u,c,dark)}}
+function bivKey(a){const sg=a.at!=null&&!a.legs.length&&N[a.at]&&!N[a.at].col&&S.siege&&S.siege[N[a.at].id];
+  return a.decamp?'d':a.legs.length?(a.camp?'c':'m'):sg&&sg.a===a.id&&!a.inG?'s':a.camp?'c':'b'+(a.at==null?'':a.at)}
+function bivStill(a,key){return key[0]==='b'&&!a.ship&&a.units&&a.units.length&&!(typeof lgLand==='function'&&lgLand(a))}
+const BIV_ORD={inf:0,eleph:1,skirm:2,lcav:3,cav:4};
+function bivFormation(a,s){
+  const c=FAC[a.side].c,dark='rgba(26,18,10,.95)',col=`rgb(${c[0]},${c[1]},${c[2]})`,q=UNIT_KM*s,n=a.units.length,T=(S.day||0)*DAY_S;
+  const U=a.units.slice().sort((p,r)=>BIV_ORD[UT[p.t].k]-BIV_ORD[UT[r.t].k]);
+  // îlots de 4 régiments (2 × 2), une rangée de tentes derrière chaque îlot, ruelles entre les îlots, léger désordre
+  const nb=Math.ceil(n/4),bc=Math.max(2,Math.min(5,Math.ceil(Math.sqrt(nb*1.7)))),br=Math.ceil(nb/bc),up=q*1.3,px=q*3.7,py=q*4.1,W=(Math.min(bc,nb)-1)*px+up,rows=br;
+  let X=view.ox+a._p[0]*s,Y=view.oy+a._p[1]*s,cx=X,ty=Y;
+  // dans une ville : le bivouac se dresse à côté des murs, pour laisser la ville lisible
+  if(a.at!=null){const nd=N[a.at],tr=s>1.6?Math.max([4,6,8.5,11][nd.size]||6,(.55+(nd.size||0)*.55)*s*.9):7;cx=X+tr+8+W/2+q*1.6;ty=Y-(br*py)/2}
+  const y0=ty+q*3.1,pts=[],blk=[],jit=(k,m)=>{const v=Math.sin((a.id*7.13+k*12.9898+m*78.233))*43758.5453;return (v-Math.floor(v)-.5)*q*.5};
+  for(let b=0;b<nb;b++){const r=Math.floor(b/bc),m=Math.min(bc,nb-r*bc),bx=cx+((b%bc)-(m-1)/2)*px+jit(b,1),by=y0+r*py+jit(b,2)*.7,k=Math.min(4,n-b*4);blk.push([bx,by,k]);
+    for(let i=0;i<k;i++)pts.push([bx+((i&1)-(k>1?.5:0))*up,by+(i>>1)*up])}
+  ctx.save();
+  // terre battue
+  const gx=cx-W/2-q*1.6,gy=ty-q*1.6,gw=W+q*3.2,gh=y0+(rows-1)*py+up+q*1.3-gy;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(gx,gy,gw,gh,q*1.1);else ctx.rect(gx,gy,gw,gh);
+  ctx.fillStyle='rgba(150,122,82,.30)';ctx.fill();ctx.strokeStyle='rgba(90,66,36,.28)';ctx.lineWidth=Math.max(1,q*.08);ctx.setLineDash([q*.5,q*.4]);ctx.stroke();ctx.setLineDash([]);
+  if(sel&&sel.a===a){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,q*.9,0,7);ctx.fill()})}
+  // tentes derrière chaque rang, feux entre les îlots
+  const tw=Math.max(3.5,q*.62);
+  blk.forEach(([bx,by,k],b)=>{const m=k>1?3:2;for(let i=0;i<m;i++)campTent(bx+(i-(m-1)/2)*tw*1.15,by-q*.72,tw,i&1?'#e6d9b8':'#efe4c8','rgba(90,70,40,.9)');
+    if(b%2===0&&k>2)try{fire(bx+up*1.25,by+up*.5,Math.max(1.2,q*.14),T,a.id+b)}catch(e){}});
+  // tente du chef, à l'emplacement de l'armée
+  const cw=Math.max(8,q*1.7),by=ty+cw*.3;campTent(cx,by,cw,col,'#2b1c0e');
+  ctx.strokeStyle='#2b1c0e';ctx.lineWidth=Math.max(1,q*.08);ctx.beginPath();ctx.moveTo(cx+cw*.62,by);ctx.lineTo(cx+cw*.62,by-cw*1.1);ctx.stroke();
+  ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(cx+cw*.62,by-cw*1.1);ctx.lineTo(cx+cw*1.12,by-cw*.95);ctx.lineTo(cx+cw*.62,by-cw*.78);ctx.closePath();ctx.fill();ctx.stroke();
+  try{fire(cx-cw*.85,by-q*.1,Math.max(1.4,q*.17),T,a.id)}catch(e){}
+  ctx.restore();
+  U.forEach((u,i)=>unitSq(pts[i][0],pts[i][1],q,u,c,dark));
+  a._sq=[...pts,[cx,by-cw*.4]]}
+{const _fm=formation;formation=function(a,s){let key;try{key=bivKey(a)}catch(e){return _fm.apply(this,arguments)}
+  const now=performance.now();
+  if(a._bk!==key){if(a._bk!=null){a._bt=now;for(const u of a.units)u._f0=u._fw&&now-(u._ff||0)<600?u._fw:null}else a._bt=0;a._bk=key}
+  // camp fortifié que l'armée vient d'établir : les régiments entrent en file par la porte, les tentes se montent à mesure (a._fold)
+  if(key==='c'&&a._bt===now&&a.camp&&!a.camp.ok&&!a._lev){try{const L=campLayout(a),g=[a.camp.x,a.camp.y+L.H/2];const Q=a.units.filter(u=>u._f0&&Math.hypot(u._f0[0]-g[0],u._f0[1]-g[1])<10);
+      if(Q.length){for(const u of a.units)u._ci=null;Q.sort((p,r)=>Math.hypot(p._f0[0]-g[0],p._f0[1]-g[1])-Math.hypot(r._f0[0]-g[0],r._f0[1]-g[1])).forEach((u,i)=>u._ci=i);a._cg=g;a._ce=now;a._cn=Q.length;a._cp=0;a._cl=now}}catch(e){}}
+  // l'entrée suit la construction (temps de jeu) : le dernier régiment gagne son quartier quand la palissade se ferme ;
+  // si le camp est achevé d'un coup (pionniers), l'entrée se termine en 1,5 s
+  if(a._ce){if(key!=='c'||!a.camp)a._ce=0;else{if(a.camp.ok)a._cp=Math.min(1,a._cp+(now-a._cl)/1500);else a._cp=Math.max(a._cp,Math.min(1,1-(a.camp.t-S.day)));a._cl=now;
+      if(a._cp>=1){a._ce=0;a._fold=0}else a._fold=Math.max(0,Math.min(1,1.05-a._cp*1.15))}}
+  if(key==='d'&&a._bt===now&&a.decamp){a._dx=null;try{const cam=a.decamp.cam,L=campLayout(a),l0=a.legs[0],dx=l0.x-cam.x,dy=l0.y-cam.y,d=Math.abs(dx)>Math.abs(dy)?[dx>0?1:-1,0]:[0,dy>0?1:-1],g=[cam.x+d[0]*L.W/2,cam.y+d[1]*L.H/2];
+      const Q=a.units.filter(u=>u._f0);for(const u of a.units)u._di=null;Q.sort((p,r)=>Math.hypot(p._f0[0]-g[0],p._f0[1]-g[1])-Math.hypot(r._f0[0]-g[0],r._f0[1]-g[1])).forEach((u,i)=>u._di=i);
+      if(Q.length)a._dx={c:[cam.x,cam.y],d,g,n:Q.length,R:Math.ceil(Q.length/4)}}catch(e){}}
+  BIV_A=a;BIV_S=s;BIV_NOW=now;
+  try{if(bivStill(a,key)){try{return bivFormation(a,s)}catch(e){console.error('[bivouac]',e)}}return _fm.apply(this,arguments)}finally{BIV_A=null}}}
+// garnison ou armée de capitaine en marche, vue rapprochée : écu sur hampe comme une armée
+{const _tk2=token;token=function(x,y,side,txt,selected,a){if(a&&a.g&&a.legs&&a.legs.length&&!a.dead&&/^\d+$/.test(txt||'')&&a._sq)return _tk2.call(this,x,y-18,side,txt,selected,{side:a.side,at:a.at,id:a.id,g:false});
+  return _tk2.apply(this,arguments)}}
+/* ---- FOURRAGEURS BIEN VISIBLES (11 nov., Baptiste : « on ne voit toujours pas les petits carrés partir du camp/siège quand on pille ») ----
+   Les détachements S.par 'raid' étaient dessinés en carrés de 8 px, noyés dans le camp ou les lignes de siège. On les redessine par-dessus :
+   carré de la taille d'un régiment (12 px au moins), liseré doré, fanion, poussière, et un pointillé qui les relie à leur armée et à leur village. */
+{const _dfF=drawFleets;drawFleets=function(s,z,inV){const r=_dfF.apply(this,arguments);
+  try{if(S&&S.par&&S.par.length){const dark='rgba(26,18,10,.95)';
+    for(const p of S.par){if(p.k!=='raid')continue;const a=parArmy(p);if(!a)continue;if(!(p.side==='car'||isMine(a)||visAt(p.x,p.y)===2))continue;if(!inV(p.x,p.y,40))continue;
+      const c=FAC[p.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,X=view.ox+p.x*s,Y=view.oy+p.y*s,q=Math.max(12,UNIT_KM*s*.85),AX=view.ox+a.x*s,AY=view.oy+a.y*s;
+      ctx.save();
+      // fil d'Ariane : de l'armée au détachement, puis jusqu'au village visé
+      ctx.setLineDash([4,4]);ctx.lineWidth=1.4;ctx.strokeStyle='rgba(40,26,12,.55)';ctx.beginPath();ctx.moveTo(AX,AY);ctx.lineTo(X,Y);ctx.stroke();
+      const L=p.legs&&p.legs[0];if(L&&p.state==='out'){ctx.strokeStyle='rgba(190,60,30,.7)';ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(view.ox+L.x*s,view.oy+L.y*s);ctx.stroke()}
+      ctx.setLineDash([]);
+      if(L){const hx=L.x-p.x,hy=L.y-p.y,hl=Math.hypot(hx,hy)||1;for(let k=1;k<=3;k++){ctx.fillStyle=`rgba(170,150,110,${.4-k*.1})`;ctx.beginPath();ctx.arc(X-hx/hl*q*.8*k,Y-hy/hl*q*.8*k,q*.3*(1+k*.3),0,7);ctx.fill()}}
+      const cav=a.units.find(u=>{const k=UT[u.t].k;return k==='cav'||k==='lcav'}),u0=(p.id%3===1?null:cav)||a.units.find(u=>UT[u.t].k==='inf')||cav||a.units[0];
+      ctx.fillStyle='rgba(243,217,138,.9)';ctx.fillRect(X-q/2-2.5,Y-q/2-2.5,q+5,q+5);
+      if(u0)unitSq(X,Y,q,{t:u0.t,men:UT[u0.t].men},c,dark);
+      // fanion ; sac de butin au retour
+      ctx.strokeStyle=dark;ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(X+q/2,Y-q/2);ctx.lineTo(X+q/2,Y-q/2-9);ctx.stroke();
+      ctx.fillStyle=p.state==='back'?'#e9c46a':col;ctx.beginPath();ctx.moveTo(X+q/2,Y-q/2-9);ctx.lineTo(X+q/2+7,Y-q/2-6.5);ctx.lineTo(X+q/2,Y-q/2-4);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.restore()}}}catch(e){console.error('[fourrageurs]',e)}
+  return r}}
+/* ---- CONTACT PAR LA COLONNE (11 nov., Baptiste : « oui il faut améliorer ça ») ----
+   Avant : bataille dès que deux têtes d'armées ennemies étaient à moins de 6 km, colonne ignorée.
+   Maintenant (retouche ENC-COL de tick par genie/patch.py) :
+   - chaque armée en marche laisse dans la simulation la trace de sa colonne (ENC_T, hors sauvegarde), longue de 0,37 km par régiment ;
+   - une tête qui arrive à moins de encR(a)+0,6 km de la colonne d'un ennemi l'accroche : c'est elle qui attaque ;
+   - deux têtes s'accrochent à moins de encR(a)+encR(b) : 1,5 km par armée en marche, jusqu'à 2,5 km pour une grande armée au bivouac.
+   Les autres règles (murs, délai de grâce, se dérober, flottes, neutres) ne changent pas. */
+const ENC_T=new Map(),ENC_SP=.15;
+function encLen(a){return .33+(a.units?a.units.length:1)*UNIT_KM*1.22}
+function encR(a){return a.legs&&a.legs.length?1.5:Math.min(2.5,1.5+(a.units?a.units.length:1)*.03)}
+function encTrail(){if(!S||!S.armies)return;const live=new Set();
+  for(const a of S.armies){if(a.dead||a.ship||!a.legs||!a.legs.length){ENC_T.delete(a.id);continue}live.add(a.id);
+    let T=ENC_T.get(a.id);if(!T){T=[[a.x,a.y]];ENC_T.set(a.id,T)}const l=T[T.length-1];
+    if(Math.hypot(l[0]-a.x,l[1]-a.y)>ENC_SP){T.push([a.x,a.y]);let len=0;for(let k=T.length-1;k>0;k--){len+=Math.hypot(T[k][0]-T[k-1][0],T[k][1]-T[k-1][1]);if(len>encLen(a)){T.splice(0,k-1);break}}}}
+  for(const id of ENC_T.keys())if(!live.has(id))ENC_T.delete(id)}
+// distance d'un point à la colonne de b (de sa tête vers l'arrière)
+function encCol(px,py,b){const T=ENC_T.get(b.id);if(!T||T.length<1)return 1e9;let best=1e9,ax=b.x,ay=b.y;
+  for(let k=T.length-1;k>=0;k--){const bx=T[k][0],by=T[k][1],dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));
+    best=Math.min(best,Math.hypot(px-(ax+dx*t),py-(ay+dy*t)));ax=bx;ay=by}return best}
+let ENC_ATT=null;
+function encNear(a,b){ENC_ATT=null;const d=Math.hypot(a.x-b.x,a.y-b.y);if(d>=40)return false;
+  if(d<encR(a)+encR(b)){ENC_ATT=(a.legs.length>0)>=(b.legs.length>0)?a:b;return true}
+  if(encCol(a.x,a.y,b)<encR(a)+.6){ENC_ATT=a;return true}
+  if(encCol(b.x,b.y,a)<encR(b)+.6){ENC_ATT=b;return true}
+  return false}
+function encAtt(a,b){return ENC_ATT===a||ENC_ATT===b?ENC_ATT:((a.legs.length>0)>=(b.legs.length>0)?a:b)}
+{const _tkE=tick;tick=function(dd){try{encTrail()}catch(e){}const r=_tkE.apply(this,arguments);try{encTrail()}catch(e){}return r}}
+window.__genie={encNear,encCol,encR,encLen,ENC_T,bivFormation,bivKey,campDraw,campStill,capSync,towerIcon,grHire,grNewArmy,grTravel,grCand,cfwdSend,cfwdRecall,pilSend,cardPiece,uiPieces,pcSVG,peuInit,peuDaily,peuP,peuRegs,menMs,matCap,woodRate,buyMat,startBridge,stopBridge,bridgeSite,rivNear,burnGb,foldGb,buildDef,cityMat,ENG_M,GBRK,DEF,genSV,gbNear};
+/* ================= FIN GÉNIE ================= */

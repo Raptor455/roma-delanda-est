@@ -1,0 +1,28 @@
+/* ================= COMBATS AU PIED DES MURS (pendant un siège) ================= */
+// petits carrés d'assaillants contre les défenseurs sur le rempart : chocs, éclats, flèches ; plus nombreux quand le siège avance
+const _siegeFormation=siegeFormation;
+siegeFormation=function(a,s,sg){
+  _siegeFormation(a,s,sg);
+  const n=N[a.at],g=cityGeom(n),o=ownerN(a.at),f=Math.min(1,sg.d/sg.need),T=S.day*DAY_S;if(!o)return;
+  const ca=FAC[a.side].c,cd=FAC[o].c,q=Math.max(6,UNIT_KM*s*.55),SX=x=>view.ox+x*s,SY=y=>view.oy+y*s;
+  const R=g.wall.map(w=>({ang:Math.atan2(w[1]-g.cy,w[0]-g.cx),rr:Math.hypot(w[0]-g.cx,w[1]-g.cy)}));
+  const land=R.map(r=>landFast(g.cx+Math.cos(r.ang)*(r.rr+.6),g.cy+Math.sin(r.ang)*(r.rr+.6)));const cand=R.map((r,k)=>k).filter(k=>land[k]);if(!cand.length)return;
+  const nc=1+Math.floor(f*4);ctx.save();
+  for(let j=0;j<nc;j++){const k=cand[Math.floor(((j+.3)/nc)*cand.length+Math.floor(T/40))%cand.length],r=R[k];
+    const surge=Math.sin(T*1.3+j*2)*.04;
+    const ax=SX(g.cx+Math.cos(r.ang)*(r.rr+.13+surge)),ay=SY(g.cy+Math.sin(r.ang)*(r.rr+.13+surge)),dx2=SX(g.cx+Math.cos(r.ang)*(r.rr-.05)),dy2=SY(g.cy+Math.sin(r.ang)*(r.rr-.05));
+    const sq=(x,y,c,lost)=>{ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fillRect(x-q/2,y-q/2,q,q);ctx.fillStyle='rgba(26,18,10,.9)';ctx.fillRect(x-q/2,y+q/2-q*lost,q,q*lost);ctx.strokeStyle='rgba(26,18,10,.95)';ctx.lineWidth=1;ctx.strokeRect(x-q/2+.5,y-q/2+.5,q-1,q-1);
+      ctx.beginPath();ctx.moveTo(x-q*.3,y-q*.3);ctx.lineTo(x+q*.3,y+q*.3);ctx.moveTo(x+q*.3,y-q*.3);ctx.lineTo(x-q*.3,y+q*.3);ctx.stroke()};
+    // échelle contre le mur
+    ctx.strokeStyle='#6b4a2a';ctx.lineWidth=Math.max(1,q*.12);ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(dx2,dy2);ctx.stroke();
+    sq(ax,ay,ca,.15+.2*hsh(j));sq(dx2,dy2,cd,.1+.3*f*hsh(j+5));
+    // éclats du choc
+    const mx=(ax+dx2)/2,my=(ay+dy2)/2;for(let m=0;m<3;m++){const ph=(T*2.2+m/3+j*.37)%1;if(ph>.5)continue;const an=hsh(m+j*7+Math.floor(T*2.2))*6.283,rd=q*(.3+ph*1.2);
+      ctx.strokeStyle=`rgba(255,235,170,${1-ph*2})`;ctx.lineWidth=Math.max(1,q*.1);ctx.beginPath();ctx.moveTo(mx+Math.cos(an)*rd*.4,my+Math.sin(an)*rd*.4);ctx.lineTo(mx+Math.cos(an)*rd,my+Math.sin(an)*rd);ctx.stroke()}
+    // volée de flèches depuis le rempart
+    const ph=(T*.9+j*.29)%1;if(ph<.4){const t=ph/.4,fx=dx2+(ax-dx2)*1.6*t,fy=dy2+(ay-dy2)*1.6*t-Math.sin(t*Math.PI)*q;ctx.strokeStyle='rgba(30,20,10,.85)';ctx.lineWidth=1;
+      for(let m=-1;m<=1;m++){const ox=-(ay-dy2)/(Math.hypot(ax-dx2,ay-dy2)||1)*q*.5*m,oy=(ax-dx2)/(Math.hypot(ax-dx2,ay-dy2)||1)*q*.5*m;ctx.beginPath();ctx.moveTo(fx+ox,fy+oy);ctx.lineTo(fx+ox+(ax-dx2)*.15,fy+oy+(ay-dy2)*.15);ctx.stroke()}}
+  }
+  ctx.restore();
+};
+

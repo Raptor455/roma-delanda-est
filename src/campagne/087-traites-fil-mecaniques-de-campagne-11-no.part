@@ -1,0 +1,326 @@
+/* ================= TRAITÉS (fil « Mécaniques de campagne », 11 nov. 2026, lot B) =================
+   Source : /mnt/project-files/senat/traites.js, injecté juste après le bloc SÉNAT par senat/patch.py (relançable, remplace le bloc sur place).
+   Des traités à clauses par-dessus la DIPLOMATIE VIVANTE (dipl.js) : ce que vous offrez, ce que vous demandez, les engagements communs,
+   une durée (1, 2 ou 5 ans), une contre-proposition du peuple, la ratification par le Sénat (S.sen.rat), l'ultimatum,
+   la rupture (motif de guerre S.cb[f]) et les propositions qui viennent des peuples (S.trq).
+   La table de négociation remplace l'ancien volet « Négocier » : deux chefs face à face avec leurs gardes (figures vaseSVG du jeu).
+   État : S.tr=[{id,f,d0,until,cl:{clé:paramètre}}] traités en vigueur ; S.trw=[{id,f,o,cost,dm,until}] en attente de ratification ;
+   S.trc={f,o,cost,dm,until,ch:[]} contre-proposition en attente ; S.trq={f,o,until} proposition d'un peuple ; S.cb={f:jour} motifs de guerre.
+   Enveloppe sans les réécrire : dvRender, dvArrive, senRatDone, declareWar, capture, daily, afterLoad. */
+const TR_DUR=[[360,'1 an',.75],[720,'2 ans',1],[1800,'5 ans',1.4]];
+const trDurK=o=>(TR_DUR.find(x=>x[0]===o.dur)||TR_DUR[1])[2];
+const trDurT=o=>(TR_DUR.find(x=>x[0]===o.dur)||TR_DUR[1])[1];
+const trYears=o=>o.dur/360;
+function trInit(){if(!S)return;S.tr=S.tr||[];S.trw=S.trw||[];S.cb=S.cb||{};if(S.truid==null)S.truid=1;dvInit()}
+const trOf=f=>(S.tr||[]).filter(t=>t.f===f);
+const trHas=(f,k)=>trOf(f).some(t=>t.cl[k]!=null);
+const trThreat=f=>dvNear(f,'rom',260)>0;
+const trWants=(f,k)=>dvP(f).w.some(w=>w[0]===k);
+const trCapN=f=>dvTowns(f).sort((a,b)=>b.size-a.size)[0];
+function trTakeTown(id,f){const i=NI[id];if(i==null||ownerN(i)!==f)return false;const n=N[i];S.own[id]='car';delete S.siege[id];
+  for(const a of S.armies)if(a.side===f&&a.g&&a.at===i){a.side='car';a.name='Garnison de '+n.n}
+  territoryDirty=true;try{if(typeof garFill==='function')garFill(n)}catch(e){}return true}
+function trAllies(f,k,name){const Tn=trCapN(f);if(!Tn)return null;const t=poolOf(f),units=Array.from({length:k},()=>({t,men:UT[t].men}));
+  const a={id:S.uid++,side:'car',name:name||('Alliés '+FAC[f].n.toLowerCase()),x:Tn.x,y:Tn.y,at:Tn.i,legs:[],units,scout:0,cool:0,mor:65,food:12};S.armies.push(a);
+  try{for(const u of units)if(typeof depOne==='function')depOne(a,u,{})}catch(e){}try{syncGens()}catch(e){}return a}
+/* ---- les clauses. s : 'o' vous offrez, 'd' vous demandez, 'm' engagement commun. dur : clause datée (elle court le temps du traité).
+   v(f,F,p,o) = ce qu'elle vaut pour eux (positif : ça leur plaît). now = effet à la signature, mon = chaque mois, end = à l'échéance. ---- */
+const TR_C={
+  or:{s:'o',n:'Un présent en or',d:p=>`${p} or, versés à la signature.`,par:()=>[25,50,75,100,150,200,300,400].filter(v=>v<=S.gold.car),ok:()=>S.gold.car>=25,
+    v:(f,F,p)=>p/8*dvTr(f).gold,now:(f,F,p)=>{F.dvg=(F.dvg||0)+p;return p+' or'}},
+  sub:{s:'o',dur:1,n:'Des subsides',d:p=>`${p} or par mois pendant toute la durée du traité.`,par:()=>[10,20,40],ok:()=>true,aff:[.1,-.5,-.2],rat:p=>p>=20,
+    v:(f,F,p,o)=>Math.min(45,p*o.dur/30/8*dvTr(f).gold*.5*S.dv.rep/60),lab:p=>`${p} or par mois`,
+    mon:(f,F,p,T)=>{if(S.gold.car>=p){S.gold.car-=p;F.dvg=(F.dvg||0)+p;return}trBreak(T,'les subsides promis ne sont plus versés')}},
+  ville:{s:'o',n:'Céder une ville',d:p=>`${N[NI[p]]?N[NI[p]].n:'La ville'} passe sous leur autorité.`,par:f=>dvTownsFor(f).map(x=>x.n.id),parT:(f,p)=>N[NI[p]].n+(dvTownsFor(f).some(x=>x.n.id===p&&x.want)?' ★':''),ok:f=>dvTownsFor(f).length>0,aff:[-.6,-.2,.2],rat:()=>true,
+    v:(f,F,p)=>{const n=N[NI[p]],w=dvTownsFor(f).find(x=>x.n.id===p);return n?(10+n.size*8)*(w&&w.want?2:1)*dvTr(f).town:0},now:(f,F,p)=>dvGiveTown(p,f)?N[NI[p]].n:''},
+  otages:{s:'o',n:'Livrer des otages',d:()=>'Des fils de grande famille partent chez eux, gage de votre parole.',ok:(f,F)=>!F.ot,v:()=>12,now:(f,F)=>{F.ot=1;return 'des otages'}},
+  mariage:{s:'o',n:'Un mariage royal',d:()=>'Une fille de grande famille épouse leur roi.',ok:f=>['num','mae'].includes(f)&&!S.mar,v:f=>trWants(f,'mariage')?28:18,now:(f,F)=>{S.mar=f;F.rom-=10;return 'un mariage royal'}},
+  garantie:{s:'o',dur:1,n:'Garantie de défense',d:()=>'S’ils sont attaqués, une de vos armées doit venir dans les 45 jours.',ok:f=>!dvActive(f).some(p=>p.k==='def'),
+    v:(f,F,p,o)=>(trThreat(f)?18:8)*(trWants(f,'protect')?1.3:1)*S.dv.rep/60*dvTr(f).prom,now:(f,F,p,T,o)=>{dvPromise({f,k:'def',until:Math.floor(S.day)+o.dur});return 'votre garantie'}},
+  frapper:{s:'o',n:'Frapper leurs rivaux',d:p=>`Vous promettez de prendre une ville ${FAC[p]?dvDes(p):''} d'ici un an.`,par:f=>dvRivalsFor(f),parT:(f,p)=>dvC(dvLes(p)),ok:f=>dvRivalsFor(f).length>0&&!dvActive(f).some(p=>p.k==='riv'),
+    v:(f,F,p)=>((trWants(f,'guerre')&&dvP(f).w.some(w=>w[0]==='guerre'&&w[1]===p))||dvP(f).r.includes(p)?18:6)*S.dv.rep/60*dvTr(f).prom,now:(f,F,p)=>{dvPromise({f,k:'riv',r:p,until:Math.floor(S.day)+360});return `la promesse de frapper ${dvLes(p)}`}},
+  ceder:{s:'o',n:'Leur promettre une ville à prendre',d:p=>`Dès que vous prendrez ${N[NI[p]]?N[NI[p]].n:'la ville'}, elle sera pour eux.`,par:f=>dvCovet(f),parT:(f,p)=>N[NI[p]].n,ok:f=>dvCovet(f).length>0&&!dvActive(f).some(p=>p.k==='cede'),
+    v:f=>12*S.dv.rep/60*dvTr(f).prom*dvTr(f).town,now:(f,F,p)=>{dvPromise({f,k:'cede',t:p,until:Math.floor(S.day)+1080});return `la promesse de ${N[NI[p]].n}`}},
+  rendre:{s:'o',n:'Rendre leurs otages',d:()=>'Leurs fils rentrent chez eux : ils retrouvent leur liberté d’alliance.',ok:(f,F)=>!!F.otD,v:f=>16*dvTr(f).prom,now:(f,F)=>{F.otD=0;return 'leurs otages rendus'}},
+  remise:{s:'o',n:'Remettre le tribut',d:()=>'Ils cessent de payer tribut et deviennent vos amis par traité.',ok:(f,F)=>F.st==='tribut_car',aff:[-.4,-.3,.3],rat:()=>true,v:()=>25,now:(f,F)=>{F.st='pacte_car';territoryDirty=true;return 'la remise du tribut'}},
+  butin:{s:'o',dur:1,n:'Une part du butin',d:()=>'À chaque ville que vous prenez, 30 or leur reviennent.',ok:()=>true,v:(f,F,p,o)=>(trWants(f,'butin')?12:6)*dvTr(f).vic*S.dv.rep/60},
+
+  nonag:{s:'m',dur:1,n:'Pacte de non-agression',d:()=>`Ni vous ni eux ne prenez les armes l'un contre l'autre ; ils ne s'allient pas à ${dvEnemy()}.`,ok:(f,F)=>F.st==='neutre'&&!trHas(f,'nonag'),
+    v:(f,F)=>{const K=dvFear(f).v,t=dvP(f).t;return (K>10||t==='prudent'?6:2)-(t==='belliqueux'&&F.car<0?5:0)-Math.max(0,F.rom)*.12},now:(f,F,p,T,o)=>{F.neu=Math.max(F.neu||0,Math.floor(S.day)+o.dur);return 'un pacte de non-agression'},
+    mon:(f,F)=>{F.car=Math.min(100,F.car+.5)}},
+  commerce:{s:'m',dur:1,n:'Traité de commerce',d:f=>`Vos marchands et les leurs circulent librement : environ ${trComm(f)} or par mois pour vous.`,ok:(f,F)=>['neutre','pacte_car','tribut_car'].includes(F.st)&&!trHas(f,'commerce'),aff:[0,.6,.1],
+    v:f=>(trWants(f,'commerce')?14:6)*dvTr(f).gold,now:()=>'un traité de commerce',mon:(f,F)=>{S.gold.car+=trComm(f);F.car=Math.min(100,F.car+.5)}},
+  defa:{s:'m',dur:1,n:'Alliance défensive',d:()=>`Si ${dvEnemy()} assiège une de vos villes, ils envoient un corps de secours ; s'ils sont attaqués, vous devez venir.`,ok:(f,F)=>['neutre','pacte_car'].includes(F.st)&&!trHas(f,'defa'),aff:[.5,.2,-.5],rat:()=>true,
+    v:(f,F)=>(trThreat(f)?15:-8)+(F.car<20?-15:0)+(trWants(f,'protect')?6:0),now:(f,F,p,T,o)=>{const u=Math.floor(S.day)+o.dur;if(!dvActive(f).some(x=>x.k==='def'))dvPromise({f,k:'def',until:u});F.neu=Math.max(F.neu||0,u);return 'une alliance défensive'}},
+
+  pass:{s:'d',dur:1,n:'Droit de passage',d:()=>'Vos armées et vos convois traversent leurs terres.',ok:(f,F)=>F.st==='neutre'&&!F.pass,v:f=>-(8+(trThreat(f)?10:0)),now:(f,F)=>{F.pass=1;return 'le droit de passage'},end:(f,F)=>{if(F.st==='neutre')F.pass=0}},
+  portes:{s:'d',dur:1,n:`Fermer leurs portes à l'ennemi`,d:()=>`Ils renvoient les émissaires de ${dvEnemy()} sans les entendre.`,ok:(f,F)=>F.st==='neutre'&&!(F.noR>S.day),v:(f,F)=>-(10+Math.max(0,F.rom)*.3),now:(f,F,p,T,o)=>{F.noR=Math.floor(S.day)+o.dur;return 'leurs portes fermées à l’ennemi'}},
+  vivres:{s:'d',dur:1,n:'Fournitures de vivres',d:()=>'Chaque mois, vos armées à moins de 300 km de leurs villes reçoivent dix jours de vivres.',ok:(f,F)=>['neutre','pacte_car','tribut_car'].includes(F.st)&&!trHas(f,'vivres'),v:()=>-8,now:()=>'des vivres',
+    mon:f=>{const T=dvTowns(f);for(const a of S.armies)if(a.side==='car'&&!a.dead&&!a.g&&!a.ship&&T.some(n=>Math.hypot(a.x-n.x,a.y-n.y)<300))a.food=(a.food||0)+10}},
+  mercs:{s:'d',dur:1,n:'Droit de lever des mercenaires',d:()=>'Tous les trois mois, vous pouvez enrôler chez eux deux régiments pour 90 or (depuis leur fiche).',ok:(f,F)=>['neutre','pacte_car','tribut_car'].includes(F.st)&&!trHas(f,'mercs'),v:f=>dvP(f).t==='cupide'?3:-6,now:()=>'le droit de lever des mercenaires'},
+  troupes:{s:'d',n:'Un contingent',d:()=>'Deux ou trois régiments de leur peuple vous rejoignent tout de suite.',ok:(f,F)=>F.st==='pacte_car'||F.st==='tribut_car',v:()=>-15,
+    now:f=>{const t=poolOf(f),a=trAllies(f,t==='ncav'||t==='sling'?3:2);return a?`${a.units.length} régiments (à ${N[a.at].n})`:''}},
+  annuel:{s:'d',dur:1,n:'Un contingent chaque printemps',d:()=>'Deux régiments de leur peuple vous rejoignent à chaque printemps du traité.',ok:(f,F)=>(F.st==='pacte_car'||F.st==='tribut_car')&&!trHas(f,'annuel'),v:(f,F,p,o)=>-10*trYears(o)/trDurK(o),now:()=>'un contingent annuel'},
+  otagesD:{s:'d',n:'Des otages',d:()=>`Leurs fils de chefs chez vous : ils ne pourront plus s'allier à ${dvEnemy()}.`,ok:(f,F)=>['neutre','pacte_car','tribut_car'].includes(F.st)&&!F.otD,v:()=>-18,now:(f,F)=>{F.otD=1;return 'des otages'}},
+  orD:{s:'d',n:'Un versement d’or',d:p=>`Ils vous versent ${p} or à la signature.`,par:()=>[50,100,200],ok:(f,F)=>F.st!=='guerre_car',v:(f,F,p)=>-p/6*dvTr(f).gold,now:(f,F,p)=>{S.gold.car+=p;return p+' or'}},
+  amitie:{s:'d',n:'Traité d’amitié',d:()=>'Ils gardent leurs villes, ouvrent leurs routes et peuvent vous prêter des troupes. Sans limite de durée.',ok:(f,F)=>F.st==='neutre',v:(f,F)=>-(25+Math.max(0,F.rom)*.15),now:(f,F)=>{F.st='pacte_car';F.pass=1;territoryDirty=true;return 'un traité d’amitié'}},
+  tribut:{s:'d',n:'Tribut',d:()=>'Ils deviennent vos tributaires et paient la moitié du revenu de leurs villes. Seule la crainte les y décide.',ok:(f,F)=>F.st==='neutre',v:f=>-45-(dvFear(f).v<15?25:0),now:(f,F)=>{F.st='tribut_car';F.fid=55;F.pass=1;territoryDirty=true;return 'un tribut'}},
+  ville_d:{s:'d',n:'Qu’ils vous cèdent une ville',d:p=>`${N[NI[p]]?N[NI[p]].n:'La ville'} passe sous votre autorité.`,par:f=>{const c=trCapN(f);return dvTowns(f).filter(n=>n!==c).map(n=>n.id)},parT:(f,p)=>N[NI[p]].n,ok:f=>dvTowns(f).length>1,
+    v:(f,F,p)=>{const n=N[NI[p]];return -((30+(n?n.size:1)*15)*dvTr(f).town+(dvFear(f).v<20?20:0))},now:(f,F,p)=>trTakeTown(p,f)?N[NI[p]].n:''},
+  alliance:{s:'d',n:'Alliance de guerre',d:()=>'Ils rejoignent votre camp avec leurs villes et leurs troupes, jusqu’à la fin de la guerre.',ok:(f,F)=>['neutre','pacte_car','tribut_car'].includes(F.st),aff:[.8,.3,-.6],rat:()=>true,
+    v:(f,F)=>-(F.st==='tribut_car'?35:55+Math.max(0,F.rom)*.3),now:f=>{joinAlliance(f,'car');return 'leur alliance'}},
+  paix:{s:'d',n:'La paix',d:()=>'Fin de la guerre : ils redeviennent neutres.',ok:(f,F)=>F.st==='guerre_car',aff:[-.5,.4,.8],rat:()=>true,v:()=>-20,now:(f,F)=>{F.st='neutre';F.car=Math.max(F.car,-20);territoryDirty=true;return 'la paix'}},
+  indemn:{s:'d',n:'Une indemnité de guerre',d:p=>`Ils paient ${p} or pour prix de la paix.`,par:()=>[100,200,300],ok:(f,F)=>F.st==='guerre_car',v:(f,F,p)=>-p/5*dvTr(f).gold-(dvFear(f).v<15?15:0),now:(f,F,p)=>{S.gold.car+=p;return p+' or d’indemnité'}}
+};
+function trComm(f){let s=0;for(const n of dvTowns(f))s+=1+n.size+(n.port?1:0);return Math.max(4,Math.min(30,Math.round(s*1.5)))}
+function trNewOffer(){return {tr:1,dur:720,cl:{},ult:0}}
+function trAvail(f,s){trInit();const F=S.fac[f];return Object.keys(TR_C).filter(k=>TR_C[k].s===s&&TR_C[k].ok(f,F)&&(!TR_C[k].par||TR_C[k].par(f).length))}
+function trVal(f,k,p,o){const C=TR_C[k],F=S.fac[f];let v=C.v(f,F,p,o);if(C.dur&&k!=='sub'&&k!=='annuel')v*=trDurK(o);return v}
+function trEval(f,o){trInit();const D=dvDisp(f),G=[],M=[],F=S.fac[f];
+  for(const k in o.cl){const C=TR_C[k];if(!C||!C.ok(f,F))continue;const v=trVal(f,k,o.cl[k],o),lab=C.n+(C.par?' · '+(C.lab?C.lab(o.cl[k]):C.parT?C.parT(f,o.cl[k]):o.cl[k]+' or'):'');(v>=0?G:M).push([lab,v,k])}
+  if(o.cl.alliance&&o.cl.amitie)M.push(['Demander à la fois amitié et alliance n’a pas de sens',-5]);
+  if(o.ult){const K=dvFear(f).v,T=dvTr(f);G.push(['Ultimatum : la peur parle',Math.max(0,K)*T.fear*1.2-(T.ins?10:0)-4])}
+  const gv=G.reduce((s,x)=>s+x[1],0),mv=M.reduce((s,x)=>s+x[1],0),pure=!Object.keys(o.cl).some(k=>TR_C[k]&&TR_C[k].s!=='o');
+  return {D,G,M,gv,mv,score:D.v+gv+mv,pure}}
+function trVerdict(e){if(e.pure)return e.gv>0?['ok','Ils accepteront vos présents avec plaisir.']:['no','Rien sur la table.'];
+  const s=e.score;return s>=8?['ok','Ils accepteraient.']:s>=0?['ok','Ils accepteraient · marge faible.']:s>=-8?['mid','Ils hésitent : tout se jouera à peu de chose.']:['no','Ils refuseraient.']}
+// leur contre-proposition : ils ajoutent ce qu'ils désirent, demandent de l'or, puis retirent votre plus grosse demande
+function trCounter(f,o,e){if(e.pure||e.score>=2)return null;const F=S.fac[f],o2=JSON.parse(JSON.stringify(o)),ch=[];let E=e;const ok=()=>E.score>=3;
+  const add=(k,p,t)=>{if(ok()||o2.cl[k]!=null||!TR_C[k].ok(f,F))return;if(TR_C[k].par){const L=TR_C[k].par(f);if(!L.length)return;if(p==null||!L.includes(p))p=L[0]}else p=1;
+    o2.cl[k]=p;const E2=trEval(f,o2);if(E2.score<=E.score+.5){delete o2.cl[k];return}E=E2;ch.push('+ '+t(p))};
+  if(trThreat(f))add('garantie',null,()=>'votre garantie de défense');
+  if(trWants(f,'commerce'))add('commerce',null,()=>'un traité de commerce');
+  const want=dvTownsFor(f).find(x=>x.want);if(want)add('ville',want.n.id,p=>`la ville de ${N[NI[p]].n}`);
+  if(dvCovet(f).length)add('ceder',null,p=>`la promesse de ${N[NI[p]].n}`);
+  if(dvRivalsFor(f).length)add('frapper',null,p=>`votre promesse de frapper ${dvLes(p)}`);
+  if(trWants(f,'butin'))add('butin',null,()=>'une part du butin');
+  if(S.fac[f].otD)add('rendre',null,()=>'leurs otages rendus');
+  if(!ok()){const T=dvTr(f),need=Math.ceil((3-E.score)*8/T.gold/25)*25,cur=o2.cl.or||0,max=Math.floor(Math.min(400,S.gold.car)/25)*25;
+    if(need>0&&cur+need<=max){o2.cl.or=cur+need;E=trEval(f,o2);ch.push(`+ ${need} or`)}}
+  let guard=0;while(!ok()&&guard++<4){const big=E.M.filter(x=>x[2]).sort((a,b)=>a[1]-b[1])[0];if(!big||E.M.filter(x=>x[2]).length<2)break;delete o2.cl[big[2]];E=trEval(f,o2);ch.push('− '+big[0].toLowerCase())}
+  if(!ok()||!ch.length)return null;return {o:o2,ch,e:E}}
+// ratification : les clauses lourdes passent devant le Sénat
+function trRat(o){let need=false;const aff=[0,0,0];for(const k in o.cl){const C=TR_C[k];if(!C||!C.aff)continue;if(C.rat&&C.rat(o.cl[k]))need=true;for(let i=0;i<3;i++)aff[i]+=C.aff[i]}
+  if(!need||!S.sen||typeof senVotes!=='function')return null;return aff.map(v=>dvClamp(v,-1,1))}
+function trSummary(f,o){const a=[],b=[],m=[];for(const k in o.cl){const C=TR_C[k];if(!C)continue;const t=C.n.toLowerCase()+(C.par?` (${C.lab?C.lab(o.cl[k]):C.parT?C.parT(f,o.cl[k]):o.cl[k]+' or'})`:'');(C.s==='o'?a:C.s==='d'?b:m).push(t)}
+  return [m.length?m.join(', '):'',b.length?'vous obtenez : '+b.join(', '):'',a.length?'vous donnez : '+a.join(', '):''].filter(Boolean).join(' ; ')}
+function trCost(o){return o.cl.or||0}
+/* ---- envoi, arrivée, signature ---- */
+function trSend(f){trInit();const F=S.fac[f],o=DVS.offer;if(!o||!o.tr||F.cd>0)return;if(!Object.keys(o.cl).length)return;
+  if((S.env||[]).some(x=>x.f===f&&x.kind!=='s'))return;const cost=trCost(o);if(S.gold.car<cost)return;const t=dvTarget(f);if(!t)return;const og=envOrigin(t);if(!og)return;
+  S.gold.car-=cost;F.cd=1;S.env=S.env||[];const days=Math.max(1,Math.round(Math.hypot(t.x-og[0],t.y-og[1])/ENV_KMD));
+  S.env.push({kind:'n',key:'neg',f,x:og[0],y:og[1],tx:t.x,ty:t.y,tn:t.n,cost,o:JSON.parse(JSON.stringify(o)),dm:dvDm()});
+  log(`Ambassade partie vers ${t.n} (${FAC[f].n}) avec votre projet de traité${o.ult?' — un ultimatum':''} : ≈ ${days} jour${days>1?'s':''}.`);
+  DVS.view='fiche';DVS.offer=null;renderAll();openDip(f)}
+function trClean(f,o){const F=S.fac[f];for(const k in o.cl){const C=TR_C[k];if(!C||!C.ok(f,F)){delete o.cl[k];continue}if(C.par&&!C.par(f).includes(o.cl[k])&&k!=='or')delete o.cl[k]}return o}
+let trArrive=function(e){trInit();const f=e.f,F=S.fac[f];if(!F)return;F.cd=1;const o=trClean(f,e.o);
+  const refund=()=>{if(e.cost)dvWith(e.dm,()=>{S.gold.car+=e.cost})};
+  if(!Object.keys(o.cl).length){refund();log(`Votre projet de traité avec ${dvLes(f)} n'a plus d'objet.`);return}
+  const ev=trEval(f,o),T=dvTr(f),jit=o.ult?0:(Math.random()-.5)*8,ok=ev.pure?ev.gv>0:ev.score+jit>=0;
+  if(ok){if(o.ult){F.car-=8;F.why=F.why||{};F.why['votre ultimatum']=(F.why['votre ultimatum']||0)-8}return trSign(f,o,e.cost,e.dm)}
+  if(o.ult){refund();F.car-=20;F.rom=Math.min(100,F.rom+12);F.why=F.why||{};F.why['votre ultimatum']=(F.why['votre ultimatum']||0)-20;
+    const t=`${dvC(dvLes(f))} rejettent votre ultimatum (confiance −20) et se tournent vers ${dvEnemy()}.`;log(t);dvCard(`Réponse ${dvDes(f)}`,t,true);return}
+  const c=trCounter(f,o,ev);
+  if(c){S.trc={f,o:c.o,cost:e.cost,dm:e.dm,until:Math.floor(S.day)+20,ch:c.ch};const t=`${dvC(dvLes(f))} ne signent pas tel quel, mais font une contre-proposition : ${c.ch.join(', ')}.`;log(t+' (20 jours pour répondre)');
+    if(!S.auto)S.paused=true;if($('modal').hidden&&!S.cur&&!S.over){DVS.f=f;DVS.view='neg';DVS.offer=JSON.parse(JSON.stringify(c.o));DVS.offer.ctr=1;dvRender()}return}
+  refund();let t=`${dvC(dvLes(f))} repoussent votre projet de traité.`;const why=[...ev.D.L,...ev.M].filter(x=>x[1]<-3).sort((a,b)=>a[1]-b[1]).slice(0,2).map(x=>x[0].toLowerCase());
+  if(why.length)t+=` Ce qui pèse : ${why.join(', ')}.`;if(T.ins&&ev.score<-30){F.car-=6;t+=' Leur chef se dit insulté (confiance −6).'}
+  log(t+' Votre or vous est rendu.');dvCard(`Réponse ${dvDes(f)}`,t+' Votre or vous est rendu.')};
+function trSign(f,o,cost,dm){const aff=trRat(o);
+  if(aff){const id=S.truid++;S.trw.push({id,f,o,cost:cost||0,dm,until:Math.floor(S.day)+60});S.sen.rat=S.sen.rat||[];
+    S.sen.rat.push({id,n:`le traité avec ${dvLes(f)}`,d:dvC(trSummary(f,o))+`. Durée : ${trDurT(o)}. À ratifier sous 60 jours.`,aff,tr:id});
+    const t=`Accord trouvé avec ${dvLes(f)} ! Reste à faire ratifier le traité par ${typeof senProf==='function'?senProf().sub.replace(/^Le |^La |^Les /,m=>m.toLowerCase()):'le Sénat'} (60 jours).`;log(t);
+    if($('modal').hidden&&!S.cur&&!S.over){modal(`<h2>Réponse ${esc(dvDes(f))}</h2><p>${esc(t)}</p><div class="row" style="justify-content:flex-end"><button type="button" class="go" id="trGoS">Aller au Sénat</button><button id="mClose" type="button">Plus tard</button></div>`);$('mClose').onclick=closeModal;$('trGoS').onclick=()=>{try{SEN_UI.tab='mo';SEN_UI.cat='t'}catch(e){}openPol()}}
+    return}
+  trApply(f,o)}
+function trApply(f,o){trInit();const F=S.fac[f];if(!F)return;trClean(f,o);const ev=trEval(f,o),gave=[],got=[],both=[],D=Math.floor(S.day);
+  const T={id:S.truid++,f,d0:D,until:D+o.dur,cl:{}};let dated=false;
+  // l'alliance ou la paix en dernier : elles changent le statut dont dépendent les autres clauses
+  const keys=Object.keys(o.cl).sort((a,b)=>(a==='alliance'||a==='amitie'||a==='tribut'?1:0)-(b==='alliance'||b==='amitie'||b==='tribut'?1:0));
+  for(const k of keys){const C=TR_C[k],p=o.cl[k];if(!C)continue;let t='';try{t=C.now?C.now(f,F,p,T,o):''}catch(e){console.error(e)}
+    if(C.dur){T.cl[k]=p;dated=true}if(!t&&!C.now)t=C.n.toLowerCase();if(t)(C.s==='o'?gave:C.s==='d'?got:both).push(t)}
+  if(dated)S.tr.push(T);
+  const gain=ev.pure?Math.min(ev.gv*.55/(1+(F.dvn||0)*.35),Math.max(0,60-F.car)):3+ev.gv*.15;if(ev.pure)F.dvn=(F.dvn||0)+1;F.car=Math.min(100,F.car+Math.max(0,gain));
+  try{dvRivalsReact(f,keys.some(k=>['amitie','alliance','tribut','defa'].includes(k)))}catch(e){}
+  try{if(S.sen&&typeof senLoy==='function'){if(o.cl.commerce)senLoy('m',4);if(o.cl.alliance||o.cl.defa)senLoy('g',3);if(o.cl.paix)senLoy('p',5)}}catch(e){}
+  const t=ev.pure?`${dvC(dvLes(f))} acceptent ${gave.join(', ')||'vos présents'} (confiance ${dvSg(gain)}).`:`Traité signé avec ${dvLes(f)}${dated?' pour '+trDurT(o):''} ! ${[both.length?dvC(both.join(', ')):'',got.length?'Vous obtenez '+got.join(', '):'',gave.length?'Vous donnez '+gave.join(', '):''].filter(Boolean).join('. ')}.`;
+  log(t);renderAll();dvCard(`Traité avec ${dvLes(f)}`,t)}
+trArrive=attWrap(trArrive,'vos traités');
+{const _da=dvArrive;dvArrive=function(e){if(e&&e.o&&e.o.tr){try{return trArrive(e)}catch(x){console.error(x)}return}return _da.apply(this,arguments)}}
+if(typeof senRatDone==='function'){const _rd=senRatDone;senRatDone=function(R,ok){if(R&&R.tr!=null){S.sen.rat=(S.sen.rat||[]).filter(x=>x.id!==R.id);return trRatified(R.tr,ok)}return _rd.apply(this,arguments)}}
+function trRatified(id,ok){const W=(S.trw||[]).find(x=>x.id===id);if(!W)return 'Le traité n’est plus d’actualité.';S.trw=S.trw.filter(x=>x!==W);const F=S.fac[W.f];if(!F)return '';
+  if(ok){trApply(W.f,W.o);return 'Le traité est ratifié.'}
+  if(W.cost)dvWith(W.dm,()=>{S.gold.car+=W.cost});F.car-=10;F.why=F.why||{};F.why['traité désavoué par votre Sénat']=(F.why['traité désavoué par votre Sénat']||0)-10;S.dv.rep=dvClamp(S.dv.rep-4,0,100);
+  return `Le traité est rejeté : ${dvLes(W.f)} se sentent joués (confiance −10, réputation −4).`}
+/* ---- la vie des traités ---- */
+function trEnd(T,why){S.tr=S.tr.filter(x=>x!==T);const F=S.fac[T.f];if(!F)return;for(const k in T.cl){const C=TR_C[k];try{if(C&&C.end)C.end(T.f,F,T.cl[k],T)}catch(e){}}
+  if(T.cl.nonag||T.cl.defa){if(!trOf(T.f).some(x=>x.cl.nonag||x.cl.defa)&&F.neu>S.day&&why!=='terme')F.neu=0}}
+// vous rompez : la parole trahie se paie partout
+function trBreak(T,why){if(!S.tr.includes(T))return;const f=T.f,F=S.fac[f];trEnd(T,'rupture');if(!F)return;F.car-=20;F.why=F.why||{};F.why['traité rompu']=(F.why['traité rompu']||0)-20;S.dv.rep=dvClamp(S.dv.rep-10,0,100);
+  for(const X of S.tr){const G=S.fac[X.f];if(G){G.car-=5;G.why=G.why||{};G.why['vous rompez vos traités']=(G.why['vous rompez vos traités']||0)-5}}
+  try{if(S.sen&&typeof senLoy==='function'){senLoy('p',-4);if(T.cl.commerce)senLoy('m',-6)}}catch(e){}
+  const t=`Traité rompu avec ${dvLes(f)} : ${why}. Confiance −20, réputation −10 ; vos autres partenaires s'inquiètent.`;log(t);dvCard('Traité rompu',t,true)}
+function trDenounce(id){const T=S.tr.find(x=>x.id===id);if(!T)return;const f=T.f,F=S.fac[f];trEnd(T,'rupture');F.car-=12;F.why=F.why||{};F.why['traité dénoncé']=(F.why['traité dénoncé']||0)-12;S.dv.rep=dvClamp(S.dv.rep-5,0,100);
+  log(`Vous dénoncez le traité avec ${dvLes(f)} (confiance −12, réputation −5).`);renderAll();openDip(f)}
+// ils rompent : vous tenez un motif de guerre légitime pendant un an
+function trTheyBreak(T){const f=T.f;trEnd(T,'rupture');S.cb[f]=Math.floor(S.day)+360;const t=`${dvC(dvLes(f))} dénoncent le traité qui vous liait. Vous tenez un motif de guerre légitime pendant un an : leur déclarer la guerre ne ternira pas votre réputation.`;log(t);dvCard('Un traité dénoncé',t,true)}
+function trMercs(f){const T=trOf(f).find(x=>x.cl.mercs!=null);if(!T||S.gold.car<90||(T.mc||0)>S.day)return;S.gold.car-=90;T.mc=Math.floor(S.day)+90;const a=trAllies(f,2,'Mercenaires '+FAC[f].n.toLowerCase());
+  if(a)log(`Deux régiments de mercenaires ${FAC[f].n.toLowerCase()} vous attendent à ${N[a.at].n}.`);renderAll();openDip(f)}
+function trDaily(d){trInit();const D=Math.floor(S.day);
+  for(const T of S.tr.slice()){const F=S.fac[T.f];if(!F||F.st==='allie_rom'||F.st==='guerre_car'||F.st==='soumis'){trEnd(T,'rupture');continue}
+    if(D===T.until-30)log(`Le traité avec ${dvLes(T.f)} arrive à son terme dans un mois. Vous pouvez le renégocier depuis leur fiche.`);
+    if(D>=T.until){trEnd(T,'terme');F.car=Math.min(100,F.car+4);S.dv.rep=dvClamp(S.dv.rep+2,0,100);const t=`Le traité avec ${dvLes(T.f)} est arrivé à son terme, tenu de part et d'autre (confiance +4).`;log(t);dvCard('Un traité s’achève',t);continue}
+    // alliance défensive : leurs secours quand l'ennemi assiège une de vos villes
+    if(T.cl.defa!=null&&!(T.dh>D)){const c=trCapN(T.f);if(c)for(const id in S.siege){const sg=S.siege[id],i=NI[id];if(!sg||sg.side!=='rom'||i==null||ownerN(i)!=='car')continue;if(Math.hypot(N[i].x-c.x,N[i].y-c.y)>700)continue;
+      T.dh=D+180;const a=trAllies(T.f,3,'Secours '+FAC[T.f].n.toLowerCase());if(a){const t=`${dvC(dvLes(T.f))} honorent l'alliance : trois régiments de secours se rassemblent à ${N[a.at].n} pour dégager ${N[i].n}.`;log(t);dvCard('Vos alliés marchent',t)}break}}}
+  for(const W of S.trw.slice())if(D>=W.until){S.trw=S.trw.filter(x=>x!==W);if(S.sen&&S.sen.rat)S.sen.rat=S.sen.rat.filter(x=>x.tr!==W.id);if(W.cost)dvWith(W.dm,()=>{S.gold.car+=W.cost});const F=S.fac[W.f];if(F)F.car-=5;log(`Le traité avec ${dvLes(W.f)} n'a jamais été ratifié : il tombe (confiance −5).`)}
+  if(S.trc&&(D>=S.trc.until||!S.fac[S.trc.f])){const c=S.trc;S.trc=null;if(c.cost)dvWith(c.dm,()=>{S.gold.car+=c.cost});log(`La contre-proposition ${dvDes(c.f)} est restée sans réponse. Votre or vous est rendu.`)}
+  if(S.trq&&(D>=S.trq.until||!S.fac[S.trq.f])){const q=S.trq;S.trq=null;if(S.fac[q.f]){S.fac[q.f].car-=3;log(`${dvC(dvLes(q.f))} attendaient une réponse à leur proposition de traité (confiance −3).`)}}
+  for(const f in S.cb)if(S.cb[f]<=D)delete S.cb[f];
+  if(d%30!==0)return;
+  for(const T of S.tr.slice()){const F=S.fac[T.f];if(!F)continue;for(const k in T.cl){const C=TR_C[k];try{if(C&&C.mon&&S.tr.includes(T))C.mon(T.f,F,T.cl[k],T)}catch(e){console.error(e)}}
+    if(!S.tr.includes(T))continue;
+    if(T.cl.annuel!=null&&cal(d).mo===2&&D>T.d0+20){const a=trAllies(T.f,2);if(a)log(`Le contingent de printemps ${dvDes(T.f)} vous attend à ${N[a.at].n}.`)}
+    if(dvDisp(T.f).v<-22&&Math.random()<.2)trTheyBreak(T)}
+  trPropose()}
+// un peuple bien disposé vient lui-même proposer un traité
+function trPropose(){if(S.trq||S.trc||S.over)return;const L=Object.keys(S.fac).filter(f=>{const F=S.fac[f];return DV_P[f]&&['neutre','pacte_car'].includes(F.st)&&contact('car',f)&&!trOf(f).length&&!(F.cd>0)&&!(S.env||[]).some(x=>x.f===f)});
+  for(const f of L){if(Math.random()>.05)continue;const D=dvDisp(f);if(D.v<8)continue;const F=S.fac[f],o=trNewOffer(),t=dvP(f).t;
+    if(trThreat(f)&&TR_C.defa.ok(f,F)){o.cl.defa=1}else if(trWants(f,'commerce')&&TR_C.commerce.ok(f,F)){o.cl.commerce=1;if(TR_C.nonag.ok(f,F))o.cl.nonag=1}
+    else if(t==='cupide'&&TR_C.mercs.ok(f,F)){o.cl.mercs=1;o.cl.sub=10}else if(TR_C.nonag.ok(f,F)){o.cl.nonag=1;if(TR_C.pass.ok(f,F)&&D.v>15)o.cl.pass=1}else continue;
+    if(trWants(f,'or')&&!o.cl.sub&&S.gold.car>=50)o.cl.or=50;
+    S.trq={f,o,until:Math.floor(S.day)+30};const txt=`${dvC(dvP(f).c)} envoie une ambassade : ${dvLes(f)} vous proposent un traité (${trSummary(f,o)}). Trente jours pour répondre.`;log(txt);
+    if(!S.auto)S.paused=true;if($('modal').hidden&&!S.cur&&!S.over)trOpenQ();return}}
+function trOpenQ(){const q=S.trq;if(!q||!S.fac[q.f])return;DVS.f=q.f;DVS.tab='peu';DVS.view='neg';DVS.offer=JSON.parse(JSON.stringify(q.o));DVS.offer.from=1;dvRender()}
+function trAcceptQ(){const q=S.trq;if(!q)return;const o=trClean(q.f,q.o),c=trCost(o);if(S.gold.car<c)return;S.gold.car-=c;S.trq=null;DVS.view='fiche';DVS.offer=null;closeModal();trSign(q.f,o,c,dvDm());renderAll()}
+function trRefuseQ(){const q=S.trq;if(!q)return;S.trq=null;const F=S.fac[q.f];if(F)F.car-=3;log(`Vous déclinez la proposition ${dvDes(q.f)} (confiance −3).`);DVS.view='fiche';DVS.offer=null;renderAll();openDip(q.f)}
+function trAcceptC(){const c=S.trc;if(!c)return;const o=trClean(c.f,c.o),need=trCost(o)-(c.cost||0);if(need>0&&S.gold.car<need)return;if(need>0)S.gold.car-=need;S.trc=null;DVS.view='fiche';DVS.offer=null;closeModal();trSign(c.f,o,trCost(o),c.dm);renderAll()}
+function trRefuseC(){const c=S.trc;if(!c)return;S.trc=null;if(c.cost)dvWith(c.dm,()=>{S.gold.car+=c.cost});log(`Vous repoussez la contre-proposition ${dvDes(c.f)}. Votre or vous est rendu.`);DVS.view='fiche';DVS.offer=null;renderAll();openDip(c.f)}
+{const _dwT=declareWar;declareWar=function(side,f){let L=[],cb=false;try{if(side==='car'&&S&&S.fac[f]){trInit();L=trOf(f);cb=S.cb[f]>S.day}}catch(e){}
+  const rep0=S&&S.dv?S.dv.rep:null;const r=_dwT.apply(this,arguments);
+  try{if(side==='car'&&S&&S.fac[f]){if(L.length){for(const T of L)trEnd(T,'rupture');S.dv.rep=dvClamp(S.dv.rep-10,0,100);for(const X of S.tr){const G=S.fac[X.f];if(G){G.car-=6;G.why=G.why||{};G.why['vous attaquez vos partenaires']=(G.why['vous attaquez vos partenaires']||0)-6}}
+        log(`Vous attaquez ${dvLes(f)} malgré le traité qui vous liait : réputation −10, vos autres partenaires s'en souviendront.`);try{if(S.sen&&typeof senLoy==='function')senLoy('p',-5)}catch(e){}}
+      else if(cb){if(rep0!=null)S.dv.rep=Math.max(S.dv.rep,rep0);delete S.cb[f];try{if(S.sen&&typeof senBarSet==='function'){senBarSet(senBar()+3);senLoy('g',3)}}catch(e){}log(`Vous aviez un motif de guerre légitime contre ${dvLes(f)} : personne ne vous le reproche (appui +3).`)}}}catch(e){console.error(e)}return r}}
+{const _cpT=capture;capture=function(i,side){const prev=ownerN(i);const r=_cpT.apply(this,arguments);try{if(S&&S.tr&&side==='car'&&prev!=='car')for(const T of S.tr){if(T.cl.butin==null)continue;const F=S.fac[T.f];if(!F)continue;
+    if(S.gold.car>=30){S.gold.car-=30;F.dvg=(F.dvg||0)+30;F.car=Math.min(100,F.car+2);log(`Part du butin : 30 or pour ${dvLes(T.f)}, comme le veut le traité.`)}else{F.car-=3;log(`Vous n'avez pas de quoi verser leur part du butin ${dvAux(T.f)} (confiance −3).`)}}}catch(e){console.error(e)}return r}}
+{const _dT=daily;daily=function(d){const r=_dT.apply(this,arguments);try{if(S&&S.fac&&!S.over)trDaily(d)}catch(e){console.error(e)}return r}}
+{const _alT=afterLoad;afterLoad=function(){const r=_alT.apply(this,arguments);try{trInit()}catch(e){}return r}}
+/* ---- les figures : le dessin de vase du jeu, sans médaillon ---- */
+const TR_FIG={};
+function trDes(who,chief){let base,gear,teinte,cloak;
+  try{if(who==='me'||who==='rom'){const peo=who==='me'?depPeo('car'):'rom',R=DEP_R[peo]||DEP_R.car;base=Object.keys(R).find(t=>UT[t]&&UT[t].k==='inf')||Object.keys(R)[0];gear=R[base][0][1];teinte=DEP_T[peo]||'ocre';cloak=peo==='rom'?'rouge':'pourpre'}
+    else{const R=iacRos(who),e=(R.inf&&R.inf[0])||(R.skirm&&R.skirm[0])||(R.cav&&R.cav[0]);base=e[0];gear=e[3]||{};teinte=iacTeinte(who);cloak='ocre'}}catch(e){base='lib';gear={};teinte='ocre';cloak='ocre'}
+  const d=Object.assign({id:null,base,name:'',helm:'bronze',crest:'rien',armor:'lin',jamb:'aucune',shield:'rond',motif:'peuple',teinte,tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'reg'},(typeof BDEF!=='undefined'&&BDEF[base])||{},{teinte},gear||{});
+  if(chief)Object.assign(d,{crest:d.crest==='rien'?'crin':d.crest,manteau:cloak,shield:'aucun',armor:d.armor==='tunique'||d.armor==='lin'?'cuir':d.armor});
+  try{dFix(d)}catch(e){}d.base=base;return d}
+function trFig(who,chief){const key=who+(chief?':c':':g')+':'+(who==='me'?(S.mirror?'r':'')+(S.peo||''):'');if(TR_FIG[key]!=null)return TR_FIG[key];let h='';
+  try{const t=document.createElement('div');t.innerHTML=vaseSVG(trDes(who,chief),false);const s=t.querySelector('svg');if(s){[...s.children].forEach((c,i)=>{if(i!==2)c.remove()});if(s.firstElementChild)s.firstElementChild.removeAttribute('clip-path');
+      s.setAttribute('viewBox','40 2 135 192');s.removeAttribute('width');s.removeAttribute('height');s.setAttribute('preserveAspectRatio','xMidYMax meet');s.style.cssText='height:100%;width:auto;display:block';h=s.outerHTML}}catch(e){console.error(e)}
+  return TR_FIG[key]=h}
+/* ---- la table de négociation ---- */
+{const st=document.createElement('style');st.textContent=`
+#mcard.tr-win{max-width:1160px!important;width:min(1160px,97vw)}
+.tr-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.tr-head h2{margin:0}
+.tr-chip{border:1px solid var(--line,#4a3a26);border-radius:4px;padding:6px 10px;background:rgba(0,0,0,.25);font-size:13px}
+.tr-frise{position:relative;height:236px;border-radius:6px;overflow:hidden;background:radial-gradient(ellipse at 50% 35%,#e6a76c 0%,#cf8348 60%,#b96a34 100%);border-top:10px solid #1d130c;border-bottom:10px solid #1d130c;box-sizing:border-box}
+.tr-frise:before,.tr-frise:after{content:'';position:absolute;left:0;right:0;height:4px;background:repeating-linear-gradient(90deg,#c8763d 0 14px,#1d130c 14px 22px)}.tr-frise:before{top:0}.tr-frise:after{bottom:0}
+.tr-sol{position:absolute;left:0;right:0;bottom:12px;height:2px;background:#1d130c}
+.tr-fg{position:absolute;bottom:12px}.tr-fg.r{transform:scaleX(-1)}
+.tr-mot{position:absolute;left:50%;top:16px;transform:translateX(-50%);width:min(250px,26%);text-align:center;color:#1d130c}.tr-mot b{display:block;font-family:Marcellus,Georgia,serif;font-weight:400;font-size:18px;letter-spacing:.08em;margin-bottom:5px}.tr-mot span{font-size:12.5px;font-weight:500;line-height:1.35;display:block}
+.tr-tab{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:92px;height:52px}.tr-tab:before{content:'';position:absolute;left:0;right:0;top:0;height:8px;background:#1d130c;border-radius:2px}.tr-tab:after{content:'';position:absolute;left:11px;right:11px;top:8px;bottom:0;border-left:6px solid #1d130c;border-right:6px solid #1d130c}
+.tr-roll{position:absolute;left:50%;bottom:68px;transform:translateX(-50%) rotate(-4deg);width:54px;height:16px;background:#efe4cc;border:2px solid #1d130c;border-radius:3px}
+.tr-pl{display:grid;grid-template-columns:minmax(0,270px) 1fr minmax(0,270px);gap:12px;margin-top:10px}@media (max-width:900px){.tr-pl{grid-template-columns:1fr}.tr-frise{height:180px}}
+.tr-who{background:rgba(0,0,0,.25);border:1px solid var(--line,#4a3a26);border-radius:6px;padding:9px 12px;display:flex;align-items:center;gap:10px}.tr-who.r{flex-direction:row-reverse;text-align:right;border-right:3px solid #c98a4e}.tr-who.l{border-left:3px solid #9a6fd6}
+.tr-who img,.tr-who .av{width:48px;height:48px;border-radius:50%;border:2px solid var(--bz,#8a6a3c);object-fit:cover;flex:none;display:flex;align-items:center;justify-content:center;font-family:Marcellus,Georgia,serif;font-size:20px;background:#17110b;color:#c98a4e}
+.tr-who .nm{font-family:Marcellus,Georgia,serif;font-size:16px;line-height:1.2}
+.tr-ga{background:rgba(0,0,0,.25);border:1px solid var(--line,#4a3a26);border-radius:6px;padding:9px 14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:center;font-size:13px}
+.tr-ga .t{display:flex;justify-content:space-between;gap:6px;white-space:nowrap}.tr-ga .b{height:8px;background:#17110b;border-radius:4px;margin:4px 0;position:relative;overflow:hidden}.tr-ga .b i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}.tr-ga small{color:var(--mu2,#c4b393);font-size:11.5px;display:block;line-height:1.25}
+.tr-cols{display:grid;grid-template-columns:minmax(0,1fr) 270px minmax(0,1fr);gap:12px;margin-top:10px;align-items:stretch}@media (max-width:900px){.tr-cols{grid-template-columns:1fr}}
+.tr-col{background:rgba(0,0,0,.25);border:1px solid var(--line,#4a3a26);border-radius:6px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;min-width:0}.tr-col.mid{border-color:var(--bz,#8a6a3c);text-align:center}
+.tr-col .ti{font-family:Marcellus,Georgia,serif;font-size:16px;color:var(--bzL,#d2ae6c)}
+.tr-cl{display:grid;grid-template-columns:1fr auto auto;gap:2px 8px;align-items:center;border-bottom:1px solid var(--line,#4a3a26);padding-bottom:6px;font-size:13px}.tr-cl small{grid-column:1/-1;color:var(--mu2,#c4b393);font-size:12px;line-height:1.3}
+.tr-cl select{max-width:150px}.tr-cl .x{width:26px;height:26px;padding:0;line-height:1}.tr-cl .du{color:var(--mu2,#c4b393);font-size:12px;white-space:nowrap}
+.tr-add{margin-top:auto}.tr-add select{width:100%;min-height:36px;background:#17110b;color:inherit;border:1px dashed var(--bz,#8a6a3c);border-radius:4px;padding:4px 8px}
+.tr-col select{background:#17110b;color:inherit;border:1px solid var(--line,#4a3a26);border-radius:4px;padding:2px 4px}
+.tr-bal{height:10px;background:#17110b;border-radius:5px;position:relative}.tr-bal i{position:absolute;left:0;top:0;bottom:0;border-radius:5px}.tr-bal u{position:absolute;left:50%;top:-3px;width:2px;height:16px;background:var(--tx,#efe4cc)}
+.tr-com{margin-top:10px;background:rgba(0,0,0,.25);border:1px solid var(--line,#4a3a26);border-radius:6px;padding:9px 13px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.tr-com label{display:flex;gap:6px;align-items:center;font-size:13px}.tr-ban{border:1px solid #e0b458;background:rgba(224,180,88,.1);border-radius:6px;padding:9px 13px;margin-bottom:10px}
+.tr-det{font-size:12px;text-align:left;list-style:none;margin:0;padding:0}.tr-det li{display:flex;justify-content:space-between;gap:8px}
+.tr-ok{color:#8fd08f}.tr-mid{color:#e0b458}.tr-no{color:#f0a08a}`;document.head.appendChild(st)}
+function trMe(){let nm='',por=null;try{const a=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g&&!a.ship&&a.reinf==null).sort((a,b)=>armyMen(b)-armyMen(a))[0];if(a){nm=a.name;if(typeof porGenURL==='function')por=porGenURL(genOf(a)||{name:a.name,side:'car'})}}catch(e){}
+  return {nm:nm||dvMe(),por}}
+function trQuote(f,e,k,o){const t=dvP(f).t,F=S.fac[f];if(o.ult)return t==='fier'?'« On ne parle pas ainsi à un homme libre. »':'« Vous venez avec des menaces. Pesez bien ce que vous faites. »';
+  if(!Object.keys(o.cl).length)return F.car>=30?'« Soyez le bienvenu. Que nous apportez-vous ? »':F.car<-10?'« Parlez vite. Nous n’avons pas oublié. »':'« Nous vous écoutons. »';
+  if(k==='ok')return e.score>=15?'« Voilà une parole d’ami. Scellons cela. »':t==='cupide'?'« Le compte y est. »':'« Cela peut se faire. »';
+  if(k==='mid')return t==='prudent'?'« Nous voudrions des garanties. »':t==='cupide'?'« Un peu plus d’or lèverait nos doutes. »':'« Vous n’êtes pas loin du compte. »';
+  return t==='fier'?'« Vous demandez beaucoup et donnez peu. »':t==='belliqueux'?'« Des mots. Montrez-nous des victoires. »':'« Ce traité ne nous apporte rien. »'}
+function trTable(f){trInit();const F=S.fac[f],o=DVS.offer&&DVS.offer.tr?DVS.offer:(DVS.offer=trNewOffer()),P=dvP(f),T=dvTr(f);trClean(f,o);
+  const e=trEval(f,o),[vk,vt]=trVerdict(e),c=o.from||o.ctr?null:trCounter(f,o,e),me=trMe(),rep=S.dv.rep,cost=trCost(o),t0=dvTarget(f),og=t0&&envOrigin(t0),days=og?Math.max(1,Math.round(Math.hypot(t0.x-og[0],t0.y-og[1])/ENV_KMD)):0;
+  const env=(S.env||[]).some(x=>x.f===f&&x.kind!=='s'),block=o.from||o.ctr?'':env?'Une ambassade est déjà en route.':F.cd>0?'Une démarche par mois : attendez le mois prochain.':!contact('car',f)?'Hors de portée de vos émissaires.':!og?'Aucune ville d’où partir.':'';
+  const fg=(who,chief,x,h,side,op)=>{const s=trFig(who,chief);return s?`<div class="tr-fg${side==='r'?' r':''}" style="${side==='r'?'right':'left'}:${x}%;height:${h}px;opacity:${op||1}" aria-hidden="true">${s}</div>`:''};
+  const row=k=>{const C=TR_C[k],p=o.cl[k],v=trVal(f,k,p,o);let par='';if(C.par){const L=C.par(f);par=`<select data-trp="${k}" aria-label="${esc(C.n)}">${L.map(x=>`<option value="${esc(x)}" ${String(x)===String(p)?'selected':''}>${esc(C.lab?C.lab(x):C.parT?C.parT(f,x):x+' or')}</option>`).join('')}</select>`}
+    return `<div class="tr-cl"><span><b>${esc(C.n)}</b> <span class="${v>=0?'tr-ok':'tr-no'}" title="Ce que cette clause pèse pour eux">${dvSg(v)}</span></span>${par||'<span></span>'}<span><span class="du">${C.dur?trDurT(o):C.s==='d'&&['amitie','tribut','alliance','paix'].includes(k)?'sans terme':'aussitôt'}</span> <button type="button" class="x" data-trx="${k}" aria-label="Retirer ${esc(C.n)}">×</button></span><small>${esc(C.d(C.par?p:f))}</small></div>`};
+  const col=(s,ti,addT)=>{const mine=Object.keys(o.cl).filter(k=>TR_C[k]&&TR_C[k].s===s),av=trAvail(f,s).filter(k=>o.cl[k]==null);
+    return `<div class="tr-col"><div class="ti">${ti}</div>${mine.map(row).join('')||'<p class="sub" style="margin:0">Rien pour l’instant.</p>'}<div class="tr-add">${av.length?`<select data-tra="${s}" aria-label="${addT}"><option value="">+ ${addT}</option>${av.map(k=>`<option value="${k}">${esc(TR_C[k].n)}</option>`).join('')}</select>`:''}</div></div>`};
+  const com=trAvail(f,'m').concat(Object.keys(o.cl).filter(k=>TR_C[k]&&TR_C[k].s==='m'&&!trAvail(f,'m').includes(k))).map(k=>{const v=trVal(f,k,1,o);return `<label title="${esc(TR_C[k].d(f))}"><input type="checkbox" data-trm="${k}" ${o.cl[k]!=null?'checked':''}><span>${esc(TR_C[k].n)} <span class="${v>=0?'tr-ok':'tr-no'}">${dvSg(v)}</span></span></label>`}).join('');
+  const aff=trRat(o);let rat='';if(aff){try{const V=senVotes({id:'trx',aff},true);rat=`<div style="border-top:1px solid var(--line,#4a3a26);padding-top:8px">Ratification au Sénat : <b class="${V.v>=V.need?'tr-ok':'tr-no'}">${V.v} voix</b> sur ${V.T}</div>`}catch(x){}}
+  const pct=dvClamp(50+e.score*1.25,2,100),det=[...e.D.L,...e.G,...e.M].filter(x=>Math.abs(x[1])>=.5).map(x=>`<li><span>${esc(x[0])}</span><span class="${x[1]>=0?'tr-ok':'tr-no'}">${dvSg(x[1])}</span></li>`).join('');
+  const top=x=>{const L=x.L.slice().sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]))[0];return L?esc(L[0].toLowerCase()):'rien de marquant'};
+  const ban=o.from?`<div class="tr-ban"><b>${esc(dvC(dvLes(f)))} vous proposent ce traité.</b> Acceptez-le tel quel, refusez, ou modifiez-le : il deviendra alors votre projet et partira par ambassade. <span class="sub">Réponse attendue sous ${Math.max(0,(S.trq?S.trq.until:0)-Math.floor(S.day))} jours.</span></div>`
+    :o.ctr&&S.trc?`<div class="tr-ban"><b>Leur contre-proposition</b> : ${esc(S.trc.ch.join(', '))}. Votre ambassade attend sur place ; l'accepter signe aussitôt. <span class="sub">Réponse attendue sous ${Math.max(0,S.trc.until-Math.floor(S.day))} jours.</span></div>`:'';
+  const btn=o.from?`<button type="button" class="go" id="trAcc" ${S.gold.car<cost?'disabled':''}>Accepter leur proposition</button><div class="row" style="margin:0;gap:8px"><button type="button" id="trRef" style="flex:1">Refuser</button><button type="button" id="trMod" style="flex:1">Modifier</button></div>`
+    :o.ctr?`<button type="button" class="go" id="trAccC" ${S.gold.car<cost-(S.trc?S.trc.cost||0:0)?'disabled':''}>Accepter et signer</button><div class="row" style="margin:0;gap:8px"><button type="button" id="trRefC" style="flex:1">Refuser</button></div>`
+    :`<button type="button" class="go" id="trSend" ${block||!Object.keys(o.cl).length||cost>S.gold.car?'disabled':''}>Proposer le traité</button><div class="row" style="margin:0;gap:8px"><button type="button" id="trUlt" style="flex:1" ${e.pure?'disabled':''} title="La crainte pèse davantage et le hasard ne joue plus. Accepté : ils vous en gardent rancune (confiance −8). Refusé : confiance −20, et ils se tournent vers l'ennemi.">${o.ult?'✓ Ultimatum':'Ultimatum'}</button><button type="button" id="trBack" style="flex:1">Se retirer</button></div>`;
+  modal(`<div class="tr-head"><div><h2>Traité avec ${esc(dvLes(f))}</h2><div class="sub">${esc(dvStTxt(f))} · ${o.from?'leur ambassade attend votre réponse':o.ctr?'votre ambassade est sur place':block?esc(block):og?`l'ambassade partira de ${esc(og[2]||'votre ville la plus proche')} : ≈ ${days} jour${days>1?'s':''} de route`:''}</div></div>
+     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="tr-chip" title="Chaque parole tenue la renforce ; elle donne leur valeur à vos promesses.">Votre réputation <b>${dvR(rep)}</b> · ${esc(dvRepTxt(rep))}</span><button type="button" id="trFiche">← Fiche</button><button type="button" id="mClose" aria-label="Fermer">Fermer</button></div></div>${ban}
+   <div class="tr-frise" role="img" aria-label="${esc(me.nm)} et ${esc(P.c)} face à face, leurs gardes derrière eux">
+     ${fg('me',0,3,160,'l',.9)}${fg('me',0,12,168,'l')}${fg('me',1,26,196,'l')}
+     <div class="tr-mot"><b>PAROLE ET SERMENT</b><span>${esc(trQuote(f,e,vk,o)).replace(/ »/g,'&nbsp;»').replace(/« /g,'«&nbsp;')}</span></div><div class="tr-tab"></div><div class="tr-roll"></div><div class="tr-sol"></div>
+     ${fg(f,1,26,196,'r')}${fg(f,0,12,168,'r')}${fg(f,0,3,160,'r',.9)}</div>
+   <div class="tr-pl"><div class="tr-who l">${me.por?`<img src="${me.por}" alt="">`:`<span class="av" style="color:#9a6fd6">${esc(me.nm.charAt(0))}</span>`}<div><div class="nm">${esc(me.nm)}</div><div class="sub">${esc(dvMe())}${S.sen?' · au nom du Sénat':''}</div></div></div>
+     <div class="tr-ga"><div><div class="t"><span>Confiance</span><b>${dvR(e.D.C.v)}</b></div><div class="b"><i style="width:${dvClamp(50+e.D.C.v/2,0,100)}%;background:#8fd08f"></i></div><small>${top(e.D.C)}</small></div>
+       <div><div class="t"><span>Intérêt</span><b>${dvSg(e.D.I.v)}</b></div><div class="b"><i style="width:${dvClamp(50+e.D.I.v,0,100)}%;background:#e0b458"></i></div><small>${top(e.D.I)}</small></div>
+       <div><div class="t"><span>Crainte</span><b>${dvSg(e.D.K.v)}</b></div><div class="b"><i style="width:${dvClamp(50+e.D.K.v,0,100)}%;background:#f0a08a"></i></div><small>${top(e.D.K)}</small></div></div>
+     <div class="tr-who r"><span class="av">${esc(FAC[f].n.charAt(0))}</span><div><div class="nm">${esc(dvC(P.c))}</div><div class="sub">${esc(FAC[f].n)} · caractère ${esc(T.n)}</div></div></div></div>
+   ${com?`<div class="tr-com"><b style="font-family:Marcellus,Georgia,serif;color:var(--bzL,#d2ae6c)">Engagements communs</b>${com}<span style="margin-left:auto;display:flex;gap:6px;align-items:center">Durée du traité <select id="trDur" aria-label="Durée du traité">${TR_DUR.map(d=>`<option value="${d[0]}" ${o.dur===d[0]?'selected':''}>${d[1]}</option>`).join('')}</select></span></div>`:''}
+   <div class="tr-cols">${col('o','Vous offrez','Ajouter une clause')}
+     <div class="tr-col mid"><div class="ti">La balance</div><div class="tr-bal"><i style="width:${pct}%;background:${vk==='ok'?'#8fd08f':vk==='mid'?'#e0b458':'#f0a08a'}"></i><u></u></div>
+       <div><b class="tr-${vk}">${esc(vt)}</b></div>${c?`<div class="sub" style="line-height:1.4">Ils signeraient ceci : ${esc(c.ch.join(', '))}. <button type="button" id="trCtr">Adopter leur version</button></div>`:(!e.pure&&e.score<2&&!o.from&&!o.ctr?'<div class="sub" style="line-height:1.4">Rien de ce que vous pouvez ajouter ne les décide. Gagnez leur confiance, servez leurs désirs ou faites-vous craindre.</div>':'')}
+       <details><summary class="sub" style="cursor:pointer">Ce qu'ils pèsent</summary><ul class="tr-det">${det}<li style="border-top:1px solid var(--line,#4a3a26);margin-top:3px;padding-top:3px;font-weight:600"><span>Bilan</span><span class="${e.score>=0?'tr-ok':'tr-no'}">${e.pure?'présent':dvSg(e.score)}</span></li></ul></details>
+       ${rat}<div class="sub">${cost?`Or à verser : ${cost}. `:''}${o.from||o.ctr?'':o.ult?'Ultimatum : pas de hasard, mais un refus coûte cher.':'Une petite part de hasard joue à l’arrivée.'}</div>
+       <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">${btn}</div></div>
+     ${col('d','Vous demandez','Ajouter une demande')}</div>`);
+  const M=$('mcard');M.classList.remove('dv-win');M.classList.add('wide','tr-win');
+  const re=()=>{if(o.from){delete o.from}dvRender()};
+  M.querySelectorAll('[data-tra]').forEach(s=>s.onchange=()=>{const k=s.value;if(!k)return;const C=TR_C[k];o.cl[k]=C.par?C.par(f)[0]:1;if(o.ctr)return dvRender();re()});
+  M.querySelectorAll('[data-trx]').forEach(b=>b.onclick=()=>{delete o.cl[b.dataset.trx];if(o.ctr){delete o.ctr}re()});
+  M.querySelectorAll('[data-trp]').forEach(s=>s.onchange=()=>{const k=s.dataset.trp,v=s.value;o.cl[k]=isNaN(+v)||v===''?v:+v;if(o.ctr){delete o.ctr}re()});
+  M.querySelectorAll('[data-trm]').forEach(i=>i.onchange=()=>{if(i.checked)o.cl[i.dataset.trm]=1;else delete o.cl[i.dataset.trm];if(o.ctr){delete o.ctr}re()});
+  if($('trDur'))$('trDur').onchange=()=>{o.dur=+$('trDur').value;if(o.ctr){delete o.ctr}re()};
+  const back=()=>{M.classList.remove('tr-win');DVS.view='fiche';DVS.offer=null;dvRender()};
+  $('trFiche').onclick=back;$('mClose').onclick=()=>{M.classList.remove('tr-win');DVS.view='fiche';DVS.offer=null;closeModal()};
+  if($('trBack'))$('trBack').onclick=back;if($('trSend'))$('trSend').onclick=()=>{M.classList.remove('tr-win');trSend(f)};
+  if($('trUlt'))$('trUlt').onclick=()=>{o.ult=o.ult?0:1;dvRender()};
+  if($('trCtr'))$('trCtr').onclick=()=>{DVS.offer=c.o;dvRender()};
+  if($('trAcc'))$('trAcc').onclick=()=>{M.classList.remove('tr-win');trAcceptQ()};if($('trRef'))$('trRef').onclick=()=>{M.classList.remove('tr-win');trRefuseQ()};if($('trMod'))$('trMod').onclick=()=>{delete o.from;dvRender()};
+  if($('trAccC'))$('trAccC').onclick=()=>{M.classList.remove('tr-win');trAcceptC()};if($('trRefC'))$('trRefC').onclick=()=>{M.classList.remove('tr-win');trRefuseC()};
+  try{if(typeof mirFix==='function')mirFix(M)}catch(x){}}
+// la fiche du peuple gagne ses traités en vigueur, les réponses en attente, les mercenaires, le motif de guerre
+function trFicheAdd(){const M=$('mcard'),f=DVS.f;if(!M||!f||!S.fac[f])return;const box=M.querySelector('.dv-fiche');if(!box)return;const D=Math.floor(S.day),L=[];
+  if(S.trq&&S.trq.f===f)L.push(`<div class="dv-req"><b>Ils vous proposent un traité</b> <span class="sub">(${Math.max(0,S.trq.until-D)} jours pour répondre)</span><br>${esc(dvC(trSummary(f,S.trq.o)))}.<div class="row"><button type="button" class="go" id="trSeeQ">Voir la proposition</button></div></div>`);
+  if(S.trc&&S.trc.f===f)L.push(`<div class="dv-req"><b>Leur contre-proposition</b> <span class="sub">(${Math.max(0,S.trc.until-D)} jours pour répondre)</span><br>${esc(S.trc.ch.join(', '))}.<div class="row"><button type="button" class="go" id="trSeeC">Voir</button></div></div>`);
+  for(const W of S.trw.filter(x=>x.f===f))L.push(`<div class="dv-req"><b>Traité en attente de ratification</b> <span class="sub">(${Math.max(0,W.until-D)} jours)</span><br>${esc(dvC(trSummary(f,W.o)))}.<div class="row"><button type="button" class="go" data-trsen="1">Aller au Sénat</button></div></div>`);
+  if(S.cb[f]>D)L.push(`<div class="dv-req"><b>Motif de guerre légitime</b> : ils ont dénoncé un traité. Jusqu'à ${dvDate(S.cb[f])}, leur déclarer la guerre ne ternira pas votre réputation.</div>`);
+  const T=trOf(f);if(T.length)L.push(`<div class="dv-sec"><b>Traités en vigueur</b><ul class="dv-w">${T.map(t=>`<li><span>⚖</span><span>${esc(dvC(Object.keys(t.cl).map(k=>TR_C[k]?TR_C[k].n.toLowerCase()+(TR_C[k].lab?' ('+TR_C[k].lab(t.cl[k])+')':''):k).join(', ')))}</span><small>jusqu'à ${dvDate(t.until)} (${Math.max(0,Math.ceil((t.until-D)/30))} mois)${t.cl.mercs!=null?` <button type="button" data-trmerc="${f}" ${S.gold.car<90||(t.mc||0)>S.day?'disabled':''}>Lever 2 régiments (90 or)</button>`:''} <button type="button" data-trden="${t.id}" title="Confiance −12, réputation −5">Dénoncer</button></small></li>`).join('')}</ul></div>`);
+  if(!L.length)return;const d=document.createElement('div');d.innerHTML=L.join('');const say=box.querySelector('.dv-say');if(say)say.after(d);else box.prepend(d);
+  if($('trSeeQ'))$('trSeeQ').onclick=trOpenQ;if($('trSeeC'))$('trSeeC').onclick=()=>{DVS.view='neg';DVS.offer=JSON.parse(JSON.stringify(S.trc.o));DVS.offer.ctr=1;dvRender()};
+  d.querySelectorAll('[data-trsen]').forEach(b=>b.onclick=()=>{try{SEN_UI.tab='mo';SEN_UI.cat='t'}catch(e){}openPol()});
+  d.querySelectorAll('[data-trmerc]').forEach(b=>b.onclick=()=>trMercs(b.dataset.trmerc));
+  d.querySelectorAll('[data-trden]').forEach(b=>b.onclick=()=>trDenounce(+b.dataset.trden));
+  try{if(typeof mirFix==='function')mirFix(d)}catch(x){}}
+{const _rT=dvRender;dvRender=function(){trInit();const M0=$('mcard');if(M0)M0.classList.remove('tr-win');
+  if(DVS.view==='neg'&&DVS.f&&S.fac[DVS.f]){try{return trTable(DVS.f)}catch(e){console.error(e);DVS.view='fiche'}}
+  const r=_rT.apply(this,arguments);try{trFicheAdd()}catch(e){console.error(e)}return r}}
+{const _bT=dvBadge;dvBadge=function(){const r=_bT.apply(this,arguments);try{const b=$('bDip');if(b&&S&&(S.trq||S.trc)){let s=b.querySelector('.dv-badge');if(!s){s=document.createElement('span');s.className='dv-badge';b.appendChild(s);s.textContent='1'}}}catch(e){}return r}}
+window.__traites={get S(){return S},TR_C,trEval,trCounter,trApply,trSign,trArrive:e=>trArrive(e),trTable,trNewOffer,trDaily,trPropose,trOpenQ,trAcceptQ,trAcceptC,trRat,trBreak,trTheyBreak,trDenounce,trMercs,trAvail,trFig,DVS,dvRender:()=>dvRender(),daily:d=>daily(d),declareWar:(s,f)=>declareWar(s,f)};
+/* ================= FIN TRAITÉS ================= */

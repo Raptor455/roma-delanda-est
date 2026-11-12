@@ -1,0 +1,120 @@
+/* ================= ÉCHELLE : renforts, lignes et chaîne de commandement (fil « Mettre les batailles à l'échelle de la campagne ») =================
+   Régiments reçus avec c.arr>0 : ils attendent hors du champ (u.pend) et entrent au temps c.arr par le bord qui fait face
+   à la position réelle de leur armée (c.ent). L'infanterie se range sur des lignes plus longues quand l'armée grossit.
+   Corps (CAMP.b.corps, c.cp, c.gd venus du bloc CHAÎNE DE COMMANDEMENT de la campagne) : chaque général chevauche avec un
+   régiment de son corps (la garde pour le chef) ; près de lui, ses régiments tiennent mieux ; s'il tombe, son corps vacille. */
+{
+const RESv=[];
+function edgeIn(ex,ey){ // point du bord du champ, dans la direction de la position réelle de l'armée
+  const x0=Math.max(0,RIVER0)+80,x1=W0-80,y0=80,y1=H0-80,cx=1700,cy=1000;let dx=ex-cx,dy=ey-cy;const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
+  let t=1e9;if(dx>1e-6)t=Math.min(t,(x1-cx)/dx);if(dx<-1e-6)t=Math.min(t,(x0-cx)/dx);if(dy>1e-6)t=Math.min(t,(y1-cy)/dy);if(dy<-1e-6)t=Math.min(t,(y0-cy)/dy);
+  t=Math.min(t,l);return {x:cx+dx*t,y:cy+dy*t,dx,dy}}
+function sideWord(dx,dy,side){ // vu depuis le camp du joueur (il regarde vers -y)
+  if(side===1){dx=-dx;dy=-dy}
+  return Math.abs(dx)>Math.abs(dy)?(dx>0?'par la droite':'par la gauche'):(dy>0?'par vos arrières':'par le front')}
+function layoutMain(list,y0,fw){
+  const g={inf:[],skirm:[],cav:[],eleph:[]};for(const u of list){const k=u.T.kind;(k==='inf'?g.inf:k==='skirm'?g.skirm:k==='eleph'?g.eleph:g.cav).push(u)}
+  const cx=1700,n=g.inf.length,perRow=n<=12?Math.max(1,n):Math.min(20,Math.max(12,Math.ceil(n/2))),nf=Math.min(perRow,n),half=Math.max(2,nf)*95/2;
+  const P=(u,x,y)=>{u.x=x*G;u.y=y*G};
+  g.inf.forEach((u,i)=>{const row=Math.floor(i/perRow),col=i%perRow,m=Math.min(perRow,n-row*perRow);P(u,cx+(col-(m-1)/2)*95,y0-fw*row*75)});
+  g.skirm.forEach((u,i)=>{const m=g.skirm.length,w=Math.max(half*1.8,m*80);P(u,cx+(m>1?(i/(m-1)-.5)*w:0),y0+fw*85)});
+  g.eleph.forEach((u,i)=>{const m=g.eleph.length;P(u,cx+(i-(m-1)/2)*Math.min(260,2*half/Math.max(1,m)),y0+fw*65)});
+  g.cav.forEach((u,i)=>{const s=i%2?1:-1,k=Math.floor(i/2);P(u,cx+s*(half+70+k*76),y0+10)});
+}
+const _dcE=deployCamp;
+deployCamp=function(){
+  _dcE();RESv.length=0;if(!CAMP||!CAMP.b)return;
+  document.querySelectorAll('#start .ech-p').forEach(x=>x.remove());
+  [[CAMP.b.p,0,1470,-1],[CAMP.b.e,1,560,1]].forEach(([L,side,y0,fw])=>{
+    const main=[],grp={};
+    // colonne prise en embuscade (CAMP.b.colonne du fil Armées) : l'arrière-garde est surprise, isolée derrière la ligne
+    const amb=new Set((Array.isArray(CAMP.b.colonne)?CAMP.b.colonne:[]).filter(q=>q&&q.embusque&&q.ar&&q.ar!==q.av).map(q=>q.ar)),rear=[];
+    for(const u of units){if(u.side!==side||u.ci===undefined)continue;const c=L[u.ci];
+      if(c&&c.arr>0&&c.ent){const k=c.ag==null?'?':c.ag;(grp[k]=grp[k]||{arr:c.arr,ent:c.ent,an:c.an,side,us:[]}).us.push(u)}else if(c&&amb.has(c.cp)&&!c.gd)rear.push(u);else main.push(u)}
+    if(rear.length&&rear.length>=main.length){main.push(...rear);rear.length=0}
+    layoutMain(main,y0,fw);
+    rear.forEach((u,i)=>{const col=i%2,row=Math.floor(i/2);u.x=(1700+side*0-650+(col-.5)*70)*G;u.y=Math.max(60,Math.min(H0-60,y0-fw*(260+row*65)))*G;u.morale*=.8;u.ambush=1});
+    if(rear.length)try{const ps=document.querySelectorAll('#start .card > p');const p=document.createElement('p');p.className='ech-p';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45';
+      p.innerHTML=`<b>Embuscade</b> : ${side?"l'arrière-garde ennemie":'votre arrière-garde'} (${rear.length} régiments) est surprise en colonne, à l'écart derrière la ligne (moral −20 %).`;if(ps[0])ps[0].after(p)}catch(e){}
+    for(const k in grp){const r=grp[k];r.e=edgeIn(r.ent[0],r.ent[1]);
+      for(const u of r.us){u.pend=r;u.dead=true;u.x=r.e.x*G;u.y=r.e.y*G}RESv.push(r)}
+  });
+  RESv.sort((a,b)=>a.arr-b.arr);
+  if(RESv.length)try{const ps=document.querySelectorAll('#start .card > p');const p=document.createElement('p');p.className='ech-p';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45';
+    p.innerHTML='<b>Renforts en route</b> : '+RESv.map(r=>`${r.side?'ennemis':'vôtres'}, ${String(r.an||'une armée').replace(/[&<>]/g,'')} (${r.us.length} régiments) ${sideWord(r.e.dx,r.e.dy,0)} vers ${fmt(r.arr)}`).join(' ; ')+'.';
+    if(ps[0])ps[0].after(p)}catch(e){}
+  try{setupCorps()}catch(e){console.warn(e)}
+};
+
+// ---- chaîne de commandement
+const CORPS3=[[],[]];
+function setupCorps(){
+  CORPS3[0]=[];CORPS3[1]=[];const C=CAMP&&CAMP.b&&CAMP.b.corps;if(!C)return;
+  [[CAMP.b.p,0,C.p],[CAMP.b.e,1,C.e]].forEach(([L,side,list])=>{if(!Array.isArray(list))return;const map={};
+    for(const o0 of list){const o=Object.assign({},o0,{side,us:[],gu:null,fell:false});map[o.k]=o;CORPS3[side].push(o)}
+    for(const u of units){if(u.side!==side||u.ci===undefined)continue;const c=L[u.ci],o=c&&map[c.cp];if(!o)continue;u.cp=o.k;o.us.push(u);if(c.gd)u.gd=1}
+    for(const o of CORPS3[side]){if(!o.us.length||o.n==='sans général')continue;
+      const pow=u=>u.men*(u.T.atk||1);
+      const g=o.us.find(u=>u.gd)||o.us.filter(u=>u.T.kind==='cav').sort((a,b)=>pow(b)-pow(a))[0]||o.us.filter(u=>u.T.kind==='inf').sort((a,b)=>pow(b)-pow(a))[0]||o.us[0];
+      o.gu=g;g.genO=o;if(g.gd)g.label='Garde de '+o.n}});
+  try{const ps=document.querySelectorAll('#start .card > p'),txt=s=>CORPS3[s].filter(o=>o.us.length).map(o=>`${esc3(o.n)}${o.st?' '+'★'.repeat(o.st):''} (${o.corps}${o.garde&&o.chef?', avec sa garde':''}, ${o.us.length} rég.)`).join(' ; ');
+    if(CORPS3[0].length+CORPS3[1].length>2&&ps[0]){const p=document.createElement('p');p.className='ech-p';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45';
+      p.innerHTML=`<b>Vos corps</b> : ${txt(0)}<br><b>Corps ennemis</b> : ${txt(1)}`;ps[0].after(p)}}catch(e){}
+  corpsButtons();
+}
+const esc3=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function corpsButtons(){
+  let box=document.getElementById('corpsBtns');if(box)box.remove();const L=CORPS3[0].filter(o=>o.us.length);if(L.length<2)return;
+  box=document.createElement('div');box.id='corpsBtns';box.className='btns';
+  for(const o of L){const b=document.createElement('button');b.type='button';b.textContent=(o.corps==='corps du chef'?'Chef':o.corps.replace(' corps',''))+' · '+o.n;
+    b.title=`${o.corps} (${o.armee}) : ${o.us.length} régiments${o.tr&&o.tr.length?' · '+o.tr.join(', '):''}. Maj : ajouter à la sélection.`;
+    b.onclick=e=>{selectSet(o.us.filter(u=>!u.dead&&!u.routing),e.shiftKey||e.ctrlKey)};box.appendChild(b)}
+  const sel=document.getElementById('sel');if(sel)sel.appendChild(box)}
+function corpsTick(dt){
+  for(const s of [0,1])for(const o of CORPS3[s]){const g=o.gu;if(!g||g.pend)continue;
+    if(!o.fell&&(g.dead||g.routing)){o.fell=true;
+      const who=o.n+(g.dead?' est tombé':' s\'enfuit'),hit=(u,k)=>{if(u.dead||u.routing)return;u.morale-=k;if(u.morale<=0)rout(u)};
+      for(const u of o.us)hit(u,15);if(o.chef)for(const u of units)if(u.side===s&&!o.us.includes(u))hit(u,10);
+      banner((s?'':'⚠ ')+who+(o.chef?' : toute l\'armée vacille !':' : son corps vacille.'),s?PAL[1].lt:PAL[0].lt);continue}
+    if(o.fell)continue;
+    const R=(o.chef?420:320)*G,R2=R*R,k=(.35+.05*(o.st||0))*dt;
+    for(const u of units){if(u.side!==s||u===g||u.dead||u.routing||u.pend)continue;if(!(u.contacts.length||u.underFire>0))continue;
+      const dx=u.x-g.x,dy=u.y-g.y;if(dx*dx+dy*dy>R2)continue;
+      if(o.us.includes(u))u.morale=Math.min(u.T.morale,u.morale+k);else if(o.chef)u.morale=Math.min(u.T.morale,u.morale+k*.5)}}
+}
+const _utE=updateTags;
+updateTags=function(){_utE();for(const s of [0,1])for(const o of CORPS3[s]){const u=o.gu;if(!u||!u.tag||u.dead||u.routing)continue;
+  const p=toScreen(u.x,u.y,u.T.kind==='eleph'?32:20);if(!p.ok)continue;u.tag.hidden=false;u.tag.style.left=p.x+'px';u.tag.style.top=p.y+'px';
+  if(u.tagB.dataset.g!=='1'){u.tagB.dataset.g='1';u.tagB.textContent='★ '+o.n}u.tagB.hidden=false;
+  const m=Math.max(0,u.morale/u.T.morale);u.tagI[0].style.cssText=`width:${frac(u)*100}%;background:#e6dcc3`;u.tagI[1].style.cssText=`width:${m*100}%;background:${m>.5?'#d6b878':m>.25?'#e0883c':'#d24a3a'}`}};
+function arrive(r){
+  if(r.done)return;r.done=true;
+  const ang=Math.atan2(-r.e.dy,-r.e.dx),tx=-Math.sin(ang),ty=Math.cos(ang),per=4;
+  r.us.forEach((u,i)=>{const row=Math.floor(i/per),col=i%per,m=Math.min(per,r.us.length-row*per),off=(col-(m-1)/2)*100,dep=40+row*80;
+    u.x=(r.e.x-r.e.dx*dep+tx*off)*G;u.y=(r.e.y-r.e.dy*dep+ty*off)*G;u.ang=ang;u.dead=false;u.pend=null;u.dirty=true;u.v=0;
+    if(u.side===0)u.order={type:'move',x:u.x-r.e.dx*220*G,y:u.y-r.e.dy*220*G,face:ang};
+  });
+  banner((r.side?'Renforts ennemis : ':'Renforts : ')+(r.an||'une armée')+' arrive '+sideWord(r.e.dx,r.e.dy,0)+' !',r.side?PAL[1].lt:PAL[0].lt);
+}
+function banner(txt,col){try{const d=document.createElement('div');d.textContent=txt;
+  d.style.cssText=`position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:7;padding:8px 18px;border-radius:6px;background:rgba(20,18,14,.9);border:1px solid rgba(214,184,120,.5);color:${col||'#efe6d2'};font-family:var(--display);font-size:20px;pointer-events:none;transition:opacity 1s;text-align:center;max-width:90%`;
+  $('app').appendChild(d);setTimeout(()=>d.style.opacity='0',4200);setTimeout(()=>d.remove(),5400)}catch(e){}}
+const _stepE=step;
+step=function(dt){for(const r of RESv)if(!r.done&&time>=r.arr)arrive(r);const v=_stepE(dt);try{corpsTick(dt)}catch(e){}return v};
+// une armée sans troupes sur le champ appelle ses renforts aussitôt au lieu de perdre la bataille
+const _ceE=checkEnd;
+checkEnd=function(){if(!ended)for(const s of [0,1])if(!units.some(u=>u.side===s&&!u.dead&&!u.routing))for(const r of RESv)if(r.side===s&&!r.done)arrive(r);return _ceE()};
+// les régiments encore en route reviennent intacts dans la campagne
+const _crE=campReturn;
+campReturn=function(win){for(const r of RESv)if(!r.done)for(const u of r.us)u.dead=false;return _crE(win)};
+const _htE=hudTick;
+hudTick=function(){_htE();try{const n=RESv.filter(r=>!r.done&&!r.side).reduce((s,r)=>s+r.us.length,0),c=$('clock');
+  if(c&&n){const r=RESv.find(r=>!r.done&&!r.side);c.title=`Renforts : ${n} régiments, prochains vers ${fmt(r.arr)}`}
+  for(const d of document.querySelectorAll('#uiCards .ui-uc')){const u=units.find(x=>x.side===0&&d.title.startsWith(x.label+' · '+x.T.name));if(!u)continue;
+    d.classList.toggle('res',!!u.pend);if(u.pend)d.title=u.label+' · '+u.T.name+' · en route, arrive vers '+fmt(u.pend.arr)}}catch(e){}};
+{const st=document.createElement('style');st.textContent='#uiCards .ui-uc.res{opacity:.5;filter:sepia(.6);border-style:dashed}';document.head.appendChild(st)}
+// généraux tombés (gf) ou blessés / en fuite (gw), renvoyés à la campagne dans res (clés 'idArmée:k')
+window.__echelleGF=()=>{const gf=[],gw=[];for(const s of [0,1])for(const o of CORPS3[s]){const g=o.gu;if(!g||g.pend)continue;if(g.dead&&!g.fled)gf.push(o.k);else if(g.dead||g.routing||o.fell)gw.push(o.k)}return {gf,gw}};
+window.__echelle={get res(){return RESv},arrive,get corps(){return CORPS3}};
+}
+/* ================= FIN ÉCHELLE ================= */

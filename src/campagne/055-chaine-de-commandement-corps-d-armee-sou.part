@@ -1,0 +1,148 @@
+/* ================= CHAÎNE DE COMMANDEMENT : corps d'armée, sous-généraux, garde du chef ================= */
+// a.sub = [id de général, …] : les sous-généraux (corps I, II, III) ; u.cp = numéro du corps du régiment (0 = corps du chef) ;
+// u.gd = 1 : la garde d'élite du commandant en chef (un régiment). g.sub = id de l'armée où ce général sert en second.
+// u.og = général sous lequel le régiment a servi en dernier (sert à reformer son corps quand deux armées fusionnent).
+// Vers la bataille 3D : chaque régiment du payload porte cp ('idArmée:corps') et gd ; payload.b.corps = {p:[…], e:[…]}.
+const MAXSUB=3,ROM_N=['','I','II','III'],corpsN=k=>k===1?'Ier corps':ROM_N[k]+'e corps';
+const subsOf=a=>(a&&a.sub||[]).map(id=>S.gens.find(g=>g.id===id&&!g.dead)).filter(Boolean);
+function corpsOf(a){const C=[{k:0,g:genOf(a),u:[]}];(a.sub||[]).forEach((id,j)=>C.push({k:j+1,g:S.gens.find(g=>g.id===id&&!g.dead)||null,u:[]}));
+  a.units.forEach((u,i)=>{const c=C[u.cp||0]||C[0];c.u.push(i)});return C}
+function fixCorps(a){if(!a.sub)return;a.sub=a.sub.filter(id=>{const g=S.gens.find(x=>x.id===id);return g&&!g.dead&&g.sub===a.id});
+  for(const u of a.units)if(u.cp&&u.cp>a.sub.length)u.cp=0;if(!a.sub.length)delete a.sub;
+  const gd=a.units.filter(u=>u.gd);if(gd.length>1)gd.slice(1).forEach(u=>u.gd=0)}
+function sendHome(g,x,y){g.sub=null;const n=nearestNode(x,y,n=>!n.col&&ownerN(n.i)===g.side);if(n)g.at=n.i;else g.dead=true}
+function addSub(a,g,silent){a.sub=a.sub||[];if(a.sub.length>=MAXSUB||g.dead)return false;g.army=null;g.at=null;g.sub=a.id;a.sub.push(g.id);const k=a.sub.length;
+  // ses anciens régiments reforment son corps
+  let n=0;for(const u of a.units)if(u.og===g.id&&!u.gd){u.cp=k;n++}
+  if(!silent&&a.side==='car')log(`${g.name} prend le commandement du ${corpsN(k)} de ${armyLabel(a)}${n?` (${n} régiments qui servaient déjà sous lui)`:''}.`);return true}
+function dropSub(a,k){const id=(a.sub||[])[k-1];if(id==null)return;const g=S.gens.find(x=>x.id===id);a.sub.splice(k-1,1);
+  for(const u of a.units){if(u.cp===k)u.cp=0;else if(u.cp>k)u.cp--}if(g){sendHome(g,a.x,a.y);if(a.side==='car')log(`${g.name} quitte ${armyLabel(a)} et rentre ${g.at!=null?'à '+N[g.at].n:''}.`)}fixCorps(a)}
+// répartition automatique : la cavalerie au cavalier, le reste partagé à force égale ; la garde reste au chef
+function autoCorps(a,mode){const C=corpsOf(a),n=C.length;if(n<2){a.units.forEach(u=>u.cp=0);return}
+  const pw=u=>power([u]),cavG=C.findIndex((c,j)=>j>0&&hasTr(c.g,'cav')),L=a.units.filter(u=>!u.gd).sort((p,q)=>pw(q)-pw(p)),load=new Array(n).fill(0);
+  for(const u of a.units)if(u.gd){u.cp=0;load[0]+=pw(u)}
+  for(const u of L){const k=UT[u.t].k;let c;
+    if(mode==='armes'){c=isCavK(k)?(cavG>0?cavG:Math.min(n-1,1)):k==='skirm'||k==='eleph'?(n>3?3:0):(n>2?2:n>1?1:0)}
+    else if(cavG>0&&isCavK(k))c=cavG;else{c=0;for(let j=1;j<n;j++)if(load[j]<load[c])c=j}
+    u.cp=c;load[c]+=pw(u)}}
+function pickGuard(a){let L=a.units.filter(u=>(u.cp||0)===0);if(!L.length)return;const L2=L.filter(u=>['inf','cav'].includes(UT[u.t].k));if(L2.length)L=L2;const best=L.slice().sort((p,q)=>(chev(q)-chev(p))||(power([q])-power([p])))[0];a.units.forEach(u=>u.gd=0);best.gd=1;best.cp=0}
+// trop de régiments pour un seul homme : sans sous-général, une grande armée se commande mal
+function corpsMul(a,role){if(a.g||!a.units.length)return 1;const C=corpsOf(a),tot=power(a.units)||1;let m=0,w0=0;
+  for(const c of C){const p=power(c.u.map(i=>a.units[i]));if(!p)continue;let f=1;
+    if(c.k>0&&c.g){const g=c.g,cav=power(c.u.map(i=>a.units[i]).filter(u=>isCavK(UT[u.t].k)))/p;f=1+.025*stars(g)+(hasTr(g,'tact')?.04:0)+(hasTr(g,'cav')?.15*cav:0)+(hasTr(g,'fouge')?(role==='att'?.06:-.03):0)+(hasTr(g,'prud')&&role==='def'?.06:0)+(hasTr(g,'tem')?(role==='att'?.03:-.05):0)}
+    m+=p*f;w0+=p}
+  let k=w0?m/w0:1;const n=a.units.length,subs=C.length-1;
+  if(n>10)k*=Math.max(.88,1-.015*Math.max(0,n-10-subs*5));
+  // un second qui ne s'entend pas avec le chef
+  const chief=genOf(a);for(const c of C)if(c.k>0&&c.g&&chief&&(rivalTr(chief,c.g)||(typeof areRivals==='function'&&areRivals(chief,c.g))))k*=.95;
+  return k}
+function sideCorpsMul(ids,role){let w=0,s=0;for(const a of sideArmies(ids)){const p=strength(a);w+=p;s+=p*corpsMul(a,role)}return w>0?s/w:1}
+const _odds10=odds;
+odds=function(b){const p=Math.min(.999,Math.max(.001,_odds10(b)));let r=Math.sqrt(p/(1-p));r*=sideCorpsMul(b.att,'att')/sideCorpsMul(b.def,'def');return r*r/(r*r+1)};
+const _battleMods10=battleMods;
+battleMods=function(b,a,role,u){const m=_battleMods10.apply(this,arguments);try{const c=u&&u.cp||0,g=c>0?subsOf(a)[c-1]:null,k=UT[u.t].k;let at=1,df=1,mo=1;
+  if(g){at*=1+.03*stars(g);if(hasTr(g,'tact'))at*=1.05;if(hasTr(g,'cav')&&isCavK(k))at*=1.15;if(hasTr(g,'fouge')&&role==='att')at*=1.08;if(hasTr(g,'prud')&&role==='def')df*=1.08;if(hasTr(g,'aime'))mo*=1.06}
+  if(u&&u.gd){at*=1.1;df*=1.1;mo*=1.25}
+  const r=v=>Math.round(v*1000)/1000;m.a=r(m.a*at);m.d=r(m.d*df);m.m=r(m.m*mo)}catch(e){}return m};
+const _addBattleMods10=addBattleMods;
+addBattleMods=function(payload){_addBattleMods10(payload);const b=S.cur;if(!b||!payload||!payload.b)return;try{const attMine=b.attMine;
+  const side=(L,ids)=>{const F=bFlat(ids);F.forEach((f,k)=>{if(!L[k])return;const a=S.armies.find(x=>x.id===f.aid),u=a&&a.units[f.k];L[k].cp=f.aid+':'+(u&&u.cp||0);L[k].gd=u&&u.gd?1:0})};
+  side(payload.b.p,attMine?b.att:b.def);side(payload.b.e,attMine?b.def:b.att);
+  const list=ids=>{const A=sideArmies(ids),main=A.slice().sort((p,q)=>strength(q)-strength(p))[0],out=[];
+    for(const a of A)for(const c of corpsOf(a)){if(!c.u.length&&c.k>0)continue;const g=c.g;
+      out.push({k:a.id+':'+c.k,n:g?g.name:a.g?a.name:'sans général',st:g?stars(g):0,tr:g?g.tr.map(t=>TRAITS[t].n):[],chef:a===main&&c.k===0?1:0,armee:a.name,corps:c.k?corpsN(c.k):'corps du chef',reg:c.u.length,garde:c.k===0&&a.units.some(u=>u.gd)?1:0})}
+    return out};
+  payload.b.corps={p:list(attMine?b.att:b.def),e:list(attMine?b.def:b.att)}}catch(e){console.warn(e)}};
+// généraux : mémoire des régiments, sous-généraux sans armée, fusion d'armées → le général absorbé devient second
+const _syncGens10=syncGens;
+syncGens=function(){if(!S||!S.gens)return _syncGens10.apply(this,arguments);
+  for(const a of S.armies)if(!a.dead&&a.gen!=null)for(const u of a.units)if(u.og==null||(u.cp||0)===0)u.og=a.gen;
+  // un général dont l'armée vient d'être fondue dans une autre armée immobile à côté y devient sous-général
+  for(const g of S.gens){if(g.dead||g.army==null)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(a&&a.gen===g.id)continue;
+    const host=S.armies.find(x=>!x.dead&&!x.g&&x.side===g.side&&x.gen!==g.id&&!x.legs.length&&g.lx!=null&&Math.hypot(x.x-g.lx,x.y-g.ly)<3&&x.units.some(u=>u.og===g.id)&&(x.sub||[]).length<MAXSUB);
+    if(host)addSub(host,g)}
+  const r=_syncGens10.apply(this,arguments);
+  for(const g of S.gens){if(g.dead||g.sub==null)continue;const a=S.armies.find(x=>x.id===g.sub&&!x.dead);if(!a||!(a.sub||[]).includes(g.id)){const p=a||{x:g.lx||0,y:g.ly||0};sendHome(g,p.x,p.y);if(g.side==='car'&&!g.dead)log(`${g.name}, sans armée à seconder, rentre ${g.at!=null?'à '+N[g.at].n:''}.`)}else{g.lx=a.x;g.ly=a.y}}
+  for(const a of S.armies)if(!a.dead)fixCorps(a);
+  return r};
+// au combat, un second peut tomber ; une armée battue perd plus souvent les siens
+// retour de la bataille 3D : généraux tombés (res.gf) ou en déroute (res.gw), au format 'idArmée:corps'
+let RES3D=null;
+window.addEventListener('message',ev=>{const d=ev.data,fr=$('battle3d');if(d&&d.bellum==='retour'&&d.res&&S&&S.cur&&fr&&ev.source===fr.contentWindow)RES3D=d.res},true);
+const _readReturn10=readReturn;
+readReturn=function(){try{if(location.hash.startsWith('#r=')){const x=JSON.parse(decodeURIComponent(location.hash.slice(3)));if(x&&x.res)RES3D=x.res}}catch(e){}return _readReturn10.apply(this,arguments)};
+function cutSub(a,g){const j=(a.sub||[]).indexOf(g.id);if(j<0)return;a.sub.splice(j,1);for(const u of a.units){if(u.cp===j+1)u.cp=0;else if(u.cp>j+1)u.cp--}g.sub=null;fixCorps(a)}
+function fallen3D(R){const pick=key=>{const [aid,k]=String(key).split(':').map(Number),a=S.armies.find(x=>x.id===aid);if(!a)return null;const g=k?subsOf(a)[k-1]:genOf(a);return g?{a,g,k}:null};
+  for(const key of R.gf||[]){const o=pick(key);if(!o||o.g.dead)continue;const {a,g,k}=o;
+    if(k){g.dead=true;cutSub(a,g);if(!a.dead)a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-6);if(g.side==='car'||visOfArmy(a)>=1)log(`${g.name}, qui menait le ${corpsN(k)} de ${a.name}, est tombé au combat.`)}
+    else killGen(g,'est tombé au combat, à la tête de ses troupes')}
+  for(const key of R.gw||[]){const o=pick(key);if(!o||o.g.dead||woundOf(o.g))continue;const {a,g,k}=o;g.wound=Math.floor(S.day)+10+Math.floor(Math.random()*20);
+    if(g.side==='car'||visOfArmy(a)>=1)log(`${g.name}${k?`, à la tête du ${corpsN(k)},`:''} a été emporté dans la déroute ; il est blessé.`)}}
+const _applyResult10=applyResult;
+applyResult=function(b,res){const attA=sideArmies(b.att),defA=sideArmies(b.def),lose=res.attWin?defA:attA,win=res.attWin?attA:defA,R=RES3D;RES3D=null;
+  if(R)try{fallen3D(R)}catch(e){console.warn(e)}
+  _applyResult10(b,res);
+  if(!R)for(const [L,k] of [[lose,.1],[win,.03]])for(const a of L)for(const g of subsOf(a)){if(Math.random()>=k)continue;g.dead=true;if(!a.dead){const j=a.sub.indexOf(g.id);if(j>=0){a.sub.splice(j,1);for(const u of a.units){if(u.cp===j+1)u.cp=0;else if(u.cp>j+1)u.cp--}fixCorps(a)}}
+    if(g.side==='car'||visAt(b.x,b.y)>=1)log(`${g.name}, qui commandait un corps de ${a.name}, est tué au combat.`)}
+  for(const a of win)for(const g of subsOf(a))gainXp(g,1)};
+// IA : les grandes armées romaines reçoivent des seconds
+const _daily10=daily;
+daily=function(d){_daily10(d);if(S.cur||S.over||d%10)return;
+  for(const a of S.armies){if(a.dead||a.g||a.side==='car'||a.units.length<12||(a.sub||[]).length>=Math.min(MAXSUB,Math.floor(a.units.length/6)))continue;if(typeof MPRH==='function'&&MPRH(a.side))continue;
+    const g=mkGen(a.side,nextGen(a.side));S.gens.push(g);addSub(a,g,true);autoCorps(a);if(!a.units.some(u=>u.gd))pickGuard(a)}};
+// début de partie : Hannibal part avec son état-major (Maharbal à la cavalerie, Magon son frère, Carthalon)
+const _nextGen10=nextGen;
+nextGen=function(side){let n;for(let i=0;i<40;i++){n=_nextGen10(side);if(!S.gens||!S.gens.some(g=>!g.dead&&g.name===n))break}return n};
+function hannibalStaff(){if(!S||S.hstaff||!S.gens||(S.day||0)>5)return;const H=S.armies.find(a=>!a.dead&&a.side==='car'&&a.name==='Hannibal'&&!a.g);if(!H)return;S.hstaff=1;
+  for(const nm of ['Maharbal','Magon','Carthalon']){if((H.sub||[]).length>=MAXSUB)break;if(S.gens.some(g=>!g.dead&&g.name===nm))continue;const g=mkGen('car',nm);try{if(BORN[nm])g.born=BORN[nm]}catch(e){}S.gens.push(g);addSub(H,g,true)}
+  const n=(H.sub||[]).length,MAP={hcav:1,ncav:1,iber:2,sling:3,eleph:3};if(n===3)H.units.forEach(u=>u.cp=MAP[u.t]||0);else autoCorps(H,'eq');pickGuard(H)}
+const _initArmies10=initArmies;
+initArmies=function(){const r=_initArmies10.apply(this,arguments);try{hannibalStaff()}catch(e){console.warn(e)}return r};
+// fenêtre « Organiser les corps » : chaque régiment se déplace d'un corps à l'autre ; la garde se choisit parmi les régiments du chef
+function corpsWin(a){if(!a||a.dead)return;fixCorps(a);const C=corpsOf(a),pw=L=>Math.round(power(L.map(i=>a.units[i]))),chief=genOf(a);
+    let h=`<h2>Organiser les corps</h2><p class="sub">${esc(armyLabel(a).replace(/^./,m=>m.toUpperCase()))} · ${a.units.length} régiments. Les flèches ← → font passer un régiment au corps voisin ; la couronne ♛ fait d'un régiment du chef sa garde d'élite. Effet sur la bataille : attaque ×${corpsMul(a,'att').toFixed(2)}, défense ×${corpsMul(a,'def').toFixed(2)}.</p>`;
+  h+=`<div style="display:grid;grid-template-columns:repeat(${C.length},minmax(170px,1fr));gap:10px;margin:10px 0;overflow-x:auto">`;
+  for(const c of C){const g=c.g,rv=c.k>0&&g&&chief&&(rivalTr(chief,g)||(typeof areRivals==='function'&&areRivals(chief,g)));
+    h+=`<div style="background:rgba(0,0,0,.18);border:1px solid rgba(214,184,120,.18);border-radius:6px;padding:8px;min-width:0">
+      ${(()=>{const src=g&&typeof porGenURL==='function'?porGenURL(g):null;return src?`<img src="${src}" alt="" title="${esc(g.name)}" style="display:block;width:72px;height:72px;border-radius:50%;object-fit:cover;margin:2px auto 6px;border:2px solid ${c.k?'rgba(214,184,120,.5)':'#d6b878'};background:#fff">`:''})()}<div style="font-family:var(--display);font-size:16px;text-align:center">${c.k?corpsN(c.k):'Corps du chef'}</div>
+      <div class="sub" style="font-size:12px;line-height:1.3;margin-bottom:6px;text-align:center">${g?esc(g.name)+' '+'★'.repeat(stars(g)):'—'}${g&&g.tr.length?'<br>'+g.tr.map(t=>TRAITS[t].n).join(', '):''}${rv?'<br><span style="color:#e0a060">⚔ rival du chef (−5 %)</span>':''}<br>${c.u.length} rég. · force ${pw(c.u)}</div>`;
+    for(const i of c.u){const u=a.units[i],k=UT[u.t].k;
+      h+=`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:3px 4px;padding:4px 0;border-top:1px solid rgba(214,184,120,.1);font-size:13px">
+        <span style="flex:1 1 100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(uName(u))} · ${u.men} hommes">${typeof symSVG==='function'?symSVG(k,18)+' ':''}${u.gd?'<b style="color:#ffd77a">♛</b> ':''}${esc(uName(u))} <span class="sub">${u.men}${chev(u)?' · '+'★'.repeat(chev(u)):''}</span></span>
+        ${[c.k-1,c.k+1].map((t,j)=>`<button type="button" data-cmv="${i}:${t}" ${t<0||t>=C.length?'disabled':''} style="min-height:26px;min-width:34px;padding:0 8px;font-size:15px;line-height:1" title="${t<0||t>=C.length?'':'Envoyer au '+(t?corpsN(t):'corps du chef')}">${j?'→':'←'}</button>`).join('')}
+        ${c.k===0?`<button type="button" data-cgd="${i}" style="min-height:24px;padding:0 6px;font-size:12px;${u.gd?'background:#d6b878;color:#1b1712;border-color:#d6b878;font-weight:600;opacity:1':''}" title="${u.gd?'Retirer de la garde':'Faire de ce régiment la garde du chef'}">${u.gd?'♛ Garde':'♛'}</button>`:''}</div>`}
+    if(!c.u.length)h+=`<p class="sub" style="font-size:12px">Aucun régiment.</p>`;
+    h+=`</div>`}
+  h+=`</div>`;
+  if(C.length<2)h+=`<p class="sub">Cette armée n'a pas encore de sous-général : nommez-en un depuis le panneau (général libre dans la ville, ou fusion de deux armées).</p>`;
+  h+=`<div class="row">${C.length>1?`<button type="button" data-cwa="eq">Répartir à force égale</button><button type="button" data-cwa="armes">Répartir par armes</button><button type="button" data-cwa="chef">Tout au chef</button>`:''}<span class="sp" style="flex:1"></span><button type="button" class="go" id="cwOk">Terminé</button></div>`;
+  modal(h);$('mcard').classList.add('wide');
+  const re=()=>{corpsWin(a);renderAll()};
+  document.querySelectorAll('[data-cmv]').forEach(b=>b.onclick=()=>{const [i,k]=b.dataset.cmv.split(':').map(Number),u=a.units[i];if(!u)return;u.cp=k;if(k)u.gd=0;re()});
+  document.querySelectorAll('[data-cgd]').forEach(b=>b.onclick=()=>{const u=a.units[+b.dataset.cgd];if(!u)return;const was=u.gd;a.units.forEach(x=>x.gd=0);if(!was){u.gd=1;u.cp=0}re()});
+  document.querySelectorAll('[data-cwa]').forEach(b=>b.onclick=()=>{const m=b.dataset.cwa;if(m==='chef')a.units.forEach(u=>u.cp=0);else autoCorps(a,m);re()});
+  $('cwOk').onclick=()=>{closeModal();renderAll()}}
+// panneau : corps d'armée
+const _renderSide10=renderSide;
+renderSide=function(){_renderSide10.apply(this,arguments);if(!S||!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return;const a=sel.a,el=$('side'),box=el.querySelector('.genbox');if(!box||a.g||a.ship)return;
+  fixCorps(a);const C=corpsOf(a),n=a.units.length;
+  // repères sur les vignettes : numéro du corps, garde
+  try{const T=el.querySelectorAll('.ui-tiles label, label.unit');if(T.length===n)a.units.forEach((u,k)=>{const L=T[k];if(!u.cp&&!u.gd)return;L.style.position='relative';
+    L.insertAdjacentHTML('beforeend',`<span style="position:absolute;top:1px;left:3px;font:bold 10px Georgia,serif;text-shadow:0 0 2px #000;color:${u.gd?'#ffd77a':'#e8dcc0'}" title="${u.gd?'Garde du commandant en chef':corpsN(u.cp)}">${u.gd?'♛':ROM_N[u.cp]}</span>`)})}catch(e){}
+  const inCity=a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side,free=inCity?S.gens.filter(g=>g.side===a.side&&!g.dead&&g.army==null&&g.sub==null&&g.at===a.at):[];
+  const warn=n>10&&C.length-1<Math.ceil((n-10)/5)?`<p class="sub" style="margin:2px 0;color:#e0a060">${n} régiments pour un seul état-major : −${Math.round((1-Math.max(.88,1-.015*Math.max(0,n-10-(C.length-1)*5)))*100)} % au combat. Nommez des sous-généraux (un pour cinq régiments au-delà de dix).</p>`:'';
+  let h=`<p class="sub" style="margin:8px 0 2px">Chaîne de commandement</p>${warn}<div style="font-size:12px;line-height:1.5">`;
+  for(const c of C){const g=c.g,rv=c.k>0&&g&&genOf(a)&&(rivalTr(genOf(a),g)||(typeof areRivals==='function'&&areRivals(genOf(a),g)));
+    h+=`<div style="display:flex;gap:6px;align-items:center;justify-content:space-between"><span>${c.k?`<b>${corpsN(c.k)}</b>`:'<b>Commandant en chef</b>'} · ${g?esc(g.name)+' '+'★'.repeat(stars(g)):'—'}${g&&g.tr.length?` <span class="sub">(${g.tr.map(t=>TRAITS[t].n).join(', ')})</span>`:''} · ${c.u.length} rég.${rv?' <span style="color:#e0a060" title="Ils ne s’entendent pas : −5 %">⚔ rivalité</span>':''}</span>${c.k?`<button type="button" data-csub="${c.k}" title="Renvoyer ce sous-général ; ses régiments reviennent au chef">✕</button>`:''}</div>`}
+  h+=`</div><div class="row" style="flex-wrap:wrap;margin-top:4px">`;
+  if(free.length&&C.length-1<MAXSUB)h+=free.slice(0,3).map(g=>`<button type="button" data-cadd="${g.id}" title="${esc(g.name)} ${'★'.repeat(stars(g))}${g.tr.length?' — '+g.tr.map(t=>TRAITS[t].n).join(', '):''}">Second : ${esc(g.name)}</button>`).join('');
+  else if(C.length-1<MAXSUB)h+=`<span class="sub" style="font-size:11px">Pour nommer un second : un général libre dans la ville où se tient l'armée, ou fusionnez deux armées (le général absorbé devient second).</span>`;
+  if(C.length>1)h+=`<button type="button" data-cauto="eq" title="Partager les régiments à force égale entre les corps (la cavalerie va au cavalier)">Répartir à force égale</button><button type="button" data-cauto="armes" title="Un corps pour l'infanterie lourde, un pour la cavalerie, un pour les troupes légères et les éléphants">Répartir par armes</button>`;
+  h+=`<button type="button" id="cWin" class="go" title="Déplacer chaque régiment d'un corps à l'autre">Organiser les corps</button>`;h+=`<button type="button" id="cGuard" title="Le meilleur régiment du chef devient sa garde d'élite (+10 % en attaque et en défense, moral +25 % sur le champ de bataille)">${a.units.some(u=>u.gd)?'Changer la garde':'Former la garde'}</button></div>`;
+  box.insertAdjacentHTML('beforeend',h);
+  box.querySelectorAll('[data-cadd]').forEach(x=>x.onclick=()=>{const g=S.gens.find(y=>y.id===+x.dataset.cadd);if(g&&addSub(a,g)){autoCorps(a,'eq')}renderAll()});
+  box.querySelectorAll('[data-csub]').forEach(x=>x.onclick=()=>{dropSub(a,+x.dataset.csub);renderAll()});
+  box.querySelectorAll('[data-cauto]').forEach(x=>x.onclick=()=>{autoCorps(a,x.dataset.cauto);log(`${armyLabel(a).replace(/^./,m=>m.toUpperCase())} : régiments répartis entre les corps.`);renderAll()});
+  if($('cWin'))$('cWin').onclick=()=>corpsWin(a);
+  if($('cGuard'))$('cGuard').onclick=()=>{pickGuard(a);const u=a.units.find(x=>x.gd);if(u)log(`${esc(uName(u))} devient la garde de ${genOf(a)?genOf(a).name:a.name}.`);renderAll()}};
+

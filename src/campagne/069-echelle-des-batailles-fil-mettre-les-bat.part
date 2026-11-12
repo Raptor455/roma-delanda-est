@@ -1,0 +1,32 @@
+/* ================= ÉCHELLE DES BATAILLES (fil « Mettre les batailles à l'échelle de la campagne ») =================
+   Échelle « façon Total War » choisie par Baptiste : 20 régiments par armée ; les grandes batailles viennent de
+   plusieurs armées réunies. Les armées amies ou ennemies à moins de RF_KM du lieu de la bataille la rejoignent ;
+   celles qui sont loin entrent en renfort en 3D, par le bord du champ qui fait face à leur position réelle,
+   avec un retard qui dépend de la distance (b.arr[id] en secondes de bataille). */
+const RF_KM=10,RF_NEAR=2.5;
+function rfJoin(b){
+  if(!b||b.rf)return;b.rf=1;
+  const a0=S.armies.find(x=>x.id===b.att[0]),d0=S.armies.find(x=>x.id===b.def[0]);if(!a0||!d0)return;
+  const inB=id=>b.att.includes(id)||b.def.includes(id);
+  for(const x of S.armies){
+    if(x.dead||x.ship||x.inG||x.cool>0||!x.units||!x.units.length||inB(x.id))continue;
+    if(Math.hypot(x.x-b.x,x.y-b.y)>RF_KM)continue;
+    if(x.side===a0.side)b.att.push(x.id);else if(x.side===d0.side)b.def.push(x.id);
+  }
+  b.arr={};
+  for(const id of [...b.att,...b.def]){const x=S.armies.find(y=>y.id===id);if(!x)continue;
+    const d=Math.hypot(x.x-b.x,x.y-b.y);b.arr[id]=(id===a0.id||id===d0.id||d<RF_NEAR)?0:Math.round(30+(d-RF_NEAR)*45)}
+}
+{const _obE=openBattle;openBattle=function(){try{if(S.cur)rfJoin(S.cur)}catch(e){console.warn(e)}return _obE.apply(this,arguments)}}
+// chaque régiment emporte son délai d'arrivée, la position réelle de son armée (mètres du champ) et le nom de l'armée
+{const _abmE=addBattleMods;addBattleMods=function(payload){_abmE(payload);const b=S.cur;if(!b||!payload||!payload.b||!payload.t||!payload.t.f)return;
+  try{const f=payload.t.f,attMine=b.attMine,arr=b.arr||{};
+    const Bm=(X,Y)=>{const dx=X-f.cx,dy=Y-f.cy;return [Math.round(1700+(dx*f.ex[0]+dy*f.ex[1])*1000),Math.round(1000+(dx*f.ey[0]+dy*f.ey[1])*1000)]};
+    const late=[];
+    const put=(L,ids,mine)=>{const F=bFlat(ids);F.forEach((q,k)=>{const c=L[k];if(!c)return;const a=S.armies.find(x=>x.id===q.aid);if(!a)return;
+      c.ag=a.id;c.an=a.name;c.ent=Bm(a.x,a.y);c.arr=arr[a.id]||0;
+      if(c.arr>0&&k===F.findIndex(z=>z.aid===a.id))late.push((mine?'votre ':"l'ennemi : ")+a.name+' dans '+Math.max(1,Math.round(c.arr/60))+' min')})};
+    put(payload.b.p,attMine?b.att:b.def,true);put(payload.b.e,attMine?b.def:b.att,false);
+    if(late.length)payload.b.desc+=' Renforts en route : '+late.join(' ; ')+'.'}catch(e){console.warn(e)}}}
+window.__echelle={rfJoin,RF_KM};
+/* ================= FIN ÉCHELLE DES BATAILLES ================= */

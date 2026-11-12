@@ -1,0 +1,37 @@
+/* ================= IA ROMAINE ================= */
+function aiTurn(){
+  const mine=S.armies.filter(a=>a.side==='rom'),foes=romKnown(),roma=NI.roma;
+  if(S.gold.rom>220&&Math.floor(S.day)%10===0){
+    const spots=N.filter(n=>ownerN(n.i)==='rom'&&n.size>=1&&!S.q[n.id]&&(n.id==='roma'||S.armies.some(a=>a.side==='rom'&&!a.g&&a.at===n.i&&!a.legs.length&&a.units.length<MAXU)));
+    const n=spots.sort((a,b)=>(b.id==='roma')-(a.id==='roma'))[0];
+    if(n){const t=aiPick('rom',n)/*IA-COMPO*/;S.gold.rom-=UT[t].cost;S.q[n.id]={t,d:TRAIN[UT[t].k],side:'rom'}}
+  }
+  aiFleets();
+  const threat=foes.some(f=>Math.hypot(f.x-N[roma].x,f.y-N[roma].y)<380);
+  const defenders=mine.filter(a=>!a.g&&a.at===roma);
+  if(threat&&!defenders.length){const c=mine.filter(a=>!a.g&&a.units.length>=4).map(a=>({a,p:plan(a,0,0,roma)})).filter(x=>x.p).sort((x,y)=>x.p.days-y.p.days)[0];if(c&&c.a.ai!=='defend'){order(c.a,0,0,roma);c.a.ai='defend'}}
+  for(const a of mine){
+    if(a.g||a.cool>0||a.ship)continue;
+    if(a.ai==='embark'&&!threat){aiExpedition(a);continue}
+    if(a.ai==='defend'&&threat)continue;a.ai=null;
+    if(a.units.length<6||a.legs.length)continue;
+    const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id)continue;
+    const my=strength(a),D=dijkstra(a,startsOf(a));let best=null,bv=0;
+    for(const n of N){
+      if(n.col||!cityHostile(n.i,'rom'))continue;
+      if(n.lat<37.4&&n.lon>-6&&S.day<330)continue; // pas d'invasion de l'Afrique la première année
+      const days=D.dist[n.i];if(days>=1e9)continue;
+      const def=aiDef(n).reduce((s,x)=>s+strength(x),0);
+      if(def>my*.85)continue;
+      const v=(n.inc+12+(n.id==='carthago'?30:0))/(8+days);if(v>bv){bv=v;best=['n',n.i]}
+    }
+    for(const f of foes){
+      if(f.x>prj(-6,0)[0]&&S.day<330&&LAT1-f.y/KY<37.4)continue;
+      if(strength(f)>my*.8)continue;
+      const nn=nearestNode(f.x,f.y),days=D.dist[nn.i];if(days>=1e9)continue;
+      const v=(60+strength(f)/10)/(8+days);if(v>bv){bv=v;best=['p',f.x,f.y]}
+    }
+    if(!aiExpedition(a,bv)&&best){if(best[0]==='n')order(a,0,0,best[1]);else order(a,best[1],best[2],null)}
+  }
+}
+

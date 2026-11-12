@@ -1,0 +1,90 @@
+/* ===== Terrain de la bataille 3D tiré de la carte (mètres du champ de bataille : centre 1700,1000 ; Carthage au sud, +y) ===== */
+function battleTerrain(b,attMine){
+  const me=S.armies.find(x=>x.id===(attMine?b.att[0]:b.def[0])),foe=S.armies.find(x=>x.id===(attMine?b.def[0]:b.att[0]));
+  let cx=b.x,cy=b.y;
+  // eau la plus proche : fleuve ou mer, à moins de 1,8 km
+  let water=null;
+  for(const r of RIV)for(let k=0;k<r.length-1;k++){const [ax,ay]=r[k],[bx,by]=r[k+1],vx=bx-ax,vy=by-ay,l=vx*vx+vy*vy||1;let t=((cx-ax)*vx+(cy-ay)*vy)/l;t=t<0?0:t>1?1:t;const px=ax+vx*t,py=ay+vy*t,d=Math.hypot(px-cx,py-cy);if(d<1.8&&(!water||d<water.d))water={d,x:px,y:py,sea:false}}
+  for(let r=.1;r<=1.8&&!(water&&water.d<r);r+=.1)for(let k=0;k<32;k++){const a=k/32*6.283,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;if(!landFast(x,y)){if(!water||r<water.d)water={d:r,x,y,sea:true};break}}
+  // les armées se battent sur une rive : on recule le centre à 1,3 km de l'eau, qui borde alors le champ à l'ouest, comme sur la carte
+  if(water&&water.d<1.3){const wx=(water.x-cx)/(water.d||1),wy=(water.y-cy)/(water.d||1);if(water.d<.02){const a=Math.atan2((foe?foe.y:cy)-cy,(foe?foe.x:cx)-cx);cx-=Math.cos(a)*1.3;cy-=Math.sin(a)*1.3}else{cx=water.x-wx*1.3;cy=water.y-wy*1.3}water.d=1.3}
+  // repère : l'eau à l'ouest s'il y en a, sinon l'ennemi au nord
+  let ex,ey;
+  if(water&&water.d>.02){const wx=(water.x-cx)/water.d,wy=(water.y-cy)/water.d;ex=[-wx,-wy]}
+  else{let dx=(me?me.x:cx)-(foe?foe.x:cx),dy=(me?me.y:cy+1)-(foe?foe.y:cy);const l=Math.hypot(dx,dy);if(l<1e-6){dx=0;dy=1}else{dx/=l;dy/=l}ex=[dy,-dx]}
+  ey=[-ex[1],ex[0]];
+  const B=(X,Y)=>{const dx=X-cx,dy=Y-cy;return [Math.round(1700+(dx*ex[0]+dy*ex[1])*1000),Math.round(1000+(dx*ey[0]+dy*ey[1])*1000)]},
+    Cp=(sx,sy)=>[cx+((sx-1700)*ex[0]+(sy-1000)*ey[0])/1000,cy+((sx-1700)*ex[1]+(sy-1000)*ey[1])/1000],phi=Math.atan2(ex[1],ex[0]);
+  const X0=-1300,X1=4500,Y0=-1300,Y1=3300,inB=([x,y],m=0)=>x>X0-m&&x<X1+m&&y>Y0-m&&y<Y1+m;
+  const R=4.2,a0=cx-R,a1=cx+R,b0=cy-R,b1=cy+R;
+  const t={v:1,forests:[],fields:[],houses:[],hills:[],roads:[],town:null,water:null,rough:0,dry:0,ter:terrainAt(cx,cy)};
+  if(water){const wx=Math.round(1700-water.d*1000+36);t.water={x:Math.max(140,Math.min(760,wx)),sea:water.sea}}
+  // forêts, montagnes, fermes : mêmes tirages que la carte (cases de 2,5 km et sommets de 2,4 km)
+  let nm=0,nf=0,nn=0,gm='';const gnx=Math.floor((X1-X0)/200)+1,gny=Math.floor((Y1-Y0)/200)+1;
+  for(let j=0;j<gny;j++)for(let i=0;i<gnx;i++){const [X,Y]=Cp(X0+i*200,Y0+j*200);gm+=!landFast(X,Y)?'4':String(TNAME.indexOf(terrFast(X,Y))<0?0:TNAME.indexOf(terrFast(X,Y)))}
+  t.grid={x0:X0,y0:Y0,st:200,nx:gnx,ny:gny,m:gm};
+  for(let sx=X0;sx<=X1;sx+=200)for(let sy=Y0;sy<=Y1;sy+=200){const [X,Y]=Cp(sx,sy);if(!landFast(X,Y))continue;nn++;const tt=terrFast(X,Y);
+    if(tt==='foret'){nf++;t.forests.push({x:sx+Math.round((hash(sx,sy)-.5)*80),y:sy+Math.round((hash(sy,sx)-.5)*80),r:130})}else if(tt==='montagne')nm++}
+  t.rough=nn?nm/nn:0;
+  const cell=2.5;
+  for(let i=Math.floor(a0/cell);i<=Math.ceil(a1/cell);i++)for(let j=Math.floor(b0/cell);j<=Math.ceil(b1/cell);j++){const h=hash(i,j);if(h>.32)continue;const x=(i+hash(j,i))*cell,y=(j+hash(i+7,j))*cell;if(!landFast(x,y))continue;
+    const tt=terrFast(x,y);
+    if(tt==='montagne'||tt==='foret'||h<.08){for(let k=0;k<4;k++){const r=.16+.1*hash(k,i+j),p=B(x+(hash(i*3+k,j)-.5)*1.2,y+(hash(i,j*3+k)-.5)*1.2);if(inB(p,300))t.forests.push({x:p[0],y:p[1],r:Math.round(r*1000)})}}
+    else if(tt!=='desert'||h<.12){const p=B(x,y);if(!inB(p,600))continue;const a=h*9,ripe=h<.2;
+      t.fields.push({x:p[0],y:p[1],w:900,h:600,a:+(a-phi).toFixed(3),c:ripe?[0xc8b064,0xb59d55]:[0x9aa152,0x889246]});
+      const co=Math.cos(a),si=Math.sin(a);for(const [hx,hy] of [[.28,-.2],[.42,-.12]])t.houses.push(B(x+hx*co-hy*si,y+hx*si+hy*co))}}
+  // bosquets et arbres isolés de la vue rapprochée : ils deviennent de vrais arbres en 3D (et ne sont pas peints sur le sol)
+  {const kc=ctx;ctx=document.createElement('canvas').getContext('2d');COLLECT=[];try{fineDetail(a0,b0,a1,b1,40,1/40)}finally{ctx=kc}
+    for(const [x,y,r] of COLLECT){const p=B(x,y);if(inB(p,200))t.forests.push({x:p[0],y:p[1],r:Math.round(r*1000)})}COLLECT=null}
+  t.hills=battleHills(a0-1,b0-1,a1+1,b1+1,B,inB);
+  // routes
+  for(const e of EDGES){if(e.type==='mer'||e.type==='detroit')continue;const P=e.cv||[[N[e.a].x,N[e.a].y],[N[e.b].x,N[e.b].y]];
+    const out=[];for(let k=0;k<P.length;k++){const p=B(P[k][0],P[k][1]);out.push(p)}
+    // ne garder que la partie proche du champ de bataille
+    let s0=-1,s1=-1;for(let k=0;k<out.length;k++){const near=inB(out[k],1500)||(k&&segNear(out[k-1],out[k]));if(near){if(s0<0)s0=Math.max(0,k-1);s1=Math.min(out.length-1,k+1)}}
+    if(s0>=0){const seg=out.slice(s0,s1+1);if(seg.length>1)t.roads.push({p:seg,k:e.type})}}
+  function segNear(p,q){for(let k=0;k<=10;k++){const x=p[0]+(q[0]-p[0])*k/10,y=p[1]+(q[1]-p[1])*k/10;if(inB([x,y]))return true}return false}
+  // ville voisine
+  const tn=nearestNode(cx,cy,n=>!n.col);if(tn&&Math.hypot(tn.x-cx,tn.y-cy)<3.4){const p=B(tn.x,tn.y);t.town={x:p[0],y:p[1],size:tn.size,n:tn.n}}
+  t.dry=Math.max(0,Math.min(1,(35.2-(LAT1-cy/KY))/1.8));
+  t.f={cx,cy,ex,ey};
+  return t;
+}
+function endGame(){
+  S.paused=true;save();
+  modal(S.over==='win'?`<h2>Roma delenda est</h2><p>Rome est tombée. Carthage domine la Méditerranée occidentale.</p><div class="row"><button class="go" id="mNew" type="button">Nouvelle campagne</button></div>`
+    :`<h2>Carthage est tombée</h2><p>Les légions sont entrées dans Carthage. La guerre est perdue.</p><div class="row"><button class="go" id="mNew" type="button">Nouvelle campagne</button></div>`);
+  $('mNew').onclick=()=>{newGame();afterLoad();closeModal()};
+}
+function openHelp(){
+  modal(`<h2>Comment jouer</h2>
+  <p><b>Temps réel avec pause.</b> <kbd>Espace</kbd> met en pause ou relance ; ×1, ×2, ×4, ×10 règlent la vitesse (à ×1, un jour dure 18 secondes). Une bataille ou un siège sur vos terres met le jeu en pause.</p>
+  <p><b>Carte.</b> Molette (ou + / −) pour zoomer de la Méditerranée entière jusqu'aux rues des villes. Pour déplacer la carte : <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> (ou WASD) et flèches (<kbd>Maj</kbd> : plus vite), ou glisser avec le clic droit ou la molette enfoncée. Le clic gauche sert à choisir ; glissé, il trace un cadre qui sélectionne plusieurs armées (<kbd>Maj</kbd> pour en ajouter), et le clic droit les fait toutes marcher. Voies romaines, routes, pistes, cols et détroits sont tracés.</p>
+  <p><b>Armées.</b> Clic gauche sur un écu violet pour la choisir, <b>clic droit</b> où vous voulez pour marcher (sur téléphone : toucher). L'armée prend le chemin le plus rapide par les routes : voie romaine plus rapide, piste normale, col lent ; hors route, deux fois moins vite, et encore moins en montagne ou en forêt. Le trajet et la durée s'affichent au survol.</p>
+  <p><b>Garnisons.</b> Dans une ville amie, « Entrer en garnison » met l'armée à l'abri des murs : ses régiments se refont deux fois plus vite. Une flotte peut se mettre à l'abri au port (navires désarmés, entretien réduit de moitié). Au départ, les régiments sortent un par un par les portes, les escadres une par une du port.</p>
+  <p><b>Villes et sièges.</b> Clic droit sur une ville ennemie : l'armée s'y arrête et l'assiège (5 jours pour un village, 15 pour un bourg, 30 pour une ville, 60 pour une capitale). Une garnison doit d'abord être battue. Chaque ville contrôle le territoire autour d'elle.</p>
+  <p><b>Routes.</b> ${['via','route','piste','chemin','col','hors'].map(k=>`<b>${ROAD[k].n.charAt(0).toUpperCase()+ROAD[k].n.slice(1)}</b> (×${ROAD[k].m}) : ${ROAD[k].txt}.`).join(' ')}</p>
+  <p><b>Fleuves et ponts.</b> Hors route, on ne traverse pas les grands fleuves : il faut passer par un pont, là où la route les franchit. Une armée arrêtée à moins de 2 km d'un pont peut le couper (l'ennemi doit alors faire le tour) ou le rebâtir (20 or, 5 jours pour un pont de bois, 10 sur une route ou une voie romaine) ; elle doit rester sur place pendant le chantier. Les Romains coupent parfois un pont devant une armée carthaginoise ; au bout de quatre mois, les gens du pays rebâtissent les ponts que plus personne ne garde. Une croix rouge marque un pont coupé.</p>
+  <p><b>Montagnes et neige.</b> Hors route, on ne passe pas au-dessus d'environ 2 400 m l'été, 1 800 m au printemps et à l'automne, 1 150 m l'hiver : il faut prendre les cols. La neige descend l'hiver (vers 1 500 m) : les cols plus hauts ferment, comme les routes qui montent trop. Le Perthus et le col des Vascons restent ouverts toute l'année.</p>
+  <p><b>Saisons et ravitaillement.</b> L'hiver ralentit tout et les cols ouverts deviennent meurtriers. Hors de vos terres, l'armée s'use, surtout dans le désert. </p>
+  <p><b>Villages et vivres.</b> Une armée porte au plus 20 jours de vivres ; elle les refait sur vos terres et les mange ailleurs. Sans vivres, elle fond bien plus vite. En chemin elle fourrage un peu dans les villages proches. Arrêtée près d'un village, d'un bourg ou d'un domaine (clic droit dessus), elle peut acheter des vivres, fourrager, piller et brûler (butin, mais la ville voisine perd du revenu et les neutres s'en souviennent), interroger les habitants sur l'ennemi, brûler ses propres champs, ou lever des auxiliaires dans vos bourgs.</p>
+  <p><b>Flottes.</b> Une armée ne traverse la mer qu'à bord d'une flotte : au même port, bouton « Embarquer ». Un transport porte un régiment d'infanterie ; la cavalerie prend deux places, les éléphants trois. Clic droit sur la mer ou un port pour naviguer. Le cabotage longe les côtes (plus lent, eau douce chaque soir) ; la haute mer va plus vite mais les tempêtes y sont pires et l'eau ne dure que quatre jours. Tempêtes rares l'été, fréquentes l'hiver. Un convoi sans escorte (une galère pour quatre transports) est une proie pour les escadres ennemies, surtout en patrouille. Une flotte de guerre peut bloquer un port (revenu réduit, siège deux fois plus rapide) ou piller une côte. Une armée près d'un port ami est ravitaillée par mer et s'use moins. Les galères coûtent un entretien chaque mois ; les chantiers navals construisent par escadres de cinq.</p>
+  <p><b>Reconnaissance.</b> Une armée voit à 15 km, 30 avec de la cavalerie légère, 40 à 45 avec des éclaireurs ; une flotte 25 km, 40 en patrouille. Le relief et les forêts cachent ce qui est derrière, les hauteurs voient plus loin, l'hiver raccourcit la vue. Une ville ne voit que ses abords : levez-y des patrouilles de cavalerie (3 or par mois), au risque qu'elles soient surprises. Quand l'ennemi entre sur ses terres, la ville envoie un messager, qui arrive quelques jours plus tard. « ~ » : aperçu au loin ; « ? » pâle : dernière position connue, avec son ancienneté. Les Romains sont soumis aux mêmes règles.</p>
+  <p><b>Diplomatie.</b> Émissaires et présents améliorent l'attitude des neutres. Au-delà de 50 (et nettement plus que pour Rome), proposez l'alliance. Traverser leurs terres les agace.</p>
+  <p><b>But.</b> Prendre Rome. Vous perdez si Carthage tombe.</p>
+  <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Compris</button></div>`);
+  $('mClose').onclick=closeModal;
+}
+function openMenu(){
+  modal(`<h2>Partie</h2><p>La campagne est sauvegardée automatiquement dans ce navigateur.</p><div class="row"><button id="mNew" class="warn" type="button">Nouvelle campagne</button><button class="go" id="mClose" type="button">Reprendre</button></div>`);
+  $('mNew').onclick=()=>{newGame();afterLoad();closeModal()};$('mClose').onclick=closeModal;
+}
+function openHelpIntro(){
+  modal(`<h2>Campagne de 218 av. J.-C.</h2>
+  <p>Sagonte est tombée et Rome a déclaré la guerre. Vous commandez Carthage : Hannibal attend à Nova Carthago avec la meilleure armée punique, Hasdrubal tient l'Hispanie, Giscon garde l'Afrique.</p>
+  <p>Rome a des légions à Rome, en Sicile et à Placentia, et la maîtrise des alliances italiennes. Entre les deux, Gaulois, Ibères, Numides, Grecs et Macédoniens attendent de voir qui l'emportera.</p>
+  <p>Le temps s'écoule en continu : utilisez la pause (<kbd>Espace</kbd>) pour donner vos ordres. Choisissez une armée au clic gauche, faites-la marcher au clic droit. But : prendre Rome.</p>
+  <div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
+  $('mGo').onclick=()=>{closeModal();const h=S.armies[0];centerOn(h.x,h.y,1.1)};$('mHelp').onclick=openHelp;
+}
+

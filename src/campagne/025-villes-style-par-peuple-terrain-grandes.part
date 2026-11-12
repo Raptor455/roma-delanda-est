@@ -1,0 +1,537 @@
+/* ================= VILLES : style par peuple, terrain, grandes villes ================= */
+// style d'architecture : celui des bâtisseurs, pas du maître actuel
+const PUN_IDS=new Set(['gades','malaca','abdera','cnova','akra','ebusus','lilybaeum','panormus','melita','caralis','tharros','sulci','olbia','hipporeg','baria','onuba']);
+const GRE_IDS=new Set(['neapolis','tarentum','metapontum','thurii','croton','locri','rhegium','paestum','messana','agrigentum','gela','emporion','agatha','nicaea','epidamnus','apollonia','oricum','alalia','massalia']);
+const COL_IDS=new Set(['placentia','cremona','ariminum','ostia','albafucens','aesernia','beneventum','venusia','luceria','spoletium','narnia','hatria','senagallica','sipontum']);
+function cityStyle(n){
+  if(PUN_IDS.has(n.id))return 'pun';if(GRE_IDS.has(n.id))return 'gre';if(COL_IDS.has(n.id))return 'col';
+  const c=n.cul;
+  if(c==='afr')return 'pun';if(c==='ita')return 'ita';if(c==='gre'||c==='mac'||c==='cre')return 'gre';
+  if(c==='num')return 'num';if(c==='gau')return 'gau';return 'ibe'; // ibe, bal, ill, dar, thr : places fortes de pierre
+}
+const CSTY={
+  pun:{ground:'#e4dac4',wall:'rgba(120,104,84,.97)',tower:'sq',roof:['#f1ebdd','#e9e1cc','#efe8d8'],court:'rgba(196,182,150,1)'},
+  ita:{ground:'#d8cbb0',wall:'rgba(96,80,60,.97)',tower:'sq',roof:['#b9653f','#a95a38','#c27150'],court:'rgba(110,62,40,1)'},
+  col:{ground:'#d8cbb0',wall:'rgba(96,80,60,.97)',tower:'sq',roof:['#b9653f','#ad5e3c','#c06e4c'],court:'rgba(110,62,40,1)'},
+  gre:{ground:'#ded3b9',wall:'rgba(112,100,82,.97)',tower:'rd',roof:['#c4774f','#efe7d6','#b8704c','#e2d6bd'],court:'rgba(150,120,90,1)'},
+  ibe:{ground:'#cfba95',wall:'rgba(104,88,66,.97)',tower:'sq',roof:['#a8855a','#9c7a50','#b3916a'],court:'rgba(110,86,58,1)'},
+  gau:{ground:'#b8b484',wall:'rgba(120,96,62,.95)',tower:null,roof:['#b49a5a','#a88d50','#bfa565'],court:'rgba(90,70,40,1)'},
+  num:{ground:'#d4bd8f',wall:'rgba(150,118,76,.95)',tower:'sq',roof:['#c9a06a','#bd935e','#d2ab78'],court:'rgba(140,104,64,1)'}};
+const hk=(s,k)=>hash(s,k);
+// masque terre/mer local (30 m) autour d'une ville : bien plus rapide que de tester le tracé des côtes
+function landMask(cx,cy,R,res){const W=Math.ceil(2*R/res),c=document.createElement('canvas');c.width=c.height=W;const g=c.getContext('2d');
+  g.setTransform(1/res,0,0,1/res,-(cx-R)/res,-(cy-R)/res);g.fillStyle='#fff';g.fill(landPath);const d=g.getImageData(0,0,W,W).data,m=new Uint8Array(W*W);for(let i=0;i<W*W;i++)m[i]=d[i*4+3]>127?1:0;
+  return (x,y)=>{const i=Math.floor((x-cx+R)/res),j=Math.floor((y-cy+R)/res);return i<0||j<0||i>=W||j>=W?isLand(x,y):m[j*W+i]===1}}
+// ---- géométrie d'une ville, calculée une fois : enceinte qui suit la côte, portes sur les routes, fleuve ----
+function cityGeom(n){
+  if(n._g)return n._g;
+  const st=cityStyle(n),seed=n.i*97,r=.55+n.size*.55,cx=n.x,cy=n.y,K=36;let land=landMask(cx,cy,r*3.4+.6,.03);
+  const hilly=n.terr==='montagne'||st==='ibe'||['arretium','volaterrae','perusia','clusium','faesulae','tarquinii','spoletium','narnia'].includes(n.id);
+  const elong=st==='ibe'?1.55:hilly?1.3:st==='gau'?1.1:1.15,axis=hk(seed,5)*Math.PI;
+  // côte : direction de la mer et distance au rivage par rayon (deux passes si la ville a ses propres plans d'eau)
+  const LM=LANDMARK[n.id];
+  const rays=landF=>{const shore=[],wall=[];let sx=0,sy=0,ns=0;
+    for(let k=0;k<K;k++){const a=k/K*6.2832;let rr;
+      if(st==='col'){const b=a-axis,m=Math.max(Math.abs(Math.cos(b)),Math.abs(Math.sin(b)));rr=r*.82/m}
+      else{const e=Math.hypot(Math.cos(a-axis)*elong,Math.sin(a-axis)/elong)||1;let w=0;for(let f=1;f<=3;f++)w+=(hk(seed+f*13,Math.floor(k*f/3)%K)-.5)/f;rr=r*(1+w*(hilly?.42:.24))/e*1.02}
+      let d=.05,cut=false;while(d<rr){if(!landF(cx+Math.cos(a)*d,cy+Math.sin(a)*d)){cut=true;break}d+=.03}
+      if(cut){rr=Math.max(r*.3,d-.04);sx+=Math.cos(a);sy+=Math.sin(a);ns++}
+      shore.push(cut);wall.push([cx+Math.cos(a)*rr,cy+Math.sin(a)*rr,rr])}
+    return {shore,wall,seaAng:ns?Math.atan2(sy,sx):null}};
+  let RY=rays(land);const sea0=RY.seaAng;let wat=[];
+  if(LM&&LM.water){wat=LM.water({cx,cy,r,sea0,land});const inW=(x,y)=>wat.some(([ex,ey,rx,ry,ro])=>{const dx=x-ex,dy=y-ey,c=Math.cos(-ro),sn=Math.sin(-ro),u=dx*c-dy*sn,v=dx*sn+dy*c;return (u/rx)**2+(v/ry)**2<1});
+    const l0=land;land=(x,y)=>l0(x,y)&&!inW(x,y);RY=rays(land)}
+  let {shore,wall,seaAng}=RY;if(sea0!=null&&seaAng==null)seaAng=sea0;
+  if(LM&&LM.wall){const P=LM.wall({cx,cy,r,sea0,land});wall=polyRays(cx,cy,P,K);shore=wall.map(()=>false);wall.poly=P}
+  const path=new Path2D();(wall.poly||wall).forEach(([x,y],k)=>k?path.lineTo(x,y):path.moveTo(x,y));path.closePath();
+  // portes : là où les routes quittent la ville
+  const gates=[];for(const k of ADJ[n.i]||[]){const e=EDGES[k];if(e.type==='mer'||e.type==='detroit')continue;let P=e.cv?(e.a===n.i?e.cv:e.cv.slice().reverse()):[[n.x,n.y],[N[e.a===n.i?e.b:e.a].x,N[e.a===n.i?e.b:e.a].y]];
+    let a=null;for(const [x,y] of P){if(Math.hypot(x-cx,y-cy)>r*.9){a=Math.atan2(y-cy,x-cx);break}}if(a==null){const [x,y]=P[P.length-1];a=Math.atan2(y-cy,x-cx)}
+    if(!gates.some(g=>Math.abs(Math.atan2(Math.sin(g-a),Math.cos(g-a)))<.35))gates.push(a)}
+  if(!gates.length)gates.push(axis);
+  // fleuves qui traversent
+  const riv=[];for(const R of RIV){let near=false;for(const [x,y] of R)if(Math.hypot(x-cx,y-cy)<r*4)near=true;if(near)riv.push(R)}
+  const rot=st==='col'?axis:seaAng!=null?seaAng:hk(seed,1)*1.2;
+  const g={land,wat,sea0,n,st,seed,r,cx,cy,wall,shore,path,seaAng,gates,riv,rot,hilly,axis,elong,zones:[],K};
+  // point haut : citadelle loin de la mer, ou au bout de l'axe pour les places perchées
+  let ca=seaAng!=null?seaAng+Math.PI:axis+(hk(seed,8)<.5?0:Math.PI);if(st==='ita'||st==='col')ca+=.6;
+  const cr=st==='gau'?0:st==='num'?r*.18:r*(n.size>=2?.24:.2),cd=st==='ibe'?r*.62:r*.5;
+  g.cit=st==='gau'?null:{x:cx+Math.cos(ca)*cd*rayK(g,ca),y:cy+Math.sin(ca)*cd*rayK(g,ca),r:cr};
+  if(g.cit){g.citZ={x:g.cit.x,y:g.cit.y,r:g.cit.r*1.05};g.zones.push(g.citZ)}
+  // place publique au centre (forum, agora, marché)
+  if(st!=='gau'){const fr=st==='col'||st==='ita'?.16+n.size*.04:.12+n.size*.04;g.forum={x:cx,y:cy,r:fr};g.zones.push({x:cx,y:cy,r:fr*1.1})}
+  // bassin du port, à l'intérieur des murs côté mer
+  if(n.port&&seaAng!=null){const ka=Math.round(((seaAng/6.2832)%1+1)%1*K)%K,rr=wall[ka][2];g.harbor={x:cx+Math.cos(seaAng)*(rr-.2),y:cy+Math.sin(seaAng)*(rr-.2),a:seaAng,big:n.size>=2&&(st==='pun'||st==='gre')}
+    if(g.harbor.big)g.zones.push({x:g.harbor.x,y:g.harbor.y,r:.3})}
+  // théâtre grec adossé à la pente de l'acropole
+  if(st==='gre'&&n.size>=2&&g.cit){const a=Math.atan2(cy-g.cit.y,cx-g.cit.x)+.9;g.theater={x:g.cit.x+Math.cos(a)*g.cit.r*1.7,y:g.cit.y+Math.sin(a)*g.cit.r*1.7,a:a+Math.PI,r:.11+n.size*.02};g.zones.push({x:g.theater.x,y:g.theater.y,r:g.theater.r*1.1})}
+  // sanctuaire punique (tophet), près des murs
+  if(st==='pun'&&n.size>=1){const a=(seaAng!=null?seaAng:0)+1.9;g.tophet={x:cx+Math.cos(a)*r*.62,y:cy+Math.sin(a)*r*.62,r:.09+n.size*.03};g.zones.push(g.tophet)}
+  n._g=g;LANDMARK[n.id]&&LANDMARK[n.id].pre&&LANDMARK[n.id].pre(g);
+  return g}
+// enceinte libre (polygone) : rayon dans chaque direction depuis le centre
+function polyRays(cx,cy,P,K){const out=[];for(let k=0;k<K;k++){const a=k/K*6.2832,dx=Math.cos(a),dy=Math.sin(a);let best=null;
+  for(let i=0;i<P.length;i++){const [x1,y1]=P[i],[x2,y2]=P[(i+1)%P.length],ex=x2-x1,ey=y2-y1,den=dx*ey-dy*ex;if(Math.abs(den)<1e-9)continue;const t=((x1-cx)*ey-(y1-cy)*ex)/den,u=((x1-cx)*dy-(y1-cy)*dx)/den;if(t>0&&u>=0&&u<=1&&(best==null||t<best))best=t}
+  const rr=best||.3;out.push([cx+dx*rr,cy+dy*rr,rr])}return out}
+// déplacer la citadelle (repères des grandes villes)
+function moveCit(g,x,y,r){g.zones=g.zones.filter(z=>z!==g.citZ);g.cit={x,y,r};g.citZ=r>.01?{x,y,r:r*1.1}:null;if(g.citZ)g.zones.push(g.citZ)}
+// part du rayon de l'enceinte dans une direction (pour rester à l'intérieur)
+function rayK(g,a){const k=Math.round(((a/6.2832)%1+1)%1*g.K)%g.K;return g.wall[k][2]/g.r}
+const inZone=(g,x,y)=>g.zones.some(z=>(x-z.x)**2+(y-z.y)**2<z.r*z.r);
+function nearRiv(g,x,y,w){for(const R of g.riv)for(let k=0;k<R.length-1;k++){const [ax,ay]=R[k],[bx,by]=R[k+1],vx=bx-ax,vy=by-ay,l=vx*vx+vy*vy||1;let t=((x-ax)*vx+(y-ay)*vy)/l;t=t<0?0:t>1?1:t;if(Math.hypot(ax+vx*t-x,ay+vy*t-y)<w)return true}return false}
+const LW=(km,px,s)=>Math.max(km,px/s);
+// ---- petits bâtiments ----
+function blockRect(x,y,w,h,rot,col,court,s,shade){ctx.save();ctx.translate(x,y);ctx.rotate(rot);
+  ctx.fillStyle='rgba(60,42,26,.55)';ctx.fillRect(-w/2+w*.12,-h/2+h*.16,w,h);ctx.fillStyle=col;ctx.fillRect(-w/2,-h/2,w,h);
+  if(shade!==false){ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(-w/2,0,w,h/2)}
+  if(court&&w*s>9&&h*s>9){ctx.fillStyle=court;ctx.fillRect(-w*.17,-h*.17,w*.34,h*.34)}ctx.restore()}
+function roundHut(x,y,rr,col,s){ctx.fillStyle='rgba(60,42,26,.5)';ctx.beginPath();ctx.arc(x+rr*.25,y+rr*.3,rr,0,7);ctx.fill();ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,rr,0,7);ctx.fill();
+  if(rr*s>4){ctx.strokeStyle='rgba(110,86,46,.8)';ctx.lineWidth=LW(rr*.12,.6,s);ctx.beginPath();ctx.arc(x,y,rr*.55,0,7);ctx.stroke();ctx.fillStyle='rgba(80,60,30,.7)';ctx.beginPath();ctx.arc(x,y,rr*.15,0,7);ctx.fill()}}
+// temple vu de haut : podium, cella, colonnade
+function temple(x,y,w,h,rot,s,cols){ctx.save();ctx.translate(x,y);ctx.rotate(rot);
+  ctx.fillStyle='rgba(70,56,40,.5)';ctx.fillRect(-w/2+w*.1,-h/2+h*.12,w*1.02,h*1.02);ctx.fillStyle='#f5efe2';ctx.fillRect(-w/2,-h/2,w,h);
+  ctx.fillStyle='#e2d7c0';ctx.fillRect(-w*.32,-h*.22,w*.64,h*.6);ctx.strokeStyle='rgba(120,100,70,.9)';ctx.lineWidth=LW(w*.03,.6,s);ctx.strokeRect(-w/2,-h/2,w,h);
+  if(cols&&w*s>14){ctx.fillStyle='rgba(150,135,110,.95)';const cr=Math.max(w*.035,.6/s);for(let i=0;i<cols;i++){const t=-w*.42+i*w*.84/(cols-1);for(const yy of [-h*.42,h*.42]){ctx.beginPath();ctx.arc(t,yy,cr,0,7);ctx.fill()}}}
+  ctx.restore()}
+function hillShade(x,y,rx,ry,rot,s,col){ctx.save();ctx.translate(x,y);ctx.rotate(rot||0);const gr=ctx.createRadialGradient(-rx*.3,-ry*.35,rx*.1,0,0,Math.max(rx,ry)*1.15);
+  gr.addColorStop(0,col||'rgba(236,222,190,.55)');gr.addColorStop(.6,'rgba(150,126,90,.25)');gr.addColorStop(1,'rgba(90,70,45,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.ellipse(0,0,rx*1.15,ry*1.15,0,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(110,88,60,.35)';ctx.lineWidth=LW(.01,.6,s);for(const f of [.95,.7]){ctx.beginPath();ctx.ellipse(rx*.05*(1-f),ry*.05*(1-f),rx*f,ry*f,0,0,7);ctx.stroke()}ctx.restore()}
+function water(path,s){ctx.fillStyle='#4f8fa3';ctx.fill(path);ctx.strokeStyle='rgba(60,48,34,.8)';ctx.lineWidth=LW(.02,1,s);ctx.stroke(path)}
+function ship(x,y,a,L,s){ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.fillStyle='rgba(70,52,36,.92)';ctx.beginPath();ctx.ellipse(0,0,L/2,L*.14,0,0,7);ctx.fill();ctx.restore()}
+// ---- quartiers, selon le style ----
+function drawQuarters(g,s){
+  const S_=CSTY[g.st],{cx,cy,r,rot,seed}=g,cs=Math.cos(rot),sn=Math.sin(rot),R=r*1.25;
+  const pick=(i,j)=>S_.roof[Math.floor(hk((i*53|0)+seed,(j*29|0))*S_.roof.length)];
+  // seulement ce qui tombe dans la tuile (ou l'écran) en cours de dessin
+  const vx0=-view.ox/view.s-.15,vy0=-view.oy/view.s-.15,vx1=vx0+ctx.canvas.width/dpr/view.s+.3,vy1=vy0+ctx.canvas.height/dpr/view.s+.3;
+  const ok=(x,y,m)=>x>vx0&&x<vx1&&y>vy0&&y<vy1&&!inZone(g,x,y)&&!(g.riv.length&&nearRiv(g,x,y,.17+(m||0)));
+  if((g.st==='ita'||g.st==='col')&&!g.org){
+    // damier : îlots carrés autour de cours (atriums), deux grands axes
+    const bs=g.st==='col'?.085:.095,st_=g.st==='col'?.03:.028,step=bs+st_;
+    for(let i=-R;i<R;i+=step)for(let j=-R;j<R;j+=step){const x=cx+i*cs-j*sn,y=cy+i*sn+j*cs;if(!ok(x,y))continue;if(hk((i*50|0)+seed,(j*50|0))<.06)continue;
+      if(Math.abs(i)<step*.6||Math.abs(j)<step*.6)continue; // cardo et decumanus
+      blockRect(x,y,bs,bs,rot,pick(i*7,j*7),S_.court,s)}
+  }else if(g.st==='gre'&&!g.org){
+    // plan en lanières : longs îlots étroits, rues parallèles
+    const bw=.07,bl=.22,sw=.025,sl=.035;
+    for(let i=-R;i<R;i+=bl+sl)for(let j=-R;j<R;j+=bw+sw){const x=cx+i*cs-j*sn,y=cy+i*sn+j*cs;if(!ok(x,y))continue;
+      for(let q=0;q<3;q++){const ox=(q-1)*bl/3;blockRect(x+ox*cs,y+ox*sn,bl/3-.006,bw,rot,pick(i*9+q,j*9),S_.court,s,false)}}
+  }else if(g.st==='pun'||g.org){
+    // maisons serrées autour de leur cour, ruelles un peu tordues (Rome et Athènes ont grandi ainsi aussi) serrées autour de leur cour, ruelles un peu tordues
+    const step=.075;
+    for(let i=-R;i<R;i+=step)for(let j=-R;j<R;j+=step){const jx=(hk((i*70|0)+seed,(j*70|0)+3)-.5)*.022,jy=(hk((i*70|0)+seed,(j*70|0)+7)-.5)*.022;
+      const x=cx+(i+jx)*cs-(j+jy)*sn,y=cy+(i+jx)*sn+(j+jy)*cs;if(!ok(x,y))continue;if(hk((i*41|0)+seed,(j*37|0))<.1)continue;
+      const w=.05+hk((i*9|0),(j*9|0)+seed)*.02;blockRect(x,y,w,w*(.8+hk((j*13|0),(i*11|0))*.4),rot+(hk((i*3|0),(j*5|0)+seed)-.5)*.25,pick(i*11,j*11),S_.court,s)}
+  }else if(g.st==='ibe'){
+    // rangées de maisons rectangulaires en terrasses, le long de l'axe de la colline
+    const a=g.axis,ca=Math.cos(a),sa=Math.sin(a);
+    for(let j=-R;j<R;j+=.075)for(let i=-R*1.4;i<R*1.4;i+=.055){const x=cx+i*ca-j*sa,y=cy+i*sa+j*ca;if(!ok(x,y))continue;if(hk((i*90|0)+seed,(j*90|0))<.14)continue;
+      blockRect(x,y,.045,.05,a,pick(i*13,j*13),null,s)}
+    // murs de terrasse
+    ctx.strokeStyle='rgba(110,90,62,.55)';ctx.lineWidth=LW(.008,.6,s);for(let j=-R;j<R;j+=.15){ctx.beginPath();ctx.moveTo(cx-R*1.4*ca-(j+.04)*sa,cy-R*1.4*sa+(j+.04)*ca);ctx.lineTo(cx+R*1.4*ca-(j+.04)*sa,cy+R*1.4*sa+(j+.04)*ca);ctx.stroke()}
+  }else if(g.st==='gau'){
+    // huttes rondes par groupes, enclos, greniers ; grand espace ouvert au centre
+    for(let k=0,K2=Math.round(420*r*r);k<K2;k++){const a=hk(seed,k+200)*6.283,d=Math.sqrt(hk(k+300,seed))*r*.95;if(d<r*.22)continue;const x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d;if(!ok(x,y))continue;
+      if(k%9===0){ctx.strokeStyle='rgba(100,78,44,.75)';ctx.lineWidth=LW(.006,.6,s);ctx.strokeRect(x-.05,y-.04,.1,.08);continue}
+      roundHut(x,y,.016+hk(k,seed+5)*.012,pick(k,k*3),s);if(k%5===0)blockRect(x+.035,y+.01,.014,.014,0,'#9c824a',null,s)}
+    // bosquet sacré au centre
+    for(let k=0;k<14;k++){const a=k*2.4,d=Math.sqrt(k/14)*r*.14;ctx.fillStyle='rgba(70,96,52,.85)';ctx.beginPath();ctx.arc(cx+Math.cos(a)*d,cy+Math.sin(a)*d,.022,0,7);ctx.fill()}
+  }else if(g.st==='num'){
+    // maisons cubiques ocre en grappes, enclos à bétail
+    for(let k=0,K2=Math.round(700*r*r);k<K2;k++){const a=hk(seed,k+500)*6.283,d=Math.sqrt(hk(k+600,seed))*r;const x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d;if(!ok(x,y))continue;
+      if(k%23===0){ctx.strokeStyle='rgba(120,96,60,.7)';ctx.lineWidth=LW(.01,.6,s);ctx.beginPath();ctx.arc(x,y,.05,0,7);ctx.stroke();continue}
+      const w=.035+hk(k,seed+9)*.03;blockRect(x,y,w,w*(.7+hk(seed,k+9)*.6),hk(k,7)*.4,pick(k,k*5),S_.court,s)}
+  }
+}
+// ---- monuments communs ----
+function drawForum(g,s){const f=g.forum;if(!f)return;const {rot}=g;ctx.save();ctx.translate(f.x,f.y);ctx.rotate(rot);
+  const w=f.r*1.8,h=f.r*1.15;ctx.fillStyle=g.st==='num'?'#dcc7a0':'#ebe2cc';ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeStyle='rgba(140,120,90,.7)';ctx.lineWidth=LW(.006,.5,s);ctx.strokeRect(-w/2,-h/2,w,h);
+  if(g.st==='ita'||g.st==='col'){temple(0,-h/2+h*.22,w*.22,h*.36,0,s,4);blockRect(0,h/2-h*.12,w*.7,h*.16,0,'#dccdb0',null,s,false)} // temple sur podium, basilique
+  else if(g.st==='gre'){ctx.fillStyle='#d9ccb0';ctx.fillRect(-w/2,-h/2,w*.16,h);ctx.fillRect(-w/2,-h/2,w,h*.16); // portiques en L
+    if(w*s>30){ctx.fillStyle='rgba(150,135,110,.9)';for(let i=0;i<9;i++){ctx.beginPath();ctx.arc(-w/2+w*.2+i*w*.09,-h/2+h*.2,LW(.004,.6,s),0,7);ctx.fill()}}}
+  else if(g.st==='pun'){for(let i=0;i<14;i++){ctx.fillStyle=['#c9a170','#b9655a','#d8c39a'][i%3];ctx.fillRect(-w*.42+(i%7)*w*.12,-h*.3+Math.floor(i/7)*h*.4,w*.08,h*.18)}} // étals du marché
+  else{for(let i=0;i<8;i++){ctx.fillStyle=['#c9a170','#b48f5a'][i%2];ctx.fillRect(-w*.38+(i%4)*w*.2,-h*.25+Math.floor(i/4)*h*.4,w*.1,h*.16)}}
+  ctx.restore()}
+function drawCitadel(g,s){const c=g.cit;if(!c)return;const {st}=g;
+  hillShade(c.x,c.y,c.r*1.15,c.r*.95,g.axis,s);
+  ctx.beginPath();for(let k=0;k<12;k++){const a=k/12*6.283,rr=c.r*(.88+hk(g.seed+k,77)*.2);k?ctx.lineTo(c.x+Math.cos(a)*rr,c.y+Math.sin(a)*rr):ctx.moveTo(c.x+Math.cos(a)*rr,c.y+Math.sin(a)*rr)}ctx.closePath();
+  ctx.fillStyle=st==='num'?'#d8c49a':'#e6dcc4';ctx.fill();ctx.strokeStyle=CSTY[st].wall;ctx.lineWidth=LW(.022,1.2,s);ctx.stroke();
+  const rot=g.rot;
+  if(st==='gre'){temple(c.x,c.y,c.r*.62,c.r*.3,rot,s,8);temple(c.x+c.r*.4*Math.cos(rot+1.6),c.y+c.r*.4*Math.sin(rot+1.6),c.r*.3,c.r*.18,rot,s,5)}
+  else if(st==='ita'||st==='col'){temple(c.x,c.y,c.r*.5,c.r*.6,rot,s,6)}
+  else if(st==='pun'){temple(c.x,c.y,c.r*.55,c.r*.4,rot,s,0);ctx.fillStyle='#ece3cf';ctx.fillRect(c.x-c.r*.5,c.y+c.r*.25,c.r*.32,c.r*.3);ctx.fillRect(c.x+c.r*.2,c.y+c.r*.28,c.r*.3,c.r*.28)}
+  else if(st==='ibe'){for(let k=0;k<5;k++)blockRect(c.x+(k-2)*c.r*.3*Math.cos(g.axis),c.y+(k-2)*c.r*.3*Math.sin(g.axis),c.r*.22,c.r*.3,g.axis,'#b8996e',null,s);temple(c.x,c.y,c.r*.3,c.r*.22,g.axis,s,0)}
+  else if(st==='num'){blockRect(c.x,c.y,c.r*.9,c.r*.7,rot,'#e0caa0','rgba(176,140,96,1)',s)}}
+function drawTheater(g,s){const t=g.theater;if(!t)return;ctx.save();ctx.translate(t.x,t.y);ctx.rotate(t.a);
+  ctx.fillStyle='#e7dcc4';ctx.beginPath();ctx.arc(0,0,t.r,Math.PI,0);ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(130,110,80,.8)';ctx.lineWidth=LW(.004,.5,s);
+  for(let k=1;k<6;k++){ctx.beginPath();ctx.arc(0,0,t.r*k/6+t.r*.12,Math.PI,0);ctx.stroke()}ctx.fillStyle='#d4c6a8';ctx.beginPath();ctx.arc(0,0,t.r*.2,Math.PI,0);ctx.fill();ctx.fillRect(-t.r*.7,0,t.r*1.4,t.r*.14);ctx.restore()}
+function drawTophet(g,s){const t=g.tophet;if(!t)return;ctx.fillStyle='rgba(206,196,170,.95)';ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,7);ctx.fill();ctx.strokeStyle='rgba(120,104,84,.8)';ctx.lineWidth=LW(.006,.5,s);ctx.stroke();
+  if(t.r*s>12){ctx.fillStyle='rgba(110,96,76,.85)';for(let k=0;k<60;k++){const a=hk(g.seed,k+900)*6.283,d=Math.sqrt(hk(k,g.seed+900))*t.r*.85;ctx.fillRect(t.x+Math.cos(a)*d,t.y+Math.sin(a)*d,LW(.005,.8,s),LW(.008,1.2,s))}}}
+function drawHarbor(g,s){const h=g.harbor;if(!h)return;const a=h.a,ca=Math.cos(a),sa=Math.sin(a);
+  if(h.big){const p=new Path2D(),L=.42,W=.2;const P=[[-L/2,-W/2],[L/2,-W/2],[L/2,W/2],[-L/2,W/2]].map(([u,v])=>[h.x+u*ca-v*sa-ca*.05,h.y+u*sa+v*ca-sa*.05]);P.forEach(([x,y],k)=>k?p.lineTo(x,y):p.moveTo(x,y));p.closePath();water(p,s);
+    for(let k=0;k<5;k++)ship(h.x+(k-2)*.07*-sa,h.y+(k-2)*.07*ca,a,.06,s)}
+  // môles
+  ctx.strokeStyle='rgba(120,104,84,.97)';ctx.lineWidth=LW(.05,2,s);ctx.lineCap='round';const bx=h.x+ca*.2,by=h.y+sa*.2;ctx.beginPath();
+  ctx.moveTo(bx-sa*.25,by+ca*.25);ctx.lineTo(bx-sa*.25+ca*.4+sa*.05,by+ca*.25+sa*.4-ca*.05);ctx.moveTo(bx+sa*.25,by-ca*.25);ctx.lineTo(bx+sa*.25+ca*.35-sa*.08,by-ca*.25+sa*.35+ca*.08);ctx.stroke();
+  for(let k=0;k<3;k++)ship(bx+ca*(.15+k*.07)+(k-1)*-sa*.1,by+sa*(.15+k*.07)+(k-1)*ca*.1,a+.2,.07,s)}
+function drawCityRivers(g,s){if(!g.riv.length)return;const rw=Math.max(.25,1.4/s);
+  for(const r of g.riv){ctx.beginPath();ctx.moveTo(r[0][0],r[0][1]);for(let k=1;k<r.length-1;k++){const mx=(r[k][0]+r[k+1][0])/2,my=(r[k][1]+r[k+1][1])/2;ctx.quadraticCurveTo(r[k][0],r[k][1],mx,my)}ctx.lineTo(r[r.length-1][0],r[r.length-1][1]);
+    ctx.strokeStyle='rgba(110,96,76,.9)';ctx.lineWidth=rw+.05;ctx.stroke();ctx.strokeStyle='#4f8fa3';ctx.lineWidth=rw;ctx.stroke()}}
+// enceinte : pierre, terre ou brique crue ; tours ; portes sur les routes
+function drawWalls(g,s){const {st,wall,cx,cy}=g,S_=CSTY[st];
+  if(st==='gau'){ctx.strokeStyle='rgba(84,100,60,.6)';ctx.lineWidth=LW(.09,3,s);ctx.stroke(g.path);ctx.strokeStyle='rgba(150,124,80,.97)';ctx.lineWidth=LW(.05,2,s);ctx.stroke(g.path);ctx.strokeStyle='rgba(200,180,130,.8)';ctx.lineWidth=LW(.012,.6,s);ctx.stroke(g.path)}
+  else{ctx.strokeStyle=S_.wall;ctx.lineWidth=LW(st==='ibe'?.04:st==='num'?.025:.032,1.6,s);ctx.lineJoin='round';ctx.stroke(g.path);
+    const tw=LW(st==='ibe'?.06:.05,2.4,s),step=st==='col'?3:g.n.size>=2?2:3;ctx.fillStyle=S_.wall;
+    const WP=wall.poly||wall;for(let k=0;k<WP.length;k+=wall.poly?1:step){const [x,y]=WP[k];if(S_.tower==='rd'){ctx.beginPath();ctx.arc(x,y,tw*.6,0,7);ctx.fill()}else ctx.fillRect(x-tw/2,y-tw/2,tw,tw)}}
+  // portes
+  for(const a of g.gates){const rr=g.r*rayK(g,a),x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr,nx=-Math.sin(a),ny=Math.cos(a),gw=LW(.045,2,s);
+    ctx.strokeStyle=S_.ground;ctx.lineWidth=LW(.05,2.2,s);ctx.beginPath();ctx.moveTo(x-Math.cos(a)*.03,y-Math.sin(a)*.03);ctx.lineTo(x+Math.cos(a)*.03,y+Math.sin(a)*.03);ctx.stroke();
+    if(st!=='gau'){ctx.fillStyle=S_.wall;const tq=LW(.055,2.6,s);for(const sg of [-1,1])ctx.fillRect(x+nx*gw*sg-tq/2,y+ny*gw*sg-tq/2,tq,tq)}}}
+// rues principales : de la place aux portes
+function drawMainStreets(g,s){const {cx,cy,st}=g;ctx.strokeStyle=st==='gau'||st==='num'?'rgba(170,146,100,.9)':'rgba(206,192,160,.98)';ctx.lineWidth=LW(st==='col'||st==='ita'?.035:.028,1.4,s);ctx.lineCap='round';
+  for(const a of g.gates){const rr=g.r*rayK(g,a);ctx.beginPath();ctx.moveTo(cx,cy);if(st==='pun'||st==='num'||st==='gau'||st==='ibe'){const m=rr*.5,b=(hk(g.seed,Math.round(a*10))-.5)*.5;ctx.quadraticCurveTo(cx+Math.cos(a+b)*m,cy+Math.sin(a+b)*m,cx+Math.cos(a)*rr,cy+Math.sin(a)*rr)}else ctx.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);ctx.stroke()}
+  if(st==='col'||st==='ita'){const c=Math.cos(g.rot),sn=Math.sin(g.rot),R=g.r*1.3;ctx.beginPath();ctx.moveTo(cx-c*R,cy-sn*R);ctx.lineTo(cx+c*R,cy+sn*R);ctx.moveTo(cx+sn*R,cy-c*R);ctx.lineTo(cx-sn*R,cy+c*R);ctx.stroke()}}
+// abords : champs, tentes numides, enclos gaulois, nécropoles
+function drawOutskirts(g,s){const {cx,cy,r,seed,st}=g;
+  for(let k=0;k<10+g.n.size*6;k++){const a=hk(seed,k)*6.28,d=r*1.3+hk(k,seed)*r*1.6,fx=cx+Math.cos(a)*d,fy=cy+Math.sin(a)*d;if(!g.land(fx,fy))continue;ctx.fillStyle=hk(k,seed+3)<.5?'rgba(196,176,110,.55)':'rgba(150,160,90,.45)';ctx.save();ctx.translate(fx,fy);ctx.rotate(hk(seed+k,7)*3);ctx.fillRect(-.35,-.2,.7,.4);ctx.restore()}
+  if(st==='num'){for(let k=0;k<40+g.n.size*30;k++){const a=hk(seed,k+40)*6.28,d=r*(1.12+hk(k+40,seed)*.7),x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d;if(!g.land(x,y))continue;
+    ctx.save();ctx.translate(x,y);ctx.rotate(hk(k,seed)*3);ctx.fillStyle='rgba(92,66,40,.9)';ctx.beginPath();ctx.ellipse(0,0,.03,.013,0,0,7);ctx.fill();ctx.restore()}} // huttes en carène (mapalia)
+  if(st==='gau'){for(let k=0;k<6+g.n.size*3;k++){const a=hk(seed,k+70)*6.28,d=r*(1.25+hk(k+70,seed)*.6),x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d;if(!g.land(x,y))continue;
+    ctx.strokeStyle='rgba(100,80,46,.8)';ctx.lineWidth=LW(.008,.6,s);ctx.strokeRect(x-.09,y-.07,.18,.14);roundHut(x,y,.02,'#b49a5a',s)}}
+  if(st==='pun'||st==='gre'||st==='ita'||st==='col'){// tombeaux le long des routes, hors des murs
+    for(const a of g.gates){const rr=g.r*rayK(g,a);for(let k=0;k<6;k++){const d=rr+.15+k*.09,sd=(k%2?1:-1)*.05,x=cx+Math.cos(a)*d-Math.sin(a)*sd,y=cy+Math.sin(a)*d+Math.cos(a)*sd;if(!g.land(x,y))continue;blockRect(x,y,.025,.025,a,'#e5dccb',null,s,false)}}}}
+/* ---- plan complet ---- */
+function cityPlan(n,s){
+  const g=cityGeom(n),own=ownerN(n.i),c=own?FAC[own].c:[150,140,120],L=LANDMARK[n.id];
+  ctx.save();
+  drawOutskirts(g,s);
+  if(L&&L.under)L.under(g,s);
+  ctx.fillStyle=CSTY[g.st].ground;ctx.fill(g.path);
+  ctx.save();ctx.clip(g.path);
+  if(L&&L.ground)L.ground(g,s);
+  drawCityRivers(g,s);
+  drawQuarters(g,s);drawMainStreets(g,s);
+  drawForum(g,s);drawCitadel(g,s);drawTheater(g,s);drawTophet(g,s);
+  if(g.harbor&&g.harbor.big)drawHarbor(g,s);
+  if(L&&L.inside)L.inside(g,s);
+  ctx.restore();
+  drawWalls(g,s);
+  if(g.harbor&&!g.harbor.big)drawHarbor(g,s);
+  if(L&&L.over)L.over(g,s);
+  // bannière du maître
+  const top=g.cit||{x:g.cx,y:g.cy-g.r*.8};ctx.fillStyle=rgb(c,.95);ctx.fillRect(top.x-.02,top.y-.5,.04,.5);ctx.beginPath();ctx.moveTo(top.x+.02,top.y-.5);ctx.lineTo(top.x+.32,top.y-.42);ctx.lineTo(top.x+.02,top.y-.32);ctx.fill();
+  ctx.restore()}
+/* ---- icône de ville en vue moyenne : même style, en plus petit ---- */
+function townIcon(n,R,z){const g=cityGeom(n),own=ownerN(n.i),c=own?FAC[own].c:[150,140,120],S_=CSTY[g.st],k=R/g.r,seed=g.seed;
+  if(n.size>=1){ctx.beginPath();(g.wall.poly||g.wall).forEach(([x,y],q)=>{const X=n.x+(x-n.x)*k,Y=n.y+(y-n.y)*k;q?ctx.lineTo(X,Y):ctx.moveTo(X,Y)});ctx.closePath();
+    ctx.fillStyle=S_.ground;ctx.fill();ctx.strokeStyle=g.st==='gau'?'rgba(140,114,70,1)':rgb(c.map(v=>v*.45),1);ctx.lineWidth=(g.st==='gau'?2.4:1.6)*z;ctx.stroke()}
+  const m=[4,8,13,20][n.size];for(let q=0;q<m;q++){const a=hk(seed+q,3)*6.28,d=Math.sqrt(hk(q,seed+1))*R*.7,x=n.x+Math.cos(a)*d,y=n.y+Math.sin(a)*d,sz=R*(.14+hk(seed,q+9)*.08),col=S_.roof[q%S_.roof.length];
+    if(g.st==='gau')roundHut(x,y,sz*.5,col,1/z);else blockRect(x,y,sz,sz*(g.st==='gre'?.6:1),g.rot,col,null,1/z)}
+  if(n.size>=2&&g.cit){const cx=n.x+(g.cit.x-n.x)*k,cy=n.y+(g.cit.y-n.y)*k;temple(cx,cy,R*.3,R*.2,g.rot,1/z,0)}
+  ctx.fillStyle=rgb(c,1);ctx.fillRect(n.x-.6*z,n.y-R-8*z,1.2*z,8*z);ctx.beginPath();ctx.moveTo(n.x+.6*z,n.y-R-8*z);ctx.lineTo(n.x+6*z,n.y-R-6.5*z);ctx.lineTo(n.x+.6*z,n.y-R-5*z);ctx.fill()}
+
+/* ---- grandes villes : repères propres à chacune (repère local : u vers la mer, v à sa droite, en km) ---- */
+const LANDMARK={};
+function frameOf(g,A,ox,oy){const c=Math.cos(A),s=Math.sin(A);ox=ox==null?g.cx:ox;oy=oy==null?g.cy:oy;return {A,P:(u,v)=>[ox+u*c-v*s,oy+u*s+v*c]}}
+const seaA=g=>g.sea0!=null?g.sea0:g.seaAng!=null?g.seaAng:0;
+function polyPath(pts){const p=new Path2D();pts.forEach(([x,y],k)=>k?p.lineTo(x,y):p.moveTo(x,y));p.closePath();return p}
+function ellPath(x,y,rx,ry,rot){const p=new Path2D();p.ellipse(x,y,rx,ry,rot||0,0,6.2832);return p}
+function landAt(g,x,y){return g.land(x,y)}
+// collines : ombrage léger posé sur les maisons
+function hillOver(x,y,rx,ry,rot,s){ctx.save();ctx.translate(x,y);ctx.rotate(rot||0);const gr=ctx.createRadialGradient(-rx*.35,-ry*.4,rx*.05,0,0,Math.max(rx,ry));
+  gr.addColorStop(0,'rgba(255,248,226,.45)');gr.addColorStop(.55,'rgba(255,240,210,.08)');gr.addColorStop(1,'rgba(60,40,20,.4)');ctx.fillStyle=gr;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(90,66,40,.35)';ctx.lineWidth=LW(.008,.7,s);ctx.beginPath();ctx.ellipse(0,0,rx*.98,ry*.98,0,0,7);ctx.stroke();ctx.restore()}
+function shedsCircle(x,y,R,s){// port militaire circulaire : bassin, île de l'amirauté, cales tout autour
+  ctx.fillStyle='#e9e1cd';ctx.beginPath();ctx.arc(x,y,R*1.25,0,7);ctx.fill();water(ellPath(x,y,R,R),s);
+  ctx.strokeStyle='rgba(150,135,110,.95)';ctx.lineWidth=LW(.004,.5,s);for(let k=0;k<60;k++){const a=k/60*6.283;ctx.beginPath();ctx.moveTo(x+Math.cos(a)*R*1.02,y+Math.sin(a)*R*1.02);ctx.lineTo(x+Math.cos(a)*R*1.22,y+Math.sin(a)*R*1.22);ctx.stroke()}
+  ctx.fillStyle='#ece4d2';ctx.beginPath();ctx.arc(x,y,R*.36,0,7);ctx.fill();ctx.strokeStyle='rgba(120,104,84,.9)';ctx.lineWidth=LW(.006,.6,s);ctx.stroke();
+  for(let k=0;k<30;k++){const a=k/30*6.283;ctx.beginPath();ctx.moveTo(x+Math.cos(a)*R*.38,y+Math.sin(a)*R*.38);ctx.lineTo(x+Math.cos(a)*R*.5,y+Math.sin(a)*R*.5);ctx.stroke()}
+  blockRect(x,y,R*.25,R*.25,0,'#f5efe2',null,s)}
+
+/* CARTHAGE : Byrsa, port marchand et port militaire circulaire, tophet, jardins de Mégara, triple muraille de l'isthme */
+LANDMARK.carthago={
+  pre(g){const A=seaA(g),rr=g.r*rayK(g,A),F=frameOf(g,A,g.cx+Math.cos(A)*rr,g.cy+Math.sin(A)*rr);g.F=F;
+    const at=(u,v)=>{const [x,y]=F.P(u,v);return {x,y}};
+    const by=at(-1.1,.35);g.cit={x:by.x,y:by.y,r:.34};g.port1=at(-.32,.95);g.port2=at(-.36,.45);g.harbor=null;
+    const tp=at(-.85,1.05);g.tophet={x:tp.x,y:tp.y,r:.12};const fo=at(-.62,.62);g.forum.x=fo.x;g.forum.y=fo.y;const mg=at(-.95,-1.25);g.megara={x:mg.x,y:mg.y,r:.75};
+    g.zones=[{x:by.x,y:by.y,r:.38},{...g.port1,r:.28},{...g.port2,r:.24},g.tophet,{...g.megara},{x:fo.x,y:fo.y,r:g.forum.r*1.1}]},
+  inside(g,s){const F=g.F,A=F.A;
+    const M=g.megara;for(let k=0;k<110;k++){const a=hk(g.seed,k+1200)*6.283,d=Math.sqrt(hk(k,g.seed+1200))*M.r,x=M.x+Math.cos(a)*d,y=M.y+Math.sin(a)*d;
+      ctx.fillStyle=k%3?'rgba(120,150,80,.85)':'rgba(170,170,96,.85)';ctx.save();ctx.translate(x,y);ctx.rotate(A);ctx.fillRect(-.07,-.05,.14,.1);ctx.restore();if(k%4===0)blockRect(x+.02,y,.04,.04,A,'#f1ebdd','rgba(196,182,150,1)',s)}
+    for(let k=0;k<70;k++){const a=hk(g.seed,k+1300)*6.283,d=Math.sqrt(hk(k,g.seed+1300))*M.r;ctx.fillStyle='rgba(70,100,52,.9)';ctx.beginPath();ctx.arc(M.x+Math.cos(a)*d,M.y+Math.sin(a)*d,.02,0,7);ctx.fill()}
+    // Byrsa et son grand escalier vers l'agora
+    hillOver(g.cit.x,g.cit.y,.44,.38,A,s);const fo=g.forum;ctx.strokeStyle='rgba(236,228,212,1)';ctx.lineWidth=LW(.035,1.5,s);ctx.beginPath();ctx.moveTo(g.cit.x,g.cit.y);ctx.lineTo(fo.x,fo.y);ctx.stroke();
+    // canal depuis la mer, port marchand rectangulaire, puis port militaire circulaire
+    const R=(u0,u1,v0,v1)=>polyPath([F.P(u0,v0),F.P(u1,v0),F.P(u1,v1),F.P(u0,v1)]);
+    ctx.fillStyle='#e9e1cd';ctx.fill(R(-.58,-.04,.76,1.14));water(R(-.52,-.1,.82,1.08),s);water(R(-.14,.45,.92,.98),s);water(R(-.38,-.32,.6,.84),s);
+    shedsCircle(g.port2.x,g.port2.y,.15,s);for(let k=0;k<4;k++){const [x,y]=F.P(-.45+k*.1,.95);ship(x,y,A+1.57,.07,s)}},
+  over(g,s){const F=g.F,W=g.wall;ctx.lineJoin='round';
+    for(const off of [.09,.18]){ctx.strokeStyle='rgba(120,104,84,.9)';ctx.lineWidth=LW(.03,1.3,s);ctx.beginPath();let on=false;
+      for(let k=0;k<=W.length;k++){const w=W[k%W.length],a=Math.atan2(w[1]-g.cy,w[0]-g.cx),d=Math.abs(Math.atan2(Math.sin(a-F.A-Math.PI),Math.cos(a-F.A-Math.PI)));
+        if(d<1.1){const x=g.cx+Math.cos(a)*(w[2]+off),y=g.cy+Math.sin(a)*(w[2]+off);on?ctx.lineTo(x,y):ctx.moveTo(x,y);on=true}else on=false}ctx.stroke()}}};
+
+/* ROME : le Tibre et son île, les sept collines, Capitole, Forum, Circus Maximus, mur servien */
+function riverFrame(g){let best=null;for(const R of RIV)for(let k=0;k<R.length-1;k++){const [ax,ay]=R[k],[bx,by]=R[k+1],vx=bx-ax,vy=by-ay,l=vx*vx+vy*vy||1;let t=((g.cx-ax)*vx+(g.cy-ay)*vy)/l;t=t<0?0:t>1?1:t;const px=ax+vx*t,py=ay+vy*t,d=Math.hypot(px-g.cx,py-g.cy);if(!best||d<best.d)best={d,px,py,a:Math.atan2(vy,vx)}}
+  // v positif : rive est
+  let A=best.a;if(Math.sin(A)<0)A+=Math.PI;return {...best,A}}
+LANDMARK.roma={
+  wall(o){const g={cx:o.cx,cy:o.cy};const R=riverFrame(g);const c=Math.cos(R.A),s=Math.sin(R.A),P=(t,n)=>[R.px+t*c-n*s,R.py+t*s+n*c];
+    // R.A orienté pour que +n soit la rive est
+    return [[-1.15,.12],[-1.2,.9],[-1.0,1.8],[-.45,2.45],[.35,2.5],[1.05,2.1],[1.45,1.35],[1.5,.55],[1.3,.1],[.7,.08],[.1,.1],[-.6,.1]].map(([t,n])=>P(t,-n))},
+  pre(g){const R=riverFrame(g);g.R=R;const c=Math.cos(R.A),s=Math.sin(R.A);g.P=(t,n)=>[R.px+t*c+n*s,R.py+t*s-n*c];
+    const H={cap:[-.05,.48,.2],pal:[.45,.9,.28],ave:[1.0,.6,.34],cae:[.85,1.6,.3],esq:[-.1,1.85,.38],vim:[-.55,1.5,.24],qui:[-.75,1.0,.28]};g.H=H;
+    const [cx,cy]=g.P(-.05,.48);g.cit={x:cx,y:cy,r:.17};
+    const [fx,fy]=g.P(.18,.66);g.forum={x:fx,y:fy,r:.12};
+    const [kx,ky]=g.P(.72,.82);g.circus=[kx,ky];
+    g.zones=[{x:cx,y:cy,r:.19},{x:fx,y:fy,r:.14},{x:kx,y:ky,r:.32}];g.harbor=null;g.rot=R.A;g.org=true},
+  inside(g,s){const P=g.P,R=g.R;
+    // collines
+    for(const k in g.H){const [t,n,r]=g.H[k],[x,y]=P(t,n);hillOver(x,y,r*1.2,r,R.A+(k==='cap'?0:.6),s)}
+    // Circus Maximus, entre Palatin et Aventin
+    const [kx,ky]=g.circus,ca=R.A+.35;ctx.save();ctx.translate(kx,ky);ctx.rotate(ca);ctx.fillStyle='#e8dcc0';ctx.beginPath();ctx.ellipse(0,0,.31,.065,0,0,7);ctx.fill();ctx.fillStyle='#c9b48c';ctx.fillRect(-.3,-.05,.6,.1);ctx.fillStyle='#e8dcc0';ctx.fillRect(-.22,-.006,.44,.012);ctx.strokeStyle='rgba(120,100,70,.8)';ctx.lineWidth=LW(.005,.5,s);ctx.strokeRect(-.3,-.05,.6,.1);ctx.restore();
+    // Capitole : temple de Jupiter et citadelle
+    temple(g.cit.x,g.cit.y,.09,.11,R.A,s,6);const [ax,ay]=P(-.2,.42);temple(ax,ay,.05,.06,R.A,s,4);
+    // île Tibérine et temple d'Esculape, pont Sublicius
+    const [ix,iy]=P(.25,-.02);ctx.fillStyle='#d8cbb0';ctx.beginPath();ctx.ellipse(ix,iy,.16,.045,R.A,0,7);ctx.fill();ctx.strokeStyle='rgba(96,80,60,.9)';ctx.lineWidth=LW(.006,.6,s);ctx.stroke();temple(ix,iy,.04,.025,R.A,s,0);
+    const [b1x,b1y]=P(.48,-.18),[b2x,b2y]=P(.48,.18);ctx.strokeStyle='rgba(140,110,70,.95)';ctx.lineWidth=LW(.025,1.4,s);ctx.beginPath();ctx.moveTo(b1x,b1y);ctx.lineTo(b2x,b2y);ctx.stroke();
+    // temples du Forum Boarium au bord du fleuve
+    const [tx,ty]=P(.35,.25);temple(tx,ty,.035,.05,R.A,s,0);const [t2x,t2y]=P(.3,.33);ctx.fillStyle='#f5efe2';ctx.beginPath();ctx.arc(t2x,t2y,.018,0,7);ctx.fill()}};
+
+/* SYRACUSE : île d'Ortygie et ses deux ports, plateau des Épipoles fermé par un long mur jusqu'au fort d'Euryale */
+LANDMARK.syracusae={
+  pre(g){const F=frameOf(g,seaA(g));g.F=F;g.harbor=null},
+  over(g,s){const F=g.F,rr=g.r*rayK(g,F.A);
+    // Ortygie
+    const [ox,oy]=F.P(rr+.55,.35);const isl=ellPath(ox,oy,.62,.3,F.A+.5);ctx.fillStyle='#ded3b9';ctx.fill(isl);ctx.strokeStyle=CSTY.gre.wall;ctx.lineWidth=LW(.03,1.4,s);ctx.stroke(isl);
+    ctx.save();ctx.clip(isl);for(let i=-.7;i<.7;i+=.085)for(let j=-.35;j<.35;j+=.07){const [x,y]=[ox+i*Math.cos(F.A+.5)-j*Math.sin(F.A+.5),oy+i*Math.sin(F.A+.5)+j*Math.cos(F.A+.5)];if(hk((i*90|0)+3,(j*90|0)+5)<.15)continue;blockRect(x,y,.06,.045,F.A+.5,CSTY.gre.roof[Math.floor(hk((i*77|0),(j*31|0))*4)],null,s)}ctx.restore();
+    temple(ox,oy,.14,.07,F.A+.5,s,8);const [ax,ay]=F.P(rr+.75,.62);ctx.fillStyle='#4f8fa3';ctx.beginPath();ctx.arc(ax,ay,.03,0,7);ctx.fill(); // source Aréthuse
+    const [c1x,c1y]=F.P(rr-.02,.25),[c2x,c2y]=F.P(rr+.2,.3);ctx.strokeStyle='rgba(150,130,100,.95)';ctx.lineWidth=LW(.05,2,s);ctx.beginPath();ctx.moveTo(c1x,c1y);ctx.lineTo(c2x,c2y);ctx.stroke();
+    for(let k=0;k<6;k++){const [x,y]=F.P(rr+.3+k*.1,1.0+(k%2)*.08);ship(x,y,F.A+1.2,.08,s)}for(let k=0;k<3;k++){const [x,y]=F.P(rr+.25+k*.08,-.25);ship(x,y,F.A,.07,s)}
+    // Épipoles : deux longs murs vers l'intérieur jusqu'au fort d'Euryale
+    const [ex,ey]=F.P(-6.5,.2),aL=F.A+Math.PI-.7,aR=F.A+Math.PI+.7,ra=g.r*rayK(g,aL),rb=g.r*rayK(g,aR);
+    ctx.strokeStyle=CSTY.gre.wall;ctx.lineWidth=LW(.035,1.5,s);ctx.beginPath();ctx.moveTo(g.cx+Math.cos(aL)*ra,g.cy+Math.sin(aL)*ra);ctx.lineTo(ex,ey);ctx.lineTo(g.cx+Math.cos(aR)*rb,g.cy+Math.sin(aR)*rb);ctx.stroke();
+    ctx.fillStyle=CSTY.gre.wall;ctx.save();ctx.translate(ex,ey);ctx.rotate(F.A);ctx.fillRect(-.15,-.1,.3,.2);for(const [u,v] of [[-.15,-.1],[.15,-.1],[-.15,.1],[.15,.1],[-.25,0]]){ctx.beginPath();ctx.arc(u,v,.045,0,7);ctx.fill()}ctx.restore()}};
+
+/* CARTHAGÈNE : presqu'île entre la lagune et la mer, cinq collines, palais d'Hasdrubal */
+LANDMARK.cnova={
+  water(o){const A=o.sea0!=null?o.sea0:Math.PI/2,c=Math.cos(A),s=Math.sin(A),P=(u,v)=>[o.cx+u*c-v*s,o.cy+u*s+v*c];const [x,y]=P(-1.35,-.1);return [[x,y,.85,2.3,A]]},
+  pre(g){const F=frameOf(g,seaA(g));g.F=F;const H=[[.15,-.7,.24],[.45,.55,.22],[-.4,.75,.22],[-.65,-.1,.2],[.55,-.1,.18]];g.H=H.map(([u,v,r])=>{const [x,y]=F.P(u,v);return [x,y,r]});
+    moveCit(g,g.H[0][0],g.H[0][1],.2)},
+  under(g,s){for(const [x,y,rx,ry,ro] of g.wat){const p=ellPath(x,y,rx,ry,ro);ctx.fillStyle='#5b8996';ctx.fill(p);ctx.strokeStyle='rgba(60,48,34,.5)';ctx.lineWidth=LW(.02,1,s);ctx.stroke(p)}},
+  inside(g,s){for(const [x,y,r] of g.H)hillOver(x,y,r*1.2,r,g.F.A,s);
+    // palais d'Hasdrubal sur la colline
+    const [x,y]=[g.H[0][0],g.H[0][1]];blockRect(x,y,.2,.14,g.F.A,'#f3ede0','rgba(170,190,140,1)',s);temple(g.H[1][0],g.H[1][1],.07,.05,g.F.A,s,0)}};
+
+/* SAGONTE : l'acropole étirée sur sa crête, partagée en terrasses fortifiées */
+LANDMARK.saguntum={
+  pre(g){moveCit(g,g.cx,g.cy,.001)},
+  inside(g,s){const a=g.axis,ca=Math.cos(a),sa=Math.sin(a);hillOver(g.cx,g.cy,g.r*1.3,g.r*.55,a,s);
+    ctx.strokeStyle=CSTY.ibe.wall;ctx.lineWidth=LW(.03,1.4,s);for(const u of [-.9,-.45,0,.45,.9]){const x=g.cx+u*ca*g.r,y=g.cy+u*sa*g.r;ctx.beginPath();ctx.moveTo(x+sa*g.r*.5,y-ca*g.r*.5);ctx.lineTo(x-sa*g.r*.5,y+ca*g.r*.5);ctx.stroke()}
+    temple(g.cx+ca*g.r*.22,g.cy+sa*g.r*.22,.08,.05,a,s,0)}};
+
+/* TARENTE : la citadelle au bout de la presqu'île, la mer d'un côté, la lagune (Mare Piccolo) de l'autre */
+LANDMARK.tarentum={
+  water(o){const A=o.sea0!=null?o.sea0:0,c=Math.cos(A),s=Math.sin(A),P=(u,v)=>[o.cx+u*c-v*s,o.cy+u*s+v*c];const [x,y]=P(-.6,-1.25);return [[x,y,1.4,.5,A+.25]]},
+  pre(g){const F=frameOf(g,seaA(g));g.F=F;const [x,y]=F.P(.55,-.55);moveCit(g,x,y,.2)},
+  under(g,s){LANDMARK.cnova.under(g,s)},
+  inside(g,s){hillOver(g.cit.x,g.cit.y,.25,.2,g.F.A,s)}};
+
+/* GADÈS : la ville de l'île, et au loin le temple de Melqart avec ses deux colonnes de bronze */
+LANDMARK.gades={
+  over(g,s){const A=seaA(g);let best=null;for(let d=2.5;d<9;d+=.25)for(const sg of [1,-1]){const a=A+sg*1.4,x=g.cx+Math.cos(a)*d,y=g.cy+Math.sin(a)*d;if(g.land(x,y)&&!g.land(x+Math.cos(A)*.4,y+Math.sin(A)*.4)){best=[x,y,a];break}}
+    if(!best)return;const [x,y]=best;ctx.fillStyle='#e6dcc4';ctx.beginPath();ctx.ellipse(x,y,.22,.15,A,0,7);ctx.fill();ctx.strokeStyle=CSTY.pun.wall;ctx.lineWidth=LW(.015,1,s);ctx.stroke();temple(x,y,.12,.07,A,s,6);
+    ctx.fillStyle='#b8893f';for(const sg of [-1,1]){ctx.beginPath();ctx.arc(x+Math.cos(A)*.1+Math.cos(A+1.57)*sg*.03,y+Math.sin(A)*.1+Math.sin(A+1.57)*sg*.03,.012,0,7);ctx.fill()}
+    }};
+
+/* MASSALIA : la ville sur la rive nord du Lacydon, port allongé */
+LANDMARK.massalia={
+  water(o){const A=o.sea0!=null?o.sea0:Math.PI,c=Math.cos(A),s=Math.sin(A),P=(u,v)=>[o.cx+u*c-v*s,o.cy+u*s+v*c];const [x,y]=P(.2,.9);return [[x,y,1.1,.16,A]]},
+  pre(g){g.harbor=null},
+  under(g,s){LANDMARK.cnova.under(g,s);const [x,y,rx,ry,ro]=g.wat[0];for(let k=0;k<8;k++){const u=(k/7-.5)*rx*1.5;ship(x+Math.cos(ro)*u,y+Math.sin(ro)*u,ro,.07,s)}
+    ctx.strokeStyle='rgba(150,135,110,.95)';ctx.lineWidth=LW(.015,.8,s);ctx.beginPath();ctx.moveTo(x-Math.cos(ro)*rx*.8-Math.sin(ro)*ry*1.05,y-Math.sin(ro)*rx*.8+Math.cos(ro)*ry*1.05);ctx.lineTo(x+Math.cos(ro)*rx*.6-Math.sin(ro)*ry*1.05,y+Math.sin(ro)*rx*.6+Math.cos(ro)*ry*1.05);ctx.stroke()}};
+
+/* CAPOUE : la grande ville de la plaine, damier immense et nombreux temples */
+LANDMARK.capua={
+  inside(g,s){for(let k=0;k<5;k++){const a=k*1.25+.4,d=g.r*.55,x=g.cx+Math.cos(a)*d,y=g.cy+Math.sin(a)*d;ctx.fillStyle='#e8dfc8';ctx.save();ctx.translate(x,y);ctx.rotate(g.rot);ctx.fillRect(-.09,-.07,.18,.14);ctx.restore();temple(x,y,.06,.08,g.rot,s,4)}}};
+
+/* OSTIE : le camp fortifié à l'embouchure du Tibre, et les salines */
+LANDMARK.ostia={
+  under(g,s){const A=seaA(g);for(let i=0;i<6;i++)for(let j=0;j<4;j++){const u=-1.2-i*.17,v=.9+j*.13,x=g.cx+u*Math.cos(A)-v*Math.sin(A),y=g.cy+u*Math.sin(A)+v*Math.cos(A);if(!g.land(x,y))continue;
+    ctx.save();ctx.translate(x,y);ctx.rotate(A);ctx.fillStyle=(i+j)%3?'rgba(200,214,214,.9)':'rgba(235,238,232,.95)';ctx.fillRect(-.075,-.055,.15,.11);ctx.strokeStyle='rgba(120,110,90,.6)';ctx.lineWidth=LW(.004,.5,s);ctx.strokeRect(-.075,-.055,.15,.11);ctx.restore()}}};
+
+/* BRINDES : le port en fourche, deux bras de mer qui enserrent la ville */
+LANDMARK.brundisium={
+  water(o){const A=o.sea0!=null?o.sea0:0,c=Math.cos(A),s=Math.sin(A),P=(u,v)=>[o.cx+u*c-v*s,o.cy+u*s+v*c];const [x1,y1]=P(-.1,-1.0),[x2,y2]=P(-.1,1.0);return [[x1,y1,1.0,.16,A-.5],[x2,y2,1.0,.16,A+.5]]},
+  under(g,s){LANDMARK.cnova.under(g,s)}};
+
+/* ATHÈNES : l'Acropole et le Parthénon, l'Aréopage, l'agora, le théâtre de Dionysos, les Longs Murs vers le Pirée */
+LANDMARK.athenae={
+  pre(g){let A=0,bd=1e9;for(let k=0;k<24;k++){const a=k/24*6.283;for(let d=1;d<9;d+=.25){if(!g.land(g.cx+Math.cos(a)*d,g.cy+Math.sin(a)*d)){if(d<bd){bd=d;A=a}break}}}
+    g.F=frameOf(g,A);g.pir=bd<9?bd:6;g.org=true;const [x,y]=g.F.P(.1,.35);g.cit={x,y,r:.001};g.acro=[x,y];g.zones=[{x,y,r:.36},{x:g.forum.x,y:g.forum.y,r:g.forum.r}];
+    const [ax,ay]=g.F.P(-.25,-.25);g.forum.x=ax;g.forum.y=ay;g.zones[1]={x:ax,y:ay,r:.15};g.theater=null;g.harbor=null},
+  inside(g,s){const F=g.F,[x,y]=g.acro;
+    hillShade(x,y,.42,.24,F.A+1.57,s,'rgba(226,214,186,.95)');ctx.fillStyle='#d8cbb0';ctx.beginPath();ctx.ellipse(x,y,.3,.15,F.A+1.57,0,7);ctx.fill();ctx.strokeStyle=CSTY.gre.wall;ctx.lineWidth=LW(.02,1.2,s);ctx.stroke();
+    temple(x+Math.cos(F.A+1.57)*.05,y+Math.sin(F.A+1.57)*.05,.14,.065,F.A+1.57,s,8);temple(x-Math.cos(F.A+1.57)*.08+Math.cos(F.A)*.04,y-Math.sin(F.A+1.57)*.08+Math.sin(F.A)*.04,.045,.025,F.A+1.57,s,0);
+    const [px,py]=F.P(.1,.12);blockRect(px,py,.06,.035,F.A+1.57,'#f2ecdc',null,s);
+    const [rx,ry]=F.P(-.08,.18);hillOver(rx,ry,.08,.06,0,s);
+    const [tx,ty]=F.P(.28,.4);g.theater={x:tx,y:ty,a:F.A,r:.09};drawTheater(g,s)},
+  over(g,s){// Longs Murs et le Pirée
+    const F=g.F,L=g.pir+.6,a=F.A,n=a+1.57,rr=g.r*rayK(g,a);ctx.strokeStyle=CSTY.gre.wall;ctx.lineWidth=LW(.035,1.4,s);
+    for(const o of [-.28,.28]){ctx.beginPath();ctx.moveTo(g.cx+Math.cos(a)*rr+Math.cos(n)*o,g.cy+Math.sin(a)*rr+Math.sin(n)*o);ctx.lineTo(g.cx+Math.cos(a)*L+Math.cos(n)*o*1.6,g.cy+Math.sin(a)*L+Math.sin(n)*o*1.6);ctx.stroke()}
+    const px=g.cx+Math.cos(a)*(L+.5),py=g.cy+Math.sin(a)*(L+.5);ctx.fillStyle=CSTY.gre.ground;ctx.beginPath();ctx.ellipse(px,py,.65,.5,a,0,7);ctx.fill();ctx.stroke();
+    for(let k=0;k<3;k++){const b=a-1+k,hx=px+Math.cos(b)*.42,hy=py+Math.sin(b)*.42;water(ellPath(hx,hy,.16,.11,b),s);ship(hx,hy,b,.07,s)}
+    for(let k=0;k<40;k++){const b=hk(k,77)*6.283,d=Math.sqrt(hk(78,k))*.35;blockRect(px+Math.cos(b)*d,py+Math.sin(b)*d,.05,.035,a,CSTY.gre.roof[k%4],null,s)}}};
+
+/* PELLA : la capitale macédonienne, palais royal sur la hauteur, lac et canal vers la mer */
+LANDMARK.pella={
+  pre(g){g.F=frameOf(g,Math.PI/2);const [x,y]=g.F.P(-g.r*.75,0);moveCit(g,x,y,.001);g.palace=[x,y];g.zones.push({x,y,r:.4});g.rot=0},
+  under(g,s){const [x,y]=g.F.P(g.r+1.6,0);const p=ellPath(x,y,2.4,1.0,0);ctx.fillStyle='#5b8996';ctx.fill(p);ctx.strokeStyle='#5b8996';ctx.lineWidth=LW(.08,2,s);ctx.beginPath();ctx.moveTo(g.cx,g.cy+g.r*.9);ctx.lineTo(x,y-.9);ctx.stroke()},
+  inside(g,s){const [x,y]=g.palace;hillOver(x,y,.45,.3,0,s);for(const [u,v,w,h] of [[0,0,.3,.22],[-.3,.05,.2,.18],[.3,0,.22,.2]])blockRect(x+u,y+v,w,h,0,'#efe8d6','rgba(140,170,120,1)',s)}};
+
+/* CIRTA : la ville sur son rocher, cernée par les gorges du Rhumel ; tombeau royal hors les murs */
+LANDMARK.cirta={
+  under(g,s){ctx.strokeStyle='rgba(70,52,34,.85)';ctx.lineWidth=LW(.2,4,s);ctx.lineCap='round';ctx.beginPath();const a0=hk(g.seed,1)*6.283;for(let k=0;k<=40;k++){const a=a0+k/40*4.6,rr=g.r*rayK(g,a)+.18;const x=g.cx+Math.cos(a)*rr,y=g.cy+Math.sin(a)*rr;k?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
+    ctx.strokeStyle='#4f8fa3';ctx.lineWidth=LW(.04,1,s);ctx.stroke();royalTomb(g,s,a0+5.4,1.2)}};
+LANDMARK.siga={under(g,s){royalTomb(g,s,hk(g.seed,3)*6.283,1.4)}};
+function royalTomb(g,s,a,d){const rr=g.r*rayK(g,a)+d,x=g.cx+Math.cos(a)*rr,y=g.cy+Math.sin(a)*rr;if(!g.land(x,y))return;
+  for(let k=0;k<5;k++){ctx.fillStyle=k%2?'#cdb48a':'#dcc59a';ctx.beginPath();ctx.arc(x,y,.16-k*.028,0,7);ctx.fill()}ctx.strokeStyle='rgba(120,96,60,.9)';ctx.lineWidth=LW(.006,.5,s);ctx.beginPath();ctx.arc(x,y,.16,0,7);ctx.stroke();
+  if(.16*s>14){ctx.fillStyle='rgba(150,124,84,.9)';for(let k=0;k<24;k++){const b=k/24*6.283;ctx.beginPath();ctx.arc(x+Math.cos(b)*.16,y+Math.sin(b)*.16,LW(.006,.7,s),0,7);ctx.fill()}}}
+
+function drawSieges(s,z,inV){
+  for(const id in S.siege){const n=N[NI[id]];if(!n||!inV(n.x,n.y,40))continue;const sg=S.siege[id];if(!(sg.side==='car'||visAt(n.x,n.y)>=1))continue;
+    const planR=(.55+n.size*.55)*s,f=sg.d/sg.need,bw=30*z,by=n.y+Math.max(planR*z,(s>1.6?12:8)*z)+(s<1?16:20)*z;ctx.fillStyle='rgba(20,15,10,.75)';ctx.fillRect(n.x-bw/2,by,bw,4*z);ctx.fillStyle=sg.side==='car'?'#b48ae6':'#e2665a';ctx.fillRect(n.x-bw/2,by,bw*f,4*z)}
+}
+function drawTowns(s,z,inV,lo){
+  const labels=[],boxes=[];
+  const order=N.slice().sort((a,b)=>b.size-a.size);
+  for(const n of order){
+    if(!inV(n.x,n.y,40))continue;
+    const own=ownerN(n.i),c=own?FAC[own].c:[150,140,120];
+    if(n.col){if(s<.45)continue;if(!lo){const S2=Math.min(14,Math.max(7,9*s))*z;ctx.fillStyle='rgba(140,60,40,.95)';ctx.beginPath();ctx.moveTo(n.x-S2,n.y+S2*.6);ctx.lineTo(n.x,n.y-S2*.6);ctx.lineTo(n.x+S2,n.y+S2*.6);ctx.closePath();ctx.fill();ctx.strokeStyle='#fff6';ctx.lineWidth=z;ctx.stroke()}if(s>.9)labels.push([n,10,'italic '])
+      continue}
+    if(s<.45&&n.size<2)continue;if(s<.3&&n.size<3)continue;
+    const planR=(.55+n.size*.55)*s;
+    if(!lo){if(planR>16)cityPlan(n,s);
+    else if(s>1.6){townIcon(n,Math.max([4,6,8.5,11][n.size]*z,planR*z*.9),z)}
+    else{
+      const r=[2.4,3.3,4.6,6][n.size]*z*(s>1.5?1.15:1);
+      ctx.fillStyle=n.size>=2?'#f2e4be':'#e8d9b2';ctx.strokeStyle=rgb(c.map(v=>v*.5),1);ctx.lineWidth=1.4*z;
+      ctx.beginPath();if(n.size>=2){ctx.rect(n.x-r,n.y-r,2*r,2*r)}else ctx.arc(n.x,n.y,r,0,7);ctx.fill();ctx.stroke();
+      if(n.size===3){ctx.strokeStyle=rgb(c,1);ctx.lineWidth=1.2*z;ctx.strokeRect(n.x-r-2.5*z,n.y-r-2.5*z,2*r+5*z,2*r+5*z)}
+      if(n.port&&s>.9){ctx.strokeStyle='rgba(40,60,80,.9)';ctx.lineWidth=1.1*z;const ax=n.x+r+4*z,ay=n.y-r;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax,ay+5*z);ctx.moveTo(ax-2*z,ay+3.5*z);ctx.quadraticCurveTo(ax,ay+6*z,ax+2*z,ay+3.5*z);ctx.stroke()}
+    }}
+    if(s>=.3&&(n.size>=2||s>.75||(n.size===0&&s>2.2)))labels.push([n,n.size>=3?14:n.size===2?12.5:11,n.size>=3?'600 ':'',planR>16?planR*z:0]);
+  }
+  if(!lo)return;
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(const [n,fs,wt,off] of labels){
+    const size=fs*z,ty=n.y+(off||7*z)+2*z;ctx.font=`${wt}${size}px Barlow Semi Condensed, Arial Narrow, sans-serif`;
+    const tw=ctx.measureText(n.n).width,box=[n.x-tw/2,ty,n.x+tw/2,ty+size];
+    if(boxes.some(b=>b[0]<box[2]&&b[2]>box[0]&&b[1]<box[3]&&b[3]>box[1]))continue;boxes.push(box);
+    ctx.lineWidth=3*z;ctx.strokeStyle='rgba(245,236,214,.85)';ctx.strokeText(n.n,n.x,ty);ctx.fillStyle='#2b2115';ctx.fillText(n.n,n.x,ty);
+  }
+}
+/* ---- armées sur la carte : colonnes de carrés d'unités ---- */
+const TRAIL={};
+function updTrail(a,dp,pre=''){const id=pre+a.id;if(!a.legs.length){delete TRAIL[id];return}const T=TRAIL[id]=TRAIL[id]||[];const l=T[T.length-1];
+  if(!l||Math.hypot(l[0]-dp[0],l[1]-dp[1])>.08){T.push([dp[0],dp[1]]);let len=0;for(let k=T.length-1;k>0;k--){len+=Math.hypot(T[k][0]-T[k-1][0],T[k][1]-T[k-1][1]);if(len>400){T.splice(0,k-1);break}}}}
+const MARCH={lcav:0,skirm:1,inf:2,eleph:3,cav:4};
+function unitSq(x,y,q,u,c,dark){const k=UT[u.t].k,f=Math.max(0,Math.min(1,u.men/UT[u.t].men));
+  if(k==='skirm'){for(const [dx,dy] of [[-.32,.22],[.32,.22],[0,-.3]]){ctx.beginPath();ctx.arc(x+dx*q,y+dy*q,q*.24,0,7);ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fill();ctx.lineWidth=Math.max(1,q/12);ctx.strokeStyle=dark;ctx.stroke()}return}
+  const h=q/2;ctx.fillStyle="rgba(0,0,0,.28)";ctx.fillRect(x-h+Math.max(1,q*.08),y-h+Math.max(1.5,q*.12),q,q);
+  ctx.fillStyle=k==='lcav'?`rgb(${c.map(v=>Math.round(v+(255-v)*.45)).join(',')})`:`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fillRect(x-h,y-h,q,q);
+  if(f<.98){ctx.fillStyle='rgba(20,14,8,.55)';ctx.fillRect(x-h,y-h+q*f,q,q*(1-f))}
+  const lw=Math.max(1,q/11);ctx.strokeStyle=dark;ctx.lineWidth=lw;ctx.strokeRect(x-h+lw/2,y-h+lw/2,q-lw,q-lw);
+  ctx.beginPath();const i=h-Math.max(1.5,q*.16);
+  if(k==='inf'){ctx.moveTo(x-i,y-i);ctx.lineTo(x+i,y+i);ctx.moveTo(x+i,y-i);ctx.lineTo(x-i,y+i)}
+  else if(k==='cav'||k==='lcav'){ctx.moveTo(x-i,y+i);ctx.lineTo(x+i,y-i)}
+  else if(k==='eleph'){ctx.moveTo(x-i*.6,y+i);ctx.lineTo(x-i*.6,y-i*.2);ctx.quadraticCurveTo(x,y-i*1.3,x+i*.6,y-i*.2);ctx.lineTo(x+i*.6,y+i)}
+  ctx.stroke()}
+// taille réelle fixe d'un régiment sur la carte : 300 m de côté ; en dessous de 6 pixels, l'armée devient un cartouche
+const UNIT_KM=.3,UNIT_MIN_PX=6;
+function formation(a,s){
+  if(a.gate!=null&&a.legs.length&&!(TRAIL[a.id]&&TRAIL[a.id].length>1)){a._sq=[];return}
+  const c=FAC[a.side].c,dark='rgba(26,18,10,.95)',q=UNIT_KM*s,sp=q*1.22,U=a.units.slice().sort((p,r)=>MARCH[UT[p.t].k]-MARCH[UT[r.t].k]);
+  let X=view.ox+a._p[0]*s,Y=view.oy+a._p[1]*s;const pts=[],hid=[];
+  const T=TRAIL[a.id];
+  if(a.legs.length&&T&&T.length>1){
+    // colonne de marche : on remonte la trace de l'armée en arrière
+    const P=[[X,Y]];for(let k=T.length-1;k>=0;k--)P.push([view.ox+T[k][0]*s,view.oy+T[k][1]*s]);
+    let seg=0,acc=0,need=Math.max(11,q*.9);const dirBack=(()=>{for(let k=P.length-1;k>0;k--){const dx=P[k][0]-P[k-1][0],dy=P[k][1]-P[k-1][1],l=Math.hypot(dx,dy);if(l>1)return [dx/l,dy/l]}return [0,1]})();
+    for(let i=0;i<U.length;i++){const d=need+i*sp;
+      while(seg<P.length-1){const l=Math.hypot(P[seg+1][0]-P[seg][0],P[seg+1][1]-P[seg][1]);if(acc+l>=d){const f=(d-acc)/(l||1);pts.push([P[seg][0]+(P[seg+1][0]-P[seg][0])*f,P[seg][1]+(P[seg+1][1]-P[seg][1])*f]);break}acc+=l;seg++}
+      if(pts.length<=i){const L=P[P.length-1],rest=d-acc;pts.push([L[0]+dirBack[0]*rest,L[1]+dirBack[1]*rest]);hid[i]=behindGate(a,0,0,s,true)}
+      else hid[i]=behindGate(a,pts[i][0],pts[i][1],s,false)}
+    ctx.strokeStyle='rgba(60,40,20,.35)';ctx.lineWidth=q*.5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(X,Y);pts.forEach((p,i)=>{if(!hid[i])ctx.lineTo(p[0],p[1])});ctx.stroke();
+  }else{
+    // à l'arrêt : en ligne de bataille, troupes légères devant, cavalerie aux ailes
+    const front=U.filter(u=>UT[u.t].k==='skirm'||UT[u.t].k==='eleph'),cav=U.filter(u=>UT[u.t].k==='cav'||UT[u.t].k==='lcav'),inf=U.filter(u=>UT[u.t].k==='inf');
+    const per=Math.max(3,Math.min(7,Math.ceil(inf.length/2))),rows=[];for(let i=0;i<inf.length;i+=per)rows.push(inf.slice(i,i+per));
+    const wingL=cav.slice(0,Math.ceil(cav.length/2)),wingR=cav.slice(Math.ceil(cav.length/2));
+    const w0=Math.max(1,...rows.map(r=>r.length),front.length),Uo=[];let y0=Y+4,X0=X;
+    // dans une ville : le camp se dresse à côté des murs, pour laisser la ville lisible
+    if(a.at!=null){const n=N[a.at],tr=s>1.6?Math.max([4,6,8.5,11][n.size],(.55+n.size*.55)*s*.9):7,half=((w0-1)/2+(cav.length?1.2+((cav.length+1)>>2):0))*sp;X0=X+tr+8+half+q/2;y0=Y-4}
+    X=X0;
+    front.forEach((u,i)=>{Uo.push(u);pts.push([X+(i-(front.length-1)/2)*sp,y0])});
+    rows.forEach((r,j)=>r.forEach((u,i)=>{Uo.push(u);pts.push([X+(i-(r.length-1)/2)*sp,y0+(j+(front.length?1:0))*sp])}));
+    const yw=y0+(front.length?sp:0);
+    wingL.forEach((u,i)=>{Uo.push(u);pts.push([X-((w0-1)/2+1.2+(i>>1))*sp,yw+(i&1)*sp])});
+    wingR.forEach((u,i)=>{Uo.push(u);pts.push([X+((w0-1)/2+1.2+(i>>1))*sp,yw+(i&1)*sp])});
+    U.length=0;U.push(...Uo);
+  }
+  if(sel&&sel.a===a){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y],i)=>{if(hid[i])return;ctx.beginPath();ctx.arc(x,y,q*.9,0,7);ctx.fill()})}
+  U.forEach((u,i)=>{if(!hid[i])unitSq(pts[i][0],pts[i][1],q,u,c,dark)});
+  a._sq=pts.filter((p,i)=>!hid[i]);
+  if(0/*ARMEES:sans-etiquette*/&&s>1.4){const lx=view.ox+a._p[0]*s+14,ly=view.oy+a._p[1]*s-30;ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';const t=a.name,tw=ctx.measureText(t).width;
+    ctx.fillStyle='rgba(238,226,196,.92)';ctx.strokeStyle='rgba(60,40,20,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.rect(lx,ly-7,tw+10,14);ctx.fill();ctx.stroke();ctx.fillStyle='#2b2115';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(t,lx+5,ly)}
+}
+// emblème du médaillon : signe de Tanit pour Carthage, couronne de laurier pour Rome, initiale pour les autres
+function emblem(side,r){const ink='rgba(40,26,12,.9)';ctx.fillStyle=ink;ctx.strokeStyle=ink;ctx.lineCap='round';
+  if(side==='car'){ctx.beginPath();ctx.moveTo(0,-r*.05);ctx.lineTo(r*.42,r*.6);ctx.lineTo(-r*.42,r*.6);ctx.closePath();ctx.fill();ctx.lineWidth=r*.13;ctx.beginPath();ctx.moveTo(-r*.45,-r*.08);ctx.lineTo(r*.45,-r*.08);ctx.stroke();ctx.beginPath();ctx.arc(0,-r*.36,r*.22,0,7);ctx.fill()}
+  else if(side==='rom'){ctx.lineWidth=r*.08;for(const sg of [-1,1]){ctx.beginPath();ctx.arc(0,r*.02,r*.5,Math.PI/2+sg*.25,Math.PI/2+sg*2.6,sg<0);ctx.stroke();
+      for(let k=0;k<5;k++){const t=Math.PI/2+sg*(.45+k*.45),x=Math.cos(t)*r*.5,y=r*.02+Math.sin(t)*r*.5;ctx.save();ctx.translate(x,y);ctx.rotate(t+sg*.9);ctx.beginPath();ctx.ellipse(0,0,r*.14,r*.06,0,0,7);ctx.fill();ctx.restore()}}
+    ctx.font=`600 ${Math.round(r*.55)}px Marcellus, Georgia, serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('SPQR'.slice(0,r>11?4:1),0,r*.02)}
+  else{ctx.font=`600 ${Math.round(r*.9)}px Marcellus, Georgia, serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(FAC[side].n.replace(/^(Les |Le |La )/,'').charAt(0),0,r*.05)}}
+// cartouche d'une armée en vue dézoomée
+function genCard(a,s){
+  const k=s<.5?.78:s<.8?.9:1,c=FAC[a.side].c,sel_=sel&&sel.a===a,X=Math.round(view.ox+a._p[0]*s),Y=Math.round(view.oy+a._p[1]*s);
+  const U=a.units.slice().sort((p,r)=>MARCH[UT[p.t].k]-MARCH[UT[r.t].k]),per=5,q=Math.round(14*k),g=Math.max(2,Math.round(2*k)),rows=Math.ceil(U.length/per)||1;
+  const gridW=Math.min(per,U.length||1)*(q+g)-g,gridH=rows*(q+g)-g;
+  ctx.save();ctx.font=`600 ${Math.round(11*k)}px Marcellus, Georgia, serif`;const name=a.name.toUpperCase(),tw=ctx.measureText(name).width;
+  const pw=Math.max(tw+14*k,gridW+8*k),ph=Math.round(18*k),mr=Math.round(27*k);/*CARTE-PC*/
+  // pied : trait jusqu'à la position réelle
+  const gy=Y-8*k,top=gy-gridH,py=top-3*k-ph,my=py-mr*.55;
+  ctx.strokeStyle='rgba(30,20,10,.8)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(X,gy);ctx.lineTo(X,Y);ctx.stroke();ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(X,Y,4,1.8,0,0,7);ctx.fill();
+  // médaillon
+  ctx.beginPath();ctx.arc(X,my,mr+2,0,7);ctx.fillStyle=sel_?'#f3d98a':'#5a3d22';ctx.fill();
+  ctx.beginPath();ctx.arc(X,my,mr,0,7);const gr=ctx.createRadialGradient(X-mr*.3,my-mr*.3,1,X,my,mr);gr.addColorStop(0,'#efe1bd');gr.addColorStop(1,rgb(c.map(v=>Math.round(v*.45+150)),1));ctx.fillStyle=gr;ctx.fill();
+  ctx.lineWidth=1.2;ctx.strokeStyle='rgba(40,26,12,.8)';ctx.stroke();ctx.save();ctx.translate(X,my);emblem(a.side,mr);ctx.restore();
+  // plaque du nom
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X-pw/2+1.5,py+2,pw,ph);
+  const pg=ctx.createLinearGradient(0,py,0,py+ph);pg.addColorStop(0,'#8a6438');pg.addColorStop(1,'#5b3f22');ctx.fillStyle=pg;ctx.fillRect(X-pw/2,py,pw,ph);
+  ctx.strokeStyle=sel_?'#f3d98a':'#2b1c0e';ctx.lineWidth=sel_?2:1.2;ctx.strokeRect(X-pw/2+.5,py+.5,pw-1,ph-1);ctx.strokeStyle='rgba(240,210,150,.35)';ctx.lineWidth=1;ctx.strokeRect(X-pw/2+2.5,py+2.5,pw-5,ph-5);
+  ctx.fillStyle='#f4e2b0';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(name,X,py+ph/2+.5);
+  // grille des régiments, cinq par rang
+  const dark='rgba(26,18,10,.95)',pts=[];
+  U.forEach((u,i)=>{const r=Math.floor(i/per),n=Math.min(per,U.length-r*per),x=X-(n*(q+g)-g)/2+(i%per)*(q+g)+q/2,y=top+r*(q+g)+q/2;pts.push([x,y]);
+    if(typeof cardPiece==='function')cardPiece(x,y,q,u,c);else unitSq(x,y,q,u,c,dark)});
+  ctx.restore();
+  a._sq=[...pts,[X,py+ph/2],[X,my]];
+}
+// garnison : tour crénelée aux couleurs du camp, posée contre la ville (navire stylisé pour une flotte au port)
+function garToken(x,y,side,txt,selected,ship){const c=FAC[side].c;ctx.save();ctx.translate(x+(ship?0:16),y-10);
+  ctx.beginPath();if(ship){ctx.moveTo(-11,-2);ctx.lineTo(11,-2);ctx.lineTo(7,7);ctx.lineTo(-8,7);ctx.closePath();ctx.moveTo(-1,-2);ctx.lineTo(-1,-13);ctx.lineTo(7,-5);ctx.lineTo(-1,-5)}
+  else{ctx.moveTo(-9,9);ctx.lineTo(-9,-7);ctx.lineTo(-5,-7);ctx.lineTo(-5,-10);ctx.lineTo(-2,-10);ctx.lineTo(-2,-7);ctx.lineTo(2,-7);ctx.lineTo(2,-10);ctx.lineTo(5,-10);ctx.lineTo(5,-7);ctx.lineTo(9,-7);ctx.lineTo(9,9);ctx.closePath()}
+  ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fill();ctx.lineWidth=selected?2.4:1.3;ctx.strokeStyle=selected?'#fff3c4':'#1e160d';ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='600 10px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,ship?-1:0,ship?2.5:1.5);ctx.restore()}
+function token(x,y,side,txt,selected,a){
+  const c=FAC[side].c,neutral=!!FAC[side].a,r=neutral||(a&&a.g)?8.5:11;
+  ctx.save();ctx.translate(x,y);
+  if(a&&!a.g&&!neutral){ctx.strokeStyle='rgba(30,20,10,.8)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,r*1.1);ctx.lineTo(0,18);ctx.stroke();ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(0,18,5,2,0,0,7);ctx.fill()}
+  ctx.beginPath();ctx.moveTo(-r,-r);ctx.lineTo(r,-r);ctx.lineTo(r,r*.25);ctx.quadraticCurveTo(r*.6,r,0,r*1.15);ctx.quadraticCurveTo(-r*.6,r,-r,r*.25);ctx.closePath();
+  ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fill();ctx.lineWidth=selected?2.6:1.4;ctx.strokeStyle=selected?'#fff3c4':'#1e160d';ctx.stroke();
+  if(a&&a.side==='car'&&a.at!=null&&S.siege[N[a.at].id]&&S.siege[N[a.at].id].a===a.id){ctx.strokeStyle='#ffd27a';ctx.lineWidth=1;ctx.strokeRect(-r-2,-r-2,2*r+4,2*r+6)}
+  ctx.fillStyle='#fff';ctx.font=`600 ${r<10?10:12}px Barlow Semi Condensed, Arial Narrow, sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,0,-1);
+  ctx.restore();
+}
+

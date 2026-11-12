@@ -1,0 +1,47 @@
+/* ================= BATAILLES ================= */
+function startBattle(att,defs){
+  const sides=[att.side,defs[0].side];
+  const nn=nearestNode((att.x+defs[0].x)/2,(att.y+defs[0].y)/2,n=>!n.col||true);
+  const b={att:[att.id],def:defs.map(d=>d.id),x:(att.x+defs[0].x)/2,y:(att.y+defs[0].y)/2,node:nn.i};
+  if(!sides.includes('car')){applyResult(b,autoResolve(b));return}
+  S.cur=b;S.paused=true;save();openBattle();
+}
+function bFlat(ids){const L=[];ids.forEach(id=>{const a=S.armies.find(x=>x.id===id);if(a)a.units.forEach((u,k)=>L.push({aid:id,k,t:u.t,d:u.d,men:u.men}))});return L}
+function terrainDef(b){return {montagne:1.2,foret:1.1,marais:1.05}[terrainAt(b.x,b.y)]||1}
+function odds(b){const pa=power(bFlat(b.att)),pd=power(bFlat(b.def))*terrainDef(b)*(N[b.node].size>=2&&Math.hypot(N[b.node].x-b.x,N[b.node].y-b.y)<4?1.15:1);return pa*pa/(pa*pa+pd*pd)}
+function autoResolve(b){
+  const A=bFlat(b.att),D=bFlat(b.def),p=odds(b),attWin=Math.random()<p,ratio=attWin?p:1-p;
+  const wl=.08+.25*(1-ratio),ll=.35+.3*Math.random();
+  const hit=(L,l)=>L.map(u=>Math.round(u.men*(1-Math.min(.95,l*(.7+Math.random()*.6)))));
+  return {attWin,A:hit(A,attWin?wl:ll),D:hit(D,attWin?ll:wl)};
+}
+const placeName=b=>{const n=N[b.node],d=Math.hypot(n.x-b.x,n.y-b.y);return d<6?n.n:'près de '+n.n};
+const battleTitle=b=>{const p=placeName(b);return p.startsWith('près')?'Bataille '+p:'Bataille '+deN(p)};
+function applyResult(b,res){
+  const A=bFlat(b.att),D=bFlat(b.def);
+  const put=(L,men)=>L.forEach((u,j)=>{const a=S.armies.find(x=>x.id===u.aid);if(a&&a.units[u.k])a.units[u.k].men=Math.max(0,men[j])});
+  put(A,res.A);put(D,res.D);
+  const attA=b.att.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),defA=b.def.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);
+  const aSide=attA[0]&&attA[0].side,dSide=defA[0]&&defA[0].side;
+  const lost=(L,men)=>Math.round(L.reduce((s,u,j)=>s+Math.max(0,u.men-men[j]),0));
+  const la=lost(A,res.A),ld=lost(D,res.D);
+  [...attA,...defA].forEach(cleanArmy);
+  const losers=(res.attWin?defA:attA).filter(a=>!a.dead);
+  for(const a of losers)retreat(a);
+  const wS=res.attWin?aSide:dSide,lS=res.attWin?dSide:aSide;
+  if(wS&&lS)shiftOpinion(b.x,b.y,wS,lS);
+  // le vainqueur arrivé devant une ville ennemie commence le siège
+  for(const a of (res.attWin?attA:defA))if(!a.dead&&!a.legs.length)arrive(a);
+  const mine=aSide==='car'||dSide==='car';
+  if(mine||visAt(b.x,b.y)>=1)log(`${battleTitle(b)} : ${mine?(wS==='car'?'victoire':'défaite'):'victoire de '+sideName(wS)}. Pertes ${sideName(aSide)} ${la.toLocaleString('fr-FR')}, ${sideName(dSide)} ${ld.toLocaleString('fr-FR')}.`);
+}
+// le vaincu se replie vers sa ville la plus proche ; sans refuge, il est anéanti
+function retreat(a){
+  if(a.g){a.dead=true;S.armies=S.armies.filter(x=>x!==a);if(a.side==='car'||visAt(a.x,a.y)>=1)log(`Battue, ${armyLabel(a)} se rend.`);if(sel&&sel.a===a)sel=null;return}
+  const D=dijkstra(a,startsOf(a));let best=null,bd=1e9;
+  for(const n of N)if(ownerN(n.i)===a.side&&D.dist[n.i]<bd&&!S.armies.some(x=>hostile(x,a)&&Math.hypot(x.x-n.x,x.y-n.y)<8)){bd=D.dist[n.i];best=n}
+  if(!best){a.dead=true;S.armies=S.armies.filter(x=>x!==a);if(a.side==='car'||visAt(a.x,a.y)>=1)log(`Sans refuge, ${armyLabel(a)} est anéantie.`);if(sel&&sel.a===a)sel=null;return}
+  a.units.forEach(u=>u.men*=.92);cleanArmy(a);if(a.dead)return;
+  a.legs=[];a.at=null;a.cool=4;order(a,0,0,best.i);
+}
+

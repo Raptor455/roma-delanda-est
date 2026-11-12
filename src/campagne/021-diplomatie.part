@@ -1,0 +1,29 @@
+/* ================= DIPLOMATIE ================= */
+function contact(side,f){
+  return N.some(n=>ownerN(n.i)===f&&(S.armies.some(a=>a.side===side&&Math.hypot(a.x-n.x,a.y-n.y)<160)||N.some(m=>ownerN(m.i)===side&&Math.hypot(m.x-n.x,m.y-n.y)<180)));
+}
+function joinAlliance(f,side){
+  S.fac[f].st='allie_'+side;
+  N.forEach(n=>{if(ownerN(n.i)===f){S.own[n.id]=side;delete S.siege[n.id]}});
+  S.armies.forEach(a=>{if(a.side===f){a.side=side;a.name=(side==='car'?'Alliés ':'Socii ')+'– '+a.name.replace('Garnison de ','')}});
+  log(`Ralliement : ${FAC[f].n} rejoint le camp de ${sideName(side)} !`);territoryDirty=true;
+}
+function dipAction(f,kind){
+  const F=S.fac[f];if(F.cd>0||F.st!=='neutre')return;
+  if(kind==='env'){if(S.gold.car<25)return;S.gold.car-=25;const g=6+Math.round(Math.random()*10);F.car=Math.min(100,F.car+g);F.cd=1;log(`Émissaires envoyés (${FAC[f].n}) : attitude +${g}.`)}
+  if(kind==='gift'){if(S.gold.car<120)return;S.gold.car-=120;F.car=Math.min(100,F.car+25);F.rom-=5;F.cd=1;log(`Présents bien reçus (${FAC[f].n}) : attitude +25.`)}
+  if(kind==='ally'){const ch=Math.min(.95,.3+(F.car-50)/100);F.cd=2;if(Math.random()<ch)joinAlliance(f,'car');else{F.car-=5;log(`Alliance refusée (${FAC[f].n}) pour l'instant.`)}}
+  renderAll();openDip();
+}
+const canAlly=F=>F.car>=50&&F.car>F.rom+15;
+function aiDiplomacy(){
+  let best=null,bv=-1e9;
+  for(const f in S.fac){const F=S.fac[f];if(F.st!=='neutre'||!contact('rom',f))continue;const v=F.rom-F.car;if(v>bv){bv=v;best=f}}
+  if(!best)return;const F=S.fac[best];F.rom=Math.min(100,F.rom+6+Math.random()*6);
+  if(F.rom>=60&&F.rom>F.car+20&&Math.random()<.3)joinAlliance(best,'rom');
+}
+function shiftOpinion(x,y,winner,loser){
+  const fs=new Set();N.forEach(n=>{const o=ownerN(n.i);if(o&&S.fac[o]&&Math.hypot(n.x-x,n.y-y)<300)fs.add(o)});
+  fs.forEach(f=>{const F=S.fac[f];if(F.st!=='neutre')return;if(F[winner]!==undefined)F[winner]=Math.min(100,F[winner]+6);if(F[loser]!==undefined)F[loser]-=4});
+}
+

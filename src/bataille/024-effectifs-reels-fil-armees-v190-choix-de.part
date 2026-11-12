@@ -1,0 +1,9 @@
+/* ================= EFFECTIFS RÉELS (fil Armées, v190, choix de Baptiste « vrais effectifs partout ») =================
+   La bataille compte les mêmes hommes que la campagne : un régiment de ligne = 2 400 hommes, tirailleurs et cavaliers 1 200,
+   éléphants 20. Plus aucune conversion entre carte et bataille. Les pertes sont multipliées d'autant (×4, ×1,25 pour les
+   éléphants), si bien que la durée et l'issue des combats ne changent pas. Source : /mnt/project-files/armees/effectifs/. */
+var EFF_K=4,EFF_ELE=20;
+for(const k in T){const t=T[k];if(!t||t._eff)continue;t._eff=1;t.m0=t.men;t.men=t.kind==='eleph'?EFF_ELE:t.men*EFF_K}
+function effK(e){const t=e&&e.T;return t&&t.kind==='eleph'?EFF_ELE/16:EFF_K}
+{const _h=hurt;hurt=function(e,cas){return _h.call(this,e,cas*effK(e))}}
+/* ================= FIN EFFECTIFS RÉELS ================= */

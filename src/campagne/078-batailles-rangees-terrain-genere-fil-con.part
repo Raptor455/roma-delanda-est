@@ -1,0 +1,76 @@
+/* ================= BATAILLES RANGÉES : terrain généré (fil « Concevoir les terrains de bataille rangée ») =================
+   Le champ de bataille n'est plus recentré à 1,3 km d'un fleuve redressé contre le bord ouest : on garde l'endroit réel
+   et l'on envoie le vrai tracé des fleuves (avec méandres), les gués, les ponts (coupés ou non), les marais et le relief.
+   t.rg = {riv:[{p,hw,n}], cross:[{x,y,a,k:'gue'|'pont'|'coupe',hw,w}], marsh:[[[x,y]…]], dem:{x0,y0,st,nx,ny,h}}  (mètres du champ, avant ×G) */
+(function(){
+  const RG_BIG=new Set(["l'Èbre",'le Rhône','la Garonne','le Pô','le Tage','le Douro','le Danube','le Bétis']),RG_MID=new Set(['le Tibre','le Volturne','l\'Arno','la Save','l\'Axios','le Strymon','l\'Hèbre','la Charente','le Bagradas']);
+  const X0=-1300,X1=4500,Y0=-1300,Y1=3300;
+  const h1=(a,b)=>{let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967295};
+  window.__rgCamp={RIVD,RIVN,get BR(){return BR}};
+  const _bt=battleTerrain;
+  battleTerrain=function(b,attMine){
+    // 1. terrain d'origine, sans les fleuves : le champ reste centré sur l'endroit réel, l'ennemi au nord (la mer garde son ancien traitement)
+    const keep=RIV.slice();RIV.length=0;let t;
+    try{t=_bt(b,attMine)}finally{RIV.push(...keep)}
+    try{t.rg=rgBuild(t)}catch(e){console.warn('rangées',e)}
+    return t};
+  // image du sol envoyée à la bataille : sans les fleuves de la carte, la bataille dessine leur vrai tracé
+  const _bg=battleGround;
+  battleGround=function(t){if(!(t&&t.rg&&t.rg.riv&&t.rg.riv.length))return _bg.apply(this,arguments);
+    const keep=RIV.slice();RIV.length=0;try{return _bg.apply(this,arguments)}finally{RIV.push(...keep)}};
+  function rgBuild(t){
+    const f=t.f,B=(X,Y)=>{const dx=X-f.cx,dy=Y-f.cy;return [1700+(dx*f.ex[0]+dy*f.ex[1])*1000,1000+(dx*f.ey[0]+dy*f.ey[1])*1000]},
+      Cp=(sx,sy)=>[f.cx+((sx-1700)*f.ex[0]+(sy-1000)*f.ey[0])/1000,f.cy+((sx-1700)*f.ex[1]+(sy-1000)*f.ey[1])/1000];
+    const inB=([x,y],m=0)=>x>X0-m&&x<X1+m&&y>Y0-m&&y<Y1+m;
+    const rg={v:1,riv:[],cross:[],marsh:[],dem:null};
+    // relief : altitude détaillée tous les 100 m (en mètres, arrondie)
+    {const st=100,nx=Math.round((X1-X0)/st)+1,ny=Math.round((Y1-Y0)/st)+1,h=[];
+      for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const [X,Y]=Cp(X0+i*st,Y0+j*st);h.push(landFast(X,Y)?Math.round(relH(X,Y,.05)):-5)}
+      rg.dem={x0:X0,y0:Y0,st,nx,ny,h}}
+    // fleuves : tracé de la carte, rééchantillonné tous les 40 m et ondulé (méandres tirés de l'endroit, toujours les mêmes)
+    for(let r=0;r<RIVD.length;r++){const R=RIVD[r],P=R.P;if(R.b[0]>f.cx+5||R.b[2]<f.cx-5||R.b[1]>f.cy+5||R.b[3]<f.cy-5)continue;
+      const name=RIVN[r]||'le fleuve',hw=RG_BIG.has(name)?55:RG_MID.has(name)?32:20;
+      let cur=[];const flush=()=>{if(cur.length>3)rg.riv.push({p:cur,hw,n:name});cur=[]};
+      for(let q=1;q<P.length;q++){const a=B(P[q-1][0],P[q-1][1]),c=B(P[q][0],P[q][1]),L=Math.hypot(c[0]-a[0],c[1]-a[1]),m=Math.max(1,Math.ceil(L/40));
+        for(let s=(q>1?1:0);s<=m;s++){const x=a[0]+(c[0]-a[0])*s/m,y=a[1]+(c[1]-a[1])*s/m;if(inB([x,y],900))cur.push([x,y]);else flush()}}
+      flush()}
+    for(const R of rg.riv){const p=R.p,n=p.length,o=[];let acc=0;
+      // méandres : grande ondulation dont la période et l'amplitude varient doucement le long du cours
+      for(let i=0;i<n;i++){const a=p[Math.max(0,i-1)],c=p[Math.min(n-1,i+1)],dx=c[0]-a[0],dy=c[1]-a[1],l=Math.hypot(dx,dy)||1;if(i)acc+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);
+        const [X,Y]=Cp(p[i][0],p[i][1]),ph=acc/(190+R.hw*2.5)+vnoise(X*.35,Y*.35)*5,amp=(90+R.hw*2.2)*(.55+.9*vnoise(X*.5+7,Y*.5-3)),w=Math.sin(ph)*amp+Math.sin(ph*2.3+1.7)*amp*.22;
+        o.push([p[i][0]-dy/l*w,p[i][1]+dx/l*w])}
+      for(let k=0;k<3;k++)for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}
+      // le fleuve contourne la ville voisine (jamais à travers les maisons)
+      if(t.town){const tr=260+(t.town.size||0)*110+R.hw;for(let k=0;k<4;k++){for(const q of o){const dx=q[0]-t.town.x,dy=q[1]-t.town.y,d=Math.hypot(dx,dy)||1;if(d<tr){q[0]=t.town.x+dx/d*tr;q[1]=t.town.y+dy/d*tr}}
+        for(let q=0;q<4;q++)for(let i=1;i<n-1;i++){o[i][0]=(o[i-1][0]+o[i][0]*2+o[i+1][0])/4;o[i][1]=(o[i-1][1]+o[i][1]*2+o[i+1][1])/4}}}
+      R.p=o.map(([x,y])=>[Math.round(x),Math.round(y)])}
+    function r0(v){return Math.round(v*10)}
+    // ponts : là où une route du champ franchit un fleuve ; coupé si le pont de la campagne l'est
+    const segX2=(a,b,c,d)=>{const rx=b[0]-a[0],ry=b[1]-a[1],sx=d[0]-c[0],sy=d[1]-c[1],den=rx*sy-ry*sx;if(Math.abs(den)<1e-9)return null;const t=((c[0]-a[0])*sy-(c[1]-a[1])*sx)/den,u=((c[0]-a[0])*ry-(c[1]-a[1])*rx)/den;return t>=0&&t<=1&&u>=0&&u<=1?[t,u]:null};
+    for(const rd of t.roads)for(let i=1;i<rd.p.length;i++)for(const R of rg.riv)for(let j=1;j<R.p.length;j++){const s=segX2(rd.p[i-1],rd.p[i],R.p[j-1],R.p[j]);if(!s)continue;
+      const x=rd.p[i-1][0]+(rd.p[i][0]-rd.p[i-1][0])*s[0],y=rd.p[i-1][1]+(rd.p[i][1]-rd.p[i-1][1])*s[0];if(!inB([x,y],200))continue;
+      if(rg.cross.some(c=>Math.hypot(c.x-x,c.y-y)<300))continue;
+      const [X,Y]=Cp(x,y);let br=null,bd=1.5;for(const o of BR){const d=Math.hypot(o.x-X,o.y-Y);if(d<bd){bd=d;br=o}}
+      const big=rd.k==='via'||rd.k==='route',ra=Math.atan2(R.p[j][1]-R.p[j-1][1],R.p[j][0]-R.p[j-1][0]);
+      rg.cross.push({x:Math.round(x),y:Math.round(y),a:+ra.toFixed(3),hw:R.hw,k:br&&brDown(br)?'coupe':(br||big)?'pont':'gue',w:big?14:9})}
+    // gués : un tous les 1,6 km environ le long de chaque fleuve dans le champ (au moins deux), plus larges sur les petits cours d'eau
+    for(const R of rg.riv){const p=R.p;
+      // grands fleuves : pas de gué, sauf s'il n'y a aucun pont dans le champ (eaux basses, un seul)
+      if(R.hw>=50&&rg.cross.some(c=>c.hw===R.hw&&inB([c.x,c.y],-150)&&c.k==='pont'))continue;
+      let acc=0,next=400+h1(p[0][0],p[0][1])*700;const L=[];
+      for(let i=1;i<p.length;i++){acc+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);if(acc>=next){next+=(R.hw<30?1000:1300)+h1(p[i][0],i)*600;L.push(i)}}
+      const inField=L.filter(i=>inB(p[i],-150));if(inField.length<2)for(let i=1;i<p.length-1;i+=Math.max(1,Math.floor(p.length/5)))if(inB(p[i],-150)&&!inField.includes(i))inField.push(i);
+      if(R.hw>=50){inField.sort((i,j)=>Math.hypot(p[i][0]-1700,p[i][1]-1000)-Math.hypot(p[j][0]-1700,p[j][1]-1000));inField.length=Math.min(1,inField.length)}
+      for(const i of inField){const [x,y]=p[i];if(rg.cross.some(c=>Math.hypot(c.x-x,c.y-y)<500))continue;
+        rg.cross.push({x,y,a:+Math.atan2(p[i+1][1]-p[i-1][1],p[i+1][0]-p[i-1][0]).toFixed(3),hw:R.hw,k:'gue',w:R.hw>40?70:R.hw>25?100:120})}}
+    // marais : au creux des méandres, là où le sol est bas et plat (jamais en montagne ni dans le désert)
+    if(t.ter!=='montagne'&&t.ter!=='desert')for(const R of rg.riv){const p=R.p;
+      for(let i=8;i<p.length-8;i+=6){const a=p[i-8],m=p[i],c=p[i+8],cr=(m[0]-a[0])*(c[1]-m[1])-(m[1]-a[1])*(c[0]-m[0]),L=Math.hypot(c[0]-a[0],c[1]-a[1]);
+        if(Math.abs(cr)/(L*L+1)<.18||!inB(m,-100)||h1(m[0]>>4,m[1]>>4)>.45)continue;
+        if(rg.marsh.some(q=>Math.hypot(q[0][0]-m[0],q[0][1]-m[1])<900)||rg.cross.some(q=>Math.hypot(q.x-m[0],q.y-m[1])<350))continue;
+        const sgn=Math.sign(cr),nx=(c[1]-a[1])/L*sgn,ny=-(c[0]-a[0])/L*sgn,cx=m[0]+nx*(R.hw+170),cy=m[1]+ny*(R.hw+170),poly=[];
+        for(let k=0;k<11;k++){const an=k/11*6.283,rr=(170+h1(k,i)*110)*(1+.35*Math.cos(an*2));poly.push([Math.round(cx+Math.cos(an)*rr*1.3),Math.round(cy+Math.sin(an)*rr*.8)])}
+        rg.marsh.push(poly)}}
+    return rg}
+})();
+/* ================= FIN BATAILLES RANGÉES ================= */

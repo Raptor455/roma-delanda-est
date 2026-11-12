@@ -1,0 +1,43 @@
+/* ================= CAMÉRA, OMBRES ================= */
+const cam={tx:1600*G,ty:1300*G,dist:1000*Math.sqrt(G),yaw:0,pitch:.8};
+const STRAT_A=1900*G,STRAT_B=2600*G;let strat=0;
+const lookAt=new THREE.Vector3();
+function updateCamera(){
+  cam.tx=Math.max(-300*G,Math.min(W+500*G,cam.tx));cam.ty=Math.max(-500*G,Math.min(H+500*G,cam.ty));
+  cam.dist=Math.max(70,Math.min(3800*G,cam.dist));cam.pitch=Math.max(.3,Math.min(1.45,cam.pitch));
+  strat=Math.min(1,Math.max(0,(cam.dist-STRAT_A)/(STRAT_B-STRAT_A)));strat=strat*strat*(3-2*strat);
+  const pitch=cam.pitch+(1.5-cam.pitch)*strat;
+  scene.fog.near=cam.dist*1.2+700*G;scene.fog.far=cam.dist*3+3000*G;
+  const gh=Math.max(0,height(cam.tx,cam.ty)),cp=Math.cos(pitch);
+  camera.position.set(cam.tx-W/2+cam.dist*cp*Math.sin(cam.yaw),gh+cam.dist*Math.sin(pitch),cam.ty-H/2+cam.dist*cp*Math.cos(cam.yaw));
+  const minY=height(camera.position.x+W/2,camera.position.z+H/2)+8;if(camera.position.y<minY)camera.position.y=minY;
+  lookAt.set(cam.tx-W/2,gh,cam.ty-H/2);camera.lookAt(lookAt);
+  // ombres : le volume suit la cible, resserré quand on zoome
+  const r=Math.min(2400,Math.max(320,cam.dist*1.25));
+  sun.target.position.set(cam.tx-W/2,gh,cam.ty-H/2);
+  sun.position.copy(SUNDIR).multiplyScalar(2200).add(sun.target.position);
+  const sc=sun.shadow.camera;sc.left=-r;sc.right=r;sc.top=r*.85;sc.bottom=-r*.85;sc.updateProjectionMatrix();
+  if(skyDome)skyDome.position.copy(camera.position);
+}
+function resize(){
+  const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  pMat.uniforms.uScale.value=h*renderer.getPixelRatio()/(2*Math.tan(camera.fov*Math.PI/360));
+}
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+function groundAtNdc(nx,ny){
+  ndc.set(nx,ny);ray.setFromCamera(ndc,camera);const o=ray.ray.origin,d=ray.ray.direction;
+  let prev=0;
+  for(let t=0;t<9000;t+=6){
+    const x=o.x+d.x*t,y=o.y+d.y*t,z=o.z+d.z*t;
+    if(y<height(x+W/2,z+H/2)){
+      let a=prev,b=t;for(let i=0;i<10;i++){const m=(a+b)/2,yy=o.y+d.y*m,xx=o.x+d.x*m,zz=o.z+d.z*m;if(yy<height(xx+W/2,zz+H/2))b=m;else a=m}
+      return {x:o.x+d.x*b+W/2,y:o.z+d.z*b+H/2};
+    }
+    prev=t;
+  }
+  return null;
+}
+function groundAt(cx,cy){const r=host.getBoundingClientRect();return groundAtNdc((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1)}
+const pv=new THREE.Vector3();
+function toScreen(sx,sy,off){const r=host.getBoundingClientRect();pv.copy(w3(sx,sy,off)).project(camera);return {x:(pv.x+1)/2*r.width,y:(1-pv.y)/2*r.height,ok:pv.z<1}}
+

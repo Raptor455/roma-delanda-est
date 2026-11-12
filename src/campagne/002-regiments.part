@@ -1,0 +1,29 @@
+/* ================= RÉGIMENTS ================= */
+// Mêmes clés que la bataille 3D (jeu/index.html)
+const UT={
+  lib:{n:'Infanterie libyenne',men:600,cost:60,k:'inf'},
+  iber:{n:'Infanterie ibère',men:600,cost:50,k:'inf'},
+  gaul:{n:'Infanterie gauloise',men:600,cost:40,k:'inf'},
+  sling:{n:'Frondeurs',men:300,cost:35,k:'skirm'},
+  hcav:{n:'Cavalerie lourde',men:300,cost:70,k:'cav'},
+  ncav:{n:'Cavalerie numide',men:300,cost:55,k:'lcav'},
+  eleph:{n:'Éléphants de guerre',men:16,cost:130,k:'eleph'},
+  legion:{n:'Légionnaires',men:640,cost:60,k:'inf'},
+  velites:{n:'Vélites',men:300,cost:30,k:'skirm'},
+  rcav:{n:'Cavalerie romaine',men:300,cost:65,k:'cav'},
+  acav:{n:'Cavalerie alliée',men:300,cost:55,k:'cav'}
+};
+const SHORT={lib:'Libyens',iber:'Ibères',gaul:'Gaulois',sling:'Frondeurs',hcav:'Cavaliers',ncav:'Numides',eleph:'Éléphants',legion:'Légionnaires',velites:'Vélites',rcav:'Equites',acav:'Alae'};
+const KSPEED={inf:20,skirm:22,cav:32,lcav:38,eleph:15}; // km par jour sur une piste de plaine
+const TRAIN={inf:20,skirm:15,cav:25,lcav:20,eleph:40};
+// Quatre classes de routes, plus les cols et la marche hors route. m = vitesse relative ; mud = boue par saison ; snow = marge au-dessus de la limite des neiges avant fermeture ; food = vivres mangés
+const ROAD={
+  via:{n:'voie romaine',m:1.35,mud:{Automne:1,Hiver:.95},snow:500,food:.7,txt:"pavée : la plus rapide, praticable par tous les temps ; relais et marchés : on y mange 30 % de vivres en moins"},
+  route:{n:'route',m:1.15,mud:{Automne:.95,Hiver:.85},snow:350,food:.85,txt:"empierrée : rapide, un peu ralentie l'hiver ; 15 % de vivres en moins"},
+  piste:{n:'piste',m:1,mud:{Automne:.8,Hiver:.65},snow:200,food:1,txt:"de terre battue : boueuse à l'automne et l'hiver"},
+  chemin:{n:'chemin de terre',m:.8,mud:{Automne:.7,Hiver:.5},snow:0,food:1,txt:"étroit, vers les villages : lent, et un bourbier l'hiver ; mais on y fourrage deux fois plus"},
+  col:{n:'col',m:.45,mud:{Automne:.8,Hiver:.55},snow:0,food:1,txt:"passage de montagne : très lent, dangereux l'hiver, fermé quand la neige le recouvre"},
+  mer:{n:'mer'},
+  hors:{n:'hors route',m:.5,mud:{Automne:.85,Hiver:.7},snow:0,food:1,txt:"à travers champs : lent ; les hauteurs sont impraticables, et la limite descend l'hiver"}};
+const SEA_KMD=55,MAXU=40/*MAXU-40*/,DAY_S=18;/*JOUR-18*/ // secondes réelles par jour à ×1
+

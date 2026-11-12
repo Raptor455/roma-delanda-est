@@ -1,0 +1,279 @@
+/* ================= RÈGLES ================= */
+const T={
+  lib:{name:"Infanterie libyenne",kind:"inf",men:600,w:84,d:26,speed:13,turn:.7,atk:8.5,def:1.1,morale:105,tough:1,charge:1.15},
+  gaul:{name:"Infanterie gauloise",kind:"inf",men:600,w:84,d:24,speed:14,turn:.7,atk:9,def:.9,morale:90,tough:1,charge:1.45},
+  iber:{name:"Infanterie ibère",kind:"inf",men:600,w:84,d:24,speed:14,turn:.7,atk:8.5,def:1,morale:95,tough:1,charge:1.3},
+  sling:{name:"Frondeurs baléares",kind:"skirm",men:300,w:62,d:12,speed:20,turn:1.6,atk:2.5,def:.6,morale:70,tough:1,charge:1,ranged:{range:200,dmg:6,cd:1.6}},
+  hcav:{name:"Cavalerie ibère",kind:"cav",men:300,w:56,d:22,speed:36,turn:1.8,atk:10,def:1,morale:100,tough:1,charge:2.4},
+  ncav:{name:"Cavalerie numide",kind:"lcav",men:300,w:56,d:18,speed:48,turn:2.4,atk:6,def:.8,morale:80,tough:1,charge:1.6,ranged:{range:130,dmg:3,cd:2.2}},
+  eleph:{name:"Éléphants de guerre",kind:"eleph",men:16,w:46,d:28,speed:18,turn:1,atk:14,def:1,morale:90,tough:32,charge:2.6,fear:7},
+  legion:{name:"Légionnaires",kind:"inf",men:640,w:84,d:28,speed:12.5,turn:.65,atk:9,def:1.15,morale:100,tough:1,charge:1.2},
+  velites:{name:"Vélites",kind:"skirm",men:300,w:62,d:12,speed:20,turn:1.6,atk:3,def:.65,morale:70,tough:1,charge:1,ranged:{range:150,dmg:6,cd:2}},
+  rcav:{name:"Cavalerie romaine",kind:"cav",men:300,w:56,d:22,speed:35,turn:1.7,atk:9,def:1,morale:95,tough:1,charge:2.2},
+  acav:{name:"Cavalerie alliée",kind:"cav",men:300,w:56,d:22,speed:35,turn:1.7,atk:8.5,def:.95,morale:90,tough:1,charge:2.2},
+  // Rome : la légion manipulaire en trois lignes, et les alliés italiens
+  hastati:{name:"Hastats",kind:"inf",men:480,w:84,d:26,speed:13,turn:.7,atk:9,def:1.05,morale:92,tough:1,charge:1.3},
+  principes:{name:"Princes",kind:"inf",men:480,w:84,d:26,speed:12.5,turn:.7,atk:9.5,def:1.15,morale:102,tough:1,charge:1.25},
+  triarii:{name:"Triaires",kind:"inf",men:240,w:62,d:22,speed:12,turn:.6,atk:8,def:1.35,morale:118,tough:1,charge:1.1},
+  socii:{name:"Fantassins alliés",kind:"inf",men:600,w:84,d:26,speed:13,turn:.7,atk:8.5,def:1.05,morale:92,tough:1,charge:1.2},
+  // Macédoine : la phalange de sarisses, les hypaspistes, les Compagnons
+  phalange:{name:"Phalangites",kind:"inf",men:640,w:84,d:30,speed:11,turn:.5,atk:7,def:1.5,morale:100,tough:1,charge:1},
+  hypasp:{name:"Hypaspistes",kind:"inf",men:480,w:80,d:24,speed:14,turn:.8,atk:9.5,def:1.15,morale:112,tough:1,charge:1.35},
+  peltaste:{name:"Peltastes thraces",kind:"skirm",men:300,w:62,d:12,speed:20,turn:1.6,atk:4,def:.75,morale:75,tough:1,charge:1.1,ranged:{range:140,dmg:6,cd:2}},
+  cretois:{name:"Archers crétois",kind:"skirm",men:300,w:62,d:12,speed:19,turn:1.6,atk:2.5,def:.6,morale:72,tough:1,charge:1,ranged:{range:230,dmg:5,cd:1.8}},
+  compagnons:{name:"Compagnons",kind:"cav",men:300,w:56,d:22,speed:37,turn:1.8,atk:11,def:1.05,morale:110,tough:1,charge:2.6},
+  thessal:{name:"Cavalerie thessalienne",kind:"cav",men:300,w:56,d:22,speed:38,turn:1.9,atk:9.5,def:1,morale:100,tough:1,charge:2.3},
+  // Sparte : les Égaux, les périèques, les hilotes et les Skirites
+  spartiates:{name:"Spartiates",kind:"inf",men:480,w:84,d:26,speed:13,turn:.75,atk:10.5,def:1.4,morale:135,tough:1,charge:1.35},
+  perieques:{name:"Hoplites périèques",kind:"inf",men:600,w:84,d:26,speed:13,turn:.7,atk:8.5,def:1.2,morale:98,tough:1,charge:1.2},
+  skirites:{name:"Skirites",kind:"skirm",men:300,w:62,d:12,speed:21,turn:1.7,atk:5,def:.8,morale:95,tough:1,charge:1.2,ranged:{range:130,dmg:5,cd:2.1}},
+  hilotes:{name:"Hilotes",kind:"skirm",men:300,w:62,d:12,speed:20,turn:1.6,atk:2.5,def:.55,morale:60,tough:1,charge:1,ranged:{range:190,dmg:5,cd:1.7}},
+  laccav:{name:"Cavalerie lacédémonienne",kind:"cav",men:200,w:50,d:20,speed:34,turn:1.7,atk:8,def:.95,morale:92,tough:1,charge:2},
+  // Athènes : hoplites citoyens, thuréophores, archers scythes, cavalerie
+  athoplites:{name:"Hoplites athéniens",kind:"inf",men:600,w:84,d:26,speed:13,turn:.7,atk:8.5,def:1.2,morale:100,tough:1,charge:1.2},
+  thureo:{name:"Thuréophores",kind:"inf",men:480,w:80,d:24,speed:15,turn:.9,atk:8.5,def:1,morale:92,tough:1,charge:1.3,ranged:{range:90,dmg:4,cd:3}},
+  scythes:{name:"Archers scythes",kind:"skirm",men:300,w:62,d:12,speed:20,turn:1.6,atk:2.5,def:.6,morale:70,tough:1,charge:1,ranged:{range:220,dmg:5,cd:1.8}},
+  athpelt:{name:"Peltastes",kind:"skirm",men:300,w:62,d:12,speed:21,turn:1.7,atk:4,def:.7,morale:74,tough:1,charge:1.1,ranged:{range:140,dmg:6,cd:2}},
+  hippeis:{name:"Cavaliers athéniens",kind:"cav",men:300,w:56,d:22,speed:36,turn:1.8,atk:9,def:1,morale:96,tough:1,charge:2.2}
+};
+// Peuples jouables à venir : composition de chaque armée (type de régiment → nombre) et couleur de camp
+const PEUPLES={
+  rome:{n:'Rome',col:0xa8332b,armee:{hastati:4,principes:4,triarii:2,velites:4,socii:4,rcav:2,acav:2}},
+  mac:{n:'Macédoine',col:0xb8862e,armee:{phalange:6,hypasp:2,peltaste:2,cretois:2,compagnons:2,thessal:2}},
+  spa:{n:'Sparte',col:0x8e1f1a,armee:{spartiates:3,perieques:5,skirites:2,hilotes:3,laccav:2}},
+  ath:{n:'Athènes',col:0x2f5a8a,armee:{athoplites:6,thureo:2,scythes:2,athpelt:2,hippeis:2}}
+};
+// Rythme façon NTW3 : mêlées longues, moral qui s'use lentement, la charge et les flancs décident
+const RUN=1.55,CAS=.42,MOR=.9,FEAR=.5;
+const TUNIC={lib:0x6b3f9f,gaul:0x6b3f9f,iber:0x6b3f9f,sling:0x7f58b4,hcav:0x5e3590,ncav:0x8a64c0,eleph:0x6b3f9f,legion:0xa8332b,velites:0xbb4a3d,rcav:0x9a2c25,acav:0xb04034,
+  hastati:0xa8332b,principes:0x9a2c25,triarii:0x8a2620,socii:0xb8573e,
+  phalange:0xb8862e,hypasp:0xa8322e,peltaste:0x9a6a3a,cretois:0x8a7a4a,compagnons:0xc49a3a,thessal:0x7a5a9a,
+  spartiates:0x8e1f1a,perieques:0x9a3a2a,skirites:0x7a4a32,hilotes:0x8a7a62,laccav:0x8e1f1a,
+  athoplites:0x2f5a8a,thureo:0x3f6a9a,scythes:0x5a6a4a,athpelt:0x6a7a8a,hippeis:0xd8cdb4};
+/* Fusion avec la carte : la campagne plonge vers le lieu, envoie l'image de la carte comme sol, puis la caméra descend d'une vue verticale identique */
+const INTRO=CT&&CT.intro&&CT.f&&window.parent!==window?CT.intro:null;let GROUND=null;
+const groundP=INTRO?new Promise(res=>{const to=setTimeout(()=>res(null),8000);
+  addEventListener('message',ev=>{const d=ev.data;if(!d||ev.source!==window.parent||d.bellum!=='sol')return;clearTimeout(to);
+    if(d.bmp)res({img:d.bmp,box:d.box});else{const im=new Image();im.onload=()=>res({img:im,box:d.box});im.onerror=()=>res(null);im.src=d.url}});
+  window.parent.postMessage({bellum:'pret'},'*')}):Promise.resolve(null);
+const HILL=CT?{x:-1e5,y:-1e5,r:1}:{x:2370,y:1080,r:300},HILLS=CT?CT.hills:[];
+const FORESTS=CT?CT.forests:[{x:600,y:1040,r:120},{x:2880,y:720,r:140},{x:2960,y:1440,r:110},{x:1200,y:-420,r:180},{x:2200,y:2350,r:200},{x:-200,y:300,r:160},{x:3600,y:1000,r:220},{x:400,y:2400,r:170}];
+const ROMAN=["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI"];
+let units,projs,time,paused,started,speed=1,selected,ended,aiClock,uid;
+
+const NF0b={inf:12,skirm:10,cav:8,lcav:8,eleph:3},NR0b={inf:5,skirm:3,cav:3,lcav:3,eleph:2},NF0={},NR0={};
+for(const k in NF0b){NF0[k]=Math.round(NF0b[k]*SK(k));NR0[k]=Math.round(NR0b[k]*SK(k))}
+// régiments plus grands (espacement d'origine), portées à l'échelle de la carte, vitesse un peu plus grande pour traverser
+for(const k in T){const t=T[k],q=SK(t.kind);t.w*=q;t.d*=q;t.speed*=Math.sqrt(G);if(t.ranged)t.ranged.range*=G}
+const HILLg={x:HILL.x*G,y:HILL.y*G,r:HILL.r*G},FORESTSg=FORESTS.map(f=>({x:f.x*G,y:f.y*G,r:f.r*G}));
+function makeSlots(t){
+  const k=t.kind,nf=NF0[k],nr=NR0[k],loose=k==='skirm'?1:k==='lcav'?.6:0,j=loose||.28,s=[];
+  for(let r=0;r<nr;r++)for(let f=0;f<nf;f++)
+    s.push({r,f,nr,nf,cf:nf,jx:(Math.random()-.5)*j,jy:(Math.random()-.5)*j,ph:Math.random()*6.28,sc:.92+Math.random()*.16,ry:(Math.random()-.5)*.3,cv:.85+Math.random()*.3,ex:Math.random()-.5,ey:Math.random()-.5,sh:Math.random()});
+  return s;
+}
+// frontage : f=1 formation normale, f>1 ligne plus large et moins profonde (surface constante)
+function setFrontage(u,f){
+  f=Math.max(.5,Math.min(2.2,f));u.front=f;u.w=u.T.w*f;u.dBase=u.T.d/f;
+  const N=u.slots.length,nf=Math.max(2,Math.round(NF0[u.T.kind]*f)),nr=Math.ceil(N/nf);
+  for(let i=0;i<N;i++){const sl=u.slots[i];sl.r=Math.floor(i/nf);sl.f=i%nf;sl.nf=nf;sl.nr=nr;sl.cf=Math.min(nf,N-sl.r*nf)}
+  u.dirty=true;
+}
+function mk(side,type,x,y,label){
+  const t=T[type];x*=G;y*=G;
+  const u={id:uid++,side,type,T:t,label,x,y,ang:side===0?-Math.PI/2:Math.PI/2,men:t.men,morale:t.morale,dd:t.d,w:t.w,dBase:t.d,front:1,order:null,contacts:[],prevC:0,
+    moving:false,movedLast:false,lastRun:false,chargeT:0,chargeK:1,cd:Math.random()*1.5,routing:false,routeT:0,rallied:false,dead:false,underFire:0,fled:false,slots:makeSlots(t),shown:0,ib:null,dirty:true,preview:null};
+  return u;
+}
+
+const angDiff=(a,b)=>{let d=(a-b)%(Math.PI*2);if(d>Math.PI)d-=Math.PI*2;if(d<-Math.PI)d+=Math.PI*2;return d};
+const frac=u=>Math.max(0,u.men/u.T.men);
+function rectDist(u,px,py){
+  const c=Math.cos(u.ang),s=Math.sin(u.ang),rx=px-u.x,ry=py-u.y;
+  const lx=rx*c+ry*s,ly=-rx*s+ry*c;
+  return Math.hypot(Math.max(0,Math.abs(lx)-u.dd/2),Math.max(0,Math.abs(ly)-u.w/2));
+}
+function pts(u){const px=-Math.sin(u.ang),py=Math.cos(u.ang),h=u.w*.42;return [[u.x,u.y],[u.x+px*h,u.y+py*h],[u.x-px*h,u.y-py*h]]}
+function inContact(a,b){
+  if(Math.hypot(a.x-b.x,a.y-b.y)>a.w/2+b.w/2+30)return false;
+  for(const p of pts(b))if(rectDist(a,p[0],p[1])<b.dd/2+5)return true;
+  for(const p of pts(a))if(rectDist(b,p[0],p[1])<a.dd/2+5)return true;
+  return false;
+}
+const onHill=u=>Math.hypot(u.x-HILLg.x,u.y-HILLg.y)<HILLg.r||HILLS.some(q=>Math.hypot(u.x-q.x*G,u.y-q.y*G)<q.r*G*.8);
+const inForest=u=>FORESTSg.some(f=>Math.hypot(u.x-f.x,u.y-f.y)<f.r);
+function flankMult(def,att){const a=Math.atan2(att.y-def.y,att.x-def.x),d=Math.abs(angDiff(a,def.ang));return d<1.0?1:d<2.25?1.6:2.3}
+// rotation avec élan : accélère, puis freine en approchant de l'angle voulu
+function rotateToward(u,target,rate,dt){
+  const diff=angDiff(target,u.ang),acc=rate*2.4;
+  if(u.avT==null||time-u.avT>.12)u.av=0;u.avT=time;
+  if(Math.abs(diff)<.004){u.av=0;u.ang=target;return 0}
+  const want=Math.sign(diff)*Math.min(rate,Math.sqrt(2*acc*Math.abs(diff)));
+  u.av+=Math.max(-acc*dt,Math.min(acc*dt,want-u.av));
+  let st=u.av*dt;if(Math.abs(st)>Math.abs(diff)||st*diff<0&&Math.abs(diff)<.05){st=diff;u.av=0}
+  u.ang+=st;return Math.abs(diff-st)}
+// vitesse avec élan : chaque unité accélère et freine selon son type
+function accel(u,target,dist,brake,dt){
+  const k=u.T.kind,a=u.T.speed/(k==='cav'||k==='lcav'?2:k==='eleph'?2.6:k==='skirm'?.8:1.2);
+  if(brake)target=Math.min(target,Math.sqrt(2*a*1.4*Math.max(0,dist-2))+2.5);
+  u.v=(u.v||0)+Math.max(-a*1.6*dt,Math.min(a*dt,target-(u.v||0)))}
+function clampMap(u){u.x=Math.max(RIVER+u.w/3,Math.min(W-20,u.x));if(!u.routing)u.y=Math.max(20,Math.min(H-20,u.y))}
+function nearest(u,list){let b=null,bd=1e9;for(const e of list){const d=Math.hypot(e.x-u.x,e.y-u.y);if(d<bd){bd=d;b=e}}return b}
+
+function hurt(e,cas){
+  if(e.dead)return;
+  e.men-=cas;e.morale-=cas/e.T.men*100*(e.T.kind==='eleph'?3.5:MOR);
+  if(e.men<=0){e.men=0;e.dead=true;selected.delete(e);return}
+  if(!e.routing&&(e.morale<=0||frac(e)<.15))rout(e);
+}
+function rout(u){
+  u.routing=true;u.routeT=0;u.order=null;u.morale=0;
+  for(const o of units)if(o!==u&&o.side===u.side&&!o.dead&&!o.routing&&Math.hypot(o.x-u.x,o.y-u.y)<190*G)o.morale-=8;
+}
+function melee(u,dt){
+  const n=u.contacts.length;if(!n||u.routing)return;
+  const charge=u.chargeT>0?u.chargeK:1;
+  for(const e of u.contacts){
+    if(e.dead)continue;
+    const fm=flankMult(e,u);
+    let dmg=u.T.atk*CAS*Math.sqrt(frac(u))*charge/n*fm*(e.routing?2.2:1)*(onHill(u)?1.1:1);
+    if(u.T.kind==='cav'&&e.T.kind==='inf'&&fm===1&&!e.routing)dmg*=.5;
+    hurt(e,dmg*dt/(e.T.def*(onHill(e)?1.25:1))/e.T.tough);
+    if(!e.dead&&!e.routing){
+      if(fm>1)e.morale-=(fm-1)*2.5*dt;
+      if(u.T.fear&&e.T.kind!=='eleph')e.morale-=u.T.fear*FEAR*dt;
+      if(u.chargeT>0)e.morale-=(u.chargeK-1)*3*dt;
+      if(e.morale<=0)rout(e);
+    }
+    if(Math.random()<dt*9)spark((u.x+e.x)/2+(Math.random()-.5)*34*G,(u.y+e.y)/2+(Math.random()-.5)*34*G);
+  }
+}
+function shoot(u,dt){
+  const r=u.T.ranged;if(!r||u.routing||u.contacts.length)return;
+  u.cd-=dt;if(u.cd>0)return;
+  let tgt=null;
+  if(u.order&&u.order.type==='attack'&&!u.order.target.dead&&Math.hypot(u.order.target.x-u.x,u.order.target.y-u.y)<r.range)tgt=u.order.target;
+  if(!tgt){let bd=r.range;for(const e of units){if(e.side===u.side||e.dead)continue;const d=Math.hypot(e.x-u.x,e.y-u.y)-e.w/3;if(d<bd){bd=d;tgt=e}}}
+  if(!tgt)return;
+  u.cd=r.cd*(.85+Math.random()*.3);u.shotT=rt;
+  const dist=Math.hypot(tgt.x-u.x,tgt.y-u.y);
+  projs.push({x0:u.x,y0:u.y,tx:tgt.x+(Math.random()-.5)*24,ty:tgt.y+(Math.random()-.5)*16,t:0,dur:.35+dist/500,target:tgt,dmg:r.dmg*2*Math.sqrt(frac(u)),seed:Math.random(),arc:18+dist*.12});
+}
+function landProj(p){
+  const e=p.target;if(e.dead)return;
+  let cas=p.dmg*.5/e.T.def*(onHill(e)?.8:1);
+  if(e.T.kind==='eleph')cas/=6;if(e.T.kind==='skirm')cas*=.7;
+  e.underFire=1.5;hurt(e,cas);
+  if(!e.dead&&!e.routing){e.morale-=e.T.kind==='eleph'?1.6:.35;if(e.morale<=0)rout(e)}
+}
+function moveUnit(u,dt){
+  u.moving=false;const o=u.order;if(!o){u.v=0;return}
+  let tx,ty;
+  if(o.type==='attack'){
+    const t=o.target;if(t.dead){u.order=null;return}
+    tx=t.x;ty=t.y;
+    if(u.T.kind==='skirm'&&Math.hypot(tx-u.x,ty-u.y)<u.T.ranged.range*.85){rotateToward(u,Math.atan2(ty-u.y,tx-u.x),u.T.turn,dt);return}
+  }else{tx=o.x;ty=o.y}
+  const dx=tx-u.x,dy=ty-u.y,dist=Math.hypot(dx,dy);
+  if(o.type==='move'&&dist<3){u.v=0;if(o.face!=null){if(rotateToward(u,o.face,u.T.turn,dt)<.02)u.order=null}else u.order=null;return}
+  const want=Math.atan2(dy,dx),diff=Math.abs(angDiff(want,u.ang));
+  u.lastRun=!!o.run;
+  const sp=u.T.speed*(o.run?RUN:1)*(inForest(u)?.55:1)*(onHill(u)?.85:1);
+  if(o.type==='move'&&diff>2.3&&dist<160*G&&u.T.kind!=='cav'&&u.T.kind!=='lcav'){
+    accel(u,sp*.45,dist,true,dt);const st=Math.min(u.v*dt,dist);u.x+=dx/dist*st;u.y+=dy/dist*st;u.moving=st>0;if(o.face!=null)rotateToward(u,o.face,u.T.turn,dt);return;
+  }
+  // avance en tournant (en arc), ralentit dans les virages serrés, ne pivote sur place que pour un demi-tour
+  rotateToward(u,want,u.T.turn,dt);
+  const d2=angDiff(want,u.ang),ad=Math.abs(d2),wide=u.T.kind==='cav'||u.T.kind==='lcav'||u.T.kind==='eleph';
+  const f=ad<.25?1:Math.max(0,Math.cos(Math.min(Math.PI/2,(ad-.25)*(wide?1.1:1.6))));
+  accel(u,sp*f,dist,o.type==='move',dt);
+  if(u.v>.05){const h=u.ang+Math.max(-.3,Math.min(.3,d2)),st=Math.min(u.v*dt,dist);u.x+=Math.cos(h)*st;u.y+=Math.sin(h)*st;u.moving=true}
+}
+function flee(u,dt){
+  u.routeT+=dt;
+  const foes=units.filter(e=>e.side!==u.side&&!e.dead&&!e.routing);
+  let ax=0,ay=(u.side===0?H+80:-80)-u.y;const l=Math.hypot(ax,ay)||1;ax/=l;ay/=l;
+  const n=nearest(u,foes);
+  if(n){const dx=u.x-n.x,dy=u.y-n.y,d=Math.hypot(dx,dy)||1;if(d<250*G){ax+=dx/d*.8;ay+=dy/d*.8}}
+  rotateToward(u,Math.atan2(ay,ax),u.T.turn*2,dt);
+  const sp=u.T.speed*RUN*1.1;u.x+=Math.cos(u.ang)*sp*dt;u.y+=Math.sin(u.ang)*sp*dt;u.moving=true;
+  // ralliement : loin de l'ennemi, avec assez d'hommes, une seule fois
+  const nd=n?Math.hypot(n.x-u.x,n.y-u.y):1e9;
+  if(!u.rallied&&u.routeT>14&&nd>420*G&&frac(u)>.3){u.routing=false;u.rallied=true;u.morale=u.T.morale*.4;u.dirty=true;u.ang=u.side===0?-Math.PI/2:Math.PI/2}
+  if(u.y<-60||u.y>H+60){u.fled=true;u.dead=true;selected.delete(u)}
+}
+function ai(){
+  const mine=units.filter(u=>u.side===1&&!u.dead&&!u.routing),foes=units.filter(u=>u.side===0&&!u.dead&&!u.routing);
+  if(!foes.length)return;
+  for(const u of mine){
+    if(u.contacts.length)continue;
+    const k=u.T.kind,n=nearest(u,foes),dist=Math.hypot(n.x-u.x,n.y-u.y),toN=Math.atan2(n.y-u.y,n.x-u.x);
+    if(k==='skirm'){
+      if(time>95*Math.sqrt(G)){u.order={type:'move',x:u.x,y:380*G,face:Math.PI/2};continue}
+      if(dist<95*G)u.order={type:'move',x:u.x-(n.x-u.x)/dist*110*G,y:u.y-(n.y-u.y)/dist*110*G,face:toN};
+      else if(dist>u.T.ranged.range*.9){const r=u.T.ranged.range*.75;u.order={type:'move',x:n.x-(n.x-u.x)/dist*r,y:n.y-(n.y-u.y)/dist*r,face:toN}}
+      else u.order={type:'move',x:u.x,y:u.y,face:toN};
+    }else if(k==='inf'){
+      if(time<5)continue;
+      if(dist>210*G)u.order={type:'move',x:u.x+(n.x-u.x)*.08,y:u.y+70*G,face:Math.PI/2};
+      else u.order={type:'attack',target:n,run:dist<120*G};
+    }else{
+      const cavs=foes.filter(e=>e.T.kind==='cav'||e.T.kind==='lcav');
+      let t=cavs.length?nearest(u,cavs):n;
+      if(!cavs.length){
+        const busy=foes.filter(e=>e.contacts.length);if(busy.length)t=nearest(u,busy);
+        const rx=t.x-Math.cos(t.ang)*80*G,ry=t.y-Math.sin(t.ang)*80*G;
+        if(Math.hypot(rx-u.x,ry-u.y)>50*G&&Math.hypot(t.x-u.x,t.y-u.y)>90*G){u.order={type:'move',x:rx,y:ry,face:null,run:true};continue}
+      }
+      u.order={type:'attack',target:t,run:Math.hypot(t.x-u.x,t.y-u.y)<260*G};
+    }
+  }
+}
+function step(dt){
+  time+=dt;aiClock-=dt;if(aiClock<=0){aiClock=.8;ai()}
+  const live=units.filter(u=>!u.dead);
+  for(const u of live){u.prevC=u.contacts.length;u.contacts=[]}
+  gaContacts(live);/*PERF-GA*/
+  for(const u of live){
+    if(u.prevC===0&&u.contacts.length&&u.movedLast&&u.T.charge>1&&!u.routing){u.chargeT=u.lastRun?4:2;u.chargeK=u.lastRun?u.T.charge:1+(u.T.charge-1)*.4}
+    u.chargeT=Math.max(0,u.chargeT-dt);u.underFire=Math.max(0,u.underFire-dt);
+  }
+  for(const u of live)if(!u.dead)melee(u,dt);
+  for(const u of live){
+    if(u.dead)continue;
+    if(u.routing){flee(u,dt);u.movedLast=true;continue}
+    if(u.contacts.length){
+      const e=u.contacts[0];
+      rotateToward(u,Math.atan2(e.y-u.y,e.x-u.x),u.T.turn*.25,dt);u.morale-=.12*dt;u.moving=false;u.lastRun=false;
+      if(u.order&&u.order.type==='move'&&u.T.kind!=='inf'&&u.T.kind!=='eleph'){
+        const o=u.order,want=Math.atan2(o.y-u.y,o.x-u.x);
+        if(Math.abs(angDiff(want,Math.atan2(e.y-u.y,e.x-u.x)))>1.6){rotateToward(u,want,u.T.turn,dt);u.x+=Math.cos(want)*u.T.speed*.5*dt;u.y+=Math.sin(want)*u.T.speed*.5*dt;u.morale-=2*dt}
+      }
+    }else{moveUnit(u,dt);if(u.underFire<=0)u.morale=Math.min(u.T.morale,u.morale+.8*dt)}
+    u.movedLast=u.moving;shoot(u,dt);
+    u.dd=u.dBase*(.45+.55*frac(u));clampMap(u);
+    if(u.moving&&Math.random()<dt*(u.T.kind==='cav'||u.T.kind==='lcav'?9:u.T.kind==='eleph'?6:3.5))dustAt(u);
+  }
+  for(const p of projs){p.t+=dt;if(p.t>=p.dur&&!p.done){p.done=true;landProj(p);puff(p.tx,p.ty)}}
+  projs=projs.filter(p=>!p.done);
+  for(const u of selected)if(u.dead||u.routing)selected.delete(u);
+  checkEnd();
+}
+const alive=s=>units.some(u=>u.side===s&&!u.dead&&!u.routing);
+const fmt=t=>String(Math.floor(t/60)).padStart(2,'0')+':'+String(Math.floor(t%60)).padStart(2,'0');
+function checkEnd(){
+  if(ended)return;const p=alive(0),r=alive(1);if(p&&r)return;
+  ended=true;paused=true;updatePauseBtn();
+  const win=p&&!r;
+  $('endT').textContent=win?'Victoire':'Défaite';
+  $('endP').textContent=win?"L'armée romaine est en déroute. Carthage tient le champ de bataille de l'Aufide.":"Votre armée a cédé. Rome reste maîtresse du terrain.";
+  const st=s=>{const us=units.filter(u=>u.side===s&&u.T.kind!=='eleph');return [Math.round(us.reduce((a,u)=>a+(u.fled?0:u.T.men-u.men),0)),units.filter(u=>u.side===s&&(u.routing||u.fled)).length]};
+  const a=st(0),b=st(1);
+  $('endS').innerHTML=`<span class="h">Armée</span><span class="h">Pertes</span><span class="h">Unités en fuite</span>
+   <span class="cp">${PAL[0].n}</span><span>${a[0].toLocaleString('fr-FR')}</span><span>${a[1]}</span>
+   <span class="cr">${PAL[1].n}</span><span>${b[0].toLocaleString('fr-FR')}</span><span>${b[1]}</span>
+   <span class="h" style="grid-column:1/-1;margin-top:6px">Durée : ${fmt(time)}</span>`;
+  if(CAMP){$('endP').textContent=win?"L'ennemi est en déroute : le champ de bataille est à vous.":"Votre armée a cédé et doit se replier.";$('bAgain').onclick=()=>campReturn(win)}
+  $('end').hidden=false;
+}
+

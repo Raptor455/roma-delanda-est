@@ -1,0 +1,124 @@
+/* ================= RÉGIMENTS LÉGENDAIRES ET REPÈRES (campagne ; fil « Imaginer les idées pour le futur ») =================
+   Régiments légendaires : chaque régiment tient le compte de ses batailles, victoires, ennemis tués et hauts faits
+   (u.lg={b,v,k,hf:[…]}). À 5 points de gloire (une victoire = 1, autant d'ennemis tués que son effectif = 1,
+   une victoire contre toute attente = +1) et au moins 2 victoires, il devient légendaire : un surnom tiré du lieu,
+   un étendard à lui (u.lg.leg={n,c,em}), +8 % au combat sur la carte, moral +20 % et ses couleurs sur le champ de bataille.
+   Son étendard perdu (régiment anéanti) ébranle son armée et exalte le vainqueur.
+   Les morts réels de la bataille viennent du champ de bataille (message « exploits ») ; sinon, estimation.
+   Repères : signaux posés sur la carte (attaque ici, à l'aide, rassemblement, danger) avec un petit message,
+   vus par les joueurs du même camp (S.marks, synchronisé par la partie à plusieurs). Bouton drapeau ou Alt+clic.
+   Source : /mnt/project-files/futur/legendes-campagne.js, injecté par futur/patch.py après pvp-campagne.js. */
+const LEGE={exp:null,expK:{}};
+{
+  const LG_PTS=5,LG_VIC=2;
+  const kindOf=u=>{const k=UT[u.t]&&UT[u.t].k;return k||'inf'};
+  const NOUNS={inf:['Lions','Loups','Taureaux','Inébranlables','Boucliers d’airain','Invaincus','Sangliers','Fils de la foudre'],
+    cav:['Faucons','Centaures','Foudres','Éperons d’or','Aigles','Cavaliers du vent'],lcav:['Vents','Faucons','Scorpions','Chacals','Fils du désert'],
+    skirm:['Frelons','Guêpes','Éperviers','Grêle de pierres','Archers du soleil'],eleph:['Colosses','Tours vivantes','Géants','Montagnes qui marchent']};
+  const COLS=[['#8b1e1e','#e8c46a'],['#1f3b6b','#e8e1cc'],['#2d5a2d','#e8c46a'],['#5a1f5a','#e8c46a'],['#6b4a1f','#f3e4b8'],['#1a1a1a','#c9302c'],['#a8761c','#2a1a0a'],['#e8e1cc','#8b1e1e']];
+  const EMB=['Signe de Tanit','Croissant','Soleil','Étoile','Foudre','Palme','Taureau','Lune et étoile'];
+  const gloire=u=>{const g=u.lg;if(!g)return 0;return (g.v||0)+(g.k||0)/Math.max(300,UT[u.t].men)+(g.x||0)};
+  LEGE.gloire=gloire;
+  const isLeg=u=>!!(u&&u.lg&&u.lg.leg);
+  LEGE.isLeg=isLeg;
+  function emblem(i,fg){const s=`fill="${fg}"`,st=`stroke="${fg}" fill="none" stroke-width="1.6" stroke-linecap="round"`;
+    switch(i%8){
+      case 0:return `<circle cx="10" cy="5.6" r="2.4" ${s}/><rect x="4.6" y="8.4" width="10.8" height="1.6" ${s}/><path d="M10 10 L5.2 17.4 L14.8 17.4Z" ${s}/>`;
+      case 1:return `<path d="M13.5 3.5 A7 7 0 1 0 13.5 16.5 A5.4 5.4 0 1 1 13.5 3.5Z" ${s}/>`;
+      case 2:{let r='';for(let k=0;k<8;k++){const a=k*Math.PI/4;r+=`<line x1="${(10+Math.cos(a)*5).toFixed(1)}" y1="${(10+Math.sin(a)*5).toFixed(1)}" x2="${(10+Math.cos(a)*7.6).toFixed(1)}" y2="${(10+Math.sin(a)*7.6).toFixed(1)}" ${st}/>`}return `<circle cx="10" cy="10" r="3.6" ${s}/>`+r}
+      case 3:{let p='';for(let k=0;k<10;k++){const a=-Math.PI/2+k*Math.PI/5,r=k%2?3:7.2;p+=(10+Math.cos(a)*r).toFixed(1)+','+(10.6+Math.sin(a)*r).toFixed(1)+' '}return `<polygon points="${p}" ${s}/>`}
+      case 4:return `<polygon points="11.5,2 5,11 9.4,11 7.4,18 15,8.4 10.6,8.4 13,2" ${s}/>`;
+      case 5:return `<path d="M10 18 L10 4 M10 6 Q6 5 4 8 M10 6 Q14 5 16 8 M10 9.5 Q6 9 4.5 12 M10 9.5 Q14 9 15.5 12 M10 13 Q7.5 13 6 15.5 M10 13 Q12.5 13 14 15.5" ${st}/>`;
+      case 6:return `<path d="M4 5 Q5 9 8 9 L12 9 Q15 9 16 5 M7 9 Q6 14 10 16 Q14 14 13 9" ${st}/><circle cx="8.4" cy="11.6" r=".9" ${s}/><circle cx="11.6" cy="11.6" r=".9" ${s}/>`;
+      default:return `<path d="M12 3.5 A6.6 6.6 0 1 0 12 16.5 A5 5 0 1 1 12 3.5Z" ${s}/><polygon points="14.6,7.6 15.3,9.4 17.2,9.5 15.7,10.6 16.3,12.4 14.6,11.3 12.9,12.4 13.5,10.6 12,9.5 13.9,9.4" ${s}/>`}}
+  // étendard : hampe, traverse, étoffe frangée, emblème
+  function banner(L,w){const c=COLS[L.c%COLS.length];w=w||22;
+    return `<svg class="lgban" width="${w}" height="${Math.round(w*1.4)}" viewBox="0 0 22 31" style="vertical-align:middle"><title>${esc(L.n)}</title>`+
+      `<line x1="11" y1="1" x2="11" y2="30" stroke="#5a4020" stroke-width="1.6"/><line x1="2.5" y1="3" x2="19.5" y2="3" stroke="#c9a24a" stroke-width="1.4"/><circle cx="11" cy="1.6" r="1.3" fill="#e8c46a"/>`+
+      `<path d="M3.5 3.6 H18.5 V22 L16 24 L13.5 22 L11 24 L8.5 22 L6 24 L3.5 22 Z" fill="${c[0]}" stroke="${c[1]}" stroke-width=".7"/>`+
+      `<g transform="translate(4.6 4.4) scale(.64)">${emblem(L.em,c[1])}</g></svg>`}
+  LEGE.banner=banner;
+  const rndB=(b,n)=>{const h=Math.sin(Math.floor(S.day)*12.9898+((b&&b.x)||0)*78.233+((b&&b.y)||0)*37.719+n*4.13)*43758.5453;return h-Math.floor(h)};
+  function makeName(u,b,j){const L=NOUNS[kindOf(u)]||NOUNS.inf,used=new Set();for(const a of S.armies)for(const x of a.units)if(isLeg(x))used.add(x.lg.leg.n);
+    const place=b&&N[b.node]?N[b.node].n:null;
+    for(let i=0;i<20;i++){const nm=L[Math.floor(rndB(b,j*7+i)*L.length)],n=place?`Les ${nm} ${deN(place)}`:`Les ${nm}`;if(!used.has(n))return n}
+    return `Les ${L[0]} ${ROMAN[(used.size+1)%20]||''}`.trim()}
+  function hfTxt(b,win,k){const c=cal(Math.floor(S.day));return `${win?'Victoire':'Défaite'} ${battleTitle(b).replace(/^Bataille /,'')} (${c.year} av. J.-C.)${k>=1?` : ${Math.round(k).toLocaleString('fr-FR')} ennemis tués`:''}`}
+  function promote(u,a,b,j){j=j||0;const g=u.lg;g.leg={n:makeName(u,b,j),c:Math.floor(rndB(b,j*7+31)*COLS.length),em:Math.floor(rndB(b,j*7+53)*EMB.length),d:Math.floor(S.day)};
+    const seen=a.side==='car'||visOfArmyL(a)>=1;
+    if(seen)log(`${a.side==='car'?'Gloire !':'L’ennemi a ses héros :'} le régiment ${esc(uName(u))} de ${esc(a.name||'l’armée')} devient légendaire : <b>${esc(g.leg.n)}</b>. Il reçoit son étendard (+8 % au combat, moral +20 % sur le terrain).`);
+    if(a.side==='car')try{const W=window.__son;if(W&&W.ok()){const t=W.now()+.4;W.horn(t,[[262,.3],[330,.3],[392,.3],[523,1.4]],.2,'e',0);W.crowd(t+.6,.18,0,6)}}catch(e){}}
+  const visOfArmyL=a=>{try{return typeof visOfArmy==='function'?visOfArmy(a):visAt(a.x,a.y)}catch(e){return 0}};
+  // ---- bilan d'une bataille, régiment par régiment ----
+  function account(b,res,before,KA,KD,p){
+    const A=before.A,D=before.D,lossA=A.reduce((s,o,j)=>s+Math.max(0,o.men-(res.A[j]||0)),0),lossD=D.reduce((s,o,j)=>s+Math.max(0,o.men-(res.D[j]||0)),0);
+    // morts infligés : ceux du champ de bataille s'ils sont là, sinon les pertes adverses partagées selon la force
+    const share=(L,tot)=>{const w=L.map(o=>{try{return power([{t:o.t,d:o.d,men:o.men}])}catch(e){return o.men}}),W=w.reduce((s,x)=>s+x,0)||1;return w.map(x=>tot*x/W)};
+    const kA=KA&&KA.length===A.length?KA:share(A,lossD),kD=KD&&KD.length===D.length?KD:share(D,lossA);
+    const upset=res.attWin?p<.35:p>.65;
+    const run=(L,K,win)=>L.forEach((o,j)=>{const u=o.u,a=o.a;if(!u)return;
+      const alive=a&&!a.dead&&a.units.includes(u);
+      if(!alive){if(isLeg(u)){const W=(win?before.dA:before.wA)||[];const sideA=a&&a.side;
+          if(sideA==='car'||W.some(x=>x.side==='car')||visAt(b.x,b.y)>=1)log(`${esc(u.lg.leg.n)} ${win?'sont tombés jusqu’au dernier':'sont anéantis'} : ${sideA==='car'?'leur étendard est perdu':'leur étendard est pris'}.`);
+          for(const x of S.armies){if(x.dead)continue;const d=Math.hypot(x.x-b.x,x.y-b.y);if(d>30)continue;if(x.side===sideA)x.mor=Math.max(0,(x.mor==null?MOR0:x.mor)-8);else if(W.includes(x))x.mor=Math.min(100,(x.mor==null?MOR0:x.mor)+8)}}
+        return}
+      const g=u.lg=u.lg||{b:0,v:0,k:0,hf:[]};const was=gloire(u),wasLeg=isLeg(u);g.b++;if(win)g.v++;g.k+=K[j]||0;
+      if(win&&upset){g.x=(g.x||0)+1}
+      const big=(K[j]||0)>=Math.max(150,UT[u.t].men*.4);
+      if(win||big){g.hf.push(hfTxt(b,win,K[j]||0)+(win&&upset?' — contre toute attente':''));if(g.hf.length>6)g.hf.shift()}
+      if(!wasLeg&&g.v>=LG_VIC&&gloire(u)>=LG_PTS)promote(u,a,b,j+(L===A?0:100));
+      else if(wasLeg&&a.side==='car'&&win&&was<10&&gloire(u)>=10)log(`${esc(g.leg.n)} : leur renommée grandit encore (${Math.round(g.k).toLocaleString('fr-FR')} ennemis tués, ${g.v} victoires).`)});
+    run(A,kA,res.attWin);run(D,kD,!res.attWin)}
+  const snapSide=ids=>{const L=[];for(const id of ids){const a=S.armies.find(x=>x.id===id);if(a)a.units.forEach(u=>L.push({u,a,t:u.t,d:u.d,men:u.men}))}return L};
+  {const _ar=applyResult;applyResult=function(b,res){
+    // l'invité d'une bataille à deux n'applique pas le résultat
+    const key=typeof mpBKey==='function'&&b?(()=>{try{return mpBKey(b)}catch(e){return null}})():null;
+    if(typeof MP!=='undefined'&&MP.pvpG&&key===MP.pvpG)return _ar.apply(this,arguments);
+    let before=null,p=.5,KA=null,KD=null;
+    try{before={A:snapSide(b.att),D:snapSide(b.def)};before.wA=sideArmies(b.att);before.dA=sideArmies(b.def);try{p=odds(b)}catch(e){}
+      let E=LEGE.exp;LEGE.exp=null;if(!E&&key&&LEGE.expK[key]){E=LEGE.expK[key];delete LEGE.expK[key]}
+      if(E){if(E.KA){KA=E.KA;KD=E.KD}else{const am=!!b.attMine;KA=am?E.p:E.e;KD=am?E.e:E.p}}
+      // chef d'armée invité qui a livré la bataille : il envoie aussi les morts infligés à l'hôte
+      if(KA&&typeof MP!=='undefined'&&MP.role==='guest'&&MP.in3d&&key===MP.in3d){mpSend({t:'bexp',k:key,KA:KA,KD:KD})}
+    }catch(e){console.warn(e);before=null}
+    const r=_ar.apply(this,arguments);
+    if(before)try{account(b,res,before,KA,KD,p)}catch(e){console.warn(e)}
+    return r}}
+  // morts infligés envoyés par le champ de bataille, juste avant son résultat
+  window.addEventListener('message',ev=>{const d=ev.data,f=$('battle3d');if(d&&d.bellum==='exploits'&&f&&ev.source===f.contentWindow)LEGE.exp={p:d.p||[],e:d.e||[]}},true);
+  if(typeof mpOnHost==='function'){const _h=mpOnHost;mpOnHost=function(d){if(d&&d.t==='bexp'){if(d.k)LEGE.expK[d.k]={KA:d.KA,KD:d.KD};return}return _h.apply(this,arguments)}}
+  // +8 % au combat pour un régiment légendaire (s'ajoute aux chevrons)
+  {const _vm=vetMul;vetMul=function(ids){const base=_vm.apply(this,arguments);let w=0,s=0;for(const id of ids){const a=S.armies.find(x=>x.id===id);if(!a)continue;for(const u of a.units){w+=u.men;s+=u.men*(isLeg(u)?1.08:1)}}return base*(w>0?s/w:1)}}
+  // ---- sur le champ de bataille : surnom, couleurs et moral ----
+  {const _dv=dive;dive=function(payload){try{const b=S.cur,pb=payload&&payload.b;if(b&&pb&&pb.p&&(!payload.pvp||payload.pvp.role==='h')){
+      const am=!!b.attMine,A=snapSide(b.att),D=snapSide(b.def),P=am?A:D,E=am?D:A;
+      const tag=(L,src)=>{if(!L)return;L.forEach((c,i)=>{const u=src[i]&&src[i].u;if(!c||!isLeg(u))return;const g=u.lg.leg;c.leg={n:g.n,c:COLS[g.c%COLS.length],svg:banner(g,22)};c.label=g.n})};
+      tag(pb.p,P);tag(pb.e,E)}}catch(e){console.warn(e)}
+    return _dv.apply(this,arguments)}}
+  // ---- panneau de l'armée : étendards sur les régiments et tableau des légendes ----
+  const _rs=renderSide;renderSide=function(){_rs.apply(this,arguments);try{if(!S||!sel||!sel.a||sel.a.dead||sel.a.ship)return;const a=sel.a,el=$('side');if(!el)return;
+    const T=el.querySelectorAll('.ui-tiles label, label.unit');
+    if(T.length===a.units.length)a.units.forEach((u,k)=>{const L=T[k],g=u.lg;if(!g)return;const gl=gloire(u);
+      L.title=(L.title||'')+(isLeg(u)?` · ${g.leg.n} (légendaire)`:` · gloire ${gl.toFixed(1).replace('.',',')} / ${LG_PTS}`)+` · ${g.b} bataille${g.b>1?'s':''}, ${g.v} victoire${g.v>1?'s':''}, ${Math.round(g.k).toLocaleString('fr-FR')} ennemis tués`;
+      if(isLeg(u)){const tile=L.classList.contains('ui-tile');if(tile){L.style.position='relative';L.insertAdjacentHTML('beforeend',`<span style="position:absolute;left:1px;bottom:0;line-height:0;pointer-events:none">${banner(g.leg,11)}</span>`)}else{const s=L.querySelectorAll('span')[1]||L;s.insertAdjacentHTML('beforeend',' '+banner(g.leg,10))}}});
+    const leg=a.units.filter(isLeg);if(!leg.length||!T.length)return;
+    const mine=isMine(a);
+    const box=document.createElement('div');box.className='lgbox';box.style.cssText='margin:8px 0 4px;padding:6px 8px;border:1px solid rgba(232,196,106,.35);border-radius:6px;background:rgba(232,196,106,.06)';
+    box.innerHTML=`<p class="sub" style="margin:0 0 4px">Régiments légendaires</p>`+leg.map(u=>{const g=u.lg,L=g.leg;
+      return `<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0">${banner(L,22)}<div style="flex:1;min-width:0"><b>${esc(L.n)}</b>${mine?` <button type="button" class="lgren" data-i="${a.units.indexOf(u)}" title="Changer le surnom ou l’étendard" style="font-size:11px;padding:0 5px;min-height:0">Renommer</button>`:''}<br>`+
+        `<span class="sub">${esc(uName(u))} · ${g.v} victoire${g.v>1?'s':''} en ${g.b} bataille${g.b>1?'s':''} · ${Math.round(g.k).toLocaleString('fr-FR')} ennemis tués</span>`+
+        (g.hf.length?`<ul style="margin:2px 0 0 14px;padding:0;font-size:12px;opacity:.85">${g.hf.slice(-3).reverse().map(h=>`<li>${esc(h)}</li>`).join('')}</ul>`:'')+`</div></div>`}).join('');
+    const host=T[0].closest('.ui-tiles')||T[0].parentNode;host.after(box);
+    box.querySelectorAll('.lgren').forEach(bt=>bt.onclick=e=>{e.stopPropagation();renameLeg(a,+bt.dataset.i)})}catch(e){console.warn(e)}};
+  function renameLeg(a,i){const u=a.units[i];if(!isLeg(u))return;const L=u.lg.leg;let c=L.c,em=L.em;
+    const draw=()=>{$('lgPrev').innerHTML=banner({n:$('lgN').value||L.n,c,em},44);
+      $('lgCols').innerHTML=COLS.map((p,k)=>`<button type="button" data-c="${k}" title="Couleurs" style="width:24px;height:24px;padding:0;border-radius:4px;background:${p[0]};border:2px solid ${k===c?'#fff':p[1]}"></button>`).join(' ');
+      $('lgEms').innerHTML=EMB.map((n,k)=>`<button type="button" data-e="${k}" title="${n}" class="${k===em?'on':''}" style="padding:2px;line-height:0"><svg width="20" height="20" viewBox="0 0 20 20">${emblem(k,'currentColor')}</svg></button>`).join(' ');
+      $('lgCols').querySelectorAll('button').forEach(b=>b.onclick=()=>{c=+b.dataset.c;draw()});$('lgEms').querySelectorAll('button').forEach(b=>b.onclick=()=>{em=+b.dataset.e;draw()})};
+    modal(`<h2>Étendard du régiment</h2><div style="display:flex;gap:14px;align-items:center"><div id="lgPrev"></div><div style="flex:1"><label class="sub">Surnom<br><input id="lgN" maxlength="40" value="${esc(L.n)}" style="width:100%"></label></div></div>
+      <p class="sub" style="margin:10px 0 4px">Couleurs</p><div id="lgCols"></div><p class="sub" style="margin:10px 0 4px">Emblème</p><div id="lgEms"></div>
+      <div class="row" style="margin-top:12px"><button type="button" id="lgOk" class="on">Garder</button><button type="button" id="lgNo">Annuler</button></div>`);
+    draw();$('lgN').oninput=draw;$('lgN').onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')$('lgOk').click()};
+    $('lgNo').onclick=closeModal;$('lgOk').onclick=()=>{const n=$('lgN').value.trim().slice(0,40);if(n)L.n=n;L.c=c;L.em=em;closeModal();save();renderAll()}}
+  LEGE.promote=promote;
+

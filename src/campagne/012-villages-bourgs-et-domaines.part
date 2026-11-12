@@ -1,0 +1,169 @@
+/* ================= VILLAGES, BOURGS ET DOMAINES ================= */
+// Des milliers de petits lieux semés le long des routes et dans les campagnes. Ils ne changent pas de maître (ils suivent la ville
+// dont ils dépendent) mais nourrissent les armées : on y achète, on y fourrage, on les pille, on y prend des nouvelles.
+// Vivres d'une armée (a.food) en « jours-régiment » : un régiment mange 1 par jour hors de ses terres.
+const VK={ferme:{n:'Domaine',cap:25,loot:3,inc:.4},village:{n:'Village',cap:60,loot:6,inc:.8},bourg:{n:'Bourg',cap:160,loot:16,inc:2}};
+const FOOD_DAYS=20; // jours de vivres qu'une armée peut porter
+let VIL=[],VB=new Map();const VBK=25;
+const SYL={
+  ita:[['al','ber','cal','fur','lan','mar','nev','pol','ser','tur','vel','cor','fer','lab','sab','tin','pal','ver','ru','men'],['ium','ia','um','inum','anum','ona','ernum','ula','etum']],
+  col:[['al','ber','cal','fur','lan','mar','nev','pol','ser','tur','vel','cor','fer','lab','sab','tin','pal','ver','ru','men'],['ium','ia','um','inum','anum','ona','ernum','ula','etum']],
+  pun:[['bal','gar','hip','mak','tab','tus','zar','kar','mag','bir','ras','sut','thu','hal','ad','mel'],['a','on','at','ara','ut','ba','mon','ka']],
+  gre:[['ar','dem','kal','lyk','ner','phal','sim','thes','zak','pel','mel','eu','her','kor','pyr','ag'],['os','ion','ai','eia','ousa','ai','ea','is']],
+  ibe:[['il','bel','ses','ur','tar','bas','ost','cel','ner','sal','ar','lac','bil','ed'],['ici','ur','a','obriga','is','etum','ena','ia']],
+  gau:[['bri','dun','lug','nem','ver','cond','mag','seg','ebur','and','vind','cam','nov','tar'],['odunum','iacum','obriga','omagus','ate','ialon','orix','ennum']],
+  num:[['tha','mas','tig','ruc','sic','zam','aud','gil','cap','tub','bul','mad'],['a','ar','ine','ura','ussa','ensis','ita']]};
+const GENS=['Aemilia','Caecina','Fabia','Licinia','Marcia','Pompilia','Sestia','Valeria','Atilia','Fulvia','Cornelia','Minucia','Papiria','Sempronia','Claudia','Iunia'];
+const VPRE={ita:['Forum ','Vicus ',''],col:['Forum ','Vicus ',''],pun:['Magdal ',''],gre:['Kômê ',''],ibe:[''],gau:[''],num:['']};
+function vName(cul,k,seed){const L=SYL[cul]||SYL.ibe,r=j=>hash(seed*7+j,seed*3-j*11);
+  let w=L[0][Math.floor(r(1)*L[0].length)]+(r(2)<.35?L[0][Math.floor(r(3)*L[0].length)]:'')+L[1][Math.floor(r(4)*L[1].length)];w=w.charAt(0).toUpperCase()+w.slice(1);
+  if(k==='ferme')return (cul==='ita'||cul==='col')?'Villa '+GENS[Math.floor(r(5)*GENS.length)]:'Domaine de '+w;
+  if(k==='bourg'){const p=VPRE[cul]||[''];return p[Math.floor(r(6)*p.length)]+w}
+  return w}
+const vBucket=(x,y)=>Math.floor(x/VBK)+','+Math.floor(y/VBK);
+function villagesIn(a,b,c,d){const out=[];for(let i=Math.floor(a/VBK);i<=Math.floor(c/VBK);i++)for(let j=Math.floor(b/VBK);j<=Math.floor(d/VBK);j++){const L=VB.get(i+','+j);if(L)for(const v of L)if(v.x>=a&&v.x<=c&&v.y>=b&&v.y<=d)out.push(v)}return out}
+function nearestVillage(x,y,r){let best=null,bd=r;for(const v of villagesIn(x-r,y-r,x+r,y+r)){const d=Math.hypot(v.x-x,v.y-y);if(d<bd){bd=d;best=v}}return best}
+function buildVillages(){
+  VIL=[];VB=new Map();
+  const tooNear=(x,y,d)=>{for(const v of villagesIn(x-d,y-d,x+d,y+d))if(Math.hypot(v.x-x,v.y-y)<d)return true;return false};
+  const add=(x,y,k,seed)=>{if(!landFast(x,y)||!landFast(x+.6,y)||!landFast(x-.6,y))return;const t=townAt(x,y);if(!t||Math.hypot(t.x-x,t.y-y)<4.5)return;
+    for(const n of N)if(n.col&&Math.abs(n.x-x)<4&&Math.abs(n.y-y)<4)return;
+    if(tooNear(x,y,k==='ferme'?3:4.5))return;if(demH(x,y)>1650)return;
+    const cul=cityStyle(t),v={id:VIL.length,x,y,k,t:t.i,cul,seed,n:vName(cul,k,seed)};VIL.push(v);const key=vBucket(x,y);if(!VB.has(key))VB.set(key,[]);VB.get(key).push(v)};
+  // le long des routes : un village toutes les 12 à 24 km, un peu à l'écart de la chaussée ; bourgs aux étapes
+  for(const e of EDGES){if(e.type==='mer'||e.type==='detroit')continue;const P=e.cv||[[N[e.a].x,N[e.a].y],[N[e.b].x,N[e.b].y]];
+    let d0=0,next=6+hash(e.a*13,e.b*7)*10,c=0;
+    for(let k=1;k<P.length;k++){const [ax,ay]=P[k-1],[bx,by]=P[k],L=Math.hypot(bx-ax,by-ay);if(L<1e-6)continue;let sp=0;
+      while(d0+(L-sp)>=next){sp+=next-d0;d0=0;c++;const h=hash(e.a*31+c,e.b*17-c),x=ax+(bx-ax)*sp/L,y=ay+(by-ay)*sp/L,nx=-(by-ay)/L,ny=(bx-ax)/L,off=(h>.5?1:-1)*(.35+hash(c,e.a)*.6);
+        add(x+nx*off,y+ny*off,h<.2?'bourg':'village',e.a*1000+e.b*7+c);next=12+hash(c*5,e.b)*12}
+      d0+=L-sp}}
+  // campagnes : selon le terrain, plus serré dans les plaines
+  const C=15,PT={plaine:.36,foret:.16,marais:.07,montagne:.15,desert:.03};
+  for(let i=0;i<Math.ceil(MW/C);i++)for(let j=0;j<Math.ceil(MH/C);j++){const h=hash(i*31+7,j*17+3),x=(i+.15+.7*hash(j,i+3))*C,y=(j+.15+.7*hash(i+5,j))*C;if(!landFast(x,y))continue;
+    const ter=terrFast(x,y),t=townAt(x,y),dt=t?Math.hypot(t.x-x,t.y-y):999;if(dt>90)continue;let p=PT[ter]||.3;if(ter==='desert'&&dt<30)p=.2;if(h>p)continue;
+    const h2=hash(i*3+1,j*5+2);add(x,y,h2<.38?'ferme':h2<.95?'village':'bourg',i*7919+j)}
+}
+// état (seuls les lieux touchés sont gardés dans la sauvegarde)
+const vSt=v=>S.vil[v.id]||{f:VK[v.k].cap*.8};
+function vMut(v){if(!S.vil[v.id])S.vil[v.id]={f:VK[v.k].cap*.8};return S.vil[v.id]}
+const vRuined=v=>{const s=S.vil[v.id];return !!(s&&s.r&&S.day<s.r)};
+function vRel(v,side){const o=ownerN(v.t);if(!o)return 'libre';if(o===side)return 'own';if(cityHostile(v.t,side))return 'hostile';const F=S.fac[o];if(F&&F.st==='neutre')return 'neutre';return 'autre'}
+function villagesDaily(){
+  const se=season(),k=se==='Été'?2:se==='Hiver'?.3:se==='Automne'?1.2:1;
+  for(const id in S.vil){const st=S.vil[id],v=VIL[id];if(!v){delete S.vil[id];continue}const cap=VK[v.k].cap;
+    if(st.r&&S.day<st.r){st.f=0;continue}if(st.r&&S.day>=st.r){delete st.r;delete st.by}
+    st.f=Math.min(cap,st.f+cap/100*k);
+    if(st.f>=cap&&!st.r&&!(st.q>S.day)&&!(st.aux>S.day))delete S.vil[id]}
+}
+// revenu perdu par une ville dont les villages ont été pillés
+function ruinLoss(n){let l=0;for(const id in S.vil){const st=S.vil[id];if(st.r&&S.day<st.r&&VIL[id].t===n.i)l+=VK[VIL[id].k].inc}return l}
+const armyFoodMax=a=>a.units.length*FOOD_DAYS*(a.bag?1.75:1);
+function aFood(a){if(a.food==null||!isFinite(a.food))a.food=armyFoodMax(a);return a.food}
+const foodDays=a=>a.units.length?Math.floor(aFood(a)/a.units.length):0;
+// --- actions ---
+function vTake(v,a,amt){aFood(a);const st=vMut(v),got=Math.max(0,Math.min(st.f,amt,armyFoodMax(a)-a.food));st.f-=got;a.food+=got;return got}
+function vBuy(v,a){aFood(a);const need=armyFoodMax(a)-a.food,got=Math.min(vSt(v).f,need),cost=Math.ceil(got/10);if(got<1||S.gold[a.side]<cost)return 0;S.gold[a.side]-=cost;vTake(v,a,got);return cost}
+function vForage(v,a){const got=vTake(v,a,1e9),o=ownerN(v.t);if(o&&S.fac[o]&&S.fac[o].st==='neutre'&&!FAC[a.side].a)S.fac[o][a.side]-=4;return got}
+function vPillage(v,a){aFood(a);const st=vMut(v),got=Math.max(0,Math.min(st.f,armyFoodMax(a)-a.food));a.food+=got;const g=VK[v.k].loot;S.gold[a.side]=(S.gold[a.side]||0)+g;
+  st.f=0;st.r=Math.floor(S.day)+240;st.by=a.side;st.pd=Math.floor(S.day);
+  const o=ownerN(v.t);if(o&&S.fac[o]&&!FAC[a.side].a){if(S.fac[o].st==='neutre')S.fac[o][a.side]-=18}
+  shiftNear(v,a.side);return {got,g}}
+function shiftNear(v,side){/* les voisins neutres de même culture s'en souviennent */const o=ownerN(v.t);if(!o||!S.fac[o])return;for(const f in S.fac)if(f!==o&&FAC[f].cul===FAC[o].cul&&S.fac[f].st==='neutre')S.fac[f][side]-=2}
+function vBurn(v,side){const st=vMut(v);st.f=0;st.r=Math.floor(S.day)+200;st.by=side;st.pd=Math.floor(S.day)}
+function vAsk(v,a){const st=vMut(v);st.q=Math.floor(S.day)+20;let n=0;
+  for(const e of S.armies){if(hostileSides(e.side,a.side)&&!e.ship&&Math.hypot(e.x-v.x,e.y-v.y)<90){S.intel[e.id]={x:e.x,y:e.y,d:Math.floor(S.day)};n++}}
+  for(const f of S.fleets||[])if(f.side!==a.side&&!FAC[f.side].a===!FAC[a.side].a&&Math.hypot(f.x-v.x,f.y-v.y)<90)n++;
+  return n}
+const AUX={car:{pun:'lib',num:'ncav',ibe:'iber',gau:'gaul',gre:'lib',ita:'sling',col:'sling'},rom:{pun:'velites',num:'acav',ibe:'velites',gau:'acav',gre:'velites',ita:'velites',col:'velites'}};
+const AUX_COST=25;
+function vAux(v,a){const st=vMut(v),t=(AUX[a.side]||AUX.car)[v.cul]||'sling';if(S.gold[a.side]<AUX_COST||a.units.length>=MAXU)return null;S.gold[a.side]-=AUX_COST;st.aux=Math.floor(S.day)+180;
+  a.units.push({t,men:Math.round(UT[t].men*.6)});a.food=(a.food||0)+10;return t}
+// vivres au jour le jour : refaits sur ses terres et en garnison, mangés ailleurs ; fourrage automatique en chemin
+function armyFoodDaily(a,home,sup){
+  const max=armyFoodMax(a);aFood(a);
+  if(home||a.inG)a.food=Math.min(max,a.food+a.units.length*4);
+  else if(sup)a.food=Math.min(max,a.food+a.units.length*1.5);
+  else{const lt=a.legs.length?a.legs[0].type:null;a.food-=a.units.length*((ROAD[lt]&&ROAD[lt].food)||1);
+    // fourrage en passant : le village le plus proche donne un peu (les neutres grognent)
+    if(a.food<max*.7){const v=nearestVillage(a.x,a.y,5);if(v&&!vRuined(v)){const rel=vRel(v,a.side);if(rel!=='own'){const got=vTake(v,a,a.units.length*(lt==='chemin'?3:1.5));if(got>0&&rel==='neutre'&&!FAC[a.side].a){const o=ownerN(v.t);S.fac[o][a.side]-=.15}}}}}
+  if(a.food<=0){a.food=0;if(!a._starve){a._starve=1;if(a.side==='car')log(`${a.name} n'a plus de vivres : l'armée fond. Fourragez, pillez ou rentrez sur vos terres.`)}}else a._starve=0;
+  a.food=Math.min(max,a.food)}
+// IA : une armée romaine affamée en terre ennemie pille le village le plus proche
+function aiForage(a){if(a.side==='car'||a.g||a.ship||a.inG||FAC[a.side].a)return;const max=armyFoodMax(a);aFood(a);if(a.food>max*.45)return;
+  const v=nearestVillage(a.x,a.y,6);if(!v||vRuined(v))return;const rel=vRel(v,a.side);
+  if(rel==='hostile'){const r=vPillage(v,a);const t=N[v.t];if(ownerN(v.t)==='car'||visAt(v.x,v.y)>=1)log(`Les Romains pillent ${v.n}, près ${deN(t.n)}.`)}
+  else if(rel!=='own')vForage(v,a)}
+// ---- dessin ----
+// fixe, dans les tuiles : maisons à taille réelle, champs autour ; repère discret de loin
+function drawVillagesStatic(x0,y0,x1,y1,s,z){
+  if(s<1.2||!VIL.length)return;const L=villagesIn(x0-2,y0-2,x1+2,y1+2);if(!L.length)return;
+  for(const v of L){const C=CSTY[v.cul]||CSTY.ita,sd=v.seed,R=(j)=>hash(sd+j*13,sd*3+j);
+    if(s<5){if(v.k==='ferme'&&s<2.5)continue;const q=(v.k==='bourg'?3.2:v.k==='village'?2.2:1.6)*z;
+      if(v.k==='bourg'){ctx.fillStyle='rgba(60,44,28,.35)';ctx.beginPath();ctx.arc(v.x,v.y,q*1.9,0,7);ctx.fill();ctx.strokeStyle='rgba(70,52,34,.75)';ctx.lineWidth=.9*z;ctx.stroke()}
+      const n=v.k==='bourg'?4:v.k==='village'?2:1;for(let k=0;k<n;k++){const hx=v.x+(R(k)-.5)*q*2.4,hy=v.y+(R(k+9)-.5)*q*2;ctx.fillStyle='rgba(50,36,22,.55)';ctx.fillRect(hx-q/2+q*.25,hy-q/2+q*.3,q,q);ctx.fillStyle=C.roof[k%C.roof.length];ctx.fillRect(hx-q/2,hy-q/2,q,q)}
+      continue}
+    // champs : quelques parcelles éparses autour du lieu
+    const cr=v.k==='bourg'?.75:v.k==='village'?.42:.2,nf=v.k==='bourg'?10:v.k==='village'?7:4,rr=cr+.45;
+    for(let k=0;k<nf;k++){const a=R(k+20)*6.283,d=rr+R(k+30)*1.1,fx=v.x+Math.cos(a)*d,fy=v.y+Math.sin(a)*d,w=.6+R(k+40)*.4,h=.4+R(k+50)*.25,rot=R(k+60)*3;
+      ctx.save();ctx.translate(fx,fy);ctx.rotate(rot);const ripe=R(k+70)<.45;ctx.fillStyle=v.cul==='num'||v.cul==='pun'&&ripe?'rgba(214,190,120,.6)':ripe?'rgba(206,188,112,.6)':'rgba(132,160,84,.55)';ctx.fillRect(-w/2,-h/2,w,h);
+      if(s>=12){ctx.strokeStyle=ripe?'rgba(150,126,60,.5)':'rgba(84,112,52,.5)';ctx.lineWidth=Math.max(.6*z,.008);ctx.beginPath();for(let m=1;m<5;m++){const yy=-h/2+h*m/5;ctx.moveTo(-w/2+.02,yy);ctx.lineTo(w/2-.02,yy)}ctx.stroke()}
+      ctx.strokeStyle='rgba(90,70,40,.3)';ctx.lineWidth=Math.max(.5*z,.006);ctx.strokeRect(-w/2,-h/2,w,h);ctx.restore()}
+    // sol battu et enceinte du bourg
+    ctx.fillStyle=C.ground;ctx.globalAlpha=.55;ctx.beginPath();ctx.ellipse(v.x,v.y,cr*1.15,cr,R(3)*3,0,7);ctx.fill();ctx.globalAlpha=1;
+    if(v.k==='bourg'){ctx.strokeStyle=v.cul==='gau'?'rgba(110,86,52,.9)':C.wall;ctx.lineWidth=Math.max(1.2*z,v.cul==='gau'?.03:.02);ctx.beginPath();ctx.ellipse(v.x,v.y,cr*1.12,cr*.97,R(3)*3,0,7);ctx.stroke();
+      ctx.fillStyle='rgba(225,212,182,.9)';ctx.fillRect(v.x-.11,v.y-.08,.22,.16)} // place du marché
+    // maisons
+    const nh=v.k==='bourg'?34:v.k==='village'?13:3,hs=v.k==='ferme'?.1:.085,round=v.cul==='gau'||(v.cul==='num'&&v.k!=='bourg');
+    if(v.k==='ferme'&&(v.cul==='ita'||v.cul==='col'||v.cul==='pun'||v.cul==='gre')){blockRect(v.x,v.y,.22,.16,R(4)*3,C.roof[0],C.court,s);}
+    for(let k=0;k<nh;k++){const a=R(k+100)*6.283,d=Math.sqrt(R(k+110))*cr*.92,hx=v.x+Math.cos(a)*d*1.1,hy=v.y+Math.sin(a)*d,q=hs*(.75+R(k+120)*.6);if(v.k==='bourg'&&Math.abs(hx-v.x)<.14&&Math.abs(hy-v.y)<.11)continue;if(v.k==='ferme'&&k===0&&(v.cul==='ita'||v.cul==='col'||v.cul==='pun'||v.cul==='gre'))continue;
+      const col=C.roof[k%C.roof.length];
+      if(round){roundHut(hx,hy,q*.85,col,s)}else{ctx.fillStyle='rgba(60,42,26,.55)';ctx.fillRect(hx-q/2+q*.22,hy-q/2+q*.28,q,q*.8);ctx.fillStyle=col;ctx.fillRect(hx-q/2,hy-q/2,q,q*.8);ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(hx-q/2,hy,q,q*.4)}}
+  }
+}
+// mobile, à chaque image : villages pillés (champs brûlés, fumées), noms
+function drawVillagesDyn(s,z,x0,y0,x1,y1){
+  if(s<1.2||!VIL.length)return;const L=villagesIn(x0-2,y0-2,x1+2,y1+2),t=performance.now()/1000;
+  for(const v of L){if(!vRuined(v))continue;const st=S.vil[v.id],age=S.day-(st.pd||0),R=v.k==='bourg'?1.4:v.k==='village'?1:.6;
+    const gr=ctx.createRadialGradient(v.x,v.y,0,v.x,v.y,R);gr.addColorStop(0,'rgba(38,30,24,.75)');gr.addColorStop(.6,'rgba(52,42,32,.5)');gr.addColorStop(1,'rgba(52,42,32,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(v.x,v.y,R,0,7);ctx.fill();
+    if(age<25){const n=v.k==='bourg'?5:3,k0=Math.max(8*z,.12);for(let k=0;k<n;k++){for(let p=0;p<4;p++){const ph=(t*.25+p/4+k*.37)%1,px=v.x+(hash(v.id,k)-.5)*R*.7+ph*R*.5,py=v.y+(hash(k,v.id)-.5)*R*.6-ph*R*.9,rr=k0*(1+ph*2.2);
+      ctx.fillStyle=`rgba(70,64,60,${(.6*(1-ph)).toFixed(3)})`;ctx.beginPath();ctx.arc(px,py,rr,0,7);ctx.fill()}
+      ctx.fillStyle='rgba(255,140,40,.8)';ctx.beginPath();ctx.arc(v.x+(hash(v.id,k)-.5)*R*.7,v.y+(hash(k,v.id)-.5)*R*.6,Math.max(1.6*z,.03),0,7);ctx.fill()}}}
+  // noms : bourgs dès 2,5 px/km, villages dès 6, domaines dès 14
+  ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.textAlign='center';const boxes=[];
+  for(const v of L){if(v.k==='bourg'?s<2.5:v.k==='village'?s<6:s<14)continue;const X=view.ox+v.x*s,Y=view.oy+v.y*s+(s>=5?(v.k==='bourg'?.6:.4)*s+10:9);
+    const b=[X-40,Y-9,X+40,Y+3];if(boxes.some(o=>o[0]<b[2]&&b[0]<o[2]&&o[1]<b[3]&&b[1]<o[3]))continue;boxes.push(b);
+    const ru=vRuined(v);ctx.font=(v.k==='bourg'?'600 11px':'italic 10px')+' Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.lineWidth=3;ctx.strokeStyle='rgba(30,22,14,.6)';ctx.strokeText(v.n,X,Y);ctx.fillStyle=ru?'rgba(220,170,150,.95)':sel&&sel.v===v.id?'#ffe9a8':'rgba(244,236,214,.95)';ctx.fillText(v.n,X,Y)}
+  if(sel&&sel.v!=null){const v=VIL[sel.v],X=view.ox+v.x*s,Y=view.oy+v.y*s;ctx.strokeStyle='rgba(255,233,168,.95)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(X,Y,Math.max(9,(v.k==='bourg'?.6:.35)*s),0,7);ctx.stroke()}
+  ctx.restore()}
+function pickVillage(mx,my){const s=view.s;if(s<1.2)return null;const [wx,wy]=toWorld(mx,my),r=Math.max(10/s,.5);let best=null,bd=1e9;
+  for(const v of villagesIn(wx-r,wy-r,wx+r,wy+r)){if(v.k==='ferme'&&s<2.5)continue;const d=Math.hypot(v.x-wx,v.y-wy);if(d<r&&d<bd){bd=d;best=v}}return best}
+// ---- panneau ----
+const REL_TXT={own:'à vous',hostile:'ennemi',neutre:'neutre',autre:'',libre:''};
+function villageBlock(v,a,main){
+  const t=N[v.t],o=ownerN(v.t),st=vSt(v),ru=vRuined(v),rel=vRel(v,'car'),cap=VK[v.k].cap;
+  let h=main?`<h2>${esc(v.n)}</h2>`:`<h3>${VK[v.k].n} : ${esc(v.n)}</h3>`;
+  h+=`<p>${o?`<span class="tag" style="border-color:rgb(${FAC[o].c})">${sideName(o)}</span>`:''}<span class="tag">${VK[v.k].n}</span><span class="tag">${TERR[terrainAt(v.x,v.y)].n}</span></p>`;
+  h+=`<p class="sub">Dépend ${deN(t.n)}. ${ru?`Pillé et brûlé${S.vil[v.id].by?' par '+sideName(S.vil[v.id].by):''} : rien à prendre avant ${Math.ceil((S.vil[v.id].r-S.day)/30)} mois.`:`Réserves : ${st.f>=cap*.75?'greniers pleins':st.f>=cap*.4?'bonnes':st.f>=cap*.15?'maigres':'presque vides'} (${Math.round(st.f)} rations de régiment).`}</p>`;
+  if(!a){h+=main?`<p class="sub">Amenez une armée à moins de 3 km (clic droit sur le village) pour s'y ravitailler, fourrager, piller ou interroger les habitants.</p>`:'';return h}
+  const need=armyFoodMax(a)-aFood(a),buy=Math.min(st.f,need),cost=Math.ceil(buy/10),q=st.q>S.day,aux=st.aux>S.day;
+  const btn=(id,lbl,tip,dis)=>`<button id="${id}" type="button" title="${tip}" ${dis?'disabled':''}>${lbl}</button>`;
+  h+=`<div class="row">`;
+  if(rel==='own')h+=btn('vReq','Réquisitionner',"Prend les vivres du village sans payer (ce sont vos terres)",ru||buy<1);
+  else if(rel!=='hostile')h+=btn('vBuy',`Acheter des vivres (${cost} or)`,"Paie les paysans : aucun ressentiment",ru||buy<1||S.gold.car<cost);
+  if(rel!=='own')h+=btn('vFor','Fourrager',rel==='neutre'?'Prend les vivres sans payer : le peuple voisin vous en voudra un peu':'Prend les vivres sans payer',ru||buy<1);
+  if(rel!=='own')h+=btn('vPil',`Piller et brûler (+${VK[v.k].loot} or)`,rel==='neutre'?'Butin et vivres, mais ce peuple neutre et ses voisins vous en voudront beaucoup':'Butin et vivres ; le village ne produit plus rien pendant 8 mois et sa ville perd du revenu',ru);
+  else h+=btn('vBrn','Brûler les champs',"Terre brûlée : plus rien à prendre ici pour l'ennemi pendant plus de 6 mois",ru);
+  h+=btn('vAsk','Interroger les habitants',"Signale les armées ennemies à moins de 90 km",q);
+  if(v.k==='bourg'&&rel==='own')h+=btn('vAux',`Lever des auxiliaires (${AUX_COST} or)`,"Un régiment local à demi-effectif, une fois tous les six mois",aux||S.gold.car<AUX_COST||a.units.length>=MAXU);
+  return h+`</div>`}
+function bindVillage(v,a){const B=(id,f)=>{const e=$(id);if(e)e.onclick=f};
+  B('vReq',()=>{const g=vTake(v,a,1e9);log(`${a.name} réquisitionne ${Math.round(g)} rations à ${v.n}.`);renderAll()});
+  B('vBuy',()=>{const c=vBuy(v,a);if(c)log(`${a.name} achète des vivres à ${v.n} pour ${c} or.`);renderAll()});
+  B('vFor',()=>{const g=vForage(v,a);log(`${a.name} fourrage autour ${deN(v.n)} : ${Math.round(g)} rations.`);renderAll()});
+  B('vPil',()=>{const go=()=>{const r=vPillage(v,a);log(`${a.name} pille et brûle ${v.n} : ${r.g} or, ${Math.round(r.got)} rations.`);renderAll()};
+    if(vRel(v,'car')==='neutre'){const o=ownerN(v.t);modal(`<h2>Piller ${esc(v.n)} ?</h2><p>Ce village dépend ${deN(N[v.t].n)}, chez les ${FAC[o].n}, qui sont neutres. Ils s'en souviendront, et leurs voisins aussi.</p><div class="row"><button class="warn" id="mYes" type="button">Piller quand même</button><button class="go" id="mNo" type="button">Annuler</button></div>`);$('mYes').onclick=()=>{closeModal();go()};$('mNo').onclick=closeModal}else go()});
+  B('vBrn',()=>{vBurn(v,'car');log(`${a.name} brûle les champs de ${v.n} : l'ennemi n'y trouvera rien.`);renderAll()});
+  B('vAsk',()=>{const n=vAsk(v,a);log(n?`Les habitants ${deN(v.n)} parlent : ${n} troupe${n>1?'s':''} ennemie${n>1?'s':''} vue${n>1?'s':''} dans la région.`:`Les habitants ${deN(v.n)} n'ont vu passer aucun ennemi.`);renderAll()});
+  B('vAux',()=>{const t=vAux(v,a);if(t)log(`${v.n} fournit un régiment : ${UT[t].n}.`);renderAll()})}
+const armyVillage=a=>a.legs.length||a.ship||a.inG?null:nearestVillage(a.x,a.y,3);
+

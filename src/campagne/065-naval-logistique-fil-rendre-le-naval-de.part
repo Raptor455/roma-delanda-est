@@ -1,0 +1,87 @@
+/* ================= NAVAL LOGISTIQUE (fil « Rendre le naval de campagne vivant ») =================
+   Embarquement visible au port (colonnes qui descendent au quai, chaloupes vers les navires), débarquement sur une plage
+   en chaloupes (l'armée prend pied peu à peu et ne peut marcher qu'une fois à terre), convois de transports qui suivent une flotte. */
+const LGX={emb:.35,deb:.45,per:.03};
+const lgBusy=f=>f.busy&&f.busy.t1>S.day;
+const lgLand=a=>a.land&&a.land.t1>S.day;
+const _boardL=board;
+board=function(a,f){const n=a.at!=null?N[a.at]:null,fx=f.x,fy=f.y,ax=n?n.x:a.x,ay=n?n.y:a.y,units=a.units.map(u=>({t:u.t,men:u.men,d:u.d}));
+  const r=_boardL.apply(this,arguments);
+  const t0=Math.max(S.day,lgBusy(f)?f.busy.t1-.1:S.day),dur=LGX.emb+units.length*LGX.per;
+  f.busy={k:'emb',t0,t1:t0+dur,ax,ay,fx,fy,units,side:a.side};
+  if(a.side==='car')log(`${a.name} descend au port et embarque sur ${f.name} : la flotte pourra lever l'ancre dans ${Math.max(1,Math.round(dur*24))} heures.`);
+  return r};
+const _unloadL=unload;
+unload=function(f){const ids=f.cargo.slice(),fx=f.x,fy=f.y;const r=_unloadL.apply(this,arguments);if(!r)return r;
+  let n=0;const all=[];for(const id of ids){const a=S.armies.find(x=>x.id===id);if(!a)continue;all.push(...a.units.map(u=>({t:u.t,men:u.men,d:u.d})));n+=a.units.length}
+  if(!n)return r;const t0=S.day,dur=LGX.deb+n*LGX.per,a0=S.armies.find(x=>x.id===ids[0]);
+  for(const id of ids){const a=S.armies.find(x=>x.id===id);if(a)a.land={t0,t1:t0+dur,fx,fy}}
+  f.busy={k:'deb',t0,t1:t0+dur,ax:a0?a0.x:fx,ay:a0?a0.y:fy,fx,fy,units:all,side:f.side,port:a0&&a0.at!=null};
+  if(f.side==='car'&&a0)log(`${a0.at!=null?'Débarquement au port de '+N[a0.at].n:'Débarquement sur la plage'} : les chaloupes font la navette ; l'armée sera à terre dans ${Math.max(1,Math.round(dur*24))} heures.`);
+  return r};
+// pendant l'embarquement ou le débarquement, ni la flotte ni l'armée ne bougent ; les ordres attendent
+const _tickL=tick;
+tick=function(dd){const st=[];
+  for(const f of S.fleets||[])if(lgBusy(f)){st.push([f,f.legs,f.dest,f.ai]);f.legs=[];f.dest=null;f.ai=null}
+  for(const a of S.armies)if(lgLand(a)&&a.legs.length){st.push([a,a.legs]);a.legs=[]}
+  try{return _tickL.apply(this,arguments)}finally{for(const [o,L,d,ai] of st){if(!o.legs.length)o.legs=L;if('ai' in o&&o.busy){if(o.dest==null)o.dest=d;if(!o.ai)o.ai=ai}}
+    for(const f of S.fleets||[])if(f.busy&&f.busy.t1<=S.day-3)delete f.busy;for(const a of S.armies)if(a.land&&a.land.t1<=S.day-3)delete a.land;lgFollow(dd)}};
+// un convoi suit sa flotte d'escorte
+const LGT=new Map();
+function lgFollow(dd){for(const f of S.fleets||[]){if(f.follow==null||f.inG||lgBusy(f))continue;const L=S.fleets.find(x=>x.id===f.follow&&x.side===f.side);if(!L){f.follow=null;continue}
+  if(L.at!=null&&!L.legs.length){const n=N[L.at];if(n.anch&&Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)<8){if(f.at!==L.at){f.at=L.at;f.x=n.anch[0];f.y=n.anch[1];f.legs=[];if(L.inG)f.inG=true}continue}}
+  const d=Math.hypot(L.x-f.x,L.y-f.y);if(d<3&&!L.legs.length){f.legs=[];continue}
+  if((LGT.get(f.id)||-1)>S.day||d<2.5)continue;LGT.set(f.id,S.day+.15);
+  let tx=L.x,ty=L.y;if(L.legs.length){const N0=L.legs[0],a=Math.atan2(N0.y-L.y,N0.x-L.x);tx-=Math.cos(a)*2.5;ty-=Math.sin(a)*2.5;if(landFine(tx,ty)){tx=L.x;ty=L.y}}
+  if(f.inG)leavePort(f);const P2=fleetLegsTo(f,tx,ty);if(P2){f.legs=P2;f.at=null;f.dest=L.at!=null&&!L.legs.length?L.at:null}}}
+// la formation de l'armée qui débarque est dessinée par les chaloupes
+const _formationL=formation;
+formation=function(a,s){if(lgLand(a))return;return _formationL.apply(this,arguments)};
+function lgBoat(x,y,ang,q,load,c){ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.fillStyle='rgba(0,0,0,.22)';ctx.beginPath();ctx.ellipse(.8,1,q*.9,q*.38,0,0,7);ctx.fill();
+  ctx.fillStyle='#7a5634';ctx.strokeStyle='rgba(20,14,8,.9)';ctx.lineWidth=.8;ctx.beginPath();ctx.ellipse(0,0,q*.9,q*.36,0,0,7);ctx.fill();ctx.stroke();
+  const t=performance.now()/180;ctx.strokeStyle='rgba(40,28,16,.9)';ctx.beginPath();for(const s of [-1,1])for(const o of [-.4,0,.4]){const w=Math.sin(t+o*3)*q*.25;ctx.moveTo(o*q,s*q*.34);ctx.lineTo(o*q+w,s*q*.85)}ctx.stroke();
+  if(load){ctx.fillStyle=`rgb(${c})`;for(const o of [-.45,-.15,.15,.45]){ctx.fillRect(o*q-1.1,-1.1,2.2,2.2)}}ctx.restore()}
+function lgDraw(s,w,h){if(!S)return;const z=UNIT_KM*s,q=Math.max(3,Math.min(14,z)),now=performance.now()/1000;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const f of S.fleets||[]){const b=f.busy;if(!b||b.t1<=S.day)continue;if(f.side!=='car'&&visAt(f.x,f.y)<2)continue;
+    const u=Math.max(0,Math.min(1,(S.day-b.t0)/(b.t1-b.t0))),X1=view.ox+b.fx*s,Y1=view.oy+b.fy*s,X0=view.ox+b.ax*s,Y0=view.oy+b.ay*s;
+    if(Math.max(X0,X1)<-60||Math.min(X0,X1)>w+60||Math.max(Y0,Y1)<-60||Math.min(Y0,Y1)>h+60)continue;
+    const c=FAC[b.side].c,dark='rgba(26,18,10,.95)',n=b.units.length,ang=Math.atan2(Y1-Y0,X1-X0),L=Math.hypot(X1-X0,Y1-Y0);
+    const QX=X0+(X1-X0)*.45,QY=Y0+(Y1-Y0)*.45; // le quai, ou la grève
+    if(L<4)continue;
+    const boats=Math.max(2,Math.min(8,Math.ceil(n/2)));
+    if(b.k==='emb'){
+      // colonne qui descend au quai : les régiments pas encore à bord
+      const left=Math.ceil(n*(1-u));for(let i=0;i<left;i++){const k=n-left+i,d=Math.min(.45,.08+((now*.15+i*.07)%.4));const x=X0+(X1-X0)*(d*(i===0?1:Math.max(.1,1-i*.08))),y=Y0+(Y1-Y0)*(d*(i===0?1:Math.max(.1,1-i*.08)));
+        if(s>=UNIT_MIN_PX/UNIT_KM)unitSq(x-Math.sin(ang)*(i%2)*q*.9,y+Math.cos(ang)*(i%2)*q*.9,q,b.units[k],c,dark);else{ctx.fillStyle=`rgb(${c})`;ctx.fillRect(x-2,y-2,4,4)}}
+    }else{
+      // la grève : les régiments déjà à terre, en rangs
+      const done=Math.floor(n*u);for(let i=0;i<done;i++){const r=Math.floor(i/5),o=(i%5-2)*q*1.15,bk=r*q*1.2+q*1.2;const x=X0-Math.cos(ang)*bk-Math.sin(ang)*o,y=Y0-Math.sin(ang)*bk+Math.cos(ang)*o;
+        if(s>=UNIT_MIN_PX/UNIT_KM)unitSq(x,y,q,b.units[i],c,dark);else{ctx.fillStyle=`rgb(${c})`;ctx.fillRect(x-2,y-2,4,4)}}
+      if(!b.port){ctx.strokeStyle='rgba(240,235,220,.6)';ctx.lineWidth=1.2;ctx.beginPath();for(let k=-3;k<=3;k++){const x=X0+(X1-X0)*.06-Math.sin(ang)*k*q*1.4,y=Y0+(Y1-Y0)*.06+Math.cos(ang)*k*q*1.4;ctx.moveTo(x-Math.sin(ang)*q*.6,y+Math.cos(ang)*q*.6);ctx.lineTo(x,y)}ctx.stroke()}
+    }
+    // chaloupes : pleines vers le bateau (embarquement) ou vers la côte (débarquement), vides au retour
+    const sx=b.k==='emb'?QX:X1,sy=b.k==='emb'?QY:Y1,ex=b.k==='emb'?X1:X0+(X1-X0)*.08,ey=b.k==='emb'?Y1:Y0+(Y1-Y0)*.08,a2=Math.atan2(ey-sy,ex-sx);
+    for(let i=0;i<boats;i++){let ph=(now*.25+i/boats)%1;const go=ph<.5,t=go?ph*2:2-ph*2,lat=((i%3)-1)*q*.9;
+      const x=sx+(ex-sx)*t-Math.sin(a2)*lat,y=sy+(ey-sy)*t+Math.cos(a2)*lat;if(u>.97&&!go)continue;lgBoat(x,y,go?a2:a2+Math.PI,Math.max(3.5,q*.7),go,c)}
+    if(f.side==='car'||s>.8){ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(20,16,12,.8)';
+      const t=(b.k==='emb'?'Embarquement':'Débarquement')+` · ${Math.round(u*100)} %`;ctx.strokeText(t,QX,QY-q*2.2);ctx.fillStyle='#f3e8cc';ctx.fillText(t,QX,QY-q*2.2)}}
+  ctx.restore()}
+const _drawDynamicL=drawDynamic;
+drawDynamic=function(w,h,s){const r=_drawDynamicL.apply(this,arguments);try{lgDraw(s,w,h)}catch(e){console.error(e)}return r};
+// panneau de flotte : suivre une autre flotte ; séparer les transports = convoi qui suit
+const _fleetPanelL=fleetPanel;
+fleetPanel=function(f){let h=_fleetPanelL.apply(this,arguments);if(f.side!=='car')return h;
+  const b=f.busy&&f.busy.t1>S.day?f.busy:null,lead=f.follow!=null&&S.fleets.find(x=>x.id===f.follow);
+  const near=S.fleets.filter(o=>o!==f&&o.side==='car'&&o.follow!==f.id&&Math.hypot(o.x-f.x,o.y-f.y)<40);
+  h+=`<h3>Convoi</h3>${b?`<p><b>${b.k==='emb'?'Embarquement':'Débarquement'} en cours</b> : ${Math.max(1,Math.round((b.t1-S.day)*24))} heures.</p>`:''}
+    ${lead?`<p>Suit <b>${esc(lead.name)}</b> à une encablure. <button id="lgUn" type="button">Ne plus suivre</button></p>`:near.length?`<div class="row">${near.slice(0,3).map(o=>`<button data-lgf="${o.id}" type="button" title="Garde le sillage de cette flotte : même route, même port">Suivre ${esc(o.name)}</button>`).join('')}</div>`:'<p class="sub">Aucune flotte amie à moins de 40 km à suivre.</p>'}`;
+  return h};
+const _bindFleetL=bindFleet;
+bindFleet=function(f){_bindFleetL.apply(this,arguments);if(f.side!=='car')return;
+  const sp=$('fSplit');if(sp&&sp.onclick){const o=sp.onclick;sp.onclick=()=>{o();const g=sel&&sel.f;if(g&&g!==f){g.follow=f.id;log(`${g.name} suivra ${f.name}.`);renderAll()}}}
+  if($('lgUn'))$('lgUn').onclick=()=>{f.follow=null;renderAll()};
+  document.querySelectorAll('[data-lgf]').forEach(b=>b.onclick=()=>{f.follow=+b.dataset.lgf;LGT.delete(f.id);renderAll()})};
+// un ordre direct annule le « suivre »
+const _orderFleetL=orderFleet;orderFleet=function(f){const r=_orderFleetL.apply(this,arguments);if(r&&f)f.follow=null;return r};
+window.__navlog={lgFollow,lgDraw,board:(a,f)=>board(a,f),unload:f=>unload(f)};
+/* ================= FIN NAVAL LOGISTIQUE ================= */

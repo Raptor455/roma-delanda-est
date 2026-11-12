@@ -1,0 +1,69 @@
+/* ================= VIE DE L'ARMÉE : mutineries, généraux blessés, récompenses ================= */
+// a.mut = {t0} : l'armée refuse d'avancer. g.wound = jour de guérison. a.rew = jour limite pour récompenser les braves.
+const woundOf=g=>g&&g.wound&&S.day<g.wound?Math.ceil(g.wound-S.day):0;
+function sideWound(ids){const A=sideArmies(ids).filter(a=>!a.g);if(!A.length)return 1;const main=A.slice().sort((p,q)=>strength(q)-strength(p))[0];return woundOf(genOf(main))?.93:1}
+function donativum(a){const c=Math.max(20,a.units.length*4);if(S.gold[a.side]<c)return;S.gold[a.side]-=c;a.mut=null;a.mor=Math.min(100,(a.mor==null?MOR0:a.mor)+20);log(`${a.name} : un donativum de ${c} or apaise les mutins (moral +20).`)}
+function decimate(a){a.units.forEach(u=>u.men*=.9);a.mut=null;a.mor=Math.min(100,(a.mor==null?MOR0:a.mor)+15);const g=genOf(a);if(g&&hasTr(g,'aime')){g.tr=g.tr.filter(t=>t!=='aime');log(`${g.name} n'est plus aimé de ses troupes.`)}
+  cleanArmy(a);log(`${a.name} : les meneurs sont tirés au sort et mis à mort devant l'armée. La peur rétablit l'ordre (−10 % d'hommes, moral +15).`)}
+function rewardBraves(a){const c=Math.max(15,a.units.length*3);if(S.gold[a.side]<c||!a.rew||S.day>a.rew)return;S.gold[a.side]-=c;a.rew=null;a.mor=Math.min(100,(a.mor==null?MOR0:a.mor)+15);a.units.forEach(u=>u.xp=(u.xp||0)+1);
+  log(`${a.name} : colliers d'or, bracelets et couronnes pour les plus braves (${c} or) : moral +15, chaque régiment gagne de l'expérience.`)}
+const _applyResult9=applyResult;
+applyResult=function(b,res){const attA=sideArmies(b.att),defA=sideArmies(b.def),win=res.attWin?attA:defA,lose=res.attWin?defA:attA;
+  const p=odds(b),big=res.attWin?p<.45:p>.55;const gens=[...win.map(a=>[genOf(a),.05]),...lose.map(a=>[genOf(a),.14])].filter(x=>x[0]);
+  _applyResult9(b,res);
+  for(const [g,k] of gens){if(g.dead||woundOf(g)||Math.random()>=k)continue;g.wound=Math.floor(S.day)+15+Math.floor(Math.random()*25);
+    if(g.side==='car'||visAt(b.x,b.y)>=1)log(`${g.name} est blessé au combat : ${Math.ceil(g.wound-S.day)} jours de convalescence (son armée combat à −7 %, il guérit plus vite dans une ville amie).`)}
+  for(const a of win){if(a.dead)continue;if(a.side==='car')a.rew=Math.floor(S.day)+20;
+    if(b.assault!=null){a.units.forEach(u=>u.xp=(u.xp||0)+2);if(a.side==='car')log(`Couronne murale : les premiers à escalader les murs de ${N[b.assault].n} sont honorés (expérience +2).`)}
+    if(a.side==='rom'&&big&&genOf(a)){const g=genOf(a);gainXp(g,3);if(visAt(b.x,b.y)>=1||Math.random()<.5)log(`Rome décerne les honneurs du triomphe à ${g.name}.`)}}};
+
+/* ---- journée : mutineries, blessures, feux trompeurs, déserteurs ---- */
+const _daily9=daily;
+daily=function(d){_daily9(d);if(S.cur||S.over)return;
+  for(const a of S.armies){if(a.dead||a.g||a.ship)continue;const m=a.mor==null?MOR0:a.mor;
+    const unpaid=S.gold[a.side]!=null&&S.gold[a.side]<=0&&!FAC[a.side].a,starv=a.food!=null&&a.food<=0;
+    if(a.mut){if(m>40){a.mut=null;if(a.side==='car')log(`${a.name} : la mutinerie s'éteint d'elle-même.`)}else{a.legs=[];a.mor=Math.max(0,m-.3);for(const u of a.units)u.men*=.997}}
+    else if(m<20&&(unpaid||starv)&&Math.random()<.08){a.mut={t0:Math.floor(S.day)};a.legs=[];if(a.side==='car'){log(`Mutinerie dans ${armyLabel(a)} ! Sans solde ni pain, les soldats refusent d'avancer. Payez un donativum ou faites un exemple.`);S.paused=true}
+      else if(a.side==='rom'&&!(typeof MPRH==='function'&&MPRH('rom'))&&Math.random()<.5){a.units.forEach(u=>u.men*=.9);a.mut=null;a.mor=m+15}}
+    // feux trompeurs
+    if(a.feux){if(S.day>=a.feux.t)a.feux=null;else{S.intelR=S.intelR||{};S.intelR[a.id]={x:a.feux.x,y:a.feux.y,d}}}
+    if(a.dupe&&S.day>=a.dupe.t)a.dupe=null;
+    if(a.rew&&S.day>a.rew)a.rew=null}
+  for(const g of S.gens||[]){if(!g.wound)continue;if(S.day>=g.wound){g.wound=0;if(g.side==='car'&&!g.dead)log(`${g.name} est remis de ses blessures.`);continue}
+    const a=S.armies.find(x=>x.id===g.army);if(a&&(a.inG||(a.at!=null&&ownerN(a.at)===a.side)))g.wound-=1}
+  // déserteurs ennemis : une armée démoralisée laisse filer des hommes qui renseignent l'adversaire
+  for(const e of S.armies){if(e.dead||e.g||e.side==='car'||(e.mor==null?MOR0:e.mor)>=45)continue;const mine=S.armies.find(a=>a.side==='car'&&!a.dead&&hostile(a,e)&&Math.hypot(a.x-e.x,a.y-e.y)<70);
+    if(mine&&Math.random()<.04){S.intel=S.intel||{};S.intel[e.id]={x:e.x,y:e.y,d:Math.floor(S.day)};const n=Math.round(20+Math.random()*60);e.units.forEach(u=>u.men*=1-n/Math.max(1,armyMen(e)));
+      log(`Des déserteurs de ${esc(e.name)} passent dans votre camp (${n} hommes) : ils révèlent sa position et son état (moral ${Math.round(e.mor)}).`)}}
+  if(S.lures)S.lures=S.lures.filter(l=>S.day-l.t0<1.5);
+};
+const _tick9=tick;
+tick=function(dd){if(S&&S.armies)for(const a of S.armies)if(a.mut&&a.legs.length)a.legs=[];return _tick9.apply(this,arguments)};
+
+/* ---- odds et bataille 3D ---- */
+const _odds9=odds;
+odds=function(b){const p=Math.min(.999,Math.max(.001,_odds9(b)));let r=Math.sqrt(p/(1-p));
+  try{r*=fmMul(b,'att')/fmMul(b,'def')}catch(e){}r*=dupeMul(b);r*=sideWound(b.att)/sideWound(b.def);return r*r/(r*r+1)};
+const _battleMods9=battleMods;
+battleMods=function(b,a,role,u){const m=_battleMods9.apply(this,arguments);try{const f=fmMods(b,role,u);m.a=Math.round(m.a*f.a*1000)/1000;m.d=Math.round(m.d*f.d*1000)/1000;
+  if(woundOf(genOf(a)))m.a=Math.round(m.a*.95*1000)/1000;if(a.dupe&&S.day<a.dupe.t)m.m=Math.round(m.m*.9*1000)/1000}catch(e){}return m};
+const _addBattleMods9=addBattleMods;
+addBattleMods=function(payload){_addBattleMods9(payload);const b=S.cur;if(!b||!payload||!payload.b)return;try{const attMine=b.attMine;
+  const fp=fmOf(b,attMine?'att':'def'),fe=fmOf(b,attMine?'def':'att');payload.b.fm={p:fp,e:fe};payload.b.desc+=` Vous vous rangez en ${FORM[fp].n.toLowerCase()}, l'ennemi en ${FORM[fe].n.toLowerCase()}.`;
+  if(payload.b.cmd){payload.b.cmd.p+=` · ${FORM[fp].n}`;payload.b.cmd.e+=` · ${FORM[fe].n}`}}catch(e){}};
+
+/* ---- panneau : ruses, mutinerie, blessure, récompenses ---- */
+const _renderSide9=renderSide;
+renderSide=function(){_renderSide9.apply(this,arguments);if(!S||!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return;const a=sel.a,box=$('side').querySelector('.genbox');if(!box||a.g||a.ship)return;
+  const btn=(id,t,tt,dis,cls)=>`<button id="${id}" type="button" class="${cls||''}" title="${tt}" ${dis?'disabled':''}>${t}</button>`;let h='';
+  const g=genOf(a),w=woundOf(g);if(w)h+=`<p class="sub" style="margin:6px 0 0;color:#e0a060">${esc(g.name)} est blessé : encore ${w} jours (son armée combat à −7 % ; plus vite guéri dans une ville amie).</p>`;
+  if(a.mut){const c=Math.max(20,a.units.length*4);h+=`<p class="sub" style="margin:8px 0 2px;color:var(--bad)"><b>Mutinerie !</b> L'armée refuse d'avancer.</p><div class="row">${btn('aDon',`Donativum (${c} or)`,'Payer les soldats : moral +20, la mutinerie cesse',S.gold[a.side]<c)}${btn('aDec','Décimer',"Tirer au sort un homme sur dix et l'exécuter : −10 % d'hommes, moral +15 par la peur ; un général aimé perd cette réputation",false,'warn')}</div>`}
+  if(a.rew&&S.day<=a.rew){const c=Math.max(15,a.units.length*3);h+=`<div class="row" style="margin-top:6px">${btn('aRew',`Récompenser les braves (${c} or)`,`Colliers d'or et couronnes après la victoire (encore ${Math.ceil(a.rew-S.day)} jours) : moral +15, expérience +1 pour chaque régiment`,S.gold[a.side]<c)}</div>`}
+  const E30=enemiesNear(a,30),E60=enemiesNear(a,60).filter(known);
+  h+=`<p class="sub" style="margin:8px 0 2px">Ruses${a.feux?` · <span style="color:var(--gold)">feux trompeurs encore ${Math.ceil(a.feux.t-S.day)} j</span>`:''}</p><div class="row" style="flex-wrap:wrap">`+
+    btn('aFeux','Feux trompeurs',"Laisser les feux de camp allumés et quelques sonneurs : l'ennemi croit l'armée sur place pendant trois jours. Partez aussitôt.",a.legs.length||!!a.feux)+
+    btn('aBoeufs','Bœufs aux torches',E30.length?"La ruse de l'Ager Falernus : des bœufs aux cornes enflammées attirent l'ennemi (≈60 %, mieux avec un tacticien, en montagne ou en forêt) ; votre armée s'échappe. Une fois tous les 120 jours.":"Il faut un ennemi à moins de 30 km.",!E30.length||(a.oxT&&S.day<a.oxT))+
+    btn('aTransf','Faux transfuges (20 or)',E60.length?`De faux déserteurs persuadent ${esc(E60[0].name)} que vous êtes à bout : il marche sur vous et vous combattez à +15 % contre lui douze jours. Échec : il apprend où vous êtes.`:"Il faut un ennemi repéré à moins de 60 km.",!E60.length||S.gold[a.side]<20||(a.dupT&&S.day<a.dupT))+`</div>`;
+  box.insertAdjacentHTML('beforeend',h);const on=(id,f)=>{const e=$(id);if(e)e.onclick=()=>{f();renderAll()}};
+  on('aDon',()=>donativum(a));on('aDec',()=>decimate(a));on('aRew',()=>rewardBraves(a));on('aFeux',()=>ruseFeux(a));on('aBoeufs',()=>ruseBoeufs(a));on('aTransf',()=>ruseTransfuges(a))};
+

@@ -1,0 +1,33 @@
+/* ================= OUTILS ================= */
+const ownerN=i=>S.own[N[i].id]||null;
+const tFind=(x,y)=>{if(TLAB){const X=Math.floor(x/TLAB.G),Y=Math.floor(y/TLAB.G);if(X>=0&&Y>=0&&X<TLAB.gw&&Y<TLAB.gh){const l=TLAB.lab[Y*TLAB.gw+X];if(l>=0)return l}}return delaunay.find(x,y)};const cellAt=(x,y)=>{const k=tFind(x,y);return N.filter(n=>!n.col)[k]};
+let TOWNS=null;const townAt=(x,y)=>TOWNS[tFind(x,y)];
+const ownerAt=(x,y)=>ownerN(townAt(x,y).i);
+const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+function cal(d){const m=Math.floor(d/30),mo=(m+2)%12,year=218-Math.floor((m+2)/12);return {dm:d%30+1,mo,year,season:mo>=2&&mo<=4?'Printemps':mo>=5&&mo<=7?'Été':mo>=8&&mo<=10?'Automne':'Hiver'}}
+const season=()=>cal(Math.floor(S.day)).season;
+function armySpeed(a){let s=99;for(const u of a.units)s=Math.min(s,uKm(u));return s}
+const power=units=>units.reduce((s,u)=>s+u.men/UT[u.t].men*uCost(u),0);
+const strength=a=>power(a.units);
+const isMine=a=>a.side==='car'&&mpCan(a)/*MP*/;
+const landFast=(x,y)=>{const X=Math.round(x*relief.R),Y=Math.round(y*relief.R);return X>=0&&Y>=0&&X<relief.w&&Y<relief.h&&relief.mask[Y*relief.w+X]===1};
+const sideName=s=>FAC[s]?FAC[s].n:s;
+const armyLabel=a=>a.g?'la '+a.name.charAt(0).toLowerCase()+a.name.slice(1):"l'armée de "+a.name;
+const deN=t=>/^[AEIOUÉÈÂÎH]/i.test(t)?"d'"+t:'de '+t;
+function log(t){S.log.unshift({d:Math.floor(S.day),t});S.log.length=Math.min(S.log.length,40);renderLog()}
+function income(side){let inc=0,up=fleetUpkeep(side);N.forEach(n=>{if(ownerN(n.i)===side)inc+=townIncome(n)});S.armies.forEach(a=>{if(a.side===side)a.units.forEach(u=>up+=uCost(u)/12)});return {inc,up:Math.round(up)}}
+function hostile(a,b){if(a.side===b.side)return false;const ma=!FAC[a.side].a,mb=!FAC[b.side].a;if(ma&&mb)return true;if(!ma&&!mb)return false;const f=ma?b.side:a.side,s=ma?a.side:b.side;return S.fac[f]&&S.fac[f].st==='guerre_'+s}
+function cityHostile(i,side){const o=ownerN(i);if(!o||o===side)return false;if(!FAC[o].a)return true;return S.fac[o]&&S.fac[o].st==='guerre_'+side}
+const nearestNode=(x,y,filter)=>{let b=null,bd=1e9;for(const n of N){if(filter&&!filter(n))continue;const d=Math.hypot(n.x-x,n.y-y);if(d<bd){bd=d;b=n}}return b};
+// vitesse (km/jour) sur un tronçon, selon la route, le terrain et la saison
+function legSpeed(a,type,tf,x,y){
+  if(type==='mer')return SEA_KMD;
+  const se=season(),R=ROAD[type]||ROAD.piste;let m;
+  if(type==='hors')m=R.m*TERR[terrainAt(x,y)].m;
+  else if(type==='detroit')m=1;
+  else m=R.m*(type==='col'||type==='chemin'?1:tf);
+  m*=(R.mud&&R.mud[se])||1;
+  if(a.cool>0)m*=1.2;
+  return armySpeed(a)*m;
+}
+

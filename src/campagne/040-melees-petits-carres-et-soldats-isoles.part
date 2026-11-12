@@ -1,0 +1,67 @@
+/* ================= MÊLÉES : petits carrés et soldats isolés ================= */
+// autour des murs : grappes de petits carrés qui s'affrontent, soldats (petits ronds) qui courent, tombent ; sorties des défenseurs
+const _siegeFormation3=siegeFormation;
+siegeFormation=function(a,s,sg){
+  _siegeFormation3(a,s,sg);
+  const n=N[a.at],g=cityGeom(n),o=ownerN(a.at);if(!o)return;
+  const f=Math.min(1,sg.d/sg.need),T=S.day*DAY_S,q=Math.max(6,UNIT_KM*s*.55),SX=x=>view.ox+x*s,SY=y=>view.oy+y*s;
+  const ca=FAC[a.side].c,cd=FAC[o].c,rgb=c=>`rgb(${c[0]},${c[1]},${c[2]})`;
+  const R=g.wall.map(w=>({ang:Math.atan2(w[1]-g.cy,w[0]-g.cx),rr:Math.hypot(w[0]-g.cx,w[1]-g.cy)}));
+  const cand=R.map((r,k)=>k).filter(k=>landFast(g.cx+Math.cos(R[k].ang)*(R[k].rr+.6),g.cy+Math.sin(R[k].ang)*(R[k].rr+.6)));if(!cand.length)return;
+  const at=(r,d,t)=>{const an=r.ang+t;return [SX(g.cx+Math.cos(an)*(r.rr+d)),SY(g.cy+Math.sin(an)*(r.rr+d))]};
+  const ss=Math.max(5,q*.5),dot=Math.max(1.3,q*.075);
+  const msq=(x,y,c,an)=>{ctx.save();ctx.translate(x,y);ctx.rotate(an);ctx.fillStyle=rgb(c);ctx.fillRect(-ss/2,-ss/2,ss,ss);ctx.strokeStyle='rgba(26,18,10,.95)';ctx.lineWidth=1;ctx.strokeRect(-ss/2,-ss/2,ss,ss);
+    if(ss>6){ctx.beginPath();ctx.moveTo(-ss*.3,-ss*.3);ctx.lineTo(ss*.3,ss*.3);ctx.moveTo(ss*.3,-ss*.3);ctx.lineTo(-ss*.3,ss*.3);ctx.stroke()}ctx.restore()};
+  const man=(x,y,c,dead)=>{ctx.fillStyle=dead?'rgba(60,20,12,.85)':rgb(c);ctx.beginPath();ctx.arc(x,y,dot,0,6.283);ctx.fill();if(!dead&&dot>1.4){ctx.strokeStyle='rgba(26,18,10,.9)';ctx.lineWidth=.7;ctx.stroke()}};
+  ctx.save();
+  const nm=Math.min(cand.length*2,6+Math.floor(f*10));
+  const nearGate=an=>(g.gates||[]).some(a0=>Math.abs(Math.atan2(Math.sin(an-a0),Math.cos(an-a0)))<.32);
+  for(let j=0;j<nm;j++){const r=R[cand[Math.floor((j+.5+hsh(j+11)*.4)*cand.length/nm)%cand.length]],dt=(hsh(j+3)-.5)*.12;if(nearGate(r.ang+dt))continue;
+    // grappe : 2-3 carrés assaillants face à 1-2 carrés défenseurs, qui avancent et reculent
+    const push=Math.sin(T*.8+j*1.7)*.035,na=3+(j%2),nd=2+((j+1)%2),tg=r.ang+Math.PI/2;
+    for(let i=0;i<na;i++){const [x,y]=at(r,.22+push+(i>=2?.07:0),dt+((i%2)-.5)*.04+(i>=2?.02:0)+Math.sin(T*3+i+j)*.002);msq(x+Math.sin(T*9+i*3+j)*ss*.08,y,ca,tg)}
+    for(let i=0;i<nd;i++){const [x,y]=at(r,.12+push,dt+(i-(nd-1)/2)*.04);msq(x,y+Math.cos(T*8+i+j)*ss*.08,cd,tg)}
+    // éclats des coups sur la ligne de contact
+    const [cx,cy]=at(r,.16+push,dt);
+    for(let m=0;m<24;m++){const h1=hsh(m*13+j*7),h2=hsh(m*5+j*31),side=m%2,ph=(T*(.25+h1*.3)+h2)%1;
+      const ox=(h1-.5)*ss*3.2,oy=(h2-.5)*ss*1.6,jx=Math.sin(T*(6+h1*5)+m)*dot*1.6,jy=Math.cos(T*(5+h2*4)+m)*dot*1.2;
+      const [tx,ty]=at(r,.16+push+(side?-.012:.012)+(h2-.5)*.05,dt+(h1-.5)*.13);
+      if(m<10&&ph>.85){ctx.strokeStyle='rgba(255,235,170,.9)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(tx-dot*2,ty-dot*2);ctx.lineTo(tx+dot*2,ty+dot*2);ctx.stroke()}}
+  }
+  // sorties : la porte s'ouvre, une colonne de la garnison sort et se déploie, des carrés assiégeants accourent des flancs,
+  // choc et mêlée, puis retraite couverte par les archers du rempart ; la porte se referme, les morts restent sur le terrain
+  const SS=ss*1.3,bsq=(x,y,c)=>{ctx.fillStyle=rgb(c);ctx.fillRect(x-SS/2,y-SS/2,SS,SS);ctx.strokeStyle='rgba(26,18,10,.95)';ctx.lineWidth=1.2;ctx.strokeRect(x-SS/2,y-SS/2,SS,SS);
+    if(SS>7){ctx.beginPath();ctx.moveTo(x-SS*.3,y-SS*.3);ctx.lineTo(x+SS*.3,y+SS*.3);ctx.moveTo(x+SS*.3,y-SS*.3);ctx.lineTo(x-SS*.3,y+SS*.3);ctx.stroke()}};
+  const sm=(a0,b0,x)=>{const t=Math.max(0,Math.min(1,(x-a0)/(b0-a0)));return t*t*(3-2*t)};
+  (g.gates||[]).forEach((a0,i)=>{let b=null,bd=9;R.forEach((r,k)=>{const d=Math.abs(Math.atan2(Math.sin(r.ang-a0),Math.cos(r.ang-a0)));if(d<bd){bd=d;b=k}});if(b==null||!cand.includes(b))return;
+    const r=R[b],ux=Math.cos(r.ang),uy=Math.sin(r.ang),vx=-uy,vy=ux,ph=(T/16+i*.37+hsh(i+40))%1;
+    const P=(d,l)=>[SX(g.cx+ux*(r.rr+d)+vx*l),SY(g.cy+uy*(r.rr+d)+vy*l)];
+    // porte : battants qui s'ouvrent puis se referment
+    const op=sm(.0,.07,ph)*(1-sm(.8,.88,ph)),[gx,gy]=P(0,0),gw=Math.max(4,ss*.9);
+    ctx.save();ctx.translate(gx,gy);ctx.rotate(r.ang);ctx.fillStyle='rgba(20,14,8,.9)';ctx.fillRect(-gw*.25,-gw/2,gw*.5,gw);
+    ctx.strokeStyle='#6b4a2a';ctx.lineWidth=Math.max(1.2,gw*.14);[-1,1].forEach(sd=>{const an=sd*op*1.2;ctx.beginPath();ctx.moveTo(0,sd*gw/2);ctx.lineTo(Math.sin(Math.abs(an))*gw*.5,sd*gw/2-sd*Math.cos(an)*gw*.5);ctx.stroke()});ctx.restore();
+    // trajectoire de la garnison : sortie, tenue, retraite
+    const D=.42*sm(.07,.3,ph)*(1-sm(.56,.78,ph))+(ph>.33&&ph<.56?Math.sin(T*1.6+i)*.012:0),spread=sm(.18,.3,ph)*(1-sm(.56,.66,ph));
+    const ctc=D+.075; // ligne de contact
+    // carrés assiégeants : accourent des deux flancs et du large, tiennent, poursuivent un peu, regagnent l'anneau
+    const come=sm(.18,.36,ph),back=sm(.66,.9,ph),pur=sm(.56,.64,ph)*(1-sm(.64,.72,ph));
+    const AT=[[-.55,.5,-.09],[.55,.5,.09],[0,.75,0]];
+    if(ph<.92)AT.forEach(([l0,d0,l1],k)=>{const w=come*(1-back),dd=d0+(ctc+.06+pur*.06-d0)*w,ll=l0+(l1-l0)*w,[x,y]=P(dd,ll);
+      const mv=(ph>.18&&ph<.36)||(ph>.66&&ph<.9);if(mv)for(let m=1;m<4;m++){ctx.fillStyle=`rgba(190,170,130,${.25-m*.06})`;ctx.beginPath();ctx.arc(x+(x-P(d0,l0)[0])*.04*m,y+(y-P(d0,l0)[1])*.04*m,ss*.35*m*.6,0,6.283);ctx.fill()}
+      bsq(x,y,ca)});
+    // garnison : 2 carrés en colonne qui se déploient en ligne
+    if(D>.015)[0,1].forEach(k=>{const dd=D-(1-spread)*k*.09,ll=spread*(k-.5)*.09;if(dd<.015)return;const [x,y]=P(dd,ll);
+      if((ph>.07&&ph<.3)||(ph>.56&&ph<.78))for(let m=1;m<3;m++){ctx.fillStyle=`rgba(190,170,130,${.22-m*.07})`;ctx.beginPath();ctx.arc(x-ux*m*ss*.4,y-uy*m*ss*.4,ss*.3*m,0,6.283);ctx.fill()}
+      bsq(x,y,cd)});
+    // mêlée sur la ligne de contact
+    const fight=sm(.33,.38,ph)*(1-sm(.56,.6,ph));
+    if(fight>0){const [kx,ky]=P(D+.07,0);ctx.fillStyle=`rgba(200,180,140,${.28*fight})`;for(let m=0;m<4;m++){ctx.beginPath();ctx.arc(kx+Math.sin(T*.7+m*1.9)*SS*.9,ky+Math.cos(T*.6+m*2.3)*SS*.5,SS*(.7+.2*Math.sin(T+m)),0,6.283);ctx.fill()}
+      for(let m=0;m<12;m++){const h1=hsh(m*7+i*13),h2=hsh(m*3+i*29),sd=m%2,[x,y]=P(D+.07+(sd?-.016:.016)+(h2-.5)*.035,(h1-.5)*.24);
+        if((T*(.6+h1)+h2)%1>.8){ctx.strokeStyle='rgba(255,235,170,.95)';ctx.lineWidth=.9;ctx.beginPath();ctx.moveTo(x-dot*2,y-dot*2);ctx.lineTo(x+dot*2,y+dot*2);ctx.moveTo(x+dot*2,y-dot*2);ctx.lineTo(x-dot*2,y+dot*2);ctx.stroke()}}}
+    // archers du rempart couvrant la retraite
+    const cov=(ph-.54)/.24;if(cov>0&&cov<1){for(let v=0;v<2;v++){const t=(cov*3+v*.5)%1,[x1,y1]=P(-.02,(v-.5)*.12),[x2,y2]=P(ctc+.06,(v-.5)*.1),hx=x1+(x2-x1)*t,hy=y1+(y2-y1)*t-Math.sin(t*Math.PI)*Math.max(8,ss*2),dx=x2-x1,dy=y2-y1,l=Math.hypot(dx,dy)||1;
+      ctx.strokeStyle='rgba(25,18,10,.85)';ctx.lineWidth=1;for(let m=-2;m<=2;m++){const ox=-dy/l*m*ss*.25,oy=dx/l*m*ss*.25;ctx.beginPath();ctx.moveTo(hx+ox,hy+oy);ctx.lineTo(hx+ox-dx/l*Math.max(3,ss*.5),hy+oy-dy/l*Math.max(3,ss*.5)+(t-.5)*Math.max(3,ss*.5));ctx.stroke()}}}
+  });
+  ctx.restore();
+};
+

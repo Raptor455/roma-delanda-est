@@ -1,0 +1,117 @@
+/* ================= ÉQUILIBRAGE (fil Équilibrage, 10 nov., Baptiste : « applique toutes tes recommandations, et que chaque pays joue vraiment sur ses forces ») =================
+   Source : /mnt/project-files/equilibrage/camp.js, injecté avant BOUCLE par equilibrage/patch.py (relançable).
+   1. Milice des garnisons (u.gm) : modèle « levée » propre (… (milice)), demi-effectif. Les parties en cours sont converties une fois (S.eqMil).
+   2. Départ 218 : Rome plus fournie (Scipion, Sempronius), Athènes et Syracuse renforcées.
+   3. Tir à l'arc (6 dégâts / 1,7 s), javelots des cavaliers légers (4 / 2 s), Gaulois (+0,4 → 0 d'attaque), cavaliers grecs au bouclier rond.
+   4. Forces des peuples (doctrines, par corps de troupe) : EQ_DOC. Rome = bloc compact (cohésion, défense) ; Carthage et ses alliés
+      d'Afrique, d'Ibérie et de Gaule = mobilité (vitesse, marche) ; Grecs et Macédoniens = défense et usure (cohésion, défense).
+      En bataille (equilibrage/bat.js) : la cohésion réduit le moral perdu sous les pertes, le soutien des voisins compte double pour Rome,
+      l'endurance règle la fatigue au corps à corps (les Grecs s'usent moins vite), les Grecs qui tiennent leur terrain se défendent mieux,
+      les tirailleurs et cavaliers légers carthaginois harcèlent (moral). */
+const EQ_DOC={
+  rom:{n:'Bloc compact',txt:'Rangs serrés et relève des manipules : la ligne encaisse les pertes sans se briser.',corps:['legion','velites','rcav','acav']},
+  car:{n:'Mobilité',txt:'Troupes variées et rapides : on frappe aux ailes, on harcèle, on enveloppe.',corps:['lib','iber','gaul','sling','hcav','ncav','eleph']},
+  gre:{n:'Défense et usure',txt:'Boucliers serrés, hommes endurants : la phalange tient son terrain et use l\'adversaire.',corps:['phalange','hypasp','peltaste','cretois','compagnons','thessal','athoplites','thureo','athpelt','hippeis','scythes']}};
+const eqDocOf=base=>{for(const k in EQ_DOC)if(EQ_DOC[k].corps.includes(base))return k;return null};
+// ---- 3. armes ----
+try{GEAR.jet.o.arc.m.ranged={range:220,dmg:6,cd:1.7};
+  GEAR.jet.o.javelots.mk.lcav.ranged={range:130,dmg:4,cd:2};
+  CORPS.gaul.m.atk=0;CORPS.gaul.txt='Charge furieuse, moral fragile, bon marché ; s\'épuisent vite dans une longue mêlée.';
+  for(const p of ['syr','ath','mas'])for(const e of (DEP_R[p]&&DEP_R[p].hippeis)||[])e[1].shield='rond';
+}catch(e){console.error(e)}
+// ---- 4. doctrines : corps de troupe ----
+try{
+  // Rome : cohésion et défense de la légion
+  COH_CORPS.legion=25;CORPS.legion.m.def=.06;COH_CORPS.velites=5;
+  // Grecs : hoplites et phalange plus cohérents, défense accrue
+  COH_CORPS.athoplites=18;CORPS.athoplites.m.def=.08;COH_CORPS.phalange=18;COH_CORPS.hypasp=20;COH_CORPS.thureo=8;CORPS.thureo.m.def=.03;
+  // Carthage : mobilité
+  CORPS.iber.m.spd=1.2;CORPS.ncav.m.spd=3;CORPS.hcav.m.spd=1.5;CORPS.sling.m.spd=1;CORPS.lib.m.spd=.5;
+  for(const k in EQ_DOC)for(const c of EQ_DOC[k].corps)if(CORPS[c])CORPS[c].txt=(CORPS[c].txt||'').replace(/ Doctrine :.*$/,'')+' Doctrine : '+EQ_DOC[k].n.toLowerCase()+'.';
+}catch(e){console.error(e)}
+{const _ds=dStats;dStats=function(d){const s=_ds.apply(this,arguments);try{const k=eqDocOf(d.base);s.doc=k;
+    if(k==='car'){s.km+=1}
+    else if(k==='gre'){s.end=Math.min(100,s.end+12)}}catch(e){}return s}}
+{const _u3=u3D;u3D=function(u){const x=_u3.apply(this,arguments);try{if(x){const d=desOf(u.d);x.doc=d?eqDocOf(d.base):null}}catch(e){}return x}}
+// ---- 1. milice des garnisons ----
+const EQ_MIL_K=.5; // effectif de la milice (part d'un régiment)
+function eqMilDesign(u,side){const src=desOf(u.d),base=u.t;if(!CORPS[base])return null;
+  const nm=(src?src.name.replace(/ \(milice\)$/,''):(CORPS[base].n))+' (milice)',key='mil:'+side+':'+base+':'+nm;
+  S.designs=S.designs||[];let d=S.designs.find(x=>x.sys==='mil'&&x.k===key);if(d)return d;
+  const k=CORPS[base].k;
+  d=Object.assign({id:null,base,name:'',helm:'cuir',crest:'rien',armor:'tunique',jamb:'aucune',shield:'rond',motif:'peuple',teinte:'ocre',tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'levee'},
+    BDEF[base]||{},src?{shield:src.shield,arm:src.arm,jet:src.jet,motif:src.motif,teinte:src.teinte,tenue:src.tenue}:{},
+    {helm:src&&src.helm==='nu'?'nu':'cuir',crest:'rien',armor:'tunique',jamb:'aucune',manteau:'aucun',train:'levee',aux:[]});
+  if(k==='inf'&&d.jet!=='aucune')d.jet='aucune';
+  dFix(d);d.base=base;d.name=nm;d.sys='mil';d.k=key;d.del=true;d.id=S.duid=(S.duid||0)+1;S.designs.push(d);return d}
+function eqMilUnit(u,side){if(!u||!u.gm)return;if(u._mil){const d0=desOf(u.d);if(d0&&d0.base===u.t&&d0.sys==='mil')return;u._mil=0;if(d0&&d0.sys==='mil')u.d=null}const d=eqMilDesign(u,side);if(d)u.d=d.id;
+  const cap=Math.round(UT[u.t].men*EQ_MIL_K);if(u.men>cap)u.men=cap;u._mil=1}
+function eqMilAll(){if(!S||!S.armies)return 0;let n=0;for(const a of S.armies)if(!a.dead)for(const u of a.units)if(u.gm){const d0=u._mil&&desOf(u.d);if(u._mil&&d0&&d0.base===u.t)continue;try{if(!u.d||!d0||d0.base!==u.t){u.d=null;depOne(a,u,{})}}catch(e){}eqMilUnit(u,a.side);n++}return n}
+{const _gf=garFill;garFill=function(n,max){const r=_gf.apply(this,arguments);try{if(r)eqMilAll()}catch(e){console.error(e)}return r}}
+// une milice qui reçoit des recrues ne dépasse pas son effectif
+{const _dEM=daily;daily=function(d){const r=_dEM.apply(this,arguments);try{if(S&&!S.over){if(!S.eqMil){S.eqMil=1;eqMilAll()}
+    if(Math.floor(d)%10===3)for(const a of S.armies)if(!a.dead&&a.g)for(const u of a.units)if(u.gm&&u._mil){const cap=Math.round(UT[u.t].men*EQ_MIL_K);if(u.men>cap)u.men=cap}}}catch(e){console.error(e)}return r}}
+// ---- 2. armées de départ ----
+const EQ_ADD={
+  // 11 nov. (Baptiste : « fortement augmenter » Hannibal et Scipion) : Hannibal quitte Nova Carthago avec ~70 000 h (Polybe : 90 000 fantassins, 12 000 cavaliers, 37 éléphants) ;
+  // Scipion mène une grande armée consulaire (~36 000 h)
+  'Hannibal':[['lib',6],['iber',7],['sling',3],['hcav',4],['ncav',4],['eleph',2]],
+  'P. Cornelius Scipio':[['legion',8],['velites',2],['rcav',1],['acav',1]],'Ti. Sempronius Longus':[['legion',2],['acav',1]]};
+const EQ_PEO={ath:{army:'Eurycléidès',add:[['athoplites',1],['thureo',1],['cretois',1]],gold:100},
+  syr:{army:'Hiéron II',add:[['athoplites',1],['athpelt',1]],gold:0}};
+function eqAdd(a,spec){if(!a||!spec)return;for(const [t,k] of spec)for(let j=0;j<k;j++)if(UT[t]&&a.units.length<MAXU)a.units.push({t,men:UT[t].men,eq:1});
+  try{a._dep=null;depArmy(a);if(typeof fixCorps==='function')fixCorps(a)}catch(e){console.error(e)}try{a.food=armyFoodMax(a)}catch(e){}}
+function eqStart218(){if(!S||S.day>3||S.eqStart)return;S.eqStart=1;
+  for(const a of S.armies)if(!a.dead&&!a.g&&EQ_ADD[a.name]){const n0=a.units.length;eqAdd(a,EQ_ADD[a.name]);
+    // Hannibal a déjà son état-major (Maharbal, Magon, Carthalon) : les nouveaux régiments rejoignent leur corps
+    if((a.sub||[]).length===3){const MAP={hcav:1,ncav:1,iber:2,sling:3,eleph:3};for(let i=n0;i<a.units.length;i++)a.units[i].cp=MAP[a.units[i].t]||0}}}
+{const _ngE=newGame;newGame=function(){const r=_ngE.apply(this,arguments);try{eqStart218();eqMilAll();S.eqMil=1}catch(e){console.error(e)}return r}}
+{const _psE=peo218Setup;peo218Setup=function(k){const r=_psE.apply(this,arguments);try{const P=EQ_PEO[k];if(P&&!S.eqPeo){S.eqPeo=1;
+    const L=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g);const a=L.find(x=>x.name===P.army)||L.sort((p,q)=>q.units.length-p.units.length)[0];
+    eqAdd(a,P.add);if(P.gold)S.gold.car=(S.gold.car||0)+P.gold}eqMilAll()}catch(e){console.error(e)}return r}}
+// ---- 5. états-majors de départ (11 nov., Baptiste : « 2 sous-généraux en plus du général principal à toutes les armées de départ, organisées en corps ») ----
+const EQ_STAFF={'Hannibal':['Maharbal','Magon'],'Hasdrubal':['Hannon','Bostar'],'Giscon':['Adherbal','Bomilcar'],
+  'P. Cornelius Scipio':['Cn. Cornelius Scipio','P. Scipio le Jeune'],'Ti. Sempronius Longus':['Sex. Pomponius','M. Aemilius Lepidus'],'C. Flaminius':['L. Manlius Vulso','C. Centenius'],
+  'Philippe V':['Apelle','Léontios'],'Taurion':['Mégaléas','Alexandros'],'Hiéron II':['Gélon','Andranodoros'],'Eurycléidès':['Mikion','Képhisodoros'],
+  'Gaïa':['Oezalcès','Capussa'],'Massinissa':['Lacumazès','Mazétullus'],'Boiorix':['Britomaros','Viridomaros'],'Ducarios':['Comontorios','Ancoros'],
+  'Attale Ier':['Épigénès','Sosandros'],'Dionysodore':['Deinocratès','Ménandros'],'Hermocratès':['Euthyménès','Protis'],'Apellis':['Pythéas','Aristoxénos']};
+const EQ_NAMES={gre:['Nikanor','Kléon','Aristodèmos','Philon','Lysias','Démétrios','Kallias','Timon','Agathoclès','Ménon','Polémon','Straton','Aratos','Lykortas','Dorimachos','Scopas','Machanidas','Kléomédon','Archidamos','Euryloque','Théodotos','Hippias','Nikias','Phainéas','Damoclès','Xénon','Pausanias','Glaukos','Andronikos','Hermias','Kratéros','Ptolémaios','Zeuxis','Molon','Ariarathe','Antipatros'],
+  gau:['Cassivellos','Andecomboros','Litavicos','Eporedorix','Vercassivellaunos','Cotuatos','Dumnacos','Segovax'],
+  ibe:['Indibilis','Mandonios','Allucios','Edecon','Attenes','Corbis','Orsua','Culchas'],
+  num:['Mazaetullus','Naravas','Bocchar','Vermina','Masgaba','Arabion'],
+  ill:['Démétrios de Pharos','Scerdilaïdas','Pleuratos','Gentios','Bastarnos','Sitalcès','Kotys','Seuthès'],
+  rom:['C. Terentius','Q. Fulvius','M. Minucius','L. Postumius','Ap. Claudius','T. Otacilius'],
+  car:['Himilcon','Hamilcar','Mutines','Hannon le Jeune','Mago le Samnite','Bostar l\'Ancien']};
+const EQ_CULT={ibe:'ibe',cel:'ibe',lus:'ibe',olc:'ibe',carp:'ibe',vac:'ibe',bal:'ibe',gau:'gau',lig:'gau',ins:'gau',ven:'gau',num:'num',mae:'num',mau:'num',
+  ill:'ill',dar:'ill',thr:'ill',rom:'rom',car:'car',pun:'car'};
+function eqStaffName(a,j){const L=EQ_STAFF[a.name];let nm=L&&L[j];const used=n=>S.gens.some(g=>!g.dead&&g.name===n);
+  if(nm&&!used(nm))return nm;const P=EQ_NAMES[EQ_CULT[a.side]||'gre'];for(let i=0;i<P.length;i++){const n=P[(a.id*3+j+i)%P.length];if(!used(n))return n}
+  try{if(GEN[a.side])return nextGen(a.side)}catch(e){}for(let i=0;i<P.length*P.length;i++){const n=P[i%P.length]+' fils de '+P[(Math.floor(i/P.length)+1)%P.length];if(!used(n))return n}return 'Lieutenant '+(j+1)}
+// les corps : le chef garde le centre (et la garde), le Ier corps prend la cavalerie et une partie des troupes légères, le IIe une aile d'infanterie
+function eqCorps(a){const n=1+(a.sub||[]).length;if(n<3){try{autoCorps(a,'eq')}catch(e){}return}
+  const pw=u=>{try{return power([u])}catch(e){return 1}},K=u=>UT[u.t]?UT[u.t].k:'inf';
+  const cav=a.units.filter(u=>isCavK(K(u))),sk=a.units.filter(u=>K(u)==='skirm'),inf=a.units.filter(u=>K(u)==='inf').sort((p,q)=>pw(q)-pw(p)),el=a.units.filter(u=>K(u)==='eleph');
+  a.units.forEach(u=>{u.cp=0;u.gd=0});
+  if(cav.length&&cav.length>inf.length){cav.forEach((u,i)=>u.cp=i%2?2:1);sk.forEach((u,i)=>u.cp=i%2?0:(i%4?2:1));inf.forEach(u=>u.cp=0)}
+  else if(cav.length){cav.forEach(u=>u.cp=1);sk.forEach((u,i)=>u.cp=i%2?2:1);inf.forEach((u,i)=>u.cp=i%2?2:0)}
+  else{let l=[0,0,0];[...inf,...sk].forEach(u=>{const c=l[0]<=l[1]&&l[0]<=l[2]?0:l[1]<=l[2]?1:2;u.cp=c;l[c]+=pw(u)})}
+  el.forEach(u=>u.cp=0);
+  for(let k=0;k<n;k++)if(!a.units.some(u=>(u.cp||0)===k)){const cnt=c=>a.units.filter(v=>(v.cp||0)===c).length;let big=0;for(let c=1;c<n;c++)if(cnt(c)>cnt(big))big=c;if(cnt(big)>1){const d=a.units.filter(u=>(u.cp||0)===big).pop();d.cp=k}}
+  try{pickGuard(a)}catch(e){}}
+function eqStaff(a){if(!a||a.dead||a.g||a.units.length<3||a._eqSt)return;a._eqSt=1;
+  a.sub=(a.sub||[]).filter(id=>S.gens.some(g=>g.id===id&&!g.dead));if(a.sub.length>=2)return;
+  for(let j=a.sub.length;j<2;j++){const g=mkGen(a.side,eqStaffName(a,j));S.gens.push(g);if(!addSub(a,g,true))break}
+  eqCorps(a)}
+function eqStaffAll(){if(!S||!S.armies||!S.gens||(S.day||0)>3)return;for(const a of S.armies)try{eqStaff(a)}catch(e){console.error(e)}}
+{const _ngS=newGame;newGame=function(){const r=_ngS.apply(this,arguments);try{eqStaffAll()}catch(e){console.error(e)}return r}}
+{const _psS=peo218Setup;peo218Setup=function(k){const r=_psS.apply(this,arguments);try{eqStaffAll();for(const a of S.armies)if(a.side==='car'&&!a.dead&&!a.g&&a._eqSt)eqCorps(a)}catch(e){console.error(e)}return r}}
+{const _dS=daily;daily=function(d){const r=_dS.apply(this,arguments);try{if(S&&(S.day||0)<=3)eqStaffAll()}catch(e){console.error(e)}return r}}
+// coop (trésors séparés par commandement) : les régiments ajoutés au départ sont payés par un trésor de guerre de leur commandement
+// (argent des mines d'Ibérie pour Hannibal, subsides du Sénat pour Scipion), tant qu'ils vivent ; sinon le commandement d'Hannibal fait faillite au 3e mois.
+// S'il reste en déficit, le trésor de guerre comble jusqu'à +10 or par mois, dans la limite de l'entretien de toute l'armée de départ (les Scipions n'ont que Pise au départ).
+try{if(typeof mpdInc==='function'){const _mi=mpdInc;mpdInc=function(k){const r=_mi.apply(this,arguments);if(!r||!S.mpD||!S.mpD[k]||k.endsWith(':eq'))return r;
+  const keep=[];try{for(const a of S.armies)if(!a.dead&&a.units.some(u=>u.eq)){keep.push([a,a.units]);a.units=a.units.filter(u=>!u.eq)}
+    if(keep.length){const r2=_mi.apply(this,arguments);const x=Math.max(0,(r.up||0)-(r2&&r2.up||0));if(x>0){let w=x;const net=(r.inc||0)+x-(r.up||0);let cap=0;for(const [a,L] of keep)if(mpdArmy(a)===k){for(const u of L)cap+=uCost(u)/12;try{for(const g of [genOf(a),...subsOf(a)])if(g)cap+=genPay(g)}catch(e){}}if(net<10)w+=Math.min(10-net,Math.max(x,cap));r.inc=Math.round((r.inc||0)+w);r.eqWar=Math.round(w)}}}
+  catch(e){}finally{for(const [a,L] of keep)a.units=L}return r};if(window.__mpd)window.__mpd.mpdInc=mpdInc}}catch(e){console.error(e)}
+window.__equi={eqStaff,eqStaffAll,eqCorps,EQ_DOC,eqDocOf,eqMilAll,eqMilDesign,EQ_ADD,EQ_PEO};
+/* ================= FIN ÉQUILIBRAGE ================= */

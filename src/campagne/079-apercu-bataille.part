@@ -1,0 +1,13 @@
+/* ================= APERÇU BATAILLE ================= */
+// fil Batailles 2D (v166) : la bataille (iframe de même origine) lit ici l'aperçu de l'atelier, les noms des pièces et les portraits des chefs
+try{(function(){
+  const DEF={id:null,name:'',helm:'bronze',crest:'rien',armor:'lin',jamb:'aucune',shield:'rond',motif:'peuple',teinte:'pourpre',tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'reg'};
+  const des=(base,gear)=>{if(typeof CORPS==='undefined'||!CORPS[base])return null;let d=Object.assign({},DEF,(typeof BDEF!=='undefined'&&BDEF[base])||{},gear||{});d.base=base;try{if(typeof dFix==='function')d=dFix(d)}catch(e){}return d};
+  window.__apercu={
+    svg(base,gear){try{const d=des(base,gear);return d?(typeof vaseSVG==='function'?vaseSVG(d,false):dollSVG(d,false)):null}catch(e){return null}},
+    gear(base,gear){try{const d=des(base,gear);if(!d||typeof GEAR==='undefined')return null;const o=[];
+      for(const s of Object.keys(GEAR)){const v=d[s],g=GEAR[s].o[v];if(!g||/^(motif|teinte|tenue|manteau)$/.test(s)&&!/^(manteau)$/.test(s)||/^(aucun|aucune|rien)$/.test(v))continue;o.push([GEAR[s].n,g.n])}return o}catch(e){return null}},
+    por(k){try{const [aid,ck]=String(k).split(':');const a=S.armies.find(x=>String(x.id)===aid);if(!a)return null;
+      const c=(typeof corpsOf==='function'?corpsOf(a):[{g:a.g}])[+ck||0],g=c&&c.g;return g&&typeof porGenURL==='function'?porGenURL(g):null}catch(e){return null}}};
+})()}catch(e){console.warn('aperçu bataille',e)}
+/* ================= FIN APERÇU BATAILLE ================= */

@@ -1,0 +1,87 @@
+/* ================= SIÈGE SANS BATAILLE FORCÉE : garnison enfermée, sortie, assaut des murs, reddition ================= */
+// Une armée qui se tient dans une ville amie (sur la place, à l'arrêt) n'est plus attaquée d'office : l'ennemi doit
+// l'assiéger. Elle reste enfermée ; elle peut tenter une sortie, l'assiégeant peut donner l'assaut aux murs
+// (les défenseurs comptent bien plus), sinon, quand le compteur du siège arrive au bout, la garnison se rend tout entière.
+const insideOf=x=>!x.dead&&!x.ship&&x.at!=null&&!x.legs.length&&!N[x.at].col&&ownerN(x.at)===x.side&&Math.hypot(x.x-N[x.at].x,x.y-N[x.at].y)<1.5;
+const shutIn=i=>S.armies.filter(x=>x.at===i&&insideOf(x));
+const besiegers=(i,side)=>S.armies.filter(x=>!x.dead&&!x.ship&&x.side===side&&x.at===i&&!x.legs.length);
+const WALLS=[1.35,1.5,1.7,1.9];let PEND=null; // bataille en cours de création : {k:'assault'|'sortie', i}
+const tagB=b=>{if(PEND&&b&&b.assault==null&&b.sortie==null)b[PEND.k]=PEND.i;return b};
+const _hostile5=hostile;
+// pendant le mouvement : on ne se heurte pas à une armée abritée derrière des murs (ni elle à vous)
+hostile=function(a,b){if(S&&S._mv&&a&&b&&a.units&&b.units&&(insideOf(a)||insideOf(b)))return false;return _hostile5(a,b)};
+const _arrive5=arrive;
+arrive=function(a){
+  _arrive5(a);const i=a.at;if(i==null||a.dead||a.legs.length)return;const n=N[i];if(n.col||S.siege[n.id]||!cityHostile(i,a.side))return;
+  const o=ownerN(i),near=S.armies.filter(x=>x.side===o&&!x.dead&&Math.hypot(x.x-a.x,x.y-a.y)<6);if(!near.length||near.some(x=>!insideOf(x)))return;
+  S.siege[n.id]={side:a.side,a:a.id,d:0,need:[5,15,30,60][n.size],shut:1};
+  const men=near.reduce((t,x)=>t+x.units.reduce((u,v)=>u+v.men,0),0);
+  if(a.side==='car')log(`${a.name} met le siège devant ${n.n} : la garnison (${near.reduce((t,x)=>t+x.units.length,0)} régiments, ${Math.round(men).toLocaleString('fr-FR')} hommes) s'enferme derrière les murs.`);
+  else if(o==='car'){log(`Les Romains assiègent ${n.n} ! Vos troupes sont enfermées dans la ville : tentez une sortie ou tenez jusqu'à leur départ.`);S.paused=true}
+};
+function surrender(i,side){const n=N[i],G=shutIn(i);let r=0,m=0;
+  for(const x of G){r+=x.units.length;m+=x.units.reduce((t,u)=>t+u.men,0);const g=genOf(x);if(g){g.dead=true;g.army=null}x.dead=true;if(sel&&sel.a===x)sel=null}
+  S.armies=S.armies.filter(x=>!x.dead);
+  if(r&&(side==='car'||ownerN(i)==='car'||visAt(n.x,n.y)>=1))log(`À bout de vivres, la garnison de ${n.n} se rend : ${r} régiments, ${Math.round(m).toLocaleString('fr-FR')} hommes faits prisonniers.`);
+  capture(i,side)}
+const _daily6=daily;
+daily=function(d){
+  // le compteur du siège avance aussi quand les seuls défenseurs sont enfermés dans la ville (le jeu de base l'arrête)
+  const pre={};for(const id in S.siege)pre[id]=S.siege[id].d;
+  _daily6(d);
+  for(const id in S.siege){const sg=S.siege[id],i=NI[id],a=S.armies.find(x=>x.id===sg.a);if(!a||a.dead||a.at!==i||a.legs.length)continue;
+    const o=ownerN(i),near=S.armies.filter(x=>x.side===o&&!x.dead&&Math.hypot(x.x-a.x,x.y-a.y)<6);if(!near.length||near.some(x=>!insideOf(x)))continue;
+    sg.shut=1;if(pre[id]!=null&&sg.d>pre[id])continue;
+    // vivres qui s'épuisent : la garnison fond un peu chaque jour
+    for(const x of near){for(const u of x.units)u.men*=.99;cleanArmy(x)}
+    sg.d+=N[i].port&&!(S.block[id]&&S.block[id].side===sg.side)?.5:1;
+    if(sg.d>=sg.need){surrender(i,sg.side);continue}
+    // l'IA : sortie si elle se sent plus forte, assaut si elle écrase la garnison
+    const G=shutIn(i),B=besiegers(i,sg.side),pG=G.reduce((t,x)=>t+power(bFlat([x.id])),0),pB=B.reduce((t,x)=>t+power(bFlat([x.id])),0);
+    if(!G.length||!B.length||S.cur)continue;
+    if(o!=='car'&&!MPRH(o)/*MP*/&&pG>pB*1.15&&Math.random()<.35){sortie(G[0],i);if(S.cur)return}
+    else if(sg.side!=='car'&&!MPRH(sg.side)/*MP*/&&pB>pG*WALLS[N[i].size]*1.6&&sg.d>sg.need*.25&&Math.random()<.25){assault(B[0],i);if(S.cur)return}}
+};
+function sortie(a,i){const sg=S.siege[N[i].id];if(!sg)return;const B=besiegers(i,sg.side);if(!B.length)return;
+  if(a.side==='car'||sg.side==='car')log(`${a.side==='car'?a.name+' tente':'La garnison de '+N[i].n+' tente'} une sortie contre les assiégeants !`);
+  a.inG=false;PEND={k:'sortie',i};try{startBattle(a,B);if(S.cur)tagB(S.cur)}finally{PEND=null}}
+function assault(a,i){const n=N[i],G=shutIn(i);
+  if(!G.length){const loss=[.05,.08,.12,.18][n.size];a.units.forEach(u=>u.men*=1-loss*(.7+Math.random()*.6));cleanArmy(a);
+    if(a.side==='car'||ownerN(i)==='car')log(`${a.name} prend ${n.n} d'assaut (${Math.round(loss*100)} % de pertes environ).`);capture(i,a.side);return}
+  if(a.side==='car'||ownerN(i)==='car')log(`${a.side==='car'?a.name+' donne':'Les Romains donnent'} l'assaut aux murs de ${n.n} !`);
+  for(const x of G)x.inG=false;PEND={k:'assault',i};try{startBattle(a,G);if(S.cur)tagB(S.cur)}finally{PEND=null}}
+// les murs : en assaut, les défenseurs pèsent bien plus lourd
+const _odds6=odds;
+odds=function(b){tagB(b);const p=Math.min(.999,Math.max(.001,_odds6(b)));if(b.assault==null)return p;const W=wallsOf(b.assault),r=p/(1-p)/(W*W);return r/(1+r)};
+const _applyResult6=applyResult;
+applyResult=function(b,res){tagB(b);
+  const i=b.assault!=null?b.assault:b.sortie!=null?b.sortie:null;
+  if(i==null)return _applyResult6(b,res);
+  const n=N[i],attA=b.att.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),defA=b.def.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);
+  _applyResult6(b,res);
+  if(b.assault!=null){
+    // murs emportés : les défenseurs pris dans la ville sont tués ou capturés, la ville tombe
+    if(res.attWin){for(const x of defA)if(!x.dead){x.dead=true;const g=genOf(x);if(g){g.dead=true;g.army=null}}S.armies=S.armies.filter(x=>!x.dead);
+      if(ownerN(i)!==attA[0].side&&!attA[0].dead){if(attA[0].side==='car'||defA[0]&&defA[0].side==='car')log(`Les murs de ${n.n} sont emportés : la garnison est passée au fil de l'épée ou prise.`);capture(i,attA[0].side)}}
+    else{for(const x of defA)if(!x.dead){x.legs=[];x.at=i;x.x=n.x;x.y=n.y}
+      if(attA[0]&&(attA[0].side==='car'||defA[0]&&defA[0].side==='car'))log(`L'assaut sur ${n.n} est repoussé.`)}}
+  else{
+    // sortie repoussée : les survivants rentrent derrière les murs ; réussie : les assiégeants reculent, le siège est levé
+    if(!res.attWin){for(const x of attA)if(!x.dead){x.legs=[];x.at=i;x.x=n.x;x.y=n.y;x.cool=0}}
+    else delete S.siege[n.id]}
+  if(sel&&sel.a&&sel.a.dead)sel=null;
+};
+const _renderSide6=renderSide;
+renderSide=function(){_renderSide6();if(!S||!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return;const a=sel.a,box=$('side').querySelector('.genbox');if(!box)return;
+  let h='';
+  if(insideOf(a)){const n=N[a.at],sg=S.siege[n.id];if(sg&&sg.side!==a.side&&besiegers(a.at,sg.side).length){
+    const left=Math.max(0,Math.ceil(sg.need-sg.d));
+    h+=`<p class="sub" style="margin:8px 0 2px">Enfermée dans ${esc(n.n)} : ${left} jour${left>1?'s':''} avant la reddition de la garnison.</p><div class="row"><button id="aSortie" type="button" title="Vos troupes sortent par les portes et attaquent les assiégeants. Victoire : le siège est levé. Défaite : les survivants rentrent derrière les murs.">Tenter une sortie</button></div>`}}
+  else if(a.at!=null&&!a.legs.length){const n=N[a.at],sg=S.siege[n.id];if(sg&&sg.side===a.side&&!n.col){const G=shutIn(a.at),left=Math.max(0,Math.ceil(sg.need-sg.d));
+    const r=G.reduce((t,x)=>t+x.units.length,0);
+    h+=`<p class="sub" style="margin:8px 0 2px">${G.length?`La garnison (${r} régiments) est enfermée : reddition dans ${left} jour${left>1?'s':''}.`:`Ville sans armée : elle tombe dans ${left} jour${left>1?'s':''}.`}</p><div class="row"><button id="aAssaut" type="button" title="${G.length?`Escalade et bélier : la bataille se livre contre la garnison, qui compte ×${wallsOf(a.at).toFixed(2)} derrière ses murs. Victoire : la ville tombe tout de suite et sa garnison est perdue. Défaite : vous reculez.`:`Les murs sont pris sans bataille, au prix de pertes (≈ ${Math.round([.05,.08,.12,.18][n.size]*100)} %).`}">Donner l'assaut aux murs</button></div>`}}
+  if(!h)return;box.insertAdjacentHTML('beforeend',h);
+  if($('aSortie'))$('aSortie').onclick=()=>{sortie(a,a.at);renderAll()};
+  if($('aAssaut'))$('aAssaut').onclick=()=>{assault(a,a.at);renderAll()};
+};
+

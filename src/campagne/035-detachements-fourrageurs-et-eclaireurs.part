@@ -1,0 +1,116 @@
+/* ================= DÉTACHEMENTS : fourrageurs et éclaireurs ================= */
+// S.par : petits détachements visibles sur la carte. k='raid' (fourrageurs : pillent et brûlent les villages autour d'une armée arrêtée)
+// ou k='scout' (éclaireurs : partent sur les routes, voient à 45 km, repèrent l'ennemi, puis rentrent).
+const RAID_KM=12,RAID_KMD=30,SCOUT_KMD=40,SCOUT_VIS=45;
+function newPar(a,k,extra){const p=Object.assign({id:S.uid++,side:a.side,k,a:a.id,x:a.x,y:a.y,at:null,legs:[],units:[],cool:0,scout:0,par:k},extra||{});S.par.push(p);return p}
+const parArmy=p=>S.armies.find(x=>x.id===p.a&&!x.dead);
+function goStraight(p,x,y){p.legs=[{x,y,n:null,type:'hors',tf:1}];p.at=null}
+function killPar(p,why,foe){S.par=S.par.filter(x=>x!==p);const a=parArmy(p);if(a){const loss=p.k==='raid'?360:120;let left=loss;for(const u of a.units){if(left<=0)break;const l=Math.min(left,u.men*.08);u.men-=l;left-=l}cleanArmy(a)}
+  if(p.side==='car')log(why);else if(foe&&foe.side==='car')log(why)}
+function pickVillage(a){
+  const taken=new Set(S.par.filter(p=>p.k==='raid'&&p.v!=null).map(p=>p.v));
+  const L=villagesIn(a.x-RAID_KM,a.y-RAID_KM,a.x+RAID_KM,a.y+RAID_KM).filter(v=>!taken.has(v.id)&&!vRuined(v)&&vRel(v,a.side)!=='own'&&Math.hypot(v.x-a.x,v.y-a.y)<=RAID_KM)
+    .sort((p,q)=>(vRel(p,a.side)==='hostile'?0:1)-(vRel(q,a.side)==='hostile'?0:1)||Math.hypot(p.x-a.x,p.y-a.y)-Math.hypot(q.x-a.x,q.y-a.y));
+  return L[Math.floor(Math.random()*Math.min(3,L.length))]||null}
+function sendScouts(a){
+  // 4 patrouilles, une par quart d'horizon ; chacune enchaîne 3 points de recherche de plus en plus loin dans son secteur,
+  // en commençant par la dernière position connue d'une armée ennemie si elle tombe dans son secteur
+  a.scoutT=S.day+12;const r0=Math.random()*6.283,used=new Set(),I=(a.side==='car'?S.intel:S.intelR)||{};let n=0;
+  const known=Object.keys(I).map(id=>({id,...I[id]})).filter(it=>{const e=S.armies.find(x=>x.id==it.id&&!x.dead);return e&&hostile(e,{side:a.side})&&Math.hypot(it.x-a.x,it.y-a.y)<170});
+  const pick=(ang,d)=>{for(let tr=0;tr<5;tr++){const an=ang+(Math.random()-.5)*.9,dd=d*(.85+Math.random()*.3),tx=a.x+Math.cos(an)*dd,ty=a.y+Math.sin(an)*dd;
+      const nd=nearestNode(tx,ty,m=>!m.col&&!used.has(m.i)&&Math.hypot(m.x-tx,m.y-ty)<45);if(nd){used.add(nd.i);return [nd.x,nd.y,nd.i]}if(landFast(tx,ty))return [tx,ty,null]}return null};
+  for(let j=0;j<4;j++){const ang=r0+j*Math.PI/2,wp=[];
+    const tg=known.find(it=>{const d=Math.atan2(it.y-a.y,it.x-a.x)-ang;return Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))<Math.PI/4});
+    if(tg){wp.push([tg.x,tg.y,null]);known.splice(known.indexOf(tg),1)}
+    for(const d of [45,85,125]){if(wp.length>=3)break;const w=pick(ang,d);if(w)wp.push(w)}
+    if(!wp.length)continue;
+    const p=newPar(a,'scout',{state:'out',seen:[],wp});if(!scoutNext(p)){S.par=S.par.filter(x=>x!==p);continue}n++}
+  if(a.side==='car')log(`${a.name} envoie ${n} patrouilles d'éclaireurs dans ${n>1?'toutes les directions':'les environs'}.`)}
+// éclaireur : aller au prochain point de recherche (par la route si possible, à travers champs sinon)
+function scoutNext(p){while(p.wp&&p.wp.length){const [x,y,ni]=p.wp.shift();if(ni!=null&&order(p,x,y,ni))return true;
+    if(landFast(x,y)&&!(typeof brOnSeg==='function'&&brOnSeg(p.x,p.y,x,y))){goStraight(p,x,y);return true}}return false}
+function initPar(){S.par=S.par||[]}
+function moveObj(o,dd){let budget=dd;
+  while(budget>0&&o.legs.length){const L=o.legs[0];if(typeof brOnSeg==='function'&&brOnSeg(o.x,o.y,L.x,L.y)){o.legs=[];o.blk=true;break}const dist=Math.hypot(L.x-o.x,L.y-o.y),sp=legSpeed(o,L.type,L.tf,o.x,o.y),need=dist/sp;
+    if(need<=budget){o.x=L.x;o.y=L.y;budget-=need;o.legs.shift();o.at=L.n!=null?L.n:null}else{o.x+=(L.x-o.x)*budget/need;o.y+=(L.y-o.y)*budget/need;budget=0;o.at=null}}}
+function movePars(dd){
+  for(const p of S.par.slice()){
+    const a=parArmy(p);if(!a||a.ship){S.par=S.par.filter(x=>x!==p);continue}
+    moveObj(p,dd);
+    if(p.blk){p.blk=false;if(p.state==='back'){S.par=S.par.filter(x=>x!==p);continue}p.state='back'}
+    // ennemis tout près : les fourrageurs sont taillés en pièces, les éclaireurs une fois sur deux
+    const foe=S.armies.find(o=>!o.dead&&!o.ship&&!((o.inG||o.g)&&o.at!=null&&S.siege&&S.siege[N[o.at].id])/*FOUR-SIEGE*/&&hostile(o,{side:p.side})&&Math.hypot(o.x-p.x,o.y-p.y)<(p.k==='raid'?3:2.5));
+    if(foe&&!(p._ev||[]).includes(foe.id)){(p._ev=p._ev||[]).push(foe.id);
+      if(p.k==='raid'||Math.random()<.5){killPar(p,p.k==='raid'?(p.side==='car'?`Des fourrageurs de ${a.name} sont surpris par ${foe.name} et taillés en pièces.`:`${foe.name} surprend et massacre des fourrageurs ennemis.`):`Une patrouille d'éclaireurs de ${a.name} est interceptée par ${foe.name}.`,foe);continue}}
+    if(p.k==='raid'){
+      if(p.state==='out'&&!p.legs.length){p.state='burn';p.t=S.day+.6}
+      else if(p.state==='burn'&&S.day>=p.t){const v=VIL[p.v];
+        if(v&&!vRuined(v)){const r=vPillage(v,a);const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id&&v.t===a.at)sg.d=Math.min(sg.need,sg.d+1.5);
+          if(a.side==='car'&&(a._rl=(a._rl||0)+1)<=3)log(`Les fourrageurs de ${a.name} pillent et brûlent ${v.n} (${Math.round(r.got)} rations, ${r.g} or).`)
+          else if(a.side!=='car'&&ownerN(v.t)==='car'&&!(a._rlog>S.day-10)){a._rlog=S.day;log(`Des fourrageurs ennemis brûlent ${v.n}, près ${deN(N[v.t].n)}.`)}}
+        p.state='back';goStraight(p,a.x,a.y)}
+      else if(p.state==='back'){if(Math.hypot(p.x-a.x,p.y-a.y)<.6)S.par=S.par.filter(x=>x!==p);else if(!p.legs.length)goStraight(p,a.x,a.y)}
+    }else{
+      if(p.state==='out'&&!p.legs.length&&!scoutNext(p)){p.state='back';order(p,a.x,a.y,!a.legs.length&&a.at!=null?a.at:null)||goStraight(p,a.x,a.y)}
+      else if(p.state==='back'){if(Math.hypot(p.x-a.x,p.y-a.y)<3||S.day>a.scoutT+8)S.par=S.par.filter(x=>x!==p);else if(!p.legs.length)goStraight(p,a.x,a.y)}
+      // repérage
+      for(const e of S.armies){if(e.dead||e.ship||!hostile(e,{side:p.side})||e.inG||p.seen.includes(e.id))continue;if(Math.hypot(e.x-p.x,e.y-p.y)>SCOUT_VIS)continue;
+        p.seen.push(e.id);if(p.side!=='car')continue;S.intel[e.id]={x:e.x,y:e.y,d:Math.floor(S.day)};
+        if(!e.g){const t=townAt(e.x,e.y);log(`Éclaireurs : ${e.name} et ${e.units.length} régiments près ${deN(t.n)} !`);if(!(S._scAl>S.day-3)){S._scAl=S.day;S.paused=true}}}
+    }
+  }
+}
+function raidsDaily(){
+  for(const a of S.armies){if(!a.raid)continue;
+    if(a.dead||a.ship||a.legs.length||a.inG){a.raid=false;continue}
+    const n=S.par.filter(p=>p.k==='raid'&&p.a===a.id).length;
+    for(let j=n;j<3;j++){const v=pickVillage(a);if(!v){if(!S.par.some(p=>p.k==='raid'&&p.a===a.id)){a.raid=false;if(a.side==='car')log(`Plus rien à piller autour de ${a.name}.`)}break}
+      const p=newPar(a,'raid',{state:'out',v:v.id});goStraight(p,v.x,v.y)}}
+  // l'IA romaine fourrage autour des villes qu'elle assiège
+  for(const a of S.armies)if(a.side==='rom'&&!MPRH()/*MP*/&&!a.raid&&!a.legs.length&&a.at!=null){const sg=S.siege[N[a.at].id];if(sg&&sg.a===a.id&&sg.d>2)a.raid=true}
+}
+const _legSpeed3=legSpeed;
+legSpeed=function(a,type){const v=_legSpeed3.apply(null,arguments);if(type==='mer'||!a.par)return v;return v/armySpeed(a)*(a.par==='raid'?RAID_KMD:SCOUT_KMD)};
+const _tick2=tick;
+tick=function(dd){_tick2(dd);if(S&&!S.cur&&!S.over){initPar();movePars(dd)}};
+const _daily5=daily;
+daily=function(d){_daily5(d);if(S.cur||S.over)return;initPar();raidsDaily();for(const a of S.armies)if(a.scout>0)a.scout=0};
+const _computeVis=computeVis;
+computeVis=function(){_computeVis();if(!S||!S.par)return;for(const p of S.par)if(p.side==='car')SRC.push([p.x,p.y,p.k==='scout'?SCOUT_VIS:12])};
+// panneau : boutons fourrageurs et éclaireurs
+const _renderSide3=renderSide;
+renderSide=function(){_renderSide3();if(!S||!S.gens)return;initPar();
+  if(!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return;const a=sel.a,b=$('aScout');
+  if(b){const out=S.par.filter(p=>p.k==='scout'&&p.a===a.id).length;b.disabled=!!out||!!a.ship;b.textContent=out?`Éclaireurs en patrouille (${out})`:'Envoyer des éclaireurs';
+    b.title="Quatre patrouilles de cavalerie légère partent chacune dans un quart de l'horizon, fouillent trois points de plus en plus loin (≈ 45, 85, 125 km, d'abord la dernière position connue de l'ennemi), voient à 45 km autour d'elles et signalent l'ennemi, puis rentrent.";
+    b.onclick=()=>{if(S.par.some(p=>p.k==='scout'&&p.a===a.id))return;sendScouts(a);computeVis();renderAll()}}
+  const box=el2();function el2(){return $('side').querySelector('.genbox')}
+  if(box&&!a.g&&!a.ship&&!a.legs.length&&!a.inG&&a.reinf==null&&(a.at==null||ownerN(a.at)!==a.side)){
+    const n=S.par.filter(p=>p.k==='raid'&&p.a===a.id).length;
+    box.insertAdjacentHTML('beforeend',`<div class="row" style="margin:6px 0 0"><button id="aRaid" type="button" class="${a.raid?'on':''}" title="Trois détachements (cavalerie ou infanterie) pillent et brûlent les villages à moins de ${RAID_KM} km : vivres et butin ; pendant un siège, les campagnes de la ville ruinées l'affament (le siège avance plus vite). Les neutres n'aiment pas ça.">${a.raid?`Fourrageurs dehors (${n}) : rappeler`:'Envoyer des fourrageurs piller'}</button></div>`);
+    $('aRaid').onclick=()=>{a.raid=!a.raid;if(a.raid){raidsDaily();log(`${a.name} envoie ses fourrageurs piller les environs.`)}else for(const p of S.par)if(p.k==='raid'&&p.a===a.id){p.state='back';goStraight(p,a.x,a.y)}renderAll()}}
+};
+// dessin des détachements : petits carrés à l'échelle (moitié d'un régiment), repère visible de loin
+const _drawFleets2=drawFleets;
+drawFleets=function(s,z,inV){
+  if(S&&S.par&&S.par.length){const T=S.day*DAY_S,cardS=UNIT_MIN_PX/UNIT_KM,dark='rgba(26,18,10,.95)';
+    for(const p of S.par){const vis=p.side==='car'||visAt(p.x,p.y)===2;if(!vis||!inV(p.x,p.y,20))continue;const a=parArmy(p);if(!a)continue;
+      const c=FAC[p.side].c,X=view.ox+p.x*s,Y=view.oy+p.y*s,q=Math.max(8,UNIT_KM*s*.55);
+      const L=p.legs[0],hx=L?L.x-p.x:0,hy=L?L.y-p.y:0,hl=Math.hypot(hx,hy)||1,dx=hx/hl,dy=hy/hl;
+      ctx.save();
+      // poussière derrière
+      if(L){for(let k=1;k<=3;k++){ctx.fillStyle=`rgba(170,150,110,${.35-k*.09})`;ctx.beginPath();ctx.arc(X-dx*q*.9*k,Y-dy*q*.9*k,q*.35*(1+k*.3),0,7);ctx.fill()}}
+      if(p.k==='scout'){const u={t:p.side==='rom'?'acav':'ncav',men:300};unitSq(X,Y,q,u,c,dark)}
+      else{const cavs=a.units.filter(u=>isCavK(UT[u.t].k)),infs=a.units.filter(u=>UT[u.t].k==='inf'||UT[u.t].k==='skirm');
+        const L2=(p.id%3===1?infs:cavs).length?(p.id%3===1?infs:cavs):(cavs.length?cavs:infs);const u0=L2[p.id%Math.max(1,L2.length)]||{t:p.side==='rom'?'rcav':'hcav'};
+        const ox=0,oy=0;unitSq(X,Y,q,{t:u0.t,men:UT[u0.t].men},c,dark);
+        if(p.state==='burn'){const v=VIL[p.v];if(v){const vx=view.ox+v.x*s,vy=view.oy+v.y*s,R=Math.max(8,.25*s);
+          for(let k=0;k<6;k++){const ph=(T*.8+k/6)%1,an=k*1.05+T*.3;ctx.fillStyle=`rgba(255,${120+Math.floor(80*hsh(k+Math.floor(T*4)))},30,${.85*(1-ph)})`;ctx.beginPath();ctx.arc(vx+Math.cos(an)*R*.5,vy+Math.sin(an)*R*.4-ph*R,R*.25*(1-ph*.5),0,7);ctx.fill()}
+          for(let k=0;k<4;k++){const ph=(T*.3+k/4)%1;ctx.fillStyle=`rgba(50,45,40,${.5*(1-ph)})`;ctx.beginPath();ctx.arc(vx+ph*R*.6,vy-R*.6-ph*R*2.2,R*.35*(1+ph*1.5),0,7);ctx.fill()}}
+          // torche
+          ctx.fillStyle=`rgba(255,190,60,${.6+.4*Math.sin(T*20)})`;ctx.beginPath();ctx.arc(X+ox+q*.5,Y+oy-q*.5,Math.max(1.8,q*.15),0,7);ctx.fill()}}
+      if(s<cardS){ctx.strokeStyle=p.side==='car'?'#f3d98a':'#fff3c4';ctx.lineWidth=1;ctx.strokeRect(X-q*.75-2,Y-q*.75-2,q*1.5+4,q*1.5+4)}
+      ctx.restore()}}
+  _drawFleets2(s,z,inV);
+};
+

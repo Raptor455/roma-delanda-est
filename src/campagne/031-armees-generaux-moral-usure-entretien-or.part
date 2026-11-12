@@ -1,0 +1,347 @@
+/* ================= ARMÉES : généraux, moral, usure, entretien, organisation, renforts ================= */
+// Module ajouté le 8 novembre 2026 (fil « Gérer les armées dans la campagne »).
+// Il enveloppe des fonctions existantes (odds, applyResult, retreat, legSpeed, income, daily, addRecruit,
+// renderSide, townBlock, bindTown, genCard) au lieu de les réécrire : à réappliquer avec patch.py.
+const TRAITS={
+  tact:{n:'Tacticien',d:'+8 % de force au combat'},
+  fouge:{n:'Fougueux',d:'+12 % en attaque, −5 % en défense'},
+  prud:{n:'Prudent',d:'+12 % en défense, retraites moins coûteuses'},
+  cav:{n:'Cavalier',d:'cavalerie +25 % au combat'},
+  march:{n:'Grand marcheur',d:'+12 % de vitesse'},
+  inten:{n:'Bon intendant',d:'vivres consommés −30 %'},
+  aime:{n:'Aimé des troupes',d:'moral +12, désertions réduites de moitié'},
+  dur:{n:'Endurci',d:'usure (froid, faim, cols) −35 %'},
+  polio:{n:'Preneur de villes',d:'sièges 35 % plus rapides'},
+  lent:{n:'Lent',d:'−10 % de vitesse',neg:1},
+  impop:{n:'Impopulaire',d:'moral −12',neg:1},
+  tem:{n:'Téméraire',d:'+6 % en attaque, −10 % en défense',neg:1},
+  avide:{n:'Avide',d:'coûte 6 or de plus par mois',neg:1}
+};
+const GOOD_TR=Object.keys(TRAITS).filter(k=>!TRAITS[k].neg),BAD_TR=Object.keys(TRAITS).filter(k=>TRAITS[k].neg);
+const HIST_GEN={'Hannibal':[['tact','aime','march'],13],'Hasdrubal':[['prud','inten'],4],'Magon':[['fouge'],2],'Giscon':[['prud'],1],'Maharbal':[['cav','fouge'],4],
+  'Hannon':[['inten','lent'],1],'Himilcon':[['polio'],1],'Bomilcar':[['avide'],0],'Hamilcar':[['fouge','dur'],3],'Mutines':[['cav','march'],3],'Carthalon':[['cav'],1],
+  'P. Cornelius Scipio':[['prud','tact'],4],'Ti. Sempronius Longus':[['fouge','tem'],1],'C. Flaminius':[['fouge','tem','impop'],1],'Cn. Cornelius Scipio':[['prud','aime'],3],
+  'Q. Fabius Maximus':[['prud','inten','impop'],8],'M. Claudius Marcellus':[['fouge','polio'],8],'L. Aemilius Paullus':[['prud'],3],'C. Terentius Varro':[['fouge','tem'],0],
+  'M. Minucius Rufus':[['tem','fouge'],1],'Ti. Sempronius Gracchus':[['aime'],2],'Q. Fulvius Flaccus':[['polio','dur'],4],'M. Livius Salinator':[['tact','impop'],4],
+  'C. Claudius Nero':[['march','tact'],4],'T. Manlius Torquatus':[['dur'],3]};
+const XP_STAR=[0,3,7,12,18,25];
+const MOR0=65;
+const stars=g=>{let s=0;if(!g)return 0;while(s<5&&g.xp>=XP_STAR[s+1])s++;return s};
+const starTxt=n=>'★'.repeat(n)+'☆'.repeat(5-n);
+const hasTr=(g,k)=>!!(g&&g.tr.includes(k));
+const genOf=a=>a&&a.gen!=null&&S.gens?S.gens.find(g=>g.id===a.gen&&!g.dead)||null:null;
+const genPay=g=>3+2*stars(g)+(hasTr(g,'avide')?6:0);
+const isCavK=k=>k==='cav'||k==='lcav';
+const morWord=m=>m>=85?'exalté':m>=65?'confiant':m>=45?'ferme':m>=25?'inquiet':'démoralisé';
+const morCol=m=>m>=65?'var(--good)':m>=45?'var(--gold)':m>=25?'#e0a060':'var(--bad)';
+const armyMen=a=>a.units.reduce((s,u)=>s+u.men,0);
+const armyUpkeep=a=>{let up=a.units.reduce((s,u)=>s+uCost(u)/12,0);if(a.inG)up*=.5;const g=genOf(a);if(g)up+=genPay(g);return Math.round(up)};
+const mercenary=u=>u.side!=='rom'&&['iber','gaul','sling','ncav'].includes(u.t);
+
+function mkGen(side,name){
+  const h=HIST_GEN[name.replace(/ II$/,'')];
+  let tr,xp;
+  if(h&&!name.endsWith(' II')){tr=h[0].slice();xp=h[1]}
+  else{tr=[GOOD_TR[Math.floor(Math.random()*GOOD_TR.length)]];if(Math.random()<.35){const b=BAD_TR[Math.floor(Math.random()*BAD_TR.length)];tr.push(b)}xp=Math.random()<.3?3:0}
+  return {id:S.guid++,side,name,xp,tr,army:null,at:null,dead:false};
+}
+function initArmies(){
+  if(!S.gens)S.gens=[];if(S.guid==null)S.guid=1;S.rally=S.rally||{};S.cand=S.cand||{};
+  for(const a of S.armies){if(a.mor==null)a.mor=a.g?70:MOR0}
+  syncGens();
+}
+// chaque armée de campagne a un général ; un général dont l'armée disparaît rentre dans la ville amie la plus proche
+function syncGens(){
+  if(!S.gens)return;
+  for(const g of S.gens){if(g.dead||g.army==null)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);
+    if(a&&a.gen===g.id){g.lx=a.x;g.ly=a.y;if(a.name!==g.name)a.name=g.name;continue}
+    g.army=null;
+    if(g._cap){g.dead=true;if(g.side==='car')log(`${g.name} est capturé par l'ennemi.`);continue}
+    const n=nearestNode(g.lx!=null?g.lx:0,g.ly!=null?g.ly:0,n=>!n.col&&ownerN(n.i)===g.side);
+    if(!n){g.dead=true;continue}g.at=n.i;
+    if(g.side==='car')log(`${g.name} rentre à ${n.n}, sans commandement.`)}
+  for(const a of S.armies){if(a.dead||a.g||a.reinf!=null)continue;if(a.mor==null)a.mor=MOR0;
+    if(genOf(a)&&genOf(a).army===a.id)continue;
+    // un général sans commandement du même nom reprend son armée ; sinon on en crée un
+    let g=S.gens.find(x=>!x.dead&&x.army==null&&x.side===a.side&&x.name===a.name);
+    if(!g){g=mkGen(a.side,a.name);S.gens.push(g)}
+    g.army=a.id;g.at=null;g.lx=a.x;g.ly=a.y;a.gen=g.id;a.name=g.name}
+  S.gens=S.gens.filter(g=>!g.dead||g.side==='car');
+}
+function giveGen(a,g){
+  const old=genOf(a);
+  if(old&&old!==g){old.army=null;const n=a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side?N[a.at]:nearestNode(a.x,a.y,n=>!n.col&&ownerN(n.i)===a.side);if(n)old.at=n.i;else old.dead=true}
+  if(!S.gens.includes(g))S.gens.push(g);
+  g.army=a.id;g.at=null;g.lx=a.x;g.ly=a.y;a.gen=g.id;a.name=g.name;
+}
+function gainXp(g,x){
+  if(!g||g.dead)return;const s0=stars(g);g.xp+=x;const s1=stars(g);
+  if(s1>s0){if((s1===2||s1===4)){const c=GOOD_TR.filter(k=>!g.tr.includes(k));if(c.length){const k=c[Math.floor(Math.random()*c.length)];g.tr.push(k);
+      if(g.side==='car')log(`${g.name} gagne en renommée (${starTxt(s1)}) : ${TRAITS[k].n.toLowerCase()}.`);return}}
+    if(g.side==='car')log(`${g.name} gagne en renommée (${starTxt(s1)}).`)}
+}
+// multiplicateur de force d'une armée (général + moral)
+function armyMul(a,role){
+  let m=1;const g=genOf(a);
+  if(!a.g){if(!g)m*=.92;else{m*=1+.04*stars(g);if(hasTr(g,'tact'))m*=1.08;
+    if(hasTr(g,'fouge'))m*=role==='att'?1.12:.95;if(hasTr(g,'prud'))m*=role==='def'?1.12:1;if(hasTr(g,'tem'))m*=role==='att'?1.06:.9;
+    if(hasTr(g,'cav')){const p=power(a.units),c=power(a.units.filter(u=>isCavK(UT[u.t].k)));if(p>0)m*=1+.25*c/p}}}
+  const mor=a.mor==null?MOR0:a.mor;m*=(.75+.5*mor/100)/(.75+.5*MOR0/100);
+  // fatigue et camp
+  const fat=a.fat||0;if(fat>30)m*=1-.3*(fat-30)/70;
+  if(role==='def'&&a.camp&&a.camp.ok)m*=1.15;
+  if(role==='def'&&a.legs.length&&a.pace==='prud')m*=1.1;
+  return m;
+}
+function sideMul(ids,role){let w=0,s=0;for(const id of ids){const a=S.armies.find(x=>x.id===id);if(!a)continue;const p=strength(a);w+=p;s+=p*armyMul(a,role)}return w>0?s/w:1}
+
+// ---- enveloppes des fonctions du jeu ----
+const _odds=odds;
+odds=function(b){const p=Math.min(.999,Math.max(.001,_odds(b)));const r=Math.sqrt(p/(1-p))*sideMul(b.att,'att')/sideMul(b.def,'def');return r*r/(r*r+1)};
+
+const _applyResult=applyResult;
+applyResult=function(b,res){
+  const attA=b.att.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),defA=b.def.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);
+  const p=odds(b),win=res.attWin?attA:defA,lose=res.attWin?defA:attA,under=res.attWin?p<.5:p>.5;
+  const gW=win.map(genOf).filter(Boolean),gL=lose.map(genOf).filter(Boolean);
+  _applyResult(b,res);
+  for(const a of win){if(a.dead)continue;a.mor=Math.min(100,(a.mor==null?MOR0:a.mor)+18)}
+  for(const a of lose){if(a.dead)continue;a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-25)}
+  // l'annonce gagne les voisins : petite hausse ou baisse pour les autres armées du camp
+  const wS=win[0]&&win[0].side,lS=lose[0]&&lose[0].side;
+  for(const a of S.armies){if(a.dead||win.includes(a)||lose.includes(a))continue;if(a.side===wS)a.mor=Math.min(100,(a.mor==null?MOR0:a.mor)+3);else if(a.side===lS)a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-4)}
+  for(const g of gW){gainXp(g,under?5:3);if(Math.random()<.03)killGen(g,'tombe au combat malgré la victoire')}
+  for(const g of gL){gainXp(g,1);if(g.dead)continue;const a=S.armies.find(x=>x.id===g.army);if(!a||a.dead){if(Math.random()<.45){killGen(g,'est tué ou capturé avec son armée');continue}}else if(Math.random()<.1)killGen(g,'tombe au combat')}
+  syncGens();
+};
+function killGen(g,why){g.dead=true;const a=S.armies.find(x=>x.id===g.army);g.army=null;if(a){a.gen=null;a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-15)}
+  if(g.side==='car'||(a&&visOfArmy(a)>=1))log(`${g.name} ${why}.`);
+  if(a&&!a.dead){const ng=mkGen(a.side,nextGen(a.side));S.gens.push(ng);giveGen(a,ng);if(a.side==='car')log(`${ng.name} prend le commandement.`)}}
+
+const _retreat=retreat;
+retreat=function(a){
+  const g=genOf(a),before=new Map(a.units.map(u=>[u,u.men]));
+  _retreat(a);
+  if(a.dead){if(g)g._cap=Math.random()<.5;return}
+  if(hasTr(g,'prud'))a.units.forEach(u=>{if(before.has(u))u.men=Math.min(before.get(u),u.men/.92*.97)});
+  a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-8);
+  if(a.mor<30){a.units.forEach(u=>u.men*=.95);cleanArmy(a)}
+};
+
+const _legSpeed=legSpeed;
+legSpeed=function(a,type){let v=_legSpeed.apply(null,arguments);if(type==='mer')return v;const g=genOf(a);
+  if(hasTr(g,'march'))v*=1.12;if(hasTr(g,'lent'))v*=.9;if(a.reinf!=null)v*=1.1;return v};
+
+const _income=income;
+income=function(side){const r=_income(side);let up=r.up;
+  for(const a of S.armies)if(a.side===side&&a.inG)up-=a.units.reduce((s,u)=>s+uCost(u)/12,0)*.5;
+  if(S.gens)for(const g of S.gens)if(g.side===side&&!g.dead)up+=genPay(g);
+  return {inc:r.inc,up:Math.round(up)}};
+
+const _daily=daily;
+daily=function(d){
+  initArmies();
+  const snap=new Map();for(const a of S.armies)snap.set(a,{men:new Map(a.units.map(u=>[u,u.men])),food:a.food});
+  const sg0={};for(const id in S.siege)sg0[id]=S.siege[id].d;
+  _daily(d);
+  if(S.cur||S.over)return;
+  const se=season();
+  for(const a of S.armies){if(a.dead)continue;const sn=snap.get(a),g=genOf(a);if(a.mor==null)a.mor=MOR0;
+    // usure de la journée (froid, faim, cols, désert) ; un général endurci en épargne une partie
+    let lost=0;if(sn)for(const u of a.units){const m0=sn.men.get(u);if(m0!=null&&m0>u.men){let l=m0-u.men;const k=lossMul(a,g);u.men=Math.max(0,u.men+l*(1-k));l*=k;lost+=l}}
+    a.usure=(a.usure||0)*.7+lost*.3;
+    if(sn&&hasTr(g,'inten')&&sn.food!=null&&a.food!=null&&a.food<sn.food)a.food+=(sn.food-a.food)*.3;
+    // moral : tend chaque jour vers une valeur qui dépend du général, des vivres, de la solde, de la saison
+    const home=ownerAt(a.x,a.y)===a.side,starving=!a.g&&!a.ship&&a.food!=null&&a.food<=0;
+    let tgt=MOR0-((a.fat||0)>60?10:0)+(a.camp&&a.camp.ok?4:0)+(g?3*stars(g):-5)+(hasTr(g,'aime')?12:0)-(hasTr(g,'impop')?12:0)+(home?5:0)+(a.inG?5:0)
+      -(starving?25:0)-(S.gold[a.side]!=null&&S.gold[a.side]<=0&&!FAC[a.side].a?15:0)-(!home&&se==='Hiver'?10:0)-(a.legs.length&&a.legs[0].type==='col'?8:0)-(lost>armyMen(a)*.01?8:0);
+    if(a.g)tgt=Math.max(tgt,55);
+    tgt=Math.max(5,Math.min(95,tgt));a.mor+=Math.max(-2,Math.min(2,tgt-a.mor));
+    // désertions sous 35 de moral
+    if(a.mor<35&&!a.ship){let k=(35-a.mor)*.0004;if(hasTr(g,'aime'))k*=.5;let des=0;for(const u of a.units){const l=u.men*k*(mercenary({t:u.t,side:a.side})?1.5:1);u.men-=l;des+=l}
+      if(a.side==='car'&&des>=20&&d%10===0)log(`${a.name} : le moral est au plus bas, ${Math.round(des*10)} hommes ont déserté ces dix derniers jours.`);
+      cleanArmy(a)}
+  }
+  // sièges menés par un preneur de villes
+  for(const id in S.siege){const sg=S.siege[id],a=S.armies.find(x=>x.id===sg.a);if(a&&hasTr(genOf(a),'polio')&&sg0[id]!=null&&sg.d>sg0[id])sg.d+=(sg.d-sg0[id])*.35;
+    if(sg.d>=sg.need&&ownerN(NI[id])!==sg.side)capture(NI[id],sg.side)}
+  // solde impayée : les mercenaires s'en vont
+  if(d%30===0)for(const side of ['car','rom']){const {inc,up}=income(side);if(S.gold[side]>0||up<=inc)continue;
+    let gone=0;for(const a of S.armies){if(a.side!==side)continue;a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-10);for(const u of a.units)if(mercenary({t:u.t,side})){gone+=u.men*.06;u.men*=.94}cleanArmy(a)}
+    if(side==='car'&&gone>0)log(`Solde impayée : ${Math.round(gone)} mercenaires désertent.`)}
+  reinforcementsDaily();
+  syncGens();
+};
+
+// ---- renforts : colonnes qui rejoignent une armée en marchant sur les routes ----
+function reinforcementsDaily(){
+  for(const c of S.armies.slice()){
+    if(c.dead||c.reinf==null||c.ship)continue;
+    const t=S.armies.find(x=>x.id===c.reinf&&!x.dead);
+    if(!t||t.side!==c.side||t.reinf!=null){c.reinf=null;c.name=nextGen(c.side);if(c.side==='car')log(`Les renforts n'ont plus d'armée à rejoindre : ${c.name} en prend la tête.`);continue}
+    if(t.ship){c.legs=[];continue}
+    if(Math.hypot(t.x-c.x,t.y-c.y)<3.5){mergeInto(t,c);continue}
+    if(!c.legs.length||Math.hypot((c._tx||0)-t.x,(c._ty||0)-t.y)>4){
+      const ok=order(c,t.x,t.y,!t.legs.length&&t.at!=null?t.at:null);c._tx=t.x;c._ty=t.y;
+      if(!ok&&!c._np){c._np=1;if(c.side==='car')log(`Les renforts pour ${t.name} ne trouvent pas de chemin par la terre.`)}if(ok)c._np=0}
+  }
+}
+// fait passer les régiments de b dans a (vivres et moral suivent) ; b disparaît s'il est vide
+function moveUnit(from,to,u){
+  if(to.units.length>=MAXU)return false;aFood(from);aFood(to);
+  const share=from.units.length?from.food/from.units.length:0;from.food-=share;to.food+=share;
+  const m0=armyMen(to),mu=u.men;to.mor=m0+mu>0?((to.mor==null?MOR0:to.mor)*m0+(from.mor==null?MOR0:from.mor)*mu)/(m0+mu):to.mor;
+  from.units=from.units.filter(x=>x!==u);to.units.push(u);return true}
+function dropArmy(a){if(!a.units.length&&!a.dead){a.dead=true;S.armies=S.armies.filter(x=>x!==a);if(sel&&sel.a===a)sel=null}}
+function mergeInto(a,b){
+  let n=0;for(const u of b.units.slice()){if(!moveUnit(b,a,u))break;n++}
+  if(a.side==='car'&&n)log(`${n} régiment${n>1?'s':''} de renfort rejoigne${n>1?'nt':''} ${armyLabel(a)}.`);
+  if(b.units.length){b.legs=[];if(a.side==='car'&&!b._full){b._full=1;log(`${armyLabel(a).replace(/^./,m=>m.toUpperCase())} est au complet (${MAXU} régiments) : les autres renforts attendent.`)}}
+  dropArmy(b);
+}
+// recrues d'une ville envoyées d'office vers une armée (point de ralliement)
+const _addRecruit=addRecruit;
+addRecruit=function(i,side,t,ds){
+  const tid=S.rally&&S.rally[N[i].id],tg=tid!=null&&S.armies.find(x=>x.id===tid&&!x.dead&&x.side===side&&x.reinf==null);
+  if(!tg||Math.hypot(tg.x-N[i].x,tg.y-N[i].y)<3.5)return _addRecruit(i,side,t,ds);
+  const n=N[i];let c=S.armies.find(x=>x.reinf===tg.id&&x.at===i&&!x.legs.length&&x.units.length<MAXU);
+  if(!c){c={id:S.uid++,side,name:'Renforts',reinf:tg.id,x:n.x,y:n.y,at:i,legs:[],units:[],scout:0,cool:0,mor:70,food:0};S.armies.push(c)}
+  const u={t,men:UT[t].men};if(ds!=null&&desOf(ds))u.d=ds;c.units.push(u);
+  if(side==='car')log(`${esc(uName(u))} : régiment prêt à ${n.n}, envoyé en renfort à ${tg.name}.`);
+};
+
+// ---- interface : bloc de l'armée dans le panneau, fenêtre « Organiser l'armée » ----
+(function(){const st=document.createElement('style');st.textContent=`
+.genbox{border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:8px 0;background:rgba(214,184,120,.05)}
+.genbox .stars{color:var(--gold);letter-spacing:1px}
+.tr{display:inline-block;padding:0 6px;border-radius:9px;font-size:12px;margin:2px 4px 0 0;border:1px solid rgba(127,174,106,.55);color:var(--good)}
+.tr.neg{border-color:rgba(208,100,79,.55);color:var(--bad)}
+.mbar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:3px 0 2px}.mbar i{display:block;height:100%}
+.org{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.org h3{margin:6px 0}
+.org .u{display:grid;grid-template-columns:18px 1fr auto auto;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(214,184,120,.1);font-size:14px}
+.org .u button{min-height:26px;padding:0 8px}
+.org select,.org input[type=text]{font:inherit;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:4px;padding:4px 6px;min-height:30px;max-width:100%}
+@media (max-width:700px){.org{grid-template-columns:1fr}}
+`;document.head.appendChild(st)})();
+function genHtml(g,full){
+  if(!g)return `<b>Sans général</b> <span class="sub">(un tribun commande : force −8 %)</span>`;
+  const s=stars(g),nx=XP_STAR[s+1];
+  return `<span class="stars" title="Renommée">${starTxt(s)}</span> <b>${esc(g.name)}</b>${full?` <span class="sub">· expérience ${Math.floor(g.xp)}${nx!=null?' / '+nx:''} · ${genPay(g)} or/mois</span>`:''}<br>`+
+    g.tr.map(k=>`<span class="tr${TRAITS[k].neg?' neg':''}" title="${TRAITS[k].d}">${TRAITS[k].n}</span>`).join('')+(full?`<div class="sub" style="margin-top:4px">${g.tr.map(k=>TRAITS[k].n+' : '+TRAITS[k].d).join(' · ')}</div>`:'');
+}
+function armyBlock(a){
+  const g=genOf(a),m=Math.round(a.mor==null?MOR0:a.mor),t=a.reinf!=null&&S.armies.find(x=>x.id===a.reinf);
+  let h=`<div class="genbox">`;
+  if(t)h+=`<p style="margin:0 0 6px">Colonne de renfort en route vers <b>${esc(t.name)}</b> : elle la suit et la rejoint d'elle-même.</p>`;
+  else if(!a.g)h+=genHtml(g,false);
+  h+=`<div style="margin-top:6px">Moral <b style="color:${morCol(m)}">${morWord(m)}</b> <span class="sub">(${m})</span><div class="mbar"><i style="width:${m}%;background:${morCol(m)}"></i></div></div>`;
+  h+=`<div class="sub">${a.title?'« '+esc(a.title)+' » · ':''}${Math.round(armyMen(a)).toLocaleString('fr-FR')} hommes · entretien ${armyUpkeep(a)} or/mois${a.usure>=1?` · usure ≈ ${Math.round(a.usure)} hommes/jour`:''}${m<35?' · <b style="color:var(--bad)">désertions</b>':''}</div>`;
+  if(!a.g&&a.reinf==null)h+=fatigueHtml(a);
+  h+=`<div class="row" style="margin-bottom:0"><button id="aOrg" type="button">Organiser l'armée…</button>${t?'<button id="aRStop" type="button">Arrêter la colonne</button>':''}</div></div>`;
+  return h;
+}
+const _renderSide=renderSide;
+renderSide=function(){
+  _renderSide();
+  const el=$('side');if(!S||!S.gens)return;
+  if(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)){
+    const a=sel.a,p=el.querySelector('h2');if(!p)return;
+    if(a.title)p.insertAdjacentHTML('beforeend',` <span class="sub" style="font-size:14px">· ${esc(a.title)}</span>`);
+    const st=p.nextElementSibling;(st||p).insertAdjacentHTML('afterend',armyBlock(a));
+    if($('aOrg'))$('aOrg').onclick=()=>openOrg(a);bindFatigue(a);
+    if($('aRStop'))$('aRStop').onclick=()=>{a.reinf=null;a.legs=[];a.name=nextGen(a.side);syncGens();renderAll()};
+  }else if(!sel){
+    const free=S.gens.filter(g=>g.side==='car'&&!g.dead&&g.army==null&&g.at!=null);
+    const box=el.querySelector('h3');
+    if(free.length&&box)box.insertAdjacentHTML('beforebegin',`<h3>Généraux sans commandement</h3>`+free.map(g=>`<div class="rec"><span>${esc(g.name)} <span class="sub">· ${starTxt(stars(g))} · à ${N[g.at].n}</span></span><button data-gto="${g.at}" type="button">Voir</button></div>`).join(''));
+    el.querySelectorAll('[data-gto]').forEach(b=>b.onclick=()=>{const n=N[+b.dataset.gto];sel={n:n.i};centerOn(n.x,n.y,Math.max(view.s,1.2));renderAll()});
+  }
+};
+// la ville : point de ralliement des recrues, généraux présents
+const _townBlock=townBlock;
+townBlock=function(i,main){
+  let h=_townBlock(i,main);const n=N[i];
+  if(!S.gens||n.col||ownerN(i)!=='car')return h;
+  const free=S.gens.filter(g=>g.side==='car'&&!g.dead&&g.army==null&&g.at===i);
+  if(free.length)h+=`<h3>Généraux à ${n.n}</h3>`+free.map(g=>`<div class="genbox">${genHtml(g,false)}</div>`).join('')+`<p class="sub">Pour leur confier une armée : amenez-la ici, puis « Organiser l'armée… ».</p>`;
+  if(n.size>=1){const mine=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g&&a.reinf==null);const cur=S.rally[n.id];
+    h+=`<h3>Recrues de ${n.n}</h3><div class="rec"><span class="sub">Envoyer chaque nouveau régiment rejoindre :</span><select data-rally="${n.id}" style="font:inherit;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:4px;padding:3px">`+
+      `<option value="">rester en ville</option>`+mine.map(a=>`<option value="${a.id}" ${cur===a.id?'selected':''}>${esc(a.name)}</option>`).join('')+`</select></div>`}
+  return h;
+};
+const _bindTown=bindTown;
+bindTown=function(){_bindTown();document.querySelectorAll('[data-rally]').forEach(s=>s.onchange=()=>{const v=s.value;if(v)S.rally[s.dataset.rally]=+v;else delete S.rally[s.dataset.rally];save()})};
+
+// fenêtre « Organiser l'armée »
+function openOrg(a,tid){
+  syncGens();if(a.dead){closeModal();renderAll();return}
+  const still=!a.legs.length;
+  const near=still?S.armies.filter(o=>o!==a&&o.side===a.side&&!o.dead&&!o.legs.length&&(o.ship||0)===(a.ship||0)&&Math.hypot(o.x-a.x,o.y-a.y)<3):[];
+  let t=tid==='new'?'new':tid!=null?near.find(x=>x.id===tid)||null:near[0]||null;if(!t&&still&&!a.ship)t='new';
+  const g=genOf(a),inCity=a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side;
+  // généraux disponibles : sans commandement dans cette ville, et candidats si la ville est à vous
+  const free=inCity?S.gens.filter(x=>x.side===a.side&&!x.dead&&x.army==null&&x.at===a.at):[];
+  let cand=[];if(inCity&&N[a.at].size>=1){const k=N[a.at].id,c=S.cand[k];
+    if(!c||S.day-c.d>90){S.cand[k]={d:Math.floor(S.day),L:[0,1].map(()=>{const x=mkGen(a.side,nextGen(a.side));S.guid--;x.id=null;return x})}}cand=S.cand[k].L}
+  const hireCost=x=>40+30*stars(x)+(x.tr.some(k=>TRAITS[k].neg)?-15:0);
+  const uRow=(u,k,side)=>{const f=u.men/UT[u.t].men;return `<div class="u">${side==='L'?`<input type="checkbox" data-ck="${k}">`:'<span></span>'}<span>${sqSVG(UT[u.t].k,f)} ${esc(uName(u))}<span class="bar" style="display:block"><i style="width:${Math.round(f*100)}%"></i></span></span><span class="sub">${Math.round(u.men).toLocaleString('fr-FR')}</span>${
+    side==='L'?(t?`<button data-mv="${k}" type="button" title="Passer dans l'autre armée">→</button>`:'<span></span>'):`<button data-bk="${k}" type="button" title="Reprendre">←</button>`}</div>`};
+  const tName=t==='new'?'Nouveau détachement':t?t.name:'';
+  const others=S.armies.filter(o=>o!==a&&o.side===a.side&&!o.dead&&!o.g&&o.reinf==null&&!near.includes(o));
+  modal(`<h2>Organiser l'armée</h2>
+   <div class="org"><div>
+     <div class="genbox">${genHtml(g,true)}
+       ${free.length||cand.length?`<h3 style="margin-top:10px">Changer de général</h3>`+free.map(x=>`<div class="rec"><span>${genHtml(x,false)}</span><button data-gfree="${x.id}" type="button">Nommer</button></div>`).join('')+
+         cand.map((x,j)=>`<div class="rec"><span>${genHtml(x,false)} <span class="sub">· candidat</span></span><button data-gcand="${j}" type="button" ${S.gold[a.side]<hireCost(x)?'disabled':''}>Engager ${hireCost(x)}</button></div>`).join('')
+         :`<p class="sub" style="margin:8px 0 0">Pour changer de général, amenez l'armée dans une de vos villes.</p>`}
+     </div>
+     <div class="rec"><input type="text" id="oTitle" maxlength="40" placeholder="Nom de l'armée (facultatif)" value="${esc(a.title||'')}"><button id="oName" type="button">Renommer</button></div>
+     <h3>${esc(a.name)} <span class="sub">· ${a.units.length}/${MAXU} régiments</span></h3>
+     ${a.units.map((u,k)=>uRow(u,k,'L')).join('')}
+     <div class="row"><button id="oReg" type="button" title="Fond ensemble les régiments incomplets de même type">Regrouper les incomplets</button><button id="oDis" type="button" class="warn">Licencier la sélection</button></div>
+     ${others.length&&still&&!a.ship?`<div class="rec"><select id="oTo">${others.map(o=>`<option value="${o.id}">${esc(o.name)} (${Math.round(Math.hypot(o.x-a.x,o.y-a.y))} km)</option>`).join('')}</select><button id="oSend" type="button">Envoyer la sélection en renfort</button></div>`:''}
+   </div><div>
+     ${!still?`<p>L'armée est en marche : arrêtez-la pour échanger des régiments.</p>`:a.ship?`<p>À bord : débarquez pour réorganiser.</p>`:`
+     <div class="rec"><span class="sub">Échanger avec</span><select id="oWith"><option value="new" ${t==='new'?'selected':''}>Nouveau détachement</option>${near.map(o=>`<option value="${o.id}" ${t===o?'selected':''}>${esc(o.name)}</option>`).join('')}</select></div>
+     <h3>${esc(tName)}${t&&t!=='new'?` <span class="sub">· ${t.units.length}/${MAXU} régiments</span>`:''}</h3>
+     ${t&&t!=='new'?t.units.map((u,k)=>uRow(u,k,'R')).join('')||'<p class="sub">Vide.</p>':'<p class="sub">Cliquez sur → pour former une nouvelle armée avec ces régiments. Elle aura son propre général.</p>'}
+     ${t&&t!=='new'&&!t.g?`<div class="row"><button id="oAll" type="button">Fusionner tout dans ${esc(a.name)}</button></div>`:''}`}
+   </div></div>
+   <p class="sub">Les vivres suivent les régiments, le moral se mélange selon les effectifs. Un général sans armée attend dans la ville. Une colonne de renfort marche seule (10 % plus vite) et peut être interceptée.</p>
+   <div class="row" style="justify-content:flex-end"><button class="go" id="oClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');
+  const re=x=>openOrg(a,x);
+  const tgt=()=>{if(t!=='new')return t;const b={id:S.uid++,side:a.side,name:nextGen(a.side),x:a.x+1.2,y:a.y,at:a.at,legs:[],units:[],scout:0,cool:0,mor:a.mor,food:0};S.armies.push(b);syncGens();if(a.side==='car')log(`${b.name} prend la tête d'un détachement.`);return b};
+  document.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{const u=a.units[+b.dataset.mv];if(!u)return;if(a.units.length===1&&t==='new')return;const T=tgt();moveUnit(a,T,u);if(!a.units.length){dropArmy(a);syncGens();sel={a:T};closeModal();renderAll();return}re(T.id)});
+  document.querySelectorAll('[data-bk]').forEach(b=>b.onclick=()=>{const u=t.units[+b.dataset.bk];if(!u)return;moveUnit(t,a,u);const id=t.id;if(!t.units.length){dropArmy(t);syncGens();re(null)}else re(id)});
+  if($('oWith'))$('oWith').onchange=()=>{const v=$('oWith').value;re(v==='new'?'new':+v)};
+  if($('oAll'))$('oAll').onclick=()=>{for(const u of t.units.slice())if(!moveUnit(t,a,u))break;dropArmy(t);syncGens();re(null)};
+  $('oName').onclick=()=>{const v=$('oTitle').value.trim();a.title=v||undefined;re(t&&t!=='new'?t.id:t)};
+  $('oReg').onclick=()=>{const G={};for(const u of a.units){const k=u.t+'|'+(u.d!=null?u.d:'');(G[k]=G[k]||[]).push(u)}
+    for(const k in G){const L=G[k];if(L.length<2)continue;const max=UT[L[0].t].men;let tot=L.reduce((s,u)=>s+u.men,0);for(const u of L){u.men=Math.min(max,tot);tot-=u.men}}
+    a.units=a.units.filter(u=>u.men>=UT[u.t].men*.1);re(t&&t!=='new'?t.id:t)};
+  const checked=()=>[...document.querySelectorAll('input[data-ck]:checked')].map(c=>a.units[+c.dataset.ck]).filter(Boolean);
+  $('oDis').onclick=()=>{const L=checked();if(!L.length)return;a.units=a.units.filter(u=>!L.includes(u));if(a.side==='car')log(`${L.length} régiment${L.length>1?'s':''} licencié${L.length>1?'s':''} : ${esc(a.name)} coûte moins cher.`);
+    if(!a.units.length){dropArmy(a);syncGens();closeModal();renderAll();return}re(t&&t!=='new'?t.id:t)};
+  if($('oSend'))$('oSend').onclick=()=>{const L=checked(),T=S.armies.find(x=>x.id===+$('oTo').value);if(!L.length||!T)return;
+    if(L.length===a.units.length){const og=genOf(a);if(og){og.army=null;og.at=inCity?a.at:null;if(og.at==null){const n=nearestNode(a.x,a.y,n=>!n.col&&ownerN(n.i)===a.side);if(n)og.at=n.i;else og.dead=true}}
+      a.gen=null;a.reinf=T.id;a.name='Renforts';a.title=undefined;a.inG=false;a._tx=null;closeModal();reinforcementsDaily();renderAll();return}
+    const c={id:S.uid++,side:a.side,name:'Renforts',reinf:T.id,x:a.x+.8,y:a.y,at:a.at,legs:[],units:[],scout:0,cool:0,mor:a.mor,food:0};S.armies.push(c);
+    for(const u of L)moveUnit(a,c,u);log(`${L.length} régiment${L.length>1?'s':''} de ${esc(a.name)} part${L.length>1?'ent':''} en renfort vers ${esc(T.name)}.`);reinforcementsDaily();re(t&&t!=='new'?t.id:t)};
+  document.querySelectorAll('[data-gfree]').forEach(b=>b.onclick=()=>{const x=S.gens.find(y=>y.id===+b.dataset.gfree);if(!x)return;giveGen(a,x);if(a.side==='car')log(`${x.name} prend le commandement de l'armée.`);re(t&&t!=='new'?t.id:t)});
+  document.querySelectorAll('[data-gcand]').forEach(b=>b.onclick=()=>{const k=N[a.at].id,L=S.cand[k].L,x=L[+b.dataset.gcand];if(!x||S.gold[a.side]<hireCost(x))return;S.gold[a.side]-=hireCost(x);
+    x.id=S.guid++;L.splice(L.indexOf(x),1);giveGen(a,x);if(a.side==='car')log(`${x.name} est engagé et prend le commandement.`);re(t&&t!=='new'?t.id:t)});
+  $('oClose').onclick=()=>{closeModal();renderAll()};
+}
+// sur la carte : étoiles du général et jauge de moral à côté du médaillon
+const _genCard=genCard;
+genCard=function(a,s){_genCard(a,s);if(!a._sq||!S.gens)return;const [X,my]=a._sq[a._sq.length-1],k=s<.5?.78:s<.8?.9:1,mr=Math.round(18*k);
+  ctx.save();const g=genOf(a);
+  if(g){const n=stars(g);if(n){ctx.font=`${Math.round(9*k)}px Georgia, serif`;ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=2.5;ctx.strokeStyle='rgba(30,20,10,.85)';const t='★'.repeat(n);ctx.strokeText(t,X,my-mr-2);ctx.fillStyle='#f3d98a';ctx.fillText(t,X,my-mr-2)}}
+  if(visOfArmy(a)===2&&(a.side==='car'||a.mor<45)){const m=a.mor==null?MOR0:a.mor,h=mr*1.6,x=X+mr+4,y=my-h/2;ctx.fillStyle='rgba(30,20,10,.75)';ctx.fillRect(x-1,y-1,5,h+2);
+    ctx.fillStyle=m>=65?'#7fae6a':m>=45?'#d6b878':m>=25?'#e0a060':'#d0644f';ctx.fillRect(x,y+h*(1-m/100),3,h*m/100)}
+  ctx.restore()};
+const _afterLoad=afterLoad;
+afterLoad=function(){initArmies();_afterLoad()};
+

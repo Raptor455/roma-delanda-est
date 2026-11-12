@@ -1,0 +1,464 @@
+/* ================= MULTIJOUEUR (fil « Jouer à plusieurs en multijoueur ») =================
+   Jusqu'à 6 joueurs sur la même campagne, en temps réel : l'hôte joue Carthage et fait tourner la simulation,
+   chaque invité choisit Carthage ou Rome. Dans un camp, chaque armée a un chef (a.cmd, joueurs dans S.mpP) ;
+   trésor, villes et diplomatie sont communs. Transport : salon en direct de la page publiée (capacité « room », sujet « mp »),
+   ou, à défaut, BroadcastChannel (deux onglets du même navigateur).
+   - L'hôte envoie l'état complet (compressé, en morceaux) toutes les 1,5 s et les positions 4 fois par seconde.
+   - L'invité voit la partie « en miroir » : chez lui, 'car' et 'rom' sont échangés partout (état, FAC, GEN),
+     si bien que toute l'interface existante lui montre Rome comme son camp. Ses actions modifient sa copie ;
+     les différences sont renvoyées à l'hôte (camps rééchangés), qui les applique.
+   - Bataille impliquant un joueur : pause commune, chaque joueur concerné choisit (3D, auto, retraite).
+   - L'IA romaine est coupée tant qu'on héberge. */
+const MP={role:null,code:null,tr:null,me:(()=>{let v=null;try{v=sessionStorage.getItem('bellum.mp.id')}catch(e){}if(!v){v='p'+Math.random().toString(36).slice(2,10);try{sessionStorage.setItem('bellum.mp.id',v)}catch(e){}}return v})(),
+  side:'car',gs:{},lastMsg:0,seq:0,lastAck:0,pending:[],base:null,hold:false,kfId:0,kfBusy:false,kfDue:0,lastKf:0,lastPos:0,bufs:{},bmod:null,played:null,glog:[],swapped:false,kind:'',
+  nick:(()=>{try{return localStorage.getItem('bellum.mp.nick')||''}catch(e){return ''}})()};
+const MP_MAX=6;
+// Rome est-elle tenue par un joueur ? (l'IA romaine se tait alors)
+function MPRH(side){return MP.role==='host'&&(side===undefined||side==='rom')&&!!S&&!!S.mpP&&Object.values(S.mpP).some(p=>p.side==='rom')}
+function MPH(){return MP.role==='host'&&Object.keys(MP.gs).length>0}
+const mpAnyOn=()=>Object.values(MP.gs).some(g=>g.on);
+/* ---- joueurs et chefs d'armée ---- */
+const mpPlayers=()=>S&&S.mpP?Object.entries(S.mpP).map(([id,p])=>Object.assign({id},p)):[];
+const mpName=id=>{const p=S&&S.mpP&&S.mpP[id];return p?(p.n||'Joueur'):'?'};
+function mpLeader(side){const p=mpPlayers().find(p=>p.side===side);return p?p.id:null}
+function mpOwner(a){const P=S&&S.mpP;if(!P)return null;if(a&&S.mpD&&typeof mpdOn==='function'&&mpdOn(a.side)){const k=mpdArmy(a);if(k)return mpdOwner(k)}return a.cmd&&P[a.cmd]&&P[a.cmd].side===a.side?a.cmd:mpLeader(a.side)}
+// l'armée obéit-elle à ce joueur ? (garnisons : à tout le camp)
+function mpCan(a){if(!MP.role||!S||!S.mpP||!a||a.g)return true;return mpOwner(a)===MP.me}
+/* ---- outils : compression, morceaux ---- */
+async function mpZip(o){const s=new Blob([JSON.stringify(o)]).stream().pipeThrough(new CompressionStream('gzip'));const u=new Uint8Array(await new Response(s).arrayBuffer());
+  let b='';for(let i=0;i<u.length;i+=8192)b+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(b)}
+async function mpUnzip(z){const b=atob(z),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
+  const s=new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(s).text())}
+const MP_CH=3200;
+async function mpSendBig(t,obj,extra){if(!MP.tr)return;const z=await mpZip(obj),n=Math.ceil(z.length/MP_CH)||1,id=++MP.kfId;
+  for(let i=0;i<n;i++)mpSend(Object.assign({t,id,n,i,z:z.slice(i*MP_CH,(i+1)*MP_CH)},extra||{}))}
+function mpSend(d){if(!MP.tr)return;d.f=MP.me;try{const r=MP.tr.send(d);if(r&&r.catch)r.catch(e=>mpErr(e))}catch(e){mpErr(e)}}
+function mpErr(e){const c=e&&e.code;if(c==='not_permitted'){MP.err="Ce compte ne peut pas envoyer de messages dans le salon : le propriétaire doit vous donner l'accès « Contributeur » (ou plus) à cette page.";mpStatus()}}
+function mpChunk(d,cb){const k=d.t+':'+d.f;let B=MP.bufs[k];if(!B||B.id!==d.id){if(B&&B.id>d.id&&d.t==='k')return;B=MP.bufs[k]={id:d.id,n:d.n,got:0,p:[]}}
+  if(B.p[d.i]==null){B.p[d.i]=d.z;B.got++}if(B.got<B.n)return;delete MP.bufs[k];mpUnzip(B.p.join('')).then(o=>cb(o,d)).catch(e=>console.error('[MP] décompression',e))}
+/* ---- carte : ne marquer le territoire à redessiner que s'il a changé (le redessin des tuiles coûte cher) ---- */
+function mpTerrSig(){if(!S)return '';let t=JSON.stringify(S.own||{});if(S.fac)for(const f in S.fac)t+='|'+f+':'+(S.fac[f]&&S.fac[f].st);return t}
+function mpTerrCheck(){const t=mpTerrSig();if(t!==MP.terr){MP.terr=t;territoryDirty=true}}
+/* ---- transport ---- */
+// connexion directe entre navigateurs (WebRTC, via PeerJS) : pour la version du jeu ouverte hors de Claude
+const MP_PEERJS='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+const mpInClaude=()=>!!(window.claude&&claude.use);
+function mpLoadPeer(){if(window.Peer)return Promise.resolve();return new Promise((res,rej)=>{const s=document.createElement('script');s.src=MP_PEERJS;s.onload=()=>res();s.onerror=()=>rej(new Error('peerjs'));document.head.appendChild(s)})}
+function mpWait(p,ms){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('délai')),ms))])}
+async function mpPeer(code,host){
+  await mpWait(mpLoadPeer(),10000);
+  const opt=Object.assign({debug:0},window.BELLUM_PEER||{}),id='bellum-mp-'+code;
+  const peer=host?new Peer(id,opt):new Peer(opt);
+  try{await mpWait(new Promise((res,rej)=>{peer.on('open',res);peer.on('error',rej)}),12000)}catch(e){try{peer.destroy()}catch(_){}throw e}
+  const conns=new Set();let fn0=null;
+  const wire=c=>{c.on('open',()=>conns.add(c));c.on('data',d=>{if(fn0)fn0(typeof d==='string'?JSON.parse(d):d,{})});c.on('close',()=>conns.delete(c));c.on('error',()=>conns.delete(c))};
+  if(host)peer.on('connection',wire);
+  else{const c=peer.connect(id,{reliable:true,serialization:'json'});wire(c);
+    try{await mpWait(new Promise((res,rej)=>{c.on('open',res);peer.on('error',rej)}),15000)}catch(e){try{peer.destroy()}catch(_){}throw new Error(e&&e.type==='peer-unavailable'?'code':'connexion')}}
+  return {kind:'direct',send:d=>{for(const c of conns)if(c.open)c.send(d)},on:fn=>{fn0=fn},leave:()=>{try{peer.destroy()}catch(_){}}};
+}
+async function mpTransport(code,host){
+  MP.err=null;
+  if(!mpInClaude()&&!/[?&]mplocal\b/.test(location.search)){
+    try{return await mpPeer(code,host)}catch(e){console.warn('[MP] connexion directe impossible',e);
+      if(!host&&e&&e.message==='code'){MP.err="Aucune partie avec ce code : vérifiez-le, et que l'hôte a bien lancé la partie.";return null}
+      MP.err="Connexion directe impossible (pare-feu ou réseau ?). Repli : entre onglets de ce navigateur seulement."}}
+  let room=null;
+  try{if(window.claude&&claude.use){const r=await Promise.race([claude.use('room'),new Promise(res=>setTimeout(()=>res(null),9000))]);if(r)room=await r.join('bellum-'+code)}}catch(e){console.warn('[MP] salon indisponible',e);room=null}
+  if(room)return {kind:'salon',send:d=>room.emit('mp',d),on:fn=>room.on('mp',m=>fn(m.data,m)),leave:()=>room.leave().catch(()=>{})};
+  if(!window.BroadcastChannel)return null;
+  const bc=new BroadcastChannel('bellum-'+code);
+  return {kind:'local',send:d=>bc.postMessage(d),on:fn=>{bc.onmessage=e=>fn(e.data,{})},leave:()=>bc.close()};
+}
+/* ---- miroir des camps : chez l'invité, 'car' <-> 'rom' ---- */
+const MP_SW={car:'rom',rom:'car',intel:'intelR',intelR:'intel'};
+function mpSwapStr(s){if(s==='car')return 'rom';if(s==='rom')return 'car';const m=/^(guerre_|allie_|3d:)(car|rom)$/.exec(s);return m?m[1]+(m[2]==='car'?'rom':'car'):s}
+function mpSwap(x,key){
+  if(typeof x==='string')return key==='over'?(x==='win'?'lose':x==='lose'?'win':x):mpSwapStr(x);
+  if(Array.isArray(x))return x.map(v=>mpSwap(v));
+  if(x&&typeof x==='object'){const o={};for(const k in x){const nk=MP_SW[k]||k;o[nk]=mpSwap(x[k],k)}return o}
+  return x}
+const mpSwapPath=p=>p.map(k=>typeof k==='string'?(MP_SW[k]||k):k);
+function mpSwapOp(op){const o={p:mpSwapPath(op.p)};if('v' in op)o.v=mpSwap(op.v,op.p[op.p.length-1]);if('add' in op)o.add=mpSwap(op.add);if('d' in op)o.d=op.d;if(op.x)o.x=1;return o}
+function mpSwapStatic(){if(MP.swapped)return;MP.swapped=true;
+  const t=FAC.car;FAC.car=FAC.rom;FAC.rom=t;const g=GEN.car;GEN.car=GEN.rom;GEN.rom=g;
+  const cul=new Set(N.map(n=>n.cul));for(const c of cul)POOL_CAR[c]=c==='ita'?['legion','velites','rcav','acav']:['velites','acav'];
+  for(const k in POOL_CAR)if(!cul.has(k))POOL_CAR[k]=k==='ita'?['legion','velites','rcav','acav']:['velites','acav'];
+  const cs=getComputedStyle(document.documentElement),pu=cs.getPropertyValue('--punic'),ro=cs.getPropertyValue('--roma');
+  document.documentElement.style.setProperty('--punic',ro);document.documentElement.style.setProperty('--roma',pu);
+  document.title='Roma Delenda Est · Rome (à plusieurs)'}
+/* ---- différences d'état ---- */
+const MPX_TOP=new Set(['mirror','peo','mpD','mpCity','mpNews','log','intel','intelR','cur','day','uid','over','msg','rep','overMsg','ev','vict','defeats','bigWin','t0']);
+const MPX_OBJ=new Set(['x','y','food','fat','mor']);
+const MP_DELTA=new Set(['gold','fac']);
+const mpKeyed=a=>a.length>0&&a.every(o=>o&&typeof o==='object'&&!Array.isArray(o)&&o.id!=null);
+const mpKind=v=>Array.isArray(v)?'arr':v&&typeof v==='object'?'obj':typeof v;
+function mpSkip(p,k){if(!p.length)return MPX_TOP.has(k);if(k[0]==='_')return true;return p.length===2&&typeof p[1]==='string'&&p[1][0]==='#'&&MPX_OBJ.has(k)}
+function mpDiff(a,b,p,out){
+  if(a===b)return;const ka=mpKind(a),kb=mpKind(b);
+  if(ka!==kb){out.push({p,v:b});return}
+  if(ka==='obj'){for(const k in a){if(mpSkip(p,k))continue;if(!(k in b))out.push({p:[...p,k],x:1});else mpDiff(a[k],b[k],[...p,k],out)}
+    for(const k in b){if(mpSkip(p,k))continue;if(!(k in a))out.push({p:[...p,k],v:b[k]})}return}
+  if(ka==='arr'){
+    if((mpKeyed(a)||mpKeyed(b))&&(mpKeyed(a)||!a.length)&&(mpKeyed(b)||!b.length)){
+      const mb=new Map(b.map(o=>[o.id,o])),ma=new Map(a.map(o=>[o.id,o]));
+      for(const [id,o] of ma){if(!mb.has(id))out.push({p:[...p,'#'+id],x:1});else mpDiff(o,mb.get(id),[...p,'#'+id],out)}
+      for(const [id,o] of mb)if(!ma.has(id))out.push({p,add:o});return}
+    if(a.length===b.length){for(let i=0;i<a.length;i++)mpDiff(a[i],b[i],[...p,i],out);return}
+    out.push({p,v:b});return}
+  if(ka==='number'&&MP_DELTA.has(p[0]))out.push({p,d:b-a});else out.push({p,v:b});
+}
+function mpGet(o,k){if(o==null)return undefined;if(typeof k==='string'&&k[0]==='#'&&Array.isArray(o)){const id=k.slice(1);return o.find(e=>e&&String(e.id)===id)}return o[k]}
+function mpApply(root,ops,host){
+  for(const op0 of ops){try{
+    const im=host&&MP.gs[host]?MP.gs[host].idmap:{},op=op0,p=op.p.map(k=>typeof k==='string'&&k[0]==='#'&&im[k.slice(1)]!=null?'#'+im[k.slice(1)]:k);
+    if(op.add){const arr=p.reduce((o,k)=>mpGet(o,k),root);if(!Array.isArray(arr))continue;const v=JSON.parse(JSON.stringify(op.add));
+      if(host&&v.id!=null){const im=MP.gs[host].idmap,nid=S.uid++;im[v.id]=nid;v.id=nid;if(arr===S.armies&&!v.g)v.cmd=host}arr.push(v);continue}
+    let par=root;for(let i=0;i<p.length-1;i++){par=mpGet(par,p[i]);if(par==null)break}if(par==null||typeof par!=='object')continue;
+    const k=p[p.length-1],isId=typeof k==='string'&&k[0]==='#'&&Array.isArray(par);
+    if(op.x){if(isId){const j=par.findIndex(e=>e&&String(e.id)===k.slice(1));if(j>=0)par.splice(j,1)}else if(Array.isArray(par))par.splice(k,1);else delete par[k];continue}
+    if('d' in op){if(!isId)par[k]=(+par[k]||0)+op.d;continue}
+    const v=JSON.parse(JSON.stringify(op.v===undefined?null:op.v));
+    if(host&&p.length===2&&p[0]==='q'&&v&&typeof v==='object')v.by=host;
+    if(isId){const j=par.findIndex(e=>e&&String(e.id)===k.slice(1));if(j>=0)par[j]=v}else par[k]=v;
+  }catch(e){console.warn('[MP] op',op0,e)}}
+}
+const mpSnap=o=>JSON.parse(JSON.stringify(o));
+/* fusion en place (garde l'identité des armées, flottes… pour la sélection et les boutons déjà affichés) */
+function mpMerge(t,s){
+  for(const k of Object.keys(t))if(!(k in s))delete t[k];
+  for(const k in s){const a=t[k],b=s[k],ka=mpKind(a),kb=mpKind(b);
+    if(ka==='obj'&&kb==='obj')mpMerge(a,b);
+    else if(ka==='arr'&&kb==='arr'&&mpKeyed(b)&&(mpKeyed(a)||!a.length)){const m=new Map(a.map(o=>[o.id,o]));t[k]=b.map(o=>{const q=m.get(o.id);if(q&&mpKind(q)==='obj'){mpMerge(q,o);return q}return o})}
+    else t[k]=b}
+}
+/* ---- côté hôte ---- */
+const MP_POS=['armies','fleets','tpat','par','conv'];
+function mpHostState(){return S}
+const mpAcks=()=>{const o={};for(const id in MP.gs)o[id]=MP.gs[id].ack;return o};
+async function mpSendKf(){if(MP.kfBusy||!mpAnyOn())return;MP.kfBusy=true;MP.kfDue=0;MP.lastKf=performance.now();
+  try{await mpSendBig('k',{S:mpHostState(),acks:mpAcks()})}catch(e){console.error('[MP]',e)}MP.kfBusy=false;MP.lastPos=performance.now()}
+function mpSendPos(){MP.lastPos=performance.now();const r=v=>Math.round(v*100)/100,d={t:'p',day:S.day,pa:S.paused,sp:S.speed,acks:mpAcks()};
+  for(const k of MP_POS){const L=S[k];if(!Array.isArray(L))continue;d[k]=L.filter(o=>o&&o.id!=null&&o.x!=null&&(o.legs&&o.legs.length||o.wp||k==='tpat'||k==='par'||k==='conv')).map(o=>[o.id,r(o.x),r(o.y),o.legs?o.legs.length:-1])}
+  if(S.nav&&Array.isArray(S.nav.bands))d.nb=S.nav.bands.filter(o=>o&&o.id!=null&&o.x!=null).map(o=>[o.id,r(o.x),r(o.y),o.legs?o.legs.length:-1]); // pirates (naval vivant)
+  if(JSON.stringify(d).length<=3800){mpSend(d);return}
+  // trop gros pour un message : plusieurs paquets 'p' plutôt qu'une image complète (Baptiste 10 nov. : saccades chez l'invité)
+  const head={t:'p',day:d.day,pa:d.pa,sp:d.sp,acks:d.acks},all=[];for(const k of [...MP_POS,'nb'])for(const e of d[k]||[])all.push([k,e]);
+  let cur=null,n=0;const flush=()=>{if(cur)mpSend(cur);cur=null;n=0};
+  for(const [k,e] of all){if(!cur){cur=Object.assign({},head);n=JSON.stringify(cur).length}const l=JSON.stringify(e).length+1;if(n+l>3600&&n>200)flush();if(!cur){cur=Object.assign({},head);n=JSON.stringify(cur).length}(cur[k]=cur[k]||[]).push(e);n+=l+(cur[k].length===1?k.length+6:0)}
+  flush()}
+const mpKfSoon=(ms)=>{if(MP.role==='host'&&mpAnyOn()){const t=performance.now()+(ms==null?150:ms);if(!MP.kfDue||t<MP.kfDue)MP.kfDue=t}};
+const MP_PEO={mac:'Macédoine',syr:'Syracuse',ath:'Athènes',num:'Numidie',ins:'Gaulois cisalpins',per:'Pergame',mas:'Massalia'};
+const mpSideTxt=s=>s==='rom'?'Rome':(S&&MP_PEO[S.peo]&&!(MP.role==='guest'&&MP.rs==='rom')?MP_PEO[S.peo]:'Carthage');
+function mpOnHost(d,m){
+  let g=MP.gs[d.f];
+  if(d.t==='hello'){
+    if(!g){if(Object.keys(MP.gs).length>=MP_MAX-1){mpSend({t:'full',to:d.f});return}
+      const rs=d.side==='rom'?'rom':'car',side=S.mirror?(rs==='rom'?'car':'rom'):rs,P=S.mpP=S.mpP||{};
+      g=MP.gs[d.f]={side,ack:0,idmap:{},lastHb:performance.now(),on:true};
+      P[d.f]={n:String(d.nick||'').slice(0,20)||(rs==='rom'?'Romain':'Punique'),side,rn:mpSideTxt(rs),on:1};
+      log(`${esc(P[d.f].n)} rejoint la partie (${mpSideTxt(rs)}).`);S.paused=true}
+    else{g.on=true;g.lastHb=performance.now();if(S.mpP&&S.mpP[d.f])S.mpP[d.f].on=1;if(d.s!=null&&d.s<g.ack)g.ack=d.s}
+    mpSend({t:'welcome',to:d.f,side:g.side});mpKfSoon(0);mpStatus();renderAll();return}
+  if(!g)return;g.lastHb=performance.now();
+  if(!g.on){g.on=true;if(S.mpP&&S.mpP[d.f])S.mpP[d.f].on=1;log(`${esc(mpName(d.f))} est de retour.`);mpStatus();mpKfSoon(0)}
+  if(d.t==='d')mpChunk(d,o=>{if(o.s!==g.ack+1)return;g.ack=o.s;MP.cur=d.f;
+    try{mpdWith(S.mpD?mpdFor(d.f,g.side):null,()=>mpApply(S,g.side==='rom'?o.ops.map(mpSwapOp):o.ops,d.f))}finally{MP.cur=null}
+    if(o.cmd){if(o.cmd.k==='dom'){mpdDo(d.f,g.side==='rom'?mpSwap(o.cmd.c):o.cmd.c);mpdSync()}else mpHostCmd(o.cmd)}mpTerrCheck();computeVis();renderAll();mpKfSoon()});
+  else if(d.t==='ch'){const b=S.cur,sd=g.side;if(b&&b.mp&&b.mp[sd]===0&&!b.mp.state&&b.mp.o&&b.mp.o[sd]===d.f&&mpBKey(b)===d.k){b.mp[sd]=d.c;mpResolve()}}
+  else if(d.t==='bres'){const b=S.cur,sd=g.side;if(b&&b.mp&&b.mp.state==='3d:'+sd&&b.mp.o&&b.mp.o[sd]===d.f&&mpBKey(b)===d.k){const r=d.res;S.cur=null;closeModal();
+      log(`${battleTitle(b)} : ${esc(mpName(d.f))} a livré la bataille sur le terrain.`);applyResult(b,{attWin:r.attWin,A:r.A,D:r.D});refreshAfterBattle();mpKfSoon(0)}}
+  else if(d.t==='bye'){delete MP.gs[d.f];if(S.mpP&&S.mpP[d.f])S.mpP[d.f].on=0;S.paused=true;log(`${esc(mpName(d.f))} a quitté la partie.`);mpStatus();renderAll();mpKfSoon(0)}
+}
+function mpHostCmd(c){
+  if(c.k==='battle'){const att=S.armies.find(a=>a.id===c.att),defs=c.defs.map(id=>S.armies.find(a=>a.id===id)).filter(Boolean);
+    if(!att||!defs.length||S.cur)return;
+    if(c.pend&&typeof PEND!=='undefined')PEND=c.pend;
+    try{startBattle(att,defs);if(S.cur&&typeof tagB==='function')tagB(S.cur)}finally{if(typeof PEND!=='undefined')PEND=null}}
+}
+/* ---- côté invité ---- */
+function mpOnGuest(d){
+  if(d.to&&d.to!==MP.me)return;
+  if(d.t==='full'){MP.err="La partie est complète ("+MP_MAX+" joueurs).";mpStatus();return}
+  if(d.t==='welcome'){MP.lastMsg=performance.now();if(!MP.ready&&(d.side==='car'||d.side==='rom'))MP.side=d.side;return}
+  if(MP.host&&d.f!==MP.host&&d.t!=='welcome')return;
+  MP.lastMsg=performance.now();
+  if(d.t==='k')mpChunk(d,(o,dd)=>{MP.host=dd.f;mpGuestKf(o)});
+  else if(d.t==='p'&&MP.ready){mpAck(d.acks&&d.acks[MP.me]);mpGuestPos(d)}
+  else if(d.t==='bye'){MP.err="L'hôte a arrêté la partie à plusieurs.";mpStatus()}
+}
+function mpAck(a){if(a!=null&&a>MP.lastAck){MP.lastAck=a;MP.pending=MP.pending.filter(x=>x.s>a)}}
+function mpGuestKf(o){
+  mpGuestDiff();
+  const R=MP.side==='rom',ns=R?mpSwap(o.S):o.S;mpAck(o.acks&&o.acks[MP.me]);
+  if(ns.mpD&&!ns.peo){const S0=S;S=ns;try{if(mpdOn('car')){const k=mpdView('car');if(k&&ns.mpD[k])ns.gold.car=ns.mpD[k].g}}finally{S=S0}} // trésor affiché = celui de mon commandement
+  for(const x of MP.pending)mpApply(ns,x.ops,false);
+  const first=!MP.ready,old=MP.ready?mpSnap(S):null;
+  if(R)ns.log=MP.glog;ns.intel=ns.intel||{};ns.log=ns.log||[];
+  const VR=MP.rs==='rom';ns.mirror=VR||undefined;if(!VR)delete ns.mirror;
+  const peo=MP_PEO[ns.peo]?ns.peo:null;
+  if(first&&typeof peoDone!=='undefined'&&peoDone&&peoDone!==(peo||(VR?'rom':null))){mpSS('bellum.mp.autoJoin',JSON.stringify({code:MP.code,side:MP.rs}));try{if(typeof SAVE!=='undefined')localStorage.removeItem(SAVE)}catch(e){}const tr=MP.tr;MP.tr=null;MP.role=null;try{tr.leave()}catch(e){}location.reload();return}
+  if(peo&&R)delete ns.peo;
+  const smD=first?null:mpSmBefore();
+  if(first){if(peo&&typeof peoStatic==='function')peoStatic(peo);else if(peo==='syr'&&typeof syrStatic==='function')syrStatic();else if(peo==='ath'&&typeof athStatic==='function')athStatic();else if(peo&&typeof macStatic==='function')macStatic();if(VR){if(typeof mirrorStatic==='function')mirrorStatic();else mpSwapStatic()}S=ns}else{mpMerge(S,ns);try{mpSmAfter(smD)}catch(e){console.warn(e)}}
+  MP.ready=true;
+  if(old&&R)mpGuestLog(old,S);
+  if(first){MP.terr=null}mpTerrCheck();computeVis();
+  if(first){closeModal();afterLoad();if(VR)log('Vous commandez Rome. La partie est en pause : chacun peut la relancer (Espace).');mpStatus()}
+  MP.base=mpSnap(S);
+  renderTop();renderLog();if(!$('side').matches(':hover'))renderSide();
+  mpBattleUI();if(S.over&&!MP.overShown){MP.overShown=true;endGame()}
+}
+/* ---- invité : mouvements lissés (Baptiste 10 nov. : « déplacements d'armée très saccadés » chez son ami).
+   L'invité ne fait pas avancer la carte : il reçoit les positions ~5 fois par seconde. Au lieu de sauter d'une position
+   à l'autre, chaque armée, flotte, patrouille ou convoi glisse vers la dernière position reçue pendant l'intervalle mesuré. */
+const MPSM={m:new Map(),pdt:220,lastP:0};
+function mpLbOn(){try{const L=window.__lb,b=S&&S.cur;return !!(L&&b&&L.live(b)&&L.othersHere(b))}catch(e){return false}}
+function mpSmDur(){return Math.max(120,Math.min(1500,MPSM.pdt*1.15))}
+function mpSmSet(k,o,x,y,now){const dx=x-o.x,dy=y-o.y,key=k+':'+o.id;
+  if(!(dx*dx+dy*dy<1600)||!isFinite(o.x)||!isFinite(o.y)){o.x=x;o.y=y;MPSM.m.delete(key);return}
+  if(dx===0&&dy===0){MPSM.m.delete(key);return}
+  MPSM.m.set(key,{o,fx:o.x,fy:o.y,tx:x,ty:y,t0:now,d:mpSmDur()})}
+function mpSmooth(){if(MP.role!=='guest'||!MPSM.m.size)return;const now=performance.now();
+  for(const [key,e] of MPSM.m){const t=Math.min(1,(now-e.t0)/e.d);e.o.x=e.fx+(e.tx-e.fx)*t;e.o.y=e.fy+(e.ty-e.fy)*t;if(t>=1)MPSM.m.delete(key)}}
+function mpSmLists(){const L=[];for(const k of MP_POS)if(Array.isArray(S[k]))L.push([k,S[k]]);if(S.nav&&Array.isArray(S.nav.bands))L.push(['nb',S.nav.bands]);return L}
+function mpSmBefore(){const disp=new Map();if(!S)return disp;for(const [k,A] of mpSmLists())for(const o of A)if(o&&o.id!=null&&o.x!=null)disp.set(k+':'+o.id,[o.x,o.y]);return disp}
+function mpSmAfter(disp){const now=performance.now();for(const [k,A] of mpSmLists())for(const o of A){if(!o||o.id==null||o.x==null)continue;const p=disp.get(k+':'+o.id);if(!p){MPSM.m.delete(k+':'+o.id);continue}
+  const x=o.x,y=o.y;o.x=p[0];o.y=p[1];mpSmSet(k,o,x,y,now)}}
+{const _dr=draw;draw=function(){try{mpSmooth()}catch(e){}return _dr.apply(this,arguments)}}
+function mpGuestPos(d){
+  {const now=performance.now(),dt=now-MPSM.lastP;if(dt>60){if(MPSM.lastP&&dt<3000)MPSM.pdt=MPSM.pdt*.7+dt*.3;MPSM.lastP=now}}
+  const now=performance.now();
+  S.day=d.day;S.paused=d.pa;S.speed=d.sp;if(MP.base){MP.base.paused=d.pa;MP.base.speed=d.sp}
+  if(d.nb&&S.nav&&Array.isArray(S.nav.bands)){const m=new Map(S.nav.bands.map(o=>[o.id,o]));const bb=MP.base&&MP.base.nav&&Array.isArray(MP.base.nav.bands)?new Map(MP.base.nav.bands.map(o=>[o.id,o])):null;
+    for(const [id,x,y,nl] of d.nb){const o=m.get(id);if(!o)continue;mpSmSet('nb',o,x,y,now);if(nl>=0&&o.legs&&o.legs.length>nl){o.legs.splice(0,o.legs.length-nl);const ob=bb&&bb.get(id);if(ob&&ob.legs&&ob.legs.length>nl)ob.legs.splice(0,ob.legs.length-nl)}}}
+  for(const k of MP_POS){const L=d[k];if(!L||!Array.isArray(S[k]))continue;const m=new Map(S[k].map(o=>[o.id,o])),mb=MP.base&&Array.isArray(MP.base[k])?new Map(MP.base[k].map(o=>[o.id,o])):null;
+    for(const [id,x,y,nl] of L){const o=m.get(id);if(!o)continue;mpSmSet(k,o,x,y,now);if(nl>=0&&o.legs&&o.legs.length>nl){o.legs.splice(0,o.legs.length-nl);const ob=mb&&mb.get(id);if(ob&&ob.legs&&ob.legs.length>nl)ob.legs.splice(0,ob.legs.length-nl)}}}
+}
+function mpGuestDiff(cmd){
+  if(MP.role!=='guest'||!MP.ready||MP.hold||!MP.base)return;
+  const cur=mpSnap(S),ops=[];mpDiff(MP.base,cur,[],ops);
+  if(!ops.length&&!cmd)return;MP.base=cur;
+  const x={s:++MP.seq,ops,cmd:cmd||null,at:performance.now()};MP.pending.push(x);
+  mpSendBig('d',{s:x.s,ops:ops,cmd:x.cmd});
+}
+function mpResendPending(){const now=performance.now();for(const x of MP.pending)if(now-x.at>1800){x.at=now;mpSendBig('d',{s:x.s,ops:x.ops,cmd:x.cmd})}}
+function mpGuestLog(o,n){
+  const L=[];
+  for(const id in n.own){const a=o.own[id],b=n.own[id];if(a===b)continue;const nn=N[NI[id]];if(!nn)continue;
+    if(b==='car')L.push(`${nn.n} est à vous.`);else if(a==='car')L.push(`${nn.n} est perdue (${sideName(b)}).`)}
+  const ids=new Set(n.armies.map(a=>a.id));
+  for(const a of o.armies)if(a.side==='car'&&!ids.has(a.id))L.push(`${armyLabel(a).replace(/^./,m=>m.toUpperCase())} a disparu.`);
+  const oi=new Set(o.armies.map(a=>a.id));for(const a of n.armies)if(a.side==='car'&&!oi.has(a.id)&&!a.g)L.push(`${a.name} prend la tête d'une armée.`);
+  const seen=new Set((o.mpNews||[]).map(x=>x.k)),news=(n.mpNews||[]).filter(x=>!seen.has(x.k)&&(x.sd==null||x.sd===MP.side));
+  for(const x of news)L.push(x.t);
+  if(o.cur&&!n.cur&&!news.length)L.push(battleTitle(o.cur)+' : la bataille est terminée.');
+  for(const t of L.slice(0,6))log(t);
+}
+/* ---- batailles à deux ---- */
+// compte rendu neutre des batailles, pour le journal de l'invité
+{const _ar=applyResult;applyResult=function(b,res){
+  if(!MPH())return _ar.apply(this,arguments);
+  const side=ids=>{const a=S.armies.find(x=>x.id===ids[0]);return a&&a.side},aS=side(b.att),dS=side(b.def);
+  const lost=(L,men)=>Math.round(L.reduce((s,u,j)=>s+Math.max(0,u.men-(men[j]||0)),0)),la=lost(bFlat(b.att),res.A),ld=lost(bFlat(b.def),res.D);
+  const r=_ar.apply(this,arguments);
+  if(aS==='rom'||dS==='rom'||visAtR(b.x,b.y)>=1){S.mpNews=S.mpNews||[];const w=res.attWin?aS:dS;
+    S.mpNews.push({k:(S.mpK=(S.mpK||0)+1),t:`${battleTitle(b)} : victoire de ${sideName(w)}. Pertes ${sideName(aS)} ${la.toLocaleString('fr-FR')}, ${sideName(dS)} ${ld.toLocaleString('fr-FR')}.`});
+    if(S.mpNews.length>8)S.mpNews.shift()}
+  return r}}
+const mpBKey=b=>b.att.join(',')+'/'+b.def.join(',');
+const _startBattleMP=startBattle;
+startBattle=function(att,defs){
+  if(MP.role==='guest'&&MP.ready){mpGuestDiff({k:'battle',att:att.id,defs:defs.map(d=>d.id),pend:typeof PEND!=='undefined'?PEND:null});return}
+  if(!MPH())return _startBattleMP.apply(this,arguments);
+  const human=s=>s==='car'||(s==='rom'&&MPRH()),sides=[att.side,defs[0].side];
+  if(!sides.some(human))return _startBattleMP.apply(this,arguments);
+  const nn=nearestNode((att.x+defs[0].x)/2,(att.y+defs[0].y)/2);
+  const b={att:[att.id],def:defs.map(d=>d.id),x:(att.x+defs[0].x)/2,y:(att.y+defs[0].y)/2,node:nn.i,mp:{o:{}}};
+  // c'est le chef de l'armée (le joueur qui la commande) qui choisit
+  const lead={[att.side]:att,[defs[0].side]:defs.find(d=>!d.g)||defs[0]};
+  for(const s of sides)if(human(s)){b.mp[s]=0;b.mp.o[s]=mpOwner(lead[s])}
+  S.cur=b;S.paused=true;save();openBattle();mpKfSoon(0);
+};
+const _openBattleMP=openBattle;
+openBattle=function(){if(!MP.role||!S.cur||(!S.cur.mp&&MP.role==='host'))return _openBattleMP.apply(this,arguments);MP.bmod=null;mpBattleUI()};
+// Baptiste 10 nov. : l'armée d'un autre joueur proche (moins de 10 km, rfJoin du bloc ÉCHELLE, ou moins de 6 km du défenseur)
+// était prise dans la bataille d'un ami : figée, commandée par lui, et son joueur restait bloqué sur la carte.
+// Elle reste dehors : son joueur la garde et peut l'engager lui-même (bandeau « Engager… », rejoindre-campagne.js).
+{const _rf=rfJoin;rfJoin=function(b){if(!MP.role||!b||b.rf||!b.mp||!S.mpP)return _rf.apply(this,arguments);
+  const r=_rf.apply(this,arguments);
+  try{const lead=new Set(Object.values(b.mp.o||{})),out=[];
+    const keep=(id,i)=>{if(i===0)return true;const a=S.armies.find(x=>x.id===id);if(!a)return true;const o=mpOwner(a);if(!o||!S.mpP[o]||lead.has(o))return true;out.push(id);return false};
+    b.att=b.att.filter(keep);b.def=b.def.filter(keep);if(b.arr)for(const id of out)delete b.arr[id]}catch(e){console.warn(e)}
+  return r}}
+function mpBattleUI(){
+  if(!MP.role||(MP.role==='guest'&&!MP.ready))return;
+  const b=S.cur,mk=$('mcard').querySelector('[data-mpb]');
+  if(!b){if(MP.bmod){MP.bmod=null;if(mk&&!$('modal').hidden)closeModal()}return}
+  if(!b.mp&&MP.role==='host')return;
+  const mp=b.mp||{},O=mp.o||{},me='car',ch=O[me],inv=mp[me]!==undefined&&ch===MP.me,st=mp.state||'',key=mpBKey(b)+'|'+JSON.stringify(mp);
+  if(MP.bmod===key&&!$('modal').hidden&&mk)return;MP.bmod=key;
+  const att=S.armies.find(x=>x.id===b.att[0]),attMine=!!att&&att.side==='car';
+  if(st==='3d:'+me&&ch===MP.me){if(MP.role==='guest'&&MP.played!==mpBKey(b)){MP.played=MP.in3d=mpBKey(b);closeModal();go3D(attMine)}return}
+  if(inv&&!mp[me]&&!st){
+    _openBattleMP();
+    const card=$('mcard'),pvp=mp.car!==undefined&&mp.rom!==undefined;
+    card.insertAdjacentHTML('beforeend',`<i data-mpb hidden></i><p class="sub"><b>À plusieurs :</b> ${pvp?`vous choisissez pour votre camp, ${esc(mpName(O.rom))} pour le sien. Si un seul veut livrer bataille sur le terrain, il la joue contre l'IA qui commande l'autre camp ; si les deux la veulent, résolution automatique pour l'instant (la bataille à deux arrive bientôt). Une retraite l'emporte sur tout le reste.`:"vous commandez cette armée : c'est à vous de choisir. Le jeu reste en pause pour tous."}</p>`);
+    const send=c=>{if(MP.role==='host'){S.cur.mp.car=c;mpResolve()}else{mp.car=c;mpSend({t:'ch',c,k:mpBKey(b)});MP.bmod=null;mpBattleUI()}};
+    $('b3d').onclick=()=>send('3d');$('bAuto').onclick=()=>send('auto');$('bFlee').onclick=()=>send('flee');
+    mpFixText();return}
+  // en attente
+  const nm=ids=>ids.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean).map(a=>esc(a.name)).join(', ')||'?';
+  const who=s=>esc(mpName(O[s]));
+  const other=st.startsWith('3d:')?`${who(st.slice(3))} livre la bataille sur le terrain.`:inv?`Votre choix : <b>${{'3d':'bataille sur le terrain',auto:'résolution automatique',flee:'retraite'}[mp[me]]||'—'}</b>. En attente des autres…`
+    :`${['car','rom'].filter(s=>mp[s]===0).map(who).join(' et ')||'Les joueurs concernés'} ${['car','rom'].filter(s=>mp[s]===0).length>1?'choisissent':'choisit'} comment livrer la bataille.`;
+  const off=MP.role==='host'&&!st&&['car','rom'].some(s=>mp[s]===0&&O[s]&&O[s]!==MP.me&&!(MP.gs[O[s]]&&MP.gs[O[s]].on));
+  modal(`<i data-mpb hidden></i><h2>${battleTitle(b)}</h2><p>${nm(b.att)} contre ${nm(b.def)}.</p><p>${other}</p><p class="sub">Le jeu est en pause pour tous les joueurs.</p>${off?'<div class="row"><button id="mpForce" type="button">Un joueur est déconnecté : résolution automatique</button></div>':''}`);
+  if($('mpForce'))$('mpForce').onclick=()=>{if(S.cur&&S.cur.mp){for(const k of ['car','rom'])if(S.cur.mp[k]===0)S.cur.mp[k]='auto';mpResolve()}};
+}
+function mpResolve(){
+  const b=S.cur;if(!b||!b.mp||b.mp.state)return;const mp=b.mp,O=mp.o||{};
+  if(['car','rom'].some(k=>mp[k]===0)){MP.bmod=null;mpBattleUI();mpKfSoon(0);return}
+  const sideOf=ids=>{const a=S.armies.find(x=>x.id===ids[0]);return a&&a.side},aS=sideOf(b.att);
+  const fl=['car','rom'].filter(s=>mp[s]==='flee');
+  if(fl.length){for(const s of fl){const isAtt=s===aS,ids=isAtt?b.att:b.def;for(const id of ids){const a=S.armies.find(x=>x.id===id);if(!a)continue;a.units.forEach(u=>u.men*=isAtt?.97:.85);a.legs=[];retreat(a)}
+      log(`${battleTitle(b)} : ${sideName(s)} se dérobe et bat en retraite.`)}
+    S.cur=null;closeModal();refreshAfterBattle();mpKfSoon(0);return}
+  const want=['car','rom'].filter(s=>mp[s]==='3d');
+  if(want.length===1){const s=want[0];mp.state='3d:'+s;if(O[s]===MP.me){closeModal();go3D(aS===s)}else{MP.bmod=null;mpBattleUI()}mpKfSoon(0);return}
+  if(want.length===2)log('Les deux camps voulaient livrer la bataille : en attendant la bataille à plusieurs, elle est résolue automatiquement.');
+  finishBattle(autoResolve(b));mpKfSoon(0);
+}
+// nouvelle armée de recrues : elle obéit au joueur qui a levé les régiments
+{const _adr=addRecruit;addRecruit=function(i,side){
+  if(!MPH())return _adr.apply(this,arguments);
+  const q=S.q[N[i].id],by=q&&q.by,ok=by&&S.mpP&&S.mpP[by]&&S.mpP[by].side===side,had=new Set(S.armies.map(a=>a.id));
+  // les recrues ne rejoignent pas une armée d'un autre joueur stationnée dans la ville : elles forment la leur
+  const hid=ok?S.armies.filter(a=>a.side===side&&!a.g&&a.at===i&&mpOwner(a)!==by):[];for(const a of hid)a.g=true;
+  let r;try{r=_adr.apply(this,arguments)}finally{for(const a of hid)delete a.g}
+  for(const a of S.armies)if(!had.has(a.id)&&a.side===side&&!a.g){if(ok)a.cmd=by;if(S.mpD&&mpdOn(side))a.dm=mpdCity(N[i])}
+  return r}}
+// l'invité renvoie le résultat de sa bataille 3D à l'hôte (la page l'applique aussi chez lui, sans le renvoyer comme une action)
+{const _ar2=applyResult;applyResult=function(b,res){
+  if(MP.role==='guest'&&MP.in3d&&b&&mpBKey(b)===MP.in3d){MP.in3d=null;mpSend({t:'bres',k:mpBKey(b),res:{attWin:res.attWin,A:res.A,D:res.D}});
+    MP.hold=true;setTimeout(()=>{MP.base=mpSnap(S);MP.hold=false},0)}
+  return _ar2.apply(this,arguments)}}
+/* ---- l'IA romaine se tait quand Rome est un joueur ---- */
+{const w=f0=>function(){if(MPRH())return;return f0.apply(this,arguments)};
+  aiTurn=w(aiTurn);aiDiplomacy=w(aiDiplomacy);if(typeof aiRome==='function')aiRome=w(aiRome);
+  const _aiF=aiForage;aiForage=function(a){if(MPRH()&&a&&a.side==='rom')return;return _aiF.apply(this,arguments)};}
+/* ---- invité : pas de simulation locale, pas de sauvegarde ---- */
+{const _t=tick;tick=function(){if(MP.role==='guest')return;return _t.apply(this,arguments)};
+  const _s=save;save=function(){if(MP.role==='guest')return;return _s.apply(this,arguments)};}
+/* ---- invité : textes écrits pour Carthage ---- */
+function mpFixText(){if(MP.role!=='guest')return;
+  {const b=$('bPol');if(b&&MP.ready)b.hidden=MP.side==='rom'}
+  if(MP.rs!=='rom')return;
+  const h=document.querySelector('#side>h2:first-child');if(h&&h.textContent==='Carthage')h.textContent=FAC.car.n;
+  {const e=document.querySelector('#mcard .vs h4');if(e&&e.textContent==='Carthage'){e.textContent=FAC.car.n;e.style.color='#e2665a'}}
+  document.querySelectorAll('#mcard .att>span:first-child').forEach(e=>{e.textContent=e.textContent==='Carthage'?'Rome':e.textContent==='Rome'?'Carthage':e.textContent});
+  const swapTxt=(root,max)=>{if(!root)return;const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n,k=0;while((n=w.nextNode())&&k++<max){const t=n.nodeValue.trim();
+    if(t==='Carthage')n.nodeValue=n.nodeValue.replace('Carthage','Rome');else if(/^famille barca$/i.test(t))n.nodeValue=n.nodeValue.replace(t,t===t.toUpperCase()?'SÉNAT ROMAIN':'Sénat romain')}};
+  swapTxt($('top'),400);if(!sel)swapTxt($('side'),12);
+  document.querySelectorAll('#mcard p.sub').forEach(e=>{if(e.textContent.includes('vous commandez toujours Carthage'))e.textContent="Sur le champ de bataille, vous commandez Rome ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes."})}
+{const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{mpArmyBox()}catch(e){console.error('[MP]',e)}mpFixText();return r};
+  const _m=modal;modal=function(){const r=_m.apply(this,arguments);mpFixText();return r};
+  const _om=openMenu;openMenu=function(){if(MP.role==='guest')return openMP();return _om.apply(this,arguments)};
+  const _eg=endGame;endGame=function(){const r=_eg.apply(this,arguments);if(MP.role==='guest'){const b=$('mNew');if(b)b.hidden=true}return r};}
+function mpArmyBox(){
+  if(!MP.role||!S.mpP||!sel)return;const el=$('side');if(!el)return;
+  const isF=!!sel.f,a=isF?sel.f:sel.a;if(!a||a.dead||a.side!=='car'||a.g)return;
+  if(S.mpD&&mpdOn('car')){const k=mpdArmy(a),ow=mpdOwner(k);
+    let h=`<div class="mpbox" style="margin:8px 0;padding:6px 8px;border:1px solid var(--line);border-left:4px solid ${MPD_ALL[k].c};border-radius:4px;font-size:13px">Commandement : <b>${mpdLbl(k)}</b>`;
+    if(ow===MP.me)h+=`<div class="row" style="margin:6px 0 0">${mpdKeys('car').filter(x=>x!==k).map(x=>`<button type="button" data-mpdgive="${x}">Confier à ${mpdName(x)}</button>`).join('')}</div>`;
+    else h+=`<div class="sub">${isF?'Flotte':'Armée'} d'un autre commandement : vous la voyez, mais c'est ${esc(mpName(ow))} qui la commande.</div>`;
+    h+='</div>';const h2=el.querySelector('h2');if(h2)h2.insertAdjacentHTML('afterend',h);else el.insertAdjacentHTML('afterbegin',h);
+    el.querySelectorAll('[data-mpdgive]').forEach(b=>b.onclick=()=>{mpdAct({a:isF?'fleet':'army',id:a.id,t:b.dataset.mpdgive});sel=null;renderAll()});return}
+  if(isF)return;const ow=mpOwner(a);
+  const mates=mpPlayers().filter(p=>p.side==='car'&&p.id!==MP.me);
+  let h=`<div class="mpbox" style="margin:8px 0;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px">Chef : <b>${esc(mpName(ow))}</b>${ow===MP.me?' (vous)':''}`;
+  if(ow===MP.me&&mates.length)h+=`<div class="row" style="margin:6px 0 0">${mates.map(p=>`<button type="button" data-mpgive="${esc(p.id)}">Confier à ${esc(p.n||'Joueur')}</button>`).join('')}</div>`;
+  else if(ow!==MP.me)h+=`<div class="sub">Armée de votre allié : vous la voyez, mais c'est lui qui la commande.</div>`;
+  h+='</div>';const h2=el.querySelector('h2');if(h2)h2.insertAdjacentHTML('afterend',h);else el.insertAdjacentHTML('afterbegin',h);
+  el.querySelectorAll('[data-mpgive]').forEach(b=>b.onclick=()=>{a.cmd=b.dataset.mpgive;log(`${a.name} passe sous les ordres de ${esc(mpName(a.cmd))}.`);sel=null;renderAll()});
+}
+/* ---- invité : chaque action renvoie ses effets à l'hôte ---- */
+for(const ev of ['click','contextmenu','keydown','pointerup','change','input'])document.addEventListener(ev,()=>{if(MP.role==='guest')setTimeout(()=>mpGuestDiff(),0);else if(MP.role==='host')mpKfSoon(250)},true);
+setInterval(()=>{
+  const now=performance.now();
+  if(MP.role==='host'){
+    for(const id in MP.gs){const g=MP.gs[id];if(g.on&&now-g.lastHb>8000){g.on=false;if(S.mpP&&S.mpP[id])S.mpP[id].on=0;S.paused=true;log(`${esc(mpName(id))} ne répond plus : partie en pause.`);mpStatus();renderAll();MP.bmod=null;mpBattleUI()}}
+    if(mpAnyOn()){
+      const pz=S.paused&&!mpLbOn();
+      if((MP.kfDue&&now>=MP.kfDue)||now-MP.lastKf>(pz?4000:1500))mpSendKf();
+      else if(now-MP.lastPos>(pz?1000:200))mpSendPos();}
+  }
+  if(MP.role==='guest'){
+    if(now-(MP.lastDiff||0)>450){MP.lastDiff=now;mpGuestDiff();mpResendPending();if(MP.ready)mpFixText()}
+    if(now-(MP.lastBeat||0)>2000){MP.lastBeat=now;mpSend(MP.ready?{t:'hb'}:{t:'hello',s:MP.lastAck,side:MP.rs||MP.side,nick:MP.nick})}
+    const lost=MP.lastMsg&&now-MP.lastMsg>7000;if(lost!==MP.lost){MP.lost=lost;mpStatus()}
+  }
+},120);
+/* ---- fenêtre « À plusieurs » ---- */
+function mpCode(){const A='abcdefghjkmnpqrstuvwxyz23456789';let s='';for(let i=0;i<4;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
+function mpStatus(){
+  let t=$('mpTag');if(!t){t=document.createElement('button');t.id='mpTag';t.type='button';t.onclick=openMP;const g=$('bMenu');g.parentNode.insertBefore(t,g)}
+  const n=Object.values(MP.gs).filter(g=>g.on).length;
+  t.textContent=!MP.role?'À plusieurs':MP.role==='host'?`Partie ${MP.code.toUpperCase()} · ${n+1} joueur${n?'s':''}`:(MP.lost||!MP.ready?'Connexion…':`${mpSideTxt(MP.rs||MP.side)} · en ligne`);
+  t.classList.toggle('on',!!MP.role&&(MP.role==='host'?n>0:MP.ready&&!MP.lost));
+  if(!$('modal').hidden&&$('mcard').querySelector('[data-mpw]'))openMP();
+}
+function mpSS(k,v){try{if(v===undefined)return sessionStorage.getItem(k);if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){}return null}
+function mpSetNick(){const e=$('mpN');if(e){MP.nick=e.value.trim().slice(0,20);try{localStorage.setItem('bellum.mp.nick',MP.nick)}catch(x){}}}
+async function mpHost(fresh){
+  mpSetNick();const code=mpCode(),tr=await mpTransport(code,true);if(!tr){MP.err="Ce navigateur ne permet pas de jouer à plusieurs.";openMP();return}
+  if(fresh){newGame();afterLoad()}
+  MP.role='host';MP.side='car';MP.code=code;MP.tr=tr;MP.kind=tr.kind;MP.err=null;MP.gs={};S.paused=true;
+  S.mpP={[MP.me]:{n:MP.nick||'Hôte',side:'car',rn:S.mirror?'Rome':mpSideTxt('car'),on:1}};
+  tr.on((d)=>{if(!d||d.f===MP.me)return;try{mpOnHost(d)}catch(e){console.error('[MP]',e)}});
+  log(`Partie à plusieurs ouverte : code ${code.toUpperCase()}. Vous jouez ${S.mirror?'Rome':mpSideTxt('car')}.`);mpStatus();renderAll();openMP();
+}
+async function mpJoin(code,side){
+  mpSetNick();code=String(code||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(code.length<3){MP.err='Entrez le code donné par l\'hôte.';openMP();return}
+  const tr=await mpTransport(code,false);if(!tr){MP.err=MP.err||"Ce navigateur ne permet pas de jouer à plusieurs.";openMP();return}
+  MP.role='guest';MP.rs=side==='rom'?'rom':'car';MP.side=MP.rs;MP.code=code;MP.tr=tr;MP.kind=tr.kind;MP.err=null;MP.ready=false;MP.lastAck=0;MP.lastMsg=performance.now();sel=null;
+  tr.on((d)=>{if(!d||d.f===MP.me)return;try{mpOnGuest(d)}catch(e){console.error('[MP]',e)}});
+  MP.glog=[];mpSend({t:'hello',s:0,side:MP.side,nick:MP.nick});MP.lastBeat=performance.now();mpStatus();openMP();
+}
+function mpLeave(){if(MP.tr){mpSend({t:'bye'});const tr=MP.tr;setTimeout(()=>tr.leave(),300)}
+  if(MP.role==='guest'){setTimeout(()=>location.reload(),400);return}
+  mpdMerge();MP.role=null;MP.tr=null;MP.gs={};delete S.mpP;log(`Partie à plusieurs terminée : ${S.mirror?'Carthage':'Rome'} est de nouveau commandée par l'IA.`);mpStatus();renderAll();closeModal()}
+function openMP(){
+  const help=!mpInClaude()?`<p class="sub">Pour jouer avec des amis : chacun ouvre cette même version du jeu (même lien ou même fichier), sans compte. L'hôte donne le code de partie, les autres le saisissent ; la connexion se fait directement d'un navigateur à l'autre. Jusqu'à ${MP_MAX} joueurs.</p>`:`<p class="sub">Pour jouer avec des amis en ligne : partagez cette page avec eux depuis le menu Partager, avec l'accès <b>Contributeur</b> au moins (sans cela, ils voient la partie mais ne peuvent pas envoyer d'ordres). Tout le monde ouvre la même page ; l'hôte donne le code de partie. Jusqu'à ${MP_MAX} joueurs. Pour essayer seul : plusieurs onglets du même navigateur.</p>`;
+  const err=MP.err?`<p style="color:var(--bad)">${esc(MP.err)}</p>`:'';
+  const inp=(id,ph,w,extra)=>`<input id="${id}" placeholder="${ph}" ${extra||''} style="font:inherit;font-size:16px;width:${w}px;background:rgba(0,0,0,.25);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 8px;-webkit-user-select:text;user-select:text">`;
+  const plist=()=>`<table class="dip"><tr><th>Joueur</th><th>Camp</th><th></th></tr>${mpPlayers().map(p=>`<tr><td><b>${esc(p.n||'Joueur')}</b>${p.id===MP.me?' (vous)':''}</td><td>${p.rn||mpSideTxt(p.side)}${S.mpD&&p.dm&&S.mpD[p.dm]?' · '+mpdName(p.dm):''}</td><td>${p.on?'<span style="color:var(--good)">en ligne</span>':'<span class="sub">absent</span>'}</td></tr>`).join('')}</table>`;
+  if(!MP.role){
+    modal(`<i data-mpw hidden></i><h2>Jouer à plusieurs</h2><p>Une campagne en temps réel jusqu'à ${MP_MAX} joueurs, dans le camp de Carthage ou de Rome. Dans un même camp, chacun commande ses armées ; le trésor, les villes et la diplomatie sont communs. Chacun ne voit que ce que voit son camp. La pause et la vitesse sont communes. Quand une bataille éclate, tout se met en pause et le chef de chaque armée concernée choisit : bataille sur le terrain, résolution automatique ou retraite.</p>${err}
+      <div class="row"><label class="sub" style="align-self:center">Votre nom</label>${inp('mpN','Votre nom',180,`maxlength="20" value="${esc(MP.nick)}"`)}</div>
+      <h3>Héberger (vous gardez votre camp${S&&S.mirror?' : Rome':' : Carthage'})</h3><div class="row"><button class="go" id="mpH" type="button">Héberger la partie en cours</button><button id="mpHN" type="button">Héberger une nouvelle campagne (scénario, camp)</button></div>
+      <h3>Rejoindre</h3><div class="row">${inp('mpC','Code',100,'maxlength="6"')}<button class="go" id="mpJC" type="button">Rejoindre Carthage (ou Macédoine, Syracuse)</button><button class="go" id="mpJR" type="button">Rejoindre Rome</button></div>
+      ${help}<div class="row" style="justify-content:flex-end"><button id="mClose" type="button">Fermer</button></div>`);
+    $('mpH').onclick=()=>mpHost(false);$('mpHN').onclick=()=>{mpSetNick();if(typeof openScen==='function'&&typeof startScen==='function'){MP.hostAfter=true;mpSS('bellum.mp.hostAfter','1');openScen();const h=document.querySelector('#mcard h2');if(h)h.textContent='Nouvelle campagne à plusieurs'}else mpHost(true)};$('mpJC').onclick=()=>mpJoin($('mpC').value,'car');$('mpJR').onclick=()=>mpJoin($('mpC').value,'rom');
+    for(const id of ['mpC','mpN'])$(id).onkeydown=e=>e.stopPropagation();$('mClose').onclick=closeModal;return}
+  const via=MP.kind==='direct'?"Connexion directe entre navigateurs, par internet.":MP.kind==='local'?"Connexion locale : entre onglets de ce navigateur seulement (le salon en ligne n'est disponible que sur la page publiée).":'Connexion par le salon en direct de la page.';
+  if(MP.role==='host')modal(`<i data-mpw hidden></i><h2>Partie à plusieurs</h2><p>Code de la partie : <b style="font-size:26px;letter-spacing:.2em;color:var(--gold)">${MP.code.toUpperCase()}</b></p>
+      ${plist()}${err}<p class="sub">${via} ${MPRH()?"Rome est tenue par un joueur : l'IA romaine ne joue pas.":"Personne ne joue Rome : l'IA la commande."} Pour confier une armée à un allié : choisissez-la, puis « Confier à… ».</p>${S.mpD&&mpdOn('car')?'<div class="row"><button type="button" id="mpDom">Commandements</button></div>':''}${help}
+      <div class="row" style="justify-content:flex-end"><button class="warn" id="mpX" type="button">Arrêter la partie à plusieurs</button><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  else modal(`<i data-mpw hidden></i><h2>Partie à plusieurs</h2><p>Partie <b>${MP.code.toUpperCase()}</b> · vous jouez <b>${mpSideTxt(MP.rs||MP.side)}</b>. ${MP.ready&&!MP.lost?'<b style="color:var(--good)">Connecté à l\'hôte.</b>':'Connexion à l\'hôte…'}</p>${MP.ready?plist():''}${err}<p class="sub">${via} Votre campagne solo n'est pas touchée : elle revient quand vous quittez.</p>
+      <div class="row" style="justify-content:flex-end"><button class="warn" id="mpX" type="button">Quitter</button><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mpX').onclick=mpLeave;$('mClose').onclick=closeModal;
+}
+const mpAfterStart=()=>{if(MP.hostAfter&&!MP.role){MP.hostAfter=false;mpSS('bellum.mp.hostAfter',null);closeModal();mpHost(false)}};
+if(typeof startScen==='function'){const _ss=startScen;startScen=function(){const r=_ss.apply(this,arguments);mpAfterStart();return r}}
+if(typeof startMac==='function'){const _sm=startMac;startMac=function(){const r=_sm.apply(this,arguments);mpAfterStart();return r}}
+if(typeof startSyr==='function'){const _sy=startSyr;startSyr=function(){const r=_sy.apply(this,arguments);mpAfterStart();return r}}
+if(typeof openMenu==='function'){const _om2=openMenu;openMenu=function(){MP.hostAfter=false;mpSS('bellum.mp.hostAfter',null);return _om2.apply(this,arguments)}}
+/* changer de peuple recharge la page (scenGo) : l'hôte garde son intention d'héberger, l'invité rejoint tout seul après rechargement */
+{let pend=false;try{pend=!!sessionStorage.getItem('bellum.scenPend')}catch(e){}
+ if(mpSS('bellum.mp.hostAfter')&&pend)MP.hostAfter=true;else mpSS('bellum.mp.hostAfter',null);
+ const aj=mpSS('bellum.mp.autoJoin');mpSS('bellum.mp.autoJoin',null);
+ if(aj)try{const o=JSON.parse(aj);setTimeout(()=>{try{closeModal()}catch(e){}mpJoin(o.code,o.side)},1500)}catch(e){}}
+if(typeof aiSide==='function'){const _ais=aiSide;aiSide=function(side){if(MPRH(side))return;return _ais.apply(this,arguments)}}
+setTimeout(()=>{try{mpStatus()}catch(e){}},0);
+window.__mp=MP;window.__mpf={mpOwner,mpCan,mpLeader};

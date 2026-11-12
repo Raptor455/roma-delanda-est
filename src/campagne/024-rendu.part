@@ -1,0 +1,259 @@
+/* ================= RENDU ================= */
+const cv=$('map');let ctx=cv.getContext('2d');
+let view={s:.3,ox:0,oy:0},dpr=1,sel=null,preview=null,territoryDirty=true,ownerPaths=null,fogC=document.createElement('canvas'),texPat=null;
+function fit(){const w=cv.clientWidth,h=cv.clientHeight;dpr=perfDpr();/*PERF*/cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);fogC.width=Math.ceil(w*PERF.fk);fogC.height=Math.ceil(h*PERF.fk);PERF.fogKey=''/*PERF*/}
+const minS=()=>Math.min(cv.clientWidth/MW,cv.clientHeight/MH)*.95,MAXS=120;
+function clampView(){const w=cv.clientWidth,h=cv.clientHeight;view.s=Math.max(minS(),Math.min(MAXS,view.s));
+  const mw=MW*view.s,mh=MH*view.s;view.ox=mw<w?(w-mw)/2:Math.min(0,Math.max(w-mw,view.ox));view.oy=mh<h?(h-mh)/2:Math.min(0,Math.max(h-mh,view.oy))}
+const toWorld=(x,y)=>[(x-view.ox)/view.s,(y-view.oy)/view.s];
+let ZT=null,NOTERR=false,COLLECT=null;
+function zoomSmooth(mx,my,f){const base=ZT?ZT.s:view.s;ZT={s:Math.max(minS(),view.s/3,Math.min(MAXS,view.s*3,base*f)),mx,my,n:0}}/*CMD*/
+function stepZoom(dt){if(!ZT)return;const k=1-Math.exp(-dt*16),ls=Math.log(view.s),lt=Math.log(ZT.s);let ns=Math.exp(ls+(lt-ls)*k);
+  if(Math.abs(lt-Math.log(ns))<.004||++ZT.n>90)ns=ZT.s;const mx=ZT.mx,my=ZT.my;if(ns===ZT.s)ZT=null;zoomAt(mx,my,ns/view.s)}
+function zoomAt(mx,my,f){const [wx,wy]=toWorld(mx,my);view.s*=f;clampView();view.ox=mx-wx*view.s;view.oy=my-wy*view.s;clampView()}
+function centerOn(x,y,s){ZT=null;/*CMD*/if(s)view.s=s;const w=cv.clientWidth,h=cv.clientHeight;view.ox=w/2-x*view.s;view.oy=h/2-y*view.s;clampView()}
+function rgb(c,a){return `rgba(${c[0]},${c[1]},${c[2]},${a})`}
+function buildOwnerPaths(){
+  ownerPaths={};
+  N.forEach(n=>{if(n.col||!CELL[n.i])return;const o=ownerN(n.i)||'_';(ownerPaths[o]=ownerPaths[o]||new Path2D()).addPath(CELL[n.i].path)});
+  // étiquettes des peuples : barycentre de leurs villes
+  FACLAB=[];const acc={};N.forEach(n=>{const o=ownerN(n.i);if(!o||n.col)return;const w=1+n.size;const A=acc[o]=acc[o]||{x:0,y:0,w:0,list:[]};A.list.push(n)});
+  for(const o in acc){const L=acc[o].list;
+    // groupe principal : les villes à moins de 450 km de la plus grande
+    const cap=L.slice().sort((a,b)=>b.size-a.size)[0];const G=L.filter(n=>Math.hypot(n.x-cap.x,n.y-cap.y)<450);
+    let x=0,y=0,w=0;G.forEach(n=>{const k=1+n.size;x+=n.x*k;y+=n.y*k;w+=k});FACLAB.push({o,x:x/w,y:y/w,n:G.length})}
+  territoryDirty=false;
+}
+let FACLAB=[];
+function makeTexture(){
+  const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d'),img=g.createImageData(128,128);
+  for(let i=0;i<128*128;i++){const x=i%128,y=i/128|0,n=(vnoise(x*.12,y*.12)+vnoise(x*.4+9,y*.4)*0.5)/1.5;const v=n*255;img.data[i*4]=v;img.data[i*4+1]=v*.95;img.data[i*4+2]=v*.8;img.data[i*4+3]=26}
+  g.putImageData(img,0,0);texPat=ctx.createPattern(c,'repeat');
+}
+// Le fond (terres, territoires, relief, détails, routes, villes) est rendu dans une image tampon, avec une marge,
+// et n'est recalculé que si la vue sort de la marge, si le zoom change (après une courte pause) ou si un territoire change.
+// ---- Fond de carte en tuiles, comme une carte en ligne ----
+// Chaque niveau L dessine la carte à l'échelle fixe 2^L px/km, en tuiles de 256 px gardées en mémoire.
+// À l'écran on affiche le niveau le plus proche, étiré ou réduit ; les tuiles manquantes se dessinent quelques-unes par image,
+// et en attendant on montre celles des niveaux voisins. Le niveau le plus large reste toujours en mémoire.
+const TS=256,TILES=new Map(),TMAX=260,LMIN=-2,LMAX=9;let TGEN=0;
+const lvlOf=s=>Math.max(LMIN,Math.min(LMAX,Math.round(Math.log2(s))));
+function tileRange(L,w,h,pad){const sL=2**L,k=view.s/sL,sz=TS*k;return [Math.floor(-view.ox/sz)-pad,Math.floor((w-view.ox)/sz)+pad,Math.floor(-view.oy/sz)-pad,Math.floor((h-view.oy)/sz)+pad]}
+function tileOK(T){return T&&T.gen===TGEN&&T.dpr===dpr}
+function renderTileAt(L,i,j){const key=L+'/'+i+'/'+j;let T=TILES.get(key);
+  if(!T||T.dpr!==dpr){const c=document.createElement('canvas');c.width=c.height=Math.round(TS*dpr);T={c,g:c.getContext('2d'),L}}
+  TILES.delete(key);TILES.set(key,T);
+  const keepCtx=ctx,keepView=view;ctx=T.g;view={s:2**L,ox:-i*TS,oy:-j*TS};
+  try{drawStatic(TS,TS)}finally{ctx=keepCtx;view=keepView}
+  T.gen=TGEN;T.dpr=dpr;
+  if(TILES.size>TMAX)for(const [k2,T2] of TILES){if(TILES.size<=TMAX)break;if(T2.L===LMIN||k2===key)continue;TILES.delete(k2)}}
+function drawLevel(L,w,h){const sL=2**L,k=view.s/sL,sz=TS*k,[i0,i1,j0,j1]=tileRange(L,w,h,0);let missing=0;
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const T=TILES.get(L+'/'+i+'/'+j);if(!T){missing++;continue}if(!tileOK(T))missing++;
+    const x0=Math.floor(dpr*(view.ox+i*sz)),x1=Math.floor(dpr*(view.ox+(i+1)*sz)),y0=Math.floor(dpr*(view.oy+j*sz)),y1=Math.floor(dpr*(view.oy+(j+1)*sz));
+    ctx.drawImage(T.bmp||T.c/*PERF*/,x0,y0,x1-x0,y1-y0)}
+  return missing}
+let lastV='',lastVT=0;
+function draw(){
+  if(territoryDirty){buildOwnerPaths();TGEN++}
+  {const se=season();if(se!==draw._se){if(draw._se)TGEN++;draw._se=se}}
+  const w=cv.clientWidth,h=cv.clientHeight,s=view.s,z=1/s,now=performance.now(),L=lvlOf(s);
+  const vk=s+'|'+view.ox+'|'+view.oy;if(vk!==lastV){lastV=vk;lastVT=now}
+  // le niveau le plus large, toujours prêt (toute la carte en quelques tuiles)
+  {const keep=view;view={s:2**LMIN,ox:0,oy:0};const [a0,a1,b0,b1]=[0,Math.ceil(MW*2**LMIN/TS),0,Math.ceil(MH*2**LMIN/TS)];view=keep;
+    for(let j=b0;j<b1;j++)for(let i=a0;i<a1;i++){const T=TILES.get(LMIN+'/'+i+'/'+j);if(!tileOK(T)&&(!T||!draw._init))renderTileAt(LMIN,i,j)}draw._init=true}
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#2b4d5d';ctx.fillRect(0,0,cv.width,cv.height);ctx.imageSmoothingEnabled=true;
+  // repli : niveaux plus grossiers puis plus fin, puis le bon niveau par-dessus
+  const miss0=(()=>{let m=0;const [i0,i1,j0,j1]=tileRange(L,w,h,0);for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)if(!tileOK(TILES.get(L+'/'+i+'/'+j)))m++;return m})();
+  if(miss0){const absent=l=>{let m=0;const [i0,i1,j0,j1]=tileRange(l,w,h,0);for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)if(!TILES.has(l+'/'+i+'/'+j))m++;return m};
+    let done=false;for(const l of [L-1,L+1,L-2]){if(l<LMIN||l>LMAX)continue;if(!absent(l)){drawLevel(l,w,h);done=true;break}}
+    if(!done){drawLevel(LMIN,w,h);for(const l of [L-2,L-1])if(l>LMIN)drawLevel(l,w,h)}}
+  if(!PERF.skip.tiles)drawLevel(L,w,h);/*PERF*/
+  // tuiles à dessiner : celles qui manquent à l'écran (du centre vers les bords), puis une couronne autour
+  perfTiles(L,w,h,miss0,now,lastVT);/*PERF*/
+  ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);
+  const [x0,y0]=toWorld(0,0),[x1,y1]=toWorld(w,h),inV=(x,y,m)=>x>x0-m&&x<x1+m&&y>y0-m&&y<y1+m;
+  if(sel&&sel.n!=null&&CELL[sel.n]){ctx.save();ctx.clip(s<5?landPath:landSmooth);ctx.fillStyle='rgba(255,245,210,.22)';ctx.fill(CELL[sel.n].path);ctx.restore()}
+  if(!PERF.skip.dyn){const _p=performance.now();drawSieges(s,z,inV);drawDynamic(w,h,s,z,inV);PERF.t.dyn+=performance.now()-_p}/*PERF*/
+}
+// sommets rangés par cases de 40 km, pour ne parcourir que ceux de la tuile
+let GBK=null;function glyphsIn(a,b,c,d){const K=40;if(!GBK){GBK=new Map();for(const g of GLYPH.close){const k=Math.floor(g[0]/K)+','+Math.floor(g[1]/K);if(!GBK.has(k))GBK.set(k,[]);GBK.get(k).push(g)}}
+  const out=[];for(let i=Math.floor(a/K);i<=Math.floor(c/K);i++)for(let j=Math.floor(b/K);j<=Math.floor(d/K);j++){const L=GBK.get(i+','+j);if(L)for(const g of L)out.push(g)}return out}
+function drawStatic(w,h,T){
+  const s=view.s,z=1/s;T=T||[0,0,w,h];
+  const [vx0,vy0]=toWorld(T[0],T[1]),[vx1,vy1]=toWorld(T[2],T[3]),coast=()=>{for(const C of COAST){const b=C.b;if(b[2]<vx0-2||b[0]>vx1+2||b[3]<vy0-2||b[1]>vy1+2)continue;ctx.stroke(C.p)}};
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#2b4d5d';ctx.fillRect(0,0,w,h);
+  ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);
+  const x0=vx0,y0=vy0,x1=vx1,y1=vy1,inV=(x,y,m)=>x>x0-m&&x<x1+m&&y>y0-m&&y<y1+m;
+  ctx.imageSmoothingEnabled=true;
+  {ctx.fillStyle='#3a6070';ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.strokeStyle='rgba(120,170,175,.35)';ctx.lineWidth=1.4;coast();ctx.strokeStyle='rgba(150,195,195,.45)';ctx.lineWidth=.5;coast();
+    ctx.save();ctx.clip(landSmooth);ctx.drawImage(relief.land,0,0,MW,MH);ctx.restore();paintRelief(w,h)}
+  // texture de détail, fixée au monde
+  if(texPat&&s>=5){ctx.save();ctx.clip(landSmooth);const m=new DOMMatrix().scale(.08);texPat.setTransform(m);ctx.fillStyle=texPat;ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.restore()}
+  // territoires
+  ctx.save();ctx.clip(landSmooth);if(!NOTERR){
+  /*TERR-LISIBLE*/const tA=s>4?.55:s>2.5?.7:s>1?.85:1;for(const o in ownerPaths){if(o==='_'||(MPTERR&&MPTERR[o]&&mpTerrFill(o,tA))/*MP*/)continue;const c=FAC[o].c,neutral=!!FAC[o].a;ctx.fillStyle=rgb(c,(neutral?.36:.5)*tA);ctx.fill(ownerPaths[o])}
+  // frontières : entre maîtres différents, plus discrètes entre villes d'un même maître quand on zoome
+  for(const B of BORDER){if(!B.bb){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of B.pts){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}B.bb=[a,b,c,d]}if(B.bb[2]<vx0||B.bb[0]>vx1||B.bb[3]<vy0||B.bb[1]>vy1)continue;const oa=ownerN(B.a),ob=ownerN(B.b);
+    if(oa===ob){if(s<1.4)continue;ctx.strokeStyle='rgba(70,50,30,.22)';ctx.lineWidth=1*z;ctx.setLineDash([4*z,4*z])}
+    else{ctx.setLineDash([]);ctx.strokeStyle='rgba(40,28,16,.75)';ctx.lineWidth=Math.max(1.4*z,.35)}
+    ctx.beginPath();B.pts.forEach(([x,y],k)=>k?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();
+    
+  }
+  }ctx.setLineDash([]);
+  ctx.restore();
+  // côtes
+  if(s>3){ctx.strokeStyle='rgba(222,202,146,.95)';ctx.lineWidth=.16;coast();ctx.strokeStyle='rgba(235,248,248,.5)';ctx.lineWidth=.03;ctx.save();ctx.translate(.07,.07);coast();ctx.restore()}
+  ctx.strokeStyle='rgba(60,45,28,.85)';ctx.lineWidth=Math.max(1.1*z,.012);coast();
+  // lacs et fleuves
+  ctx.fillStyle='#5b8996';for(const [lo,la,rx,ry] of LAKES){const [x,y]=prj(lo,la);ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,7);ctx.fill()}
+  ctx.strokeStyle='#5b8996';ctx.lineCap='round';ctx.lineJoin='round';
+  const rivPath=r=>{ctx.beginPath();ctx.moveTo(r[0][0],r[0][1]);for(let k=1;k<r.length-1;k++){const mx=(r[k][0]+r[k+1][0])/2,my=(r[k][1]+r[k+1][1])/2;ctx.quadraticCurveTo(r[k][0],r[k][1],mx,my)}ctx.lineTo(r[r.length-1][0],r[r.length-1][1])};
+  const rw=Math.max(1.4*z,.25);
+  for(const r of RIV){rivPath(r);ctx.strokeStyle='rgba(52,62,44,.55)';ctx.lineWidth=rw+Math.max(1.2*z,.12);ctx.stroke();ctx.strokeStyle='#4f8fa3';ctx.lineWidth=rw;ctx.stroke();ctx.strokeStyle='rgba(200,235,240,.55)';ctx.lineWidth=rw*.3;ctx.stroke()}
+  // relief et forêts
+  // sommets : trois densités selon le zoom, dessinés d'un seul tenant ; de très près, place aux rochers et éboulis (fineDetail)
+  if(false)for(const [x,y] of GLYPH.forest){if(!inV(x,y,10))continue;ctx.fillStyle='rgba(62,90,48,.5)';ctx.beginPath();ctx.arc(x,y,2.6,0,7);ctx.fill()}
+  // de près : fermes, hameaux et bosquets semés autour des routes
+  if(false){const cell=7,cx0=Math.floor(x0/cell),cy0=Math.floor(y0/cell),cx1=Math.ceil(x1/cell),cy1=Math.ceil(y1/cell);
+    for(let i=cx0;i<=cx1;i++)for(let j=cy0;j<=cy1;j++){const h=hash(i+31,j-17);if(h>.22)continue;const x=(i+hash(j,i+5))*cell,y=(j+hash(i+9,j))*cell;if(!landFast(x,y))continue;const t=terrainAt(x,y);if(t!=='plaine'&&t!=='collines')continue;parcel(x,y,3.4,2.2,h*11,h<.1,z)}}
+  if(s>=3){const cell=2.5,cx0=Math.floor(x0/cell),cy0=Math.floor(y0/cell),cx1=Math.ceil(x1/cell),cy1=Math.ceil(y1/cell),PP={},P=k=>PP[k]||(PP[k]=new Path2D());
+    // fermes à taille réelle, tracées par lots (un seul remplissage par style)
+    const quad=(q,cx,cy,co,si,a,b,c,d)=>{const pt=(u,v)=>[cx+u*co-v*si,cy+u*si+v*co];q.moveTo(...pt(a,b));q.lineTo(...pt(c,b));q.lineTo(...pt(c,d));q.lineTo(...pt(a,d));q.closePath()};
+    for(let i=cx0;i<=cx1;i++)for(let j=cy0;j<=cy1;j++){const h=hash(i,j);if(h>.32)continue;const x=(i+hash(j,i))*cell,y=(j+hash(i+7,j))*cell;if(!landFast(x,y))continue;
+      const t=terrFast(x,y);
+      if(t==='montagne'&&demH(x,y)>1500)continue;
+      if(t==='montagne'||t==='foret'||h<.08){const q=P(t==='montagne'?'bm':'bf');for(let k=0;k<4;k++){const r=.16+.1*hash(k,i+j),bx=x+(hash(i*3+k,j)-.5)*1.2,by=y+(hash(i,j*3+k)-.5)*1.2;q.moveTo(bx+r,by);q.arc(bx,by,r,0,7)}}
+      else if(t!=='desert'||h<.12){const a=h*9,co=Math.cos(a),si=Math.sin(a),ripe=h<.2,w=.9,hh=.6;
+        quad(P(ripe?'fr':'fg'),x,y,co,si,-w/2,-hh/2,w/2,hh/2);quad(P('fo'),x,y,co,si,-w/2,-hh/2,w/2,hh/2);
+        for(let k=1;k<5;k++){const yy=-hh/2+hh*k/5,q=P(ripe?'lr':'lg'),A=[x+(-w/2+w*.06)*co-yy*si,y+(-w/2+w*.06)*si+yy*co],B=[x+(w/2-w*.06)*co-yy*si,y+(w/2-w*.06)*si+yy*co];q.moveTo(...A);q.lineTo(...B)}
+        for(const [hx,hy,hq,wh] of [[.28,-.2,.13,h<.16],[.42,-.12,.1,true]]){quad(P('hs'),x,y,co,si,hx-hq/2+hq*.18,hy-hq/2+hq*.3,hx+hq/2+hq*.18,hy+hq/2+hq*.3);quad(P(wh?'hw':'hr'),x,y,co,si,hx-hq/2,hy-hq/2,hx+hq/2,hy+hq/2);quad(P(wh?'hw2':'hr2'),x,y,co,si,hx-hq/2,hy,hx+hq/2,hy+hq/2)}}}
+    const F=(k,c)=>{if(PP[k]){ctx.fillStyle=c;ctx.fill(PP[k])}},St=(k,c,w)=>{if(PP[k]){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.stroke(PP[k])}};
+    F('bm','rgba(80,96,60,.45)');F('bf','rgba(62,92,50,.55)');F('fr','rgba(206,188,112,.6)');F('fg','rgba(132,160,84,.55)');
+    St('lr','rgba(150,126,60,.55)',Math.max(.6*z,.9*.025));St('lg','rgba(84,112,52,.55)',Math.max(.6*z,.9*.025));St('fo','rgba(90,70,40,.35)',Math.max(.5*z,.9*.015));
+    F('hs','rgba(70,48,30,.8)');F('hw','#efe6d2');F('hr','#b9653f');F('hw2','rgba(150,135,110,.6)');F('hr2','rgba(110,50,30,.55)')}
+  if(s>=20)fineDetail(x0,y0,x1,y1,s,z);
+  drawChemins(x0,y0,x1,y1,s,z);
+  drawVillagesStatic(x0,y0,x1,y1,s,z);
+  // routes
+  drawRoads(s,z,inV);
+  drawTowns(s,z,inV,false);
+}
+function drawDynamic(w,h,s,z,inV){
+  drawTowns(s,z,inV,true);
+  {const [a0,b0]=toWorld(0,0),[a1,b1]=toWorld(w,h);drawVillagesDyn(s,z,a0,b0,a1,b1);drawBridges(s,z,a0,b0,a1,b1)}
+  // itinéraires
+  const line=(pts,color,wd,dash)=>{ctx.setLineDash(dash?dash.map(v=>v*z):[]);ctx.strokeStyle=color;ctx.lineWidth=wd*z;ctx.beginPath();pts.forEach(([x,y],k)=>k?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();ctx.setLineDash([])};
+  const routePts=(a,legs)=>{const st=dispPos(a),out=[st];let px=a.x,py=a.y;for(const L of legs){out.push(...legDrawPts(px,py,L));px=L.x;py=L.y}return out};
+  for(const a of S.armies){if(a.side!=='car'||!a.legs.length||a.ship)continue;line(routePts(a,a.legs),'rgba(52,26,82,.8)',sel&&sel.a===a?3.2:2,[7,4])}
+  if(preview&&preview.a)line(routePts(preview.a,preview.legs),'rgba(255,240,190,.95)',2.8,[8,5]);
+  // armées
+  for(const a of S.armies){const dp=dispPos(a);updTrail(a,dp);const v=a.inG&&a.side!=='car'?0:visOfArmy(a);a._p=null;a._sq=null;if(!v||a.ship)continue;if(!inV(dp[0],dp[1],60))continue;a._p=dp;}
+  const pos={};
+  for(const a of S.armies){if(!a._p)continue;const k=Math.round(a._p[0]/(18*z))+','+Math.round(a._p[1]/(18*z));const n=pos[k]=(pos[k]||0)+1;if(n>1)a._p=[a._p[0]+(n-1)*22*z,a._p[1]]}
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const id in S.intel){const it=S.intel[id],a=S.armies.find(x=>x.id==id);if(!a||S.day-it.d>60){delete S.intel[id];continue}if(visOfArmy(a)>0)continue;if(visAt(it.x,it.y)===2&&S.day-it.d>=1){delete S.intel[id];continue}if(!inV(it.x,it.y,30))continue;
+    const X=view.ox+it.x*s,Y=view.oy+it.y*s-18,k=Math.floor(S.day)-it.d;ctx.globalAlpha=.45;token(X,Y,a.side,'?',false);ctx.globalAlpha=.85;ctx.font='600 10px Georgia,serif';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(20,16,12,.8)';const L=k<1?'vue à l\'instant':'vue il y a '+k+' j';ctx.strokeText(L,X,Y+22);ctx.fillStyle='rgba(240,230,205,1)';ctx.fillText(L,X,Y+22);ctx.globalAlpha=1}
+  const CARD_S=UNIT_MIN_PX/UNIT_KM;
+  for(const a of S.armies){if(!a._p||(a.g&&!a.legs.length)||a.inG)continue;if(visOfArmy(a)===2&&s>=CARD_S)formation(a,s)}/*CAPT-VIS*/
+  // vue dézoomée : cartouche du général (médaillon, nom, grille d'unités), les plus au sud devant
+  for(const a of S.armies.filter(a=>a._p&&(!a.g||a.legs.length)&&!a.inG&&visOfArmy(a)===2&&s<CARD_S).sort((p,q)=>p._p[1]-q._p[1]))genCard(a,s);
+  for(const a of S.armies){if(!a._p)continue;const v=visOfArmy(a);if(a.inG){a._sq=null;garToken(view.ox+a._p[0]*s,view.oy+a._p[1]*s,a.side,String(a.units.length),sel&&sel.a===a,false);continue}if((!a.g||a.legs.length)&&v===2&&s<CARD_S)continue;token(view.ox+a._p[0]*s,view.oy+a._p[1]*s-(a.g?0:18),a.side,v===2?String(a.units.length):'~',sel&&sel.a===a,a)}
+  drawFleets(s,z,inV);drawPatrols(s,inV);
+  // brouillard
+  if(perfFogDirty(w,h,s)){/*PERF*/const f=fogC.getContext('2d');f.setTransform(PERF.fk,0,0,PERF.fk,0,0);f.globalCompositeOperation='source-over';f.clearRect(0,0,w,h);f.fillStyle='rgba(16,20,26,.52)';f.fillRect(0,0,w,h);
+  f.globalCompositeOperation='destination-out';
+  f.imageSmoothingEnabled=true;for(const q of SRC){const X=view.ox+q[0]*s,Y=view.oy+q[1]*s,R0=q[2]*VIS.band*s;if(X<-R0||Y<-R0||X>w+R0||Y>h+R0)continue;const v=vsOf(q),R=v.R1*s;f.drawImage(vsMask(v),X-R,Y-R,2*R,2*R)}}/*PERF*/
+  if(!PERF.skip.fog)ctx.drawImage(fogC,0,0,w,h);/*PERF*/
+  // noms des peuples, vue lointaine
+  if(s<.75){ctx.textAlign='center';ctx.textBaseline='middle';const fb=[];for(const L of FACLAB.slice().sort((a,b)=>(['car','rom'].includes(b.o)-['car','rom'].includes(a.o))||b.n-a.n)){if(L.n<2&&!['car','rom'].includes(L.o))continue;const X=view.ox+L.x*s,Y=view.oy+L.y*s;const fs=L.o==='car'||L.o==='rom'?17:12;ctx.font=`${fs}px Marcellus, Georgia, serif`;
+    const t=FAC[L.o].n.toUpperCase().split('').join(String.fromCharCode(8202)),tw=ctx.measureText(t).width,bx=[X-tw/2-10,Y-fs/2-6,X+tw/2+10,Y+fs/2+6];if(fb.some(b=>b[0]<bx[2]&&b[2]>bx[0]&&b[1]<bx[3]&&b[3]>bx[1]))continue;fb.push(bx);ctx.lineWidth=3;ctx.strokeStyle='rgba(240,230,205,.6)';ctx.strokeText(t,X,Y);ctx.fillStyle=rgb(FAC[L.o].c.map(v=>v*.55),.9);ctx.fillText(t,X,Y)}}
+}
+// point d'une courbe de route au paramètre t (0 = départ "from")
+function curveAt(e,from,t){const P=e.cv;if(!P)return null;const u=Math.max(0,Math.min(1,from===e.a?t:1-t))*(P.length-1),k=Math.min(P.length-2,Math.floor(u)),f=u-k;return [P[k][0]+(P[k+1][0]-P[k][0])*f,P[k][1]+(P[k+1][1]-P[k][1])*f]}
+// points à dessiner pour un tronçon d'itinéraire, depuis (px,py)
+function legDrawPts(px,py,L){return [[L.x,L.y]];const e=L.e!=null?EDGES[L.e]:null;if(!e||!e.cv)return [[L.x,L.y]];const from=e.a===L.n?e.b:e.a,F=N[from],tot=Math.hypot(L.x-F.x,L.y-F.y)||1,t0=1-Math.min(1,Math.hypot(L.x-px,L.y-py)/tot);
+  const out=[],P=e.cv,m=P.length-1;for(let q=1;q<=m;q++){const t=q/m;if(t>t0)out.push(curveAt(e,from,t))}return out.length?out:[[L.x,L.y]]}
+// position affichée d'une armée : suit la courbe de la route qu'elle parcourt
+function dispPos(a){return [a.x,a.y];const L=a.legs[0];if(!L||L.e==null)return [a.x,a.y];const e=EDGES[L.e];if(!e||!e.cv)return [a.x,a.y];const from=e.a===L.n?e.b:e.a,F=N[from],tot=Math.hypot(L.x-F.x,L.y-F.y)||1;return curveAt(e,from,1-Math.min(1,Math.hypot(L.x-a.x,L.y-a.y)/tot))}
+function drawRoads(s,z,inV){
+  ctx.lineCap='round';ctx.lineJoin='round';const se=season();
+  const stroke=e=>{ctx.beginPath();if(e.cv){e.cv.forEach(([x,y],q)=>q?ctx.lineTo(x,y):ctx.moveTo(x,y))}else{ctx.moveTo(N[e.a].x,N[e.a].y);ctx.lineTo(N[e.b].x,N[e.b].y)}ctx.stroke()};
+  const shut=[];
+  for(const e of EDGES){const A=N[e.a],B=N[e.b];if(!inV(A.x,A.y,300)&&!inV(B.x,B.y,300))continue;if(!perfEdgeIn(e))continue;/*PERF*/
+    if(e.type==='mer')continue;
+    if(e.type==='detroit'){if(s<.35)continue;ctx.setLineDash([3*z,5*z]);ctx.strokeStyle='rgba(225,240,240,.55)';ctx.lineWidth=1.2*z;ctx.beginPath();if(e.sv)e.sv.forEach(([x,y],q)=>q?ctx.lineTo(x,y):ctx.moveTo(x,y));else{ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y)}ctx.stroke();continue}
+    if(edgeSnow(e,se))shut.push(e);
+    if(e.type==='via'){ctx.setLineDash([]);ctx.strokeStyle='rgba(70,50,30,.85)';ctx.lineWidth=Math.max(3.4*z,.05);stroke(e);ctx.strokeStyle='rgba(236,222,186,.95)';ctx.lineWidth=Math.max(1.7*z,.034);stroke(e);if(s>FINE_S){ctx.strokeStyle='rgba(150,140,124,.7)';ctx.lineWidth=.026;ctx.setLineDash([.009,.004]);stroke(e);ctx.setLineDash([])}}
+    else if(e.type==='route'){ctx.setLineDash([]);ctx.strokeStyle='rgba(84,62,36,.45)';ctx.lineWidth=Math.max(3*z,.045);stroke(e);ctx.strokeStyle='rgba(158,118,72,.95)';ctx.lineWidth=Math.max(1.9*z,.03);stroke(e);if(s>FINE_S){ctx.strokeStyle='rgba(110,80,48,.5)';ctx.lineWidth=.005;ctx.setLineDash([.03,.02]);stroke(e);ctx.setLineDash([])}}
+    else if(e.type==='col'){ctx.setLineDash([5*z,3*z]);ctx.strokeStyle='rgba(140,60,40,.85)';ctx.lineWidth=Math.max(1.8*z,.02);stroke(e)}
+    else{ctx.setLineDash([]);ctx.strokeStyle='rgba(74,52,28,.6)';ctx.lineWidth=Math.max(2.8*z,.036);stroke(e);ctx.strokeStyle='rgba(204,170,118,1)';ctx.lineWidth=Math.max(1.4*z,.022);stroke(e)}}
+  // routes et cols fermés par la neige : pointillés blancs et croix au point le plus haut
+  ctx.setLineDash([2*z,3*z]);ctx.strokeStyle='rgba(245,250,255,.95)';ctx.lineWidth=Math.max(1.4*z,.02);for(const e of shut)stroke(e);ctx.setLineDash([]);
+  for(const e of shut){let bx=0,by=0,bh=-1;for(let q=0;q<e.cv.length;q+=Math.max(1,e.cv.length>>4)){const h=demH(e.cv[q][0],e.cv[q][1]);if(h>bh){bh=h;bx=e.cv[q][0];by=e.cv[q][1]}}
+    if(e.type==='col'){const c=N[e.a].col?N[e.a]:N[e.b];bx=c.x;by=c.y}const r=Math.max(5*z,.15);ctx.strokeStyle='rgba(40,60,90,.9)';ctx.lineWidth=Math.max(2.4*z,.03);ctx.beginPath();ctx.moveTo(bx-r,by-r);ctx.lineTo(bx+r,by+r);ctx.moveTo(bx+r,by-r);ctx.lineTo(bx-r,by+r);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.95)';ctx.lineWidth=Math.max(1.2*z,.015);ctx.stroke()}
+}
+// ---- détails très rapprochés (au-delà de FINE_S px/km) : champs, oliveraies, vignes, arbres, fermes, rochers, roseaux ----
+const FINE_S=20;
+function tree(x,y,r,dark){ctx.fillStyle='rgba(30,40,20,.3)';ctx.beginPath();ctx.ellipse(x+r*.35,y+r*.45,r,r*.7,0,0,7);ctx.fill();
+  ctx.fillStyle=dark?'#3f5f2e':'#5d7d3a';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.fillStyle=dark?'rgba(110,140,70,.55)':'rgba(150,175,90,.55)';ctx.beginPath();ctx.arc(x-r*.3,y-r*.3,r*.45,0,7);ctx.fill()}
+let CROP=null;
+function cropPatterns(){if(CROP)return CROP;CROP={};
+  const mk=(k,n,px,draw)=>{const cv2=document.createElement('canvas');cv2.width=cv2.height=px;const g=cv2.getContext('2d');draw(g,px);CROP[k]={p:ctx.createPattern(cv2,'repeat'),n,px}};
+  const furrow=(base,line)=>(g,px)=>{g.fillStyle=base;g.fillRect(0,0,px,px);g.fillStyle=line;g.fillRect(0,px*.4,px,px*.22)};
+  mk('wheat',8,16,furrow('rgba(205,180,108,.72)','rgba(150,120,60,.32)'));mk('wheat2',8,16,furrow('rgba(194,170,98,.72)','rgba(150,120,60,.32)'));
+  mk('green',8,16,furrow('rgba(134,164,86,.72)','rgba(70,100,40,.3)'));mk('fallow',8,16,(g,px)=>{g.fillStyle='rgba(159,176,108,.72)';g.fillRect(0,0,px,px)});
+  mk('vine',10,16,(g,px)=>{g.fillStyle='rgba(169,154,106,.72)';g.fillRect(0,0,px,px);g.fillStyle='rgba(95,110,54,.8)';g.fillRect(px*.4,0,px*.24,px*.6)});
+  mk('olive',5,32,(g,px)=>{g.fillStyle='rgba(180,174,120,.72)';g.fillRect(0,0,px,px);g.fillStyle='rgba(40,50,25,.2)';g.beginPath();g.arc(px*.56,px*.58,px*.3,0,7);g.fill();g.fillStyle='rgba(111,125,74,.9)';g.beginPath();g.arc(px*.5,px*.5,px*.3,0,7);g.fill()});
+  return CROP}
+function fineDetail(x0,y0,x1,y1,s,z){
+  const c=.35,i0=Math.floor(x0/c)-1,j0=Math.floor(y0/c)-1,i1=Math.ceil(x1/c)+1,j1=Math.ceil(y1/c)+1,TM={};
+  const L={};const P=k=>L[k]||(L[k]=new Path2D());
+  const terr=(x,y)=>{const k=Math.floor(x/1.5)+','+Math.floor(y/1.5);return terrFast(x,y)};
+  const tree=(x,y,r,d)=>{P('tsh').moveTo(x+r*1.35,y+r*.45);P('tsh').ellipse(x+r*.35,y+r*.45,r,r*.7,0,0,7);const q=P(d?'tdk':'tlt');q.moveTo(x+r,y);q.arc(x,y,r,0,7);const g=P(d?'tdkh':'tlth');g.moveTo(x-r*.3+r*.45,y-r*.3);g.arc(x-r*.3,y-r*.3,r*.45,0,7)};
+  const dot=(k,x,y,r)=>{const q=P(k);q.moveTo(x+r,y);q.arc(x,y,r,0,7)};
+  const rows=(k,x,y,w,n,vert)=>{const q=P(k);for(let m=1;m<n;m++){const t=-w/2+w*m/n;if(vert){q.moveTo(x+t,y-w/2+w*.05);q.lineTo(x+t,y+w/2-w*.05)}else{q.moveTo(x-w/2,y+t);q.lineTo(x+w/2,y+t)}}};
+  const farms=[],trees=[];
+  for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){
+    const x=(i+.5)*c,y=(j+.5)*c,h=hash(i*7+3,j*13+1);if(!landFast(x,y))continue;const t=terr(x,y);
+    if(t==='foret'){const d=.55+vnoise(x*.3,y*.3)*.45;for(let k=0;k<4;k++)if(hash(i+k*31,j-k*17)<d)trees.push([x+(hash(i,j+k*5)-.5)*c,y+(hash(i+k*3,j)-.5)*c,c*(.18+hash(k,i*j)*.1),hash(k+i,j)<.6]);continue}
+    if(t==='montagne'){
+      // de très près : pentes rocheuses tachetées, crêtes ombrées, rochers, éboulis et buissons, sans grille visible
+      const jx=x+(hash(i*5+1,j*3)-.5)*c*.9,jy=y+(hash(i*2,j*7+5)-.5)*c*.9,h2=hash(i*11+4,j*9+2);
+      if(h<.38){}else if(false){const r=c*(.6+h2*.9),q=P('ridge'),sh=P('mshade'),hi=P('mhi');
+        q.moveTo(jx-r,jy+r*.35);q.lineTo(jx-r*.25,jy-r*.3);q.lineTo(jx+r*.1,jy-r*.12);q.lineTo(jx+r*.85,jy+r*.4);
+        sh.moveTo(jx-r*.25,jy-r*.3);sh.lineTo(jx+r*.1,jy-r*.12);sh.lineTo(jx+r*.85,jy+r*.4);sh.lineTo(jx+r*.05,jy+r*.42);sh.closePath();
+        hi.moveTo(jx-r,jy+r*.35);hi.lineTo(jx-r*.25,jy-r*.3);hi.lineTo(jx-r*.2,jy+r*.38);hi.closePath()}
+      else if(h<.62){const cx=jx,r=c*(.08+h2*.2),a=h2*20,co=Math.cos(a),si=Math.sin(a),pt=(u,v)=>[cx+u*co-v*si,jy+u*si+v*co];
+        const A=pt(-r,0),B=pt(-r*.3,-r*.8),C=pt(r*.7,-r*.5),D=pt(r,r*.2),E=pt(0,r*.6),q=P('rock'),q2=P('rocksh');q.moveTo(...A);q.lineTo(...B);q.lineTo(...C);q.lineTo(...D);q.lineTo(...E);q.closePath();q2.moveTo(...C);q2.lineTo(...D);q2.lineTo(...E);q2.closePath()}
+      else if(h<.78)trees.push([jx,jy,c*(.08+h2*.08),true]);
+      else for(let k=0;k<3;k++)dot('scree',jx+(hash(i+k,j*3)-.5)*c*.6,jy+(hash(i*3,j+k)-.5)*c*.6,c*.025);
+      continue}
+    if(t==='marais'){const q=P('reed');for(let k=0;k<6;k++){const rx=x+(hash(i+k,j)-.5)*c,ry=y+(hash(i,j+k)-.5)*c;q.moveTo(rx,ry);q.lineTo(rx+(hash(k,i)-.5)*c*.1,ry-c*.15)}
+      if(h<.25){const q2=P('pond');q2.moveTo(x+c*.35,y);q2.ellipse(x,y,c*.35,c*.2,0,0,7)}continue}
+    if(t==='desert'){if(h<.08)dot('stone',x,y,c*.06);else if(h<.16){const q=P('dune');q.moveTo(x+Math.cos(3.6)*c*.4,y+c*.3+Math.sin(3.6)*c*.4);q.arc(x,y+c*.3,c*.4,3.6,5.8)}continue}
+    const lat=LAT1-y/KY,cult=vnoise(x*.09,y*.09)+vnoise(x*.4,y*.4)*.25;
+    if(false&&cult>.6){const big=hash((i>>1)+77,(j>>1)-5)<.45,kind=big?hash((i>>1)*3+1,(j>>1)*5+2):hash(i*3+1,j*5+2),w=big?c*1.002:c*(.8+.14*hash(j,i+3));
+      const k=kind<.15?'wheat':kind<.3?'wheat2':kind<.5?'green':kind<.68&&lat<43.5?'olive':kind<.8?'vine':'fallow';
+      P(k).rect(x-w/2,y-w/2,w,w);
+      if(!big)P('edge').rect(x-w/2,y-w/2,w,w);
+      if(h<.035)farms.push([x,y,w]);
+      if(h>.9)trees.push([x+c*.45,y+(hash(j,i)-.5)*c,c*.1,false])}
+    else{if(h<.12)trees.push([x+(hash(j,i)-.5)*c,y+(hash(i,j+9)-.5)*c,c*(.1+h*.6),h<.06]);else if(h<.2)dot('bush',x,y,c*.05)}
+  }
+  if(COLLECT)for(const q of trees)COLLECT.push(q);else if(!NOTERR)for(const [x,y,r,d] of trees)tree(x,y,r,d);
+  const F=(k,col)=>{if(L[k]){ctx.fillStyle=col;ctx.fill(L[k])}},St=(k,col,wd,dash)=>{if(L[k]){ctx.strokeStyle=col;ctx.lineWidth=wd;if(dash)ctx.setLineDash(dash);ctx.stroke(L[k]);if(dash)ctx.setLineDash([])}};
+  ctx.lineCap='butt';const lw=Math.max(z*.8,c*.012);
+  // sillons, rangs de vigne et d'oliviers : motifs répétés (un seul remplissage par culture)
+  const CP=cropPatterns();for(const k of ['wheat','wheat2','green','olive','vine','fallow']){if(!L[k])continue;const pt=CP[k],per=c/pt.n;pt.p.setTransform(new DOMMatrix().scale(per/pt.px));ctx.fillStyle=pt.p;ctx.fill(L[k])}St('edge','rgba(90,72,44,.3)',Math.max(z,c*.01));
+  F('mtint','rgba(124,104,78,.26)');F('mshade','rgba(78,60,42,.3)');F('mhi','rgba(235,225,200,.2)');F('scree','rgba(110,100,86,.6)');St('ridge','rgba(84,64,44,.6)',Math.max(z*1.2,c*.035));F('rock','rgba(120,112,100,.75)');F('rocksh','rgba(70,62,54,.6)');St('reed','rgba(70,90,50,.7)',Math.max(z,.006));F('pond','rgba(80,130,140,.55)');
+  F('stone','rgba(150,120,80,.6)');St('dune','rgba(190,160,110,.6)',Math.max(z,.008));F('bush','rgba(90,110,60,.45)');
+  for(const [x,y,w] of farms){ctx.fillStyle='rgba(205,190,150,1)';ctx.fillRect(x-w*.35,y-w*.35,w*.5,w*.42);house(x-w*.3,y-w*.3,w*.16,false);house(x-w*.12,y-w*.3,w*.16,false);house(x-w*.3,y-w*.12,w*.14,true)}
+  F('tsh','rgba(30,40,20,.3)');F('tdk','#3f5f2e');F('tlt','#5d7d3a');F('tdkh','rgba(110,140,70,.55)');F('tlth','rgba(150,175,90,.55)');
+}
+// parcelle cultivée hachurée
+function parcel(x,y,w,h,rot,ripe,z){ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.fillStyle=ripe?'rgba(206,188,112,.6)':'rgba(132,160,84,.55)';ctx.fillRect(-w/2,-h/2,w,h);
+  ctx.strokeStyle=ripe?'rgba(150,126,60,.55)':'rgba(84,112,52,.55)';ctx.lineWidth=Math.max(.6*z,w*.025);ctx.beginPath();for(let k=1;k<5;k++){const yy=-h/2+h*k/5;ctx.moveTo(-w/2+w*.06,yy);ctx.lineTo(w/2-w*.06,yy)}ctx.stroke();
+  ctx.strokeStyle='rgba(90,70,40,.35)';ctx.lineWidth=Math.max(.5*z,w*.015);ctx.strokeRect(-w/2,-h/2,w,h);ctx.restore()}
+// petite maison vue de haut, avec son mur ombré (relief)
+function house(x,y,q,white){ctx.fillStyle='rgba(70,48,30,.8)';ctx.fillRect(x-q/2+q*.18,y-q/2+q*.3,q,q);ctx.fillStyle=white?'#efe6d2':'#b9653f';ctx.fillRect(x-q/2,y-q/2,q,q);ctx.fillStyle=white?'rgba(150,135,110,.6)':'rgba(110,50,30,.55)';ctx.fillRect(x-q/2,y,q,q/2);if(q*view.s>11){ctx.fillStyle=white?'rgba(190,176,150,1)':'rgba(120,70,46,1)';ctx.fillRect(x-q*.18,y-q*.18,q*.36,q*.36);ctx.fillStyle='rgba(90,130,70,.8)';ctx.fillRect(x-q*.1,y-q*.1,q*.2,q*.2)}}

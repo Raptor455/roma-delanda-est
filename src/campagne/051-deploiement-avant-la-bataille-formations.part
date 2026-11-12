@@ -1,0 +1,67 @@
+/* ================= DÉPLOIEMENT AVANT LA BATAILLE : formations, réserve, terrain ================= */
+// b.fm = {car:'cannes', rom:'prof', …} : la formation de chaque camp. Elle pèse dans odds (donc aussi en résolution
+// automatique) et dans les multiplicateurs envoyés à la bataille 3D. L'IA choisit la sienne selon ses troupes.
+const FORM={
+  ligne:{n:'Ligne de bataille',d:"Infanterie au centre, cavalerie aux deux bouts. Sûre, sans surprise."},
+  cannes:{n:'Centre creux',d:"Le croissant de Cannes : le centre recule exprès, l'infanterie lourde des ailes et la cavalerie referment la nasse. +16 % si votre cavalerie vaut au moins celle de l'ennemi (+7 % contre une réserve), sinon le centre cède (−10 %)."},
+  ailes:{n:'Cavalerie aux ailes',d:"Toute la cavalerie massée sur les ailes pour balayer celle d'en face : +8 % si elle fait au moins 20 % de l'armée."},
+  prof:{n:'Triple ligne',d:"Hastats, princes, triaires : trois lignes et une réserve. +5 %, +10 % contre un centre creux (la réserve fait face à l'enveloppement)."},
+  tir:{n:'Rideau de tirailleurs',d:"Frondeurs et vélites devant la ligne : +5 % s'ils sont nombreux (15 %), +12 % de plus contre des éléphants."}};
+function compOf(ids){let p=0,cav=0,sk=0,el=0;for(const id of ids){const a=S.armies.find(x=>x.id===id);if(!a)continue;for(const u of a.units){const k=UT[u.t].k,v=power([u]);p+=v;if(isCavK(k))cav+=v;else if(k==='skirm')sk+=v;else if(k==='eleph')el+=v}}
+  return p>0?{p,cav:cav/p,sk:sk/p,el:el/p}:{p:0,cav:0,sk:0,el:0}}
+const sideOfIds=ids=>{const a=S.armies.find(x=>x.id===ids[0]);return a&&a.side};
+function aiFm(me,them,side){const c=compOf(me),e=compOf(them),g=genOf(S.armies.find(x=>x.id===me[0]));
+  if(e.el>.03&&c.sk>.12)return 'tir';
+  if(c.cav>=.15&&c.cav*c.p>=e.cav*e.p*1.1&&(hasTr(g,'tact')||hasTr(g,'cav')))return 'cannes';
+  if(side==='rom')return 'prof';if(c.cav>=.2)return 'ailes';return c.sk>.15?'tir':'ligne'}
+function fmOf(b,role){const ids=role==='att'?b.att:b.def,side=sideOfIds(ids);b.fm=b.fm||{};if(!side)return 'ligne';
+  if(!b.fm[side])b.fm[side]=aiFm(ids,role==='att'?b.def:b.att,side);return b.fm[side]}
+function fmMul(b,role){const me=role==='att'?b.att:b.def,them=role==='att'?b.def:b.att,f=fmOf(b,role),fe=fmOf(b,role==='att'?'def':'att'),c=compOf(me),e=compOf(them);
+  if(f==='cannes')return c.cav>=.12&&c.cav*c.p>=e.cav*e.p?(fe==='prof'?1.07:1.16):.9;
+  if(f==='ailes')return c.cav>=.2?1.08:1;
+  if(f==='prof')return fe==='cannes'?1.1:1.05;
+  if(f==='tir')return (c.sk>=.15?1.05:1)*(e.el>.03?1.12:1);
+  return 1}
+// aperçu du terrain : ±12 km autour du champ de bataille, et les deux armées dans leur formation
+const TCOL={plaine:'#7d8a52',foret:'#3f5a32',montagne:'#8a7a62',desert:'#c8b27a',marais:'#5d7a6a'};
+function drawFieldPreview(cvs,b){const c2=cvs.getContext('2d'),W=cvs.width,H=cvs.height,R=12,nx=48,ny=27;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x=b.x+(i/(nx-1)-.5)*2*R,y=b.y+(j/(ny-1)-.5)*2*R*H/W;let col='#2b4d5d';
+    try{if(landFast(x,y))col=TCOL[terrainAt(x,y)]||'#7d8a52'}catch(e){}c2.fillStyle=col;c2.fillRect(Math.floor(i*W/nx),Math.floor(j*H/ny),Math.ceil(W/nx)+1,Math.ceil(H/ny)+1)}
+  // relief et bois : un peu de texture
+  for(let k=0;k<160;k++){const x=hash(k,7)*W,y=hash(7,k)*H,wx=b.x+(x/W-.5)*2*R,wy=b.y+(y/H-.5)*2*R*H/W;let t='plaine';try{t=landFast(wx,wy)?terrainAt(wx,wy):'eau'}catch(e){}
+    if(t==='foret'){c2.fillStyle='rgba(20,40,18,.6)';c2.beginPath();c2.arc(x,y,3+hash(k,3)*3,0,7);c2.fill()}else if(t==='montagne'){c2.strokeStyle='rgba(50,40,30,.5)';c2.beginPath();c2.moveTo(x-5,y+3);c2.lineTo(x,y-4);c2.lineTo(x+5,y+3);c2.stroke()}}
+  // villes proches
+  for(const n of N){if(n.col)continue;const X=(n.x-b.x)/(2*R)*W+W/2,Y=(n.y-b.y)/(2*R*H/W)*H+H/2;if(X<0||X>W||Y<0||Y>H)continue;c2.fillStyle='#e9dcc0';c2.fillRect(X-4,Y-4,8,8);c2.fillStyle='#1a120a';c2.font='10px Georgia,serif';c2.fillText(n.n,X+6,Y+3)}
+  const mine=b.attMine!=null?b.attMine:(sideOfIds(b.att)==='car');const pIds=mine?b.att:b.def,eIds=mine?b.def:b.att;
+  const block=(x,y,w,h,col,k)=>{c2.fillStyle=col;c2.fillRect(x-w/2,y-h/2,w,h);c2.strokeStyle='rgba(20,12,6,.8)';c2.lineWidth=1;c2.strokeRect(x-w/2,y-h/2,w,h);
+    if(k==='cav'){c2.beginPath();c2.moveTo(x-w/2,y+h/2);c2.lineTo(x+w/2,y-h/2);c2.stroke()}else if(k==='inf'){c2.beginPath();c2.moveTo(x-w/2,y-h/2);c2.lineTo(x+w/2,y+h/2);c2.moveTo(x+w/2,y-h/2);c2.lineTo(x-w/2,y+h/2);c2.stroke()}};
+  const army=(ids,f,cy,dir,col)=>{const c=compOf(ids),n=Math.min(20,Math.max(4,ids.reduce((t,id)=>{const a=S.armies.find(x=>x.id===id);return t+(a?a.units.length:0)},0))),nc=Math.max(c.cav>0?2:0,Math.round(n*c.cav)),ns=Math.round(n*c.sk),ni=Math.max(1,n-nc-ns);
+    const bw=Math.min(16,W*.5/ni),bh=8,cx=W/2;
+    // infanterie
+    for(let k=0;k<ni;k++){let x=cx+(k-(ni-1)/2)*bw*1.05,y=cy,row=0;
+      if(f==='prof'){row=k%3;x=cx+(Math.floor(k/3)-(Math.ceil(ni/3)-1)/2)*bw*1.1+(row===1?bw*.5:0);y=cy+dir*row*bh*1.6}
+      if(f==='cannes'){const t=(k-(ni-1)/2)/Math.max(1,(ni-1)/2);y=cy-dir*(1-t*t)*bh*1.8}
+      block(x,y,bw*.95,bh,col,'inf')}
+    // tirailleurs
+    for(let k=0;k<ns;k++){const x=cx+(k-(ns-1)/2)*bw*1.3,y=cy-dir*(f==='tir'?bh*2.4:-bh*1.8);block(x,y,bw*.7,bh*.6,col,'sk')}
+    // cavalerie
+    const half=Math.ceil(nc/2),wing=W*.5/2+bw*Math.max(ni,4)*.35;
+    for(let k=0;k<nc;k++){const side=k<half?-1:1,j=k<half?k:k-half,adv=f==='ailes'?bh*2.2:f==='cannes'?bh*1.4:0;block(cx+side*(Math.min(W/2-14,ni*bw*.55+14+j*bw*.9)),cy-dir*adv,bw*.85,bh*.9,col,'cav')}};
+  army(pIds,fmOf(b,mine?'att':'def'),H*.74,1,'#8a63c9');army(eIds,fmOf(b,mine?'def':'att'),H*.24,-1,'#c9544a');
+  c2.fillStyle='rgba(20,12,6,.65)';c2.fillRect(0,H-16,W,16);c2.fillStyle='#f3e6c8';c2.font='11px Georgia,serif';c2.fillText(`${TERR[terrainAt(b.x,b.y)].n} · 24 km de côté`,6,H-4)}
+const oddsWord=m=>m>.75?'très favorables':m>.55?'favorables':m>.45?'incertaines':m>.25?'défavorables':'très mauvaises';
+function deployUI(){const b=S.cur;if(!b)return;const card=$('mcard'),od=card&&card.querySelector('p.odds');if(!od||card.querySelector('#depl'))return;
+  const att=S.armies.find(x=>x.id===b.att[0]),attMine=att&&att.side==='car',role=attMine?'att':'def',side='car';
+  if(!S.armies.some(x=>x.side==='car'&&(b.att.includes(x.id)||b.def.includes(x.id))))return;
+  fmOf(b,'att');fmOf(b,'def');const sug=aiFm(attMine?b.att:b.def,attMine?b.def:b.att,'car'),eF=b.fm[sideOfIds(attMine?b.def:b.att)];
+  od.insertAdjacentHTML('beforebegin',`<div id="depl" style="margin:8px 0"><h3 style="margin:4px 0">Déploiement</h3>
+    <canvas id="deplC" width="520" height="200" style="width:100%;max-width:520px;border:1px solid rgba(201,164,106,.5);border-radius:3px;display:block"></canvas>
+    <p class="sub" style="margin:4px 0">L'ennemi se range en <b>${FORM[eF].n.toLowerCase()}</b>. Votre formation (conseillée : ${FORM[sug].n.toLowerCase()}) :</p>
+    <div class="row" style="flex-wrap:wrap">${Object.entries(FORM).map(([k,F])=>`<button type="button" data-fm="${k}" class="${b.fm.car===k?'on':''}" title="${F.d}">${F.n}</button>`).join('')}</div></div>`);
+  const paint=()=>{try{drawFieldPreview($('deplC'),b)}catch(e){console.warn(e)}const p=odds(b),m=attMine?p:1-p;const bb=od.querySelector('b');if(bb)bb.textContent=oddsWord(m)};paint();
+  card.querySelectorAll('[data-fm]').forEach(x=>x.onclick=()=>{b.fm.car=x.dataset.fm;card.querySelectorAll('[data-fm]').forEach(y=>y.classList.toggle('on',y===x));paint()})}
+const _openBattle9=openBattle;
+openBattle=function(){const r=_openBattle9.apply(this,arguments);try{deployUI()}catch(e){console.warn(e)}return r};
+function fmMods(b,role,u){const f=fmOf(b,role),k=UT[u.t].k;let a=1,d=1;
+  if(f==='cannes'){if(isCavK(k))a*=1.15;else if(k==='inf')d*=.97}else if(f==='ailes'){if(isCavK(k))a*=1.1}else if(f==='prof')d*=1.08;else if(f==='tir'&&k==='skirm')a*=1.15;return {a,d}}
+

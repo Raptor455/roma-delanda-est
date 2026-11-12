@@ -1,0 +1,63 @@
+/* ================= RETOUR DE LA BATAILLE 3D ================= */
+/* ---- fusion carte / bataille : la carte plonge vers le lieu, la 3D (sol = image de la carte) prend le relais sans écran intermédiaire ---- */
+let DIVE=null;
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+// image de la carte autour du champ de bataille (sans les couleurs politiques), pour le sol 3D
+function battleGround(t){const f=t.f,P=[[-1300,-1300],[4500,-1300],[4500,3300],[-1300,3300]].map(([sx,sy])=>[f.cx+((sx-1700)*f.ex[0]+(sy-1000)*f.ey[0])/1000,f.cy+((sx-1700)*f.ex[1]+(sy-1000)*f.ey[1])/1000]);
+  const x0=Math.min(...P.map(p=>p[0])),y0=Math.min(...P.map(p=>p[1])),sz=Math.max(Math.max(...P.map(p=>p[0]))-x0,Math.max(...P.map(p=>p[1]))-y0);
+  const px=Math.min(4096,Math.max(1024,(window.__groundPx||4096))),c=document.createElement('canvas');c.width=c.height=px;
+  const kc=ctx,kv=view,kd=dpr;ctx=c.getContext('2d');view={s:px/sz,ox:-x0*px/sz,oy:-y0*px/sz};dpr=1;NOTERR=true;
+  try{drawStatic(px,px)}finally{ctx=kc;view=kv;dpr=kd;NOTERR=false}
+  return {c,box:[x0,y0,sz]}}
+function dive(payload){
+  const t=payload.t,f=t.f,r=cv.getBoundingClientRect(),W=innerWidth,H=innerHeight;
+  const sT=Math.max(300,H*1000/(3600*2*Math.tan(21*Math.PI/180)));   // échelle où la vue 3D d'en haut couvre le même sol
+  const s0=view.s,[c0x,c0y]=toWorld(W/2-r.left,H/2-r.top);
+  payload.t.intro={s:sT,w:W,h:H};
+  const fr=document.createElement('iframe');fr.id='battle3d';fr.title='Bataille';fr.style.opacity='0';fr.style.pointerEvents='none';
+  fr.src=BATTLE_URL+'#c='+encodeURIComponent(JSON.stringify(payload));document.body.appendChild(fr);
+  DIVE={fr,t,ground:null,zoomed:false,ready:false,s0,c0:[c0x,c0y],sT,start:performance.now()};
+  const D=DIVE,cw=cv.clientWidth,ch=cv.clientHeight,vAt=k=>{const e=ease(k),s=Math.exp(Math.log(s0)+(Math.log(sT)-Math.log(s0))*e),x=c0x+(f.cx-c0x)*e,y=c0y+(f.cy-c0y)*e;return {s,ox:W/2-r.left-x*s,oy:H/2-r.top-y*s}};
+  // avant de plonger : tuiles de la carte le long du trajet (un niveau sur deux, le dernier en entier) et image du sol pour la 3D
+  const todo=[],seen=new Set(),Lt=lvlOf(sT),keep=view;
+  for(let k=0;k<=1.001;k+=.05){const v=vAt(Math.min(1,k));view=v;const L=lvlOf(v.s);if((Lt-L)%2)continue;const [i0,i1,j0,j1]=tileRange(L,cw,ch,0);view=keep;
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const key=L+'/'+i+'/'+j;if(seen.has(key))continue;seen.add(key);if(!tileOK(TILES.get(key)))todo.push([L,i,j])}}
+  view=keep;todo.push(null);window.__diveTiles=todo.length;
+  (function prep(){if(DIVE!==D)return;const t0=performance.now();while(todo.length&&performance.now()-t0<14){const q=todo.shift();if(q)renderTileAt(...q);else{D.ground=battleGround(t);sendGround()}}
+    if(todo.length)requestAnimationFrame(prep);else zoom()})();
+  // zoom de la carte : 1,6 s, centré sur la bataille, au centre de la fenêtre
+  function zoom(){const T0=performance.now(),dur=1600;
+  (function step(now){if(!DIVE)return;const k=ease(Math.min(1,(now-T0)/dur)),ls=Math.log(s0)+(Math.log(sT)-Math.log(s0))*k,s=Math.exp(ls),
+      x=c0x+(f.cx-c0x)*k,y=c0y+(f.cy-c0y)*k;view.s=s;view.ox=W/2-r.left-x*s;view.oy=H/2-r.top-y*s;ZT=null;
+    if(k<1)requestAnimationFrame(step);else{DIVE.zoomed=true;reveal()}})(T0)}
+}
+function sendGround(){const D=DIVE;if(!D||!D.ground||!D.ready||D.sent)return;D.sent=true;const g=D.ground;
+  createImageBitmap(g.c).then(bmp=>D.fr.contentWindow.postMessage({bellum:'sol',bmp,box:g.box},'*',[bmp])).catch(()=>D.fr.contentWindow.postMessage({bellum:'sol',url:g.c.toDataURL('image/jpeg',.9),box:g.box},'*'))}
+function reveal(){const D=DIVE;if(!D||!D.zoomed||!D.shown)return;D.fr.style.transition='opacity .7s';D.fr.style.opacity='1';D.fr.style.pointerEvents='auto';setTimeout(()=>{if(DIVE===D)D.fr.contentWindow.postMessage({bellum:'go'},'*')},720)}
+window.addEventListener('message',ev=>{const d=ev.data,D=DIVE;if(!d||!D||ev.source!==D.fr.contentWindow)return;
+  if(d.bellum==='pret'){D.ready=true;sendGround()}
+  else if(d.bellum==='vue'){D.shown=true;reveal()}});
+window.addEventListener('message',ev=>{const d=ev.data;if(!d||d.bellum!=='retour'||!S.cur)return;const f=$('battle3d');if(!f||ev.source!==f.contentWindow)return;
+  const b=S.cur,attMine=b.attMine,P=d.res.p,E=d.res.e;S.cur=null;
+  // la caméra 3D est remontée à la verticale : on refait apparaître la carte, puis on dézoome doucement
+  f.style.transition='opacity .6s';f.style.opacity='0';f.style.pointerEvents='none';const D=DIVE;DIVE=null;setTimeout(()=>f.remove(),650);
+  if(D){const T0=performance.now(),W=innerWidth,H=innerHeight,r=cv.getBoundingClientRect(),s1=view.s,s2=Math.max(minS(),Math.min(MAXS,D.s0*1.4)),f0=D.t.f;
+    (function step(now){const k=ease(Math.min(1,(now-T0-500)/1400));if(k<=0){requestAnimationFrame(step);return}const s=Math.exp(Math.log(s1)+(Math.log(s2)-Math.log(s1))*k);view.s=s;view.ox=W/2-r.left-f0.cx*s;view.oy=H/2-r.top-f0.cy*s;if(k<1)requestAnimationFrame(step);else clampView()})(T0)}
+  applyResult(b,{attWin:attMine?d.res.win:!d.res.win,A:attMine?P:E,D:attMine?E:P});log(d.res.win?'La bataille est gagnée sur le terrain.':'La bataille est perdue.');refreshAfterBattle()});
+function readReturn(){
+  if(!location.hash.startsWith('#r='))return false;
+  let data=null;try{data=JSON.parse(decodeURIComponent(location.hash.slice(3)))}catch(e){}
+  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){location.hash=''}
+  if(!data||!data.st||!data.st.cur||!data.st.own)return false;
+  S=data.st;const b=S.cur,attMine=b.attMine,P=data.res.p,E=data.res.e;
+  const res={attWin:attMine?data.res.win:!data.res.win,A:attMine?P:E,D:attMine?E:P};
+  S.cur=null;computeVis();applyResult(b,res);
+  log(data.res.win?'La bataille est gagnée sur le terrain.':'La bataille est perdue.');
+  return true;
+}
+function afterLoad(){
+  sel=null;preview=null;territoryDirty=true;computeVis();fit();
+  const h=S.armies.find(a=>a.side==='car')||S.armies[0];view.s=Math.max(minS(),Math.min(1,cv.clientHeight/MH*1.6));centerOn(h.x,h.y);
+  renderAll();if(S.cur)openBattle();else if(S.over)endGame();
+}
+

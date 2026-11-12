@@ -1,0 +1,79 @@
+/* ================= LIEUX =================
+   id, nom, longitude, latitude, maître, taille (0 village, 1 bourg, 2 ville, 3 capitale), options (p = port, c = col) */
+const PL=[
+ // Afrique
+ ['carthago','Carthage',10.32,36.85,'car',3,'p'],['utica','Utique',10.06,37.06,'car',2,'p'],['hippodiarr','Hippo Diarrhytus',9.87,37.27,'car',1,'p'],
+ ['thugga','Thugga',9.22,36.42,'car',1],['sicca','Sicca',8.71,36.18,'car',1],['zama','Zama',9.27,35.97,'car',1],
+ ['hadrumetum','Hadrumète',10.64,35.83,'car',2,'p'],['thapsus','Thapsus',11.05,35.62,'car',1,'p'],['thaenae','Thaenae',10.70,34.67,'car',1,'p'],
+ ['tacapae','Tacapé',10.10,33.88,'car',1,'p'],['sabratha','Sabratha',12.48,32.80,'car',1,'p'],['oea','Oea',13.18,32.90,'car',1,'p'],['leptis','Leptis',14.29,32.64,'car',2,'p'],
+ ['melita','Mélité',14.40,35.90,'car',1,'p'],['hipporeg','Hippone',7.75,36.88,'car',2,'p'],
+ ['berenice','Euhespérides',20.07,32.12,'cyr',1,'p'],['barca','Barcé',20.90,32.50,'cyr',1],['cyrene','Cyrène',21.86,32.82,'cyr',2,'p'],
+ ['cirta','Cirta',6.61,36.36,'num',3],['thagaste','Thagaste',7.98,36.29,'num',1],['theveste','Théveste',8.12,35.40,'num',1],['sitifis','Sitifis',5.41,36.19,'num',1],
+ ['igilgili','Igilgili',5.77,36.82,'car',1,'p'],['rusicade','Rusicade',6.90,36.88,'car',1,'p'],
+ ['saldae','Saldae',5.08,36.75,'car',1,'p'],['icosium','Icosium',3.06,36.77,'car',1,'p'],['iol','Iol',2.19,36.61,'car',1,'p'],['auzia','Auzia',3.68,36.15,'mae',1],['siga','Siga',-1.37,35.26,'mae',3,'p'],
+ ['rusaddir','Rusaddir',-2.94,35.29,'car',1,'p'],['tingis','Tingis',-5.80,35.78,'car',2,'p'],['lixus','Lixus',-6.11,35.20,'car',1,'p'],['volubilis','Volubilis',-5.55,34.07,'mau',1],
+ // Hispanie
+ ['gades','Gadès',-6.29,36.53,'car',2,'p'],['malaca','Malaca',-4.42,36.72,'car',1,'p'],['abdera','Abdéra',-2.90,36.75,'car',1,'p'],['baria','Baria',-1.86,37.27,'car',1,'p'],
+ ['cnova','Nova Carthago',-0.99,37.60,'car',3,'p'],['castulo','Castulo',-3.63,38.04,'car',2],['hispalis','Hispalis',-5.98,37.39,'car',1],['corduba','Corduba',-4.78,37.88,'car',1],
+ ['onuba','Onuba',-6.95,37.26,'car',1,'p'],['akra','Akra Leukè',-0.48,38.35,'car',1,'p'],['ebusus','Ébusus',1.43,38.91,'car',1,'p'],
+ ['saguntum','Sagonte',-0.27,39.68,'ibe',2,'p'],['dertosa','Dertosa',0.52,40.81,'ibe',1],['tarraco','Tarraco',1.25,41.12,'ibe',1,'p'],['ilerda','Ilerda',0.62,41.62,'ibe',2],
+ ['osca','Osca',-0.41,42.14,'ibe',1],['salduie','Salduie',-0.88,41.65,'ibe',1],['pompaelo','Pompaelo',-1.64,42.82,'ibe',1],
+ ['numantia','Numance',-2.44,41.81,'cel',2],['segobriga','Ségobriga',-2.85,39.89,'cel',1],['toletum','Tolède',-4.02,39.86,'cel',1],['asturica','Asturica',-6.06,42.46,'cel',1],['iuliobriga','Cantabres',-4.10,43.00,'cel',1],
+ ['helmantica','Helmantica',-5.66,40.97,'lus',1],['norba','Norba',-6.37,39.47,'lus',1],['olisipo','Olisipo',-9.14,38.72,'lus',2,'p'],['brigantium','Brigantium',-8.40,43.37,'lus',1,'p'],['conimbriga','Conimbriga',-8.49,40.10,'lus',1],
+ ['palma','Palma',2.65,39.57,'bal',2,'p'],['mago','Mago',4.26,39.89,'bal',1,'p'],
+ ['emporion','Emporion',3.12,42.13,'mas',1,'p'],
+ // Gaule
+ ['massalia','Massalia',5.37,43.30,'mas',3,'p'],['agatha','Agathè',3.47,43.31,'mas',1,'p'],['nicaea','Nikaia',7.27,43.70,'mas',1,'p'],
+ ['ruscino','Ruscino',2.90,42.70,'gau',1],['narbo','Naro',3.00,43.18,'gau',1,'p'],['tolosa','Tolosa',1.44,43.60,'gau',2],['nemausus','Nemausus',4.36,43.84,'gau',1],
+ ['arelate','Thélinè',4.63,43.68,'gau',1],['vienna','Vienna',4.87,45.52,'gau',2],['gergovia','Gergovie',3.12,45.71,'gau',2],['burdigala','Burdigala',-0.58,44.84,'gau',1,'p'],
+ ['bibracte','Bibracte',4.04,46.92,'gau',2],['genava','Genava',6.14,46.20,'gau',1],['lapurdum','Lapurdum',-1.47,43.49,'gau',1,'p'],
+ ['ebrodunum','Eburodunum',6.49,44.56,'gau',1],['darantasia','Darantasia',6.52,45.49,'gau',1],
+ ['genua','Genua',8.93,44.41,'lig',1,'p'],['albingaunum','Albingaunum',8.20,44.05,'lig',1,'p'],['taurasia','Taurasia',7.68,45.07,'lig',2],['segusio','Segusio',7.03,45.14,'lig',1],
+ // Italie du Nord
+ ['mediolanum','Mediolanum',9.19,45.46,'ins',3],['comum','Comum',9.08,45.81,'ins',1],['augusta','Salasses',7.32,45.74,'ins',1],['felsina','Felsina',11.34,44.49,'ins',2],
+ ['mutina','Mutina',10.93,44.65,'ins',1],['parma','Parma',10.33,44.80,'ins',1],
+ ['brixia','Brixia',10.21,45.54,'ven',1],['patavium','Patavium',11.88,45.41,'ven',2],['ateste','Ateste',11.66,45.22,'ven',1],['altinum','Altinum',12.40,45.54,'ven',1,'p'],
+ ['cremona','Crémone',10.02,45.13,'rom',1],['placentia','Placentia',9.69,45.05,'rom',1],
+ // Italie romaine
+ ['ariminum','Ariminum',12.57,44.06,'rom',1,'p'],['pisae','Pisae',10.40,43.72,'rom',1,'p'],['arretium','Arretium',11.88,43.46,'rom',1],['faesulae','Faesulae',11.29,43.81,'rom',1],
+ ['volaterrae','Volaterrae',10.86,43.40,'rom',1],['perusia','Perusia',12.39,43.11,'rom',1],['clusium','Clusium',11.95,43.02,'rom',1],['tarquinii','Tarquinii',11.75,42.25,'rom',1],
+ ['roma','Rome',12.48,41.89,'rom',3],['ostia','Ostie',12.29,41.75,'rom',1,'p'],['spoletium','Spoletium',12.73,42.73,'rom',1],['narnia','Narnia',12.52,42.52,'rom',1],
+ ['senagallica','Sena Gallica',13.22,43.72,'rom',1,'p'],['ancona','Ancône',13.52,43.62,'rom',1,'p'],['asculum','Asculum',13.58,42.85,'rom',1],['hatria','Hatria',13.92,42.66,'rom',1],
+ ['albafucens','Alba Fucens',13.41,42.08,'rom',1],['corfinium','Corfinium',13.84,42.12,'rom',1],['aesernia','Aesernia',14.23,41.59,'rom',1],['bovianum','Bovianum',14.47,41.49,'rom',1],
+ ['capua','Capoue',14.25,41.08,'rom',2],['neapolis','Néapolis',14.25,40.85,'rom',2,'p'],['beneventum','Bénévent',14.78,41.13,'rom',1],['venusia','Venusia',15.81,40.96,'rom',1],
+ ['luceria','Luceria',15.33,41.51,'rom',1],['arpi','Arpi',15.60,41.60,'rom',1],['cannae','Cannes',16.13,41.30,'rom',0],['canusium','Canusium',16.07,41.22,'rom',1],
+ ['sipontum','Sipontum',15.92,41.60,'rom',1,'p'],['barium','Barium',16.87,41.12,'rom',1,'p'],['brundisium','Brundisium',17.94,40.64,'rom',2,'p'],['tarentum','Tarente',17.24,40.47,'rom',2,'p'],
+ ['metapontum','Métaponte',16.82,40.38,'rom',1,'p'],['thurii','Thurii',16.43,39.71,'rom',1,'p'],['croton','Crotone',17.12,39.08,'rom',1,'p'],['locri','Locres',16.25,38.24,'rom',1,'p'],
+ ['rhegium','Rhegium',15.65,38.11,'rom',1,'p'],['consentia','Consentia',16.25,39.30,'rom',1],['paestum','Paestum',15.00,40.42,'rom',1,'p'],['grumentum','Grumentum',15.92,40.28,'rom',1],
+ // Sicile, Sardaigne, Corse
+ ['messana','Messana',15.55,38.19,'rom',1,'p'],['panormus','Panormus',13.36,38.12,'rom',2,'p'],['lilybaeum','Lilybée',12.44,37.80,'rom',2,'p'],['agrigentum','Agrigente',13.58,37.31,'rom',2,'p'],
+ ['segesta','Ségeste',12.85,37.94,'rom',1],['henna','Henna',14.28,37.57,'rom',1],['gela','Gela',14.25,37.07,'rom',1,'p'],
+ ['syracusae','Syracuse',15.29,37.08,'syr',3,'p'],['leontini','Léontinoi',15.00,37.29,'syr',1],['catana','Catane',15.09,37.50,'syr',1,'p'],['tauromenium','Tauroménion',15.29,37.85,'syr',1,'p'],
+ ['caralis','Caralis',9.11,39.22,'rom',2,'p'],['tharros','Tharros',8.44,39.87,'rom',1,'p'],['olbia','Olbia',9.50,40.92,'rom',1,'p'],['sulci','Sulci',8.43,39.06,'rom',1,'p'],
+ ['alalia','Alalia',9.51,42.03,'rom',1,'p'],
+ // Balkans et Grèce
+ ['tergeste','Tergeste',13.77,45.65,'ill',1,'p'],['iader','Iader',15.23,44.12,'ill',1,'p'],['salona','Salona',16.48,43.54,'ill',1,'p'],['narona','Narona',17.62,43.05,'ill',1],
+ ['scodra','Scodra',19.51,42.07,'ill',3],['rhizon','Rhizon',18.69,42.50,'ill',1,'p'],['lissus','Lissus',19.65,41.78,'ill',1,'p'],['siscia','Siscia',16.37,45.48,'ill',1],['sirmium','Sirmium',19.61,44.97,'ill',1],
+ ['epidamnus','Épidamne',19.45,41.32,'rom',2,'p'],['apollonia','Apollonia',19.46,40.73,'rom',1,'p'],['oricum','Oricum',19.47,40.37,'rom',1,'p'],
+ ['naissus','Naissus',21.90,43.32,'dar',1],['scupi','Scupi',21.43,42.00,'dar',2],
+ ['ambracia','Ambracie',20.98,39.16,'epi',3,'p'],['phoenice','Phoinikè',20.10,39.90,'epi',1],['dodona','Dodone',20.79,39.55,'epi',1],
+ ['pella','Pella',22.52,40.76,'mac',3],['thessalonica','Thessalonique',22.94,40.64,'mac',2,'p'],['amphipolis','Amphipolis',23.85,40.82,'mac',1,'p'],['pydna','Pydna',22.60,40.37,'mac',1,'p'],
+ ['heraclealync','Héraclée',21.34,41.01,'mac',1],['larissa','Larissa',22.42,39.64,'mac',2],['demetrias','Démétrias',22.95,39.36,'mac',1,'p'],['corinthus','Corinthe',22.88,37.91,'mac',2,'p'],['chalcis','Chalcis',23.60,38.46,'mac',1,'p'],
+ ['philippopolis','Philippopolis',24.75,42.15,'thr',2],['seuthopolis','Seuthopolis',25.30,42.60,'thr',1],['abderathr','Abdère',24.98,40.94,'thr',1,'p'],
+ ['thermon','Thermos',21.66,38.60,'eto',2],['naupactus','Naupacte',21.83,38.39,'eto',1,'p'],['elis','Élis',21.37,37.90,'eto',1],['sparta','Sparte',22.43,37.07,'eto',2],
+ ['argos','Argos',22.72,37.63,'ach',1],['megalopolis','Mégalopolis',22.13,37.40,'ach',2],['patrae','Patras',21.73,38.25,'ach',1,'p'],['messene','Messène',21.92,37.18,'ach',1,'p'],
+ ['athenae','Athènes',23.73,37.98,'ath',3,'p'],['thebae','Thèbes',23.32,38.32,'ath',1],
+ ['gortyn','Gortyne',24.95,35.06,'cre',2,'p'],['cnossos','Cnossos',25.16,35.30,'cre',1,'p'],['kydonia','Kydonia',24.02,35.51,'cre',1,'p'],
+ // Cols de montagne
+ ['montgenevre','Col de la Matrona',6.72,44.93,null,0,'c'],['petitbernard','Col des Alpes grées',6.88,45.68,null,0,'c'],
+ ['perthus','Col des Pyrénées',2.87,42.46,null,0,'c'],['roncevaux','Col des Vascons',-1.32,43.02,null,0,'c'],
+ ['mcenis','Col du Mont-Cenis',6.90,45.25,null,0,'c'],['gdbernard','Col du Poenin',7.17,45.87,null,0,'c'],['tende','Col de Tende',7.58,44.15,null,0,'c'],['somport','Col du Summus Portus',-0.53,42.80,null,0,'c']
+];
+const VIA=[['roma','capua','beneventum','venusia','tarentum','brundisium'],['roma','narnia','spoletium','senagallica','ariminum'],['roma','tarquinii','pisae'],['roma','albafucens','corfinium'],['roma','ostia']];
+const ROUTE=[['emporion','tarraco','dertosa','saguntum','akra','cnova'],['cnova','castulo','corduba','hispalis','gades'],['ruscino','narbo','nemausus','arelate','massalia'],['utica','carthago','hadrumetum','thapsus'],['capua','neapolis'],['messana','tauromenium','catana','syracusae'],['epidamnus','heraclealync','pella','thessalonica','amphipolis']];
+// pistes de fond de vallée qui relient les bourgs alpins à la plaine (la triangulation les coupe)
+const VALLEYS=[['segusio','taurasia'],['augusta','taurasia'],['darantasia','vienna'],['ebrodunum','arelate']];
+const COLS=[['montgenevre','ebrodunum','segusio'],['petitbernard','darantasia','augusta'],['perthus','ruscino','emporion'],['roncevaux','pompaelo','lapurdum'],['mcenis','darantasia','segusio'],['gdbernard','augusta','genava'],['tende','taurasia','nicaea'],['somport','osca','lapurdum']];
+const SEA=[['carthago','lilybaeum'],['carthago','caralis'],['hippodiarr','caralis'],['carthago','melita'],['melita','syracusae'],['leptis','syracusae'],['cnova','ebusus'],['ebusus','palma'],['palma','mago'],['mago','caralis'],['palma','emporion'],['cnova','siga'],['massalia','alalia'],['alalia','ostia'],['olbia','ostia'],['caralis','panormus'],['lilybaeum','caralis'],['brundisium','epidamnus'],['brundisium','apollonia'],['ancona','iader'],['cnossos','athenae'],['gortyn','cyrene'],['kydonia','messene'],['utica','lilybaeum'],['agrigentum','carthago'],['gades','malaca'],['neapolis','panormus'],['tarentum','oricum'],['corinthus','patrae']];
+const STRAIT=[['gades','tingis'],['messana','rhegium'],['olbia','alalia'],['naupactus','patrae']];
+

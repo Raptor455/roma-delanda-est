@@ -1,0 +1,45 @@
+/* ================= LIEUTENANTS (champ de bataille ; multijoueur) =================
+   Celui qui livre la bataille (rôle 'h') confie des régiments de son camp aux alliés présents sur le champ : il les sélectionne,
+   puis « Confier la sélection à … ». Le régiment change de chef (entrée du payload c.ow, c.gv=1, ancien chef dans c.ow0) : ctl()
+   de pvp-bataille.js le donne à cet allié tant qu'il est présent, sinon il revient à l'hôte. « Reprendre » rend tout.
+   L'hôte annonce la liste ({k:'gv',m:[[ci,id],…]}) à chaque changement et toutes les 2 s. Source : multijoueur/lieutenant-bataille.js. */
+if(typeof PVP!=='undefined'&&PVP){
+  const send=d=>{try{window.parent.postMessage({bellum:'pvp',d},'*')}catch(e){}};
+  const isH=PVP.role==='h',nm=id=>PVP.names[id]||'un allié';
+  const P0=()=>(CAMP&&CAMP.b&&CAMP.b.p)||[];
+  const setOw=(c,pid)=>{if(!c)return;if(pid){if(!c.gv){c.ow0=c.ow==null?null:c.ow;c.gv=1}c.ow=pid}else if(c.gv){if(c.ow0==null)delete c.ow;else c.ow=c.ow0;delete c.ow0;delete c.gv}};
+  const box=document.createElement('div');box.id='ltBox';
+  box.style.cssText='position:absolute;right:12px;top:96px;z-index:8;max-width:300px;padding:8px 10px;border-radius:6px;background:rgba(20,18,14,.9);border:1px solid rgba(214,184,120,.5);color:#efe6d2;font:13px Georgia,serif;line-height:1.35';
+  box.hidden=true;for(const ev of ['pointerdown','mousedown','click','wheel'])box.addEventListener(ev,e=>e.stopPropagation());
+  ($('app')||document.body).appendChild(box);
+  let bh='';
+  if(isH){
+    const given=()=>{const m=[];P0().forEach((c,i)=>{if(c&&c.gv)m.push([i,c.ow])});return m};
+    const sync=()=>send({k:'gv',m:given()});
+    function give(pid){const seen=new Set();for(const u of [...selected]){const s0=u.sd0==null?u.side:u.sd0;if(s0!==0||u.dead||u.ci==null)continue;seen.add(u.ci)}
+      for(const ci of seen)setOw(P0()[ci],pid);for(const u of [...selected])if(seen.has(u.ci))selected.delete(u);
+      try{renderSel()}catch(e){}sync();ui(true);return seen.size}
+    function takeBack(pid){P0().forEach(c=>{if(c&&c.gv&&c.ow===pid)setOw(c,null)});sync();ui(true)}
+    function ui(force){const allies=[...PVP.on.keys()].filter(id=>id!==PVP.gid&&id!==PVP.hid);
+      if(!allies.length||ended){box.hidden=true;bh='';return}
+      const cnt=id=>new Set(units.filter(u=>!u.dead&&u.ci!=null&&(u.sd0==null?u.side:u.sd0)===0&&P0()[u.ci]&&P0()[u.ci].gv&&P0()[u.ci].ow===id).map(u=>u.ci)).size;
+      const nSel=new Set([...selected].filter(u=>!u.dead&&u.ci!=null).map(u=>u.ci)).size;
+      let h=`<b>Vos lieutenants</b><br><span style="opacity:.75">Sélectionnez des régiments, puis confiez-les.</span>`;
+      for(const id of allies){const n=cnt(id);h+=`<div style="margin-top:6px"><b>${nm(id).replace(/</g,'&lt;')}</b> : ${n} régiment${n>1?'s':''}<br><button type="button" data-give="${id}" ${nSel?'':'disabled'}>Confier la sélection${nSel?` (${nSel})`:''}</button> ${n?`<button type="button" data-back="${id}">Reprendre</button>`:''}</div>`}
+      if(!force&&h===bh)return;bh=h;box.innerHTML=h;box.hidden=false;
+      box.querySelectorAll('[data-give]').forEach(b=>b.onclick=()=>give(b.dataset.give));box.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>takeBack(b.dataset.back))}
+    setInterval(()=>{try{ui(false)}catch(e){}},400);
+    setInterval(()=>{try{if(PVP.on.size&&given().length)sync()}catch(e){}},2000);
+    window.__ltB={give,takeBack,given,get U(){return units},get Sel(){return selected}};
+  }else{
+    addEventListener('message',ev=>{if(ev.source!==window.parent||!ev.data||ev.data.bellum!=='pvp')return;const m=ev.data.d,f=ev.data.f;
+      if(!m||m.k!=='gv'||!Array.isArray(m.m)||(PVP.hid&&f&&f!==PVP.hid))return;
+      const want=new Map(m.m);P0().forEach((c,i)=>{if(!c)return;if(want.has(i))setOw(c,want.get(i));else if(c.gv)setOw(c,null)});
+      try{for(const u of [...selected])if(!window.__pvpB.mine(u))selected.delete(u);renderSel()}catch(e){}});
+    if(PVP.role==='j')setInterval(()=>{try{if(!units||ended){box.hidden=true;return}const n=units.some(u=>!u.dead&&u.side===0&&window.__pvpB.mine(u));
+      const h=n?'':`<b>Vous êtes sur le champ de bataille.</b><br>${nm(PVP.hid).replace(/</g,'&lt;')} peut vous confier des régiments : ils seront à vous dès qu'il les aura confiés.`;
+      if(h!==bh){bh=h;box.innerHTML=h;box.hidden=!h}}catch(e){}},700);
+    window.__ltB={get U(){return units},get Sel(){return selected}};
+  }
+}
+/* ================= FIN LIEUTENANTS (champ de bataille) ================= */

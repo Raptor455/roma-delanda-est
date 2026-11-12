@@ -1,0 +1,117 @@
+/* ================= FINITIONS (fil « Donner un avis sur le jeu actuel », 9 nov.) ================= */
+// 1) Pause automatique visible : tick() met parfois S.paused=true (pirates, éclaireurs, sièges…) sans
+//    redessiner la barre ; on surveille l'état et on montre la raison sous l'étiquette PAUSE.
+// 3) Itinéraires : plus de grands détours (voir plus bas).
+// 4) Flotte à quai dans un port qui tombe : elle appareille (voir plus bas).
+// 2) Journal : élisions (« de Ilorci » → « d'Ilorci »), « pillent Ilici, près d'Ilici », convoi « (0 rations) ».
+(function(){
+  const FIN_CSS=document.createElement('style');
+  FIN_CSS.textContent='#pauseTag .finWhy{display:block;max-width:440px;white-space:normal;font-family:var(--ui);font-size:12.5px;letter-spacing:0;line-height:1.3;margin:2px 0 1px;color:var(--ink);text-transform:none}'+
+    '#pauseTag.finAuto{text-align:center;border-color:var(--gold,#d6b878)!important;animation:finBlink 1.2s ease-out 2}@keyframes finBlink{0%{box-shadow:0 0 0 0 rgba(214,184,120,.8)}100%{box-shadow:0 0 0 14px rgba(214,184,120,0)}}';
+  document.head.appendChild(FIN_CSS);
+  // --- journal : corrections de français, sur tous les messages
+  const VOY=/(^|[\s(>«'’])([Dd])e ((?:<[^>]+>)?[AEIOUYÉÈÊÂÎÔÛH][a-zà-ÿ'’-])/g;
+  window.finFr=function(t){
+    if(typeof t!=='string')return t;
+    t=t.replace(VOY,(m,a,d,w)=>a+d+"'"+w);
+    t=t.replace(/pillent ([^,<]+), près d['’]\1\./g,"pillent les campagnes d'$1.");
+    t=t.replace(/pillent ([^,<]+), près de \1\./g,'pillent les campagnes de $1.');
+    t=t.replace(/\b1 navires( désarmés)?/g,(m,d)=>'1 navire'+(d?' désarmé':''));
+    t=t.replace(/s'empare d'un convoi ennemi \(0 rations\)\./g,"s'empare d'un convoi ennemi : ses chariots sont déjà pleins, le reste est brûlé.");
+    return t;
+  };
+  const _finLog=log;
+  log=function(t){return _finLog.call(this,finFr(t),...[].slice.call(arguments,1))};
+  // --- pause : barre du haut tenue à jour, raison affichée
+  let finK='',finTop=null;
+  setInterval(()=>{try{
+    if(typeof S==='undefined'||!S)return;
+    const top=S.log&&S.log[0],k=(S.paused?1:0)+'|'+S.speed+'|'+(S.cur?1:0)+'|'+(S.over?1:0);
+    if(k!==finK){
+      const wasRunning=finK&&finK[0]==='0';finK=k;
+      try{renderTop()}catch(e){}
+      const pt=$('pauseTag');
+      if(pt){
+        if(S.paused&&!S.cur&&wasRunning&&top&&top!==finTop){pt.innerHTML='PAUSE<span class="finWhy"></span>';pt.querySelector('.finWhy').innerHTML=top.t;pt.classList.add('finAuto')}
+        else if(!S.paused||!wasRunning){pt.textContent='PAUSE';pt.classList.remove('finAuto')}
+      }
+    }
+    finTop=top;
+  }catch(e){}},200);
+})();
+/* --- 3) Itinéraires : moins de détours (demande de Baptiste, 9 nov.) ---
+   Avant : une armée hors d'une route devait d'abord rejoindre un lieu (ville, col) ; un point visé près d'une route
+   imposait la route même quand couper à travers champs était bien plus court. On ajoute deux possibilités, retenues
+   seulement si elles coûtent moins de jours : rejoindre à travers champs la route la plus proche, et marcher droit sur la cible. */
+{
+  const FIN_DIRECT=70,FIN_JOIN=12;
+  const _finS0=startsOf0;
+  startsOf0=function(a){
+    const s=_finS0.apply(this,arguments);
+    try{
+      if(a.at!=null&&!a.legs.length)return s;               // dans une ville : le réseau part déjà d'ici
+      if(a.legs.length&&a.legs[0].e!=null)return s;          // déjà sur une route
+      const R=nearestRoad(a.x,a.y,FIN_JOIN);if(!R||R.d<.05||edgeSnow(EDGES[R.k]))return s;
+      const h=horsLegs(a.x,a.y,R.x,R.y);if(!h)return s;
+      const e=EDGES[R.k];
+      for(const end of [e.a,e.b]){const L2=[...h.map(L=>({...L})),...toEnd(R,end)];if(!legsBlocked(a.x,a.y,L2))s.push([end,legsCost(a,a.x,a.y,L2),L2])}
+    }catch(err){}
+    return s;
+  };
+  const _finPlan=plan;
+  plan=function(a,tx,ty,node){
+    const r0=_finPlan.apply(this,arguments);
+    try{
+      let best=r0;
+      const cand=legs=>{if(!legs||!legs.length||legsBlocked(a.x,a.y,legs))return;const c=legsCost(a,a.x,a.y,legs);if(!best||c<best.days-.05)best={days:c,legs}};
+      const X=node!=null?N[node].x:tx,Y=node!=null?N[node].y:ty,d=Math.hypot(X-a.x,Y-a.y);
+      // marcher droit sur la cible (contourne les hauteurs et ne passe les fleuves qu'aux ponts)
+      if(d<FIN_DIRECT&&d>.05){const h=horsLegs(a.x,a.y,X,Y);if(h){if(node!=null)h[h.length-1].n=node;cand(h)}}
+      // point visé sur une route : la rejoindre à travers champs puis la suivre
+      if(node==null){
+        const snap=nearestRoad(tx,ty,Math.max(1.2,Math.min(25,16/view.s)));
+        if(snap&&!edgeSnow(EDGES[snap.k])){
+          const e=EDGES[snap.k],tip={x:snap.x,y:snap.y,n:null,type:e.type,tf:e.tf,e:snap.k};
+          const J=nearestRoad(a.x,a.y,FIN_JOIN,snap.k);
+          if(J&&Math.hypot(J.x-a.x,J.y-a.y)>.05){const h=horsLegs(a.x,a.y,J.x,J.y);
+            if(h){const pa=J.j+J.t,pt=snap.j+snap.t;
+              const mid=pt>=pa?(snap.j>=J.j+1?cvLegs(snap.k,J.j+1,snap.j):[]):(J.j>=snap.j+1?cvLegs(snap.k,J.j,snap.j+1):[]);
+              cand([...h,...mid,tip])}}
+        }
+      }
+      return best;
+    }catch(err){return r0}
+  };
+}
+
+/* --- 4) Flotte dans un port qui tombe (9 nov.) ---
+   Avant : quand l'ennemi prenait la ville, la flotte restait à quai dans un port devenu ennemi, sans vivres, jusqu'à disparaître.
+   Maintenant elle appareille vers le port ami le plus proche ; désarmée au port (à l'abri), elle perd un dixième de ses navires. */
+{
+  function finFleetFlee(f,i){
+    const n=N[i];let lost=0;
+    if(f.inG){lost=sink(f,.1);f.inG=false}
+    const ok=typeof goHome==='function'&&goHome(f);
+    if(!ok){f.at=null;f.legs=f.legs||[]}
+    if(f.side==='car'){
+      const to=ok&&f.dest!=null?N[f.dest].n:null;
+      log(`${f.name} quitte en hâte le port ${deN(n.n)}, tombé à l'ennemi${lost?` (${lost} navire${lost>1?'s':''} désarmé${lost>1?'s':''} perdu${lost>1?'s':''} à quai)`:''}${to?` : cap sur ${to}.`:' : aucun port ami où se réfugier.'}`);
+      S.paused=true;
+    }
+  }
+  const _finCap=capture;
+  capture=function(i,side){
+    const r=_finCap.apply(this,arguments);
+    try{for(const f of (S.fleets||[]).slice())if(f.at===i&&f.side!==side&&!f.dead&&cityHostile(i,f.side))finFleetFlee(f,i)}catch(err){}
+    return r;
+  };
+  // parties déjà en cours : une flotte restée dans un port ennemi repart au chargement
+  const _finAL=afterLoad;
+  afterLoad=function(){
+    const r=_finAL.apply(this,arguments);
+    try{for(const f of (S.fleets||[]).slice())if(f.at!=null&&!f.dead&&cityHostile(f.at,f.side))finFleetFlee(f,f.at)}catch(err){}
+    return r;
+  };
+}
+window.__finitions={capture:(...x)=>capture(...x),plan:(...x)=>plan(...x),finFr:t=>finFr(t)};
+/* ================= FIN FINITIONS ================= */

@@ -1,0 +1,465 @@
+/* ================= HUBS : magasins, entrepôts et grandes bases (fil « Étoffer la logistique de campagne ») =================
+   Étape 1 des propositions validées par Baptiste (10 nov. 2026). Source : /mnt/project-files/logistique/hubs.js,
+   injecté avant « BOUCLE » par logistique/patch.py (relançable). S'appuie sur le bloc LOGISTIQUE du fil Armées (S.dep, S.conv, a.line).
+   - Un dépôt (S.dep[idVille]) devient un hub à trois niveaux selon le lieu : magasin de campagne (village, bourg),
+     entrepôt régional (ville), grande base (capitale ou grand port à chantier).
+   - Rayon : une armée hors de ses terres n'a de ligne de ravitaillement que vers un hub à portée (80 / 150 / 220 km).
+   - Débit : chaque hub livre un nombre limité de rations par jour (routes, carrefour, port), partagé entre les armées.
+   - Chaîne : un hub relié par les routes (ou par mer) à une grande base est réapprovisionné par l'amont ; isolé, il vit sur ses réserves.
+   - Prise : qui prend un hub prend son stock. Greniers romains de départ à Cannes et à Placentia.
+   - Vue Logistique (bouton du haut) : rayons, chaîne, hubs isolés, lignes des armées.
+   État : S.dep[id] = {f, auto, fr (gratuit : hub de départ ou de l'IA)}, S.hub0, convoi entre hubs c.hub = indice du lieu visé. */
+const HUB_SIDE=s=>s==='car'||s==='rom';
+const HUB_HUM=s=>s==='car'||(typeof MPRH==='function'&&MPRH(s));
+const HUB_N=['','Magasin de campagne','Entrepôt régional','Grande base'],HUB_R=[0,80,150,220],HUB_D=[0,12,28,60],HUB_LINK=250,HUB_GRAN={cannae:600};
+const hubLvl=n=>n.size>=3||(n.size===2&&YARD.has(n.id))?3:n.size===2?2:1;
+const HUB_XC=[60,120],hubExt=n=>(S&&S.dep&&S.dep[n.id]&&S.dep[n.id].x)||0,hubRad=n=>HUB_R[hubLvl(n)]+35*hubExt(n);
+const hubCap=n=>HUB_GRAN[n.id]||depCap(n);
+const hubSieged=(i,side)=>{const sg=S.siege[N[i].id];return !!(sg&&sg.side!==side)};
+const hubBlocked=n=>!!(S.block&&S.block[n.id]&&S.block[n.id].side!==ownerN(n.i));
+// débit du jour : niveau du hub × meilleure route qui y mène × carrefour × port
+function hubRoadK(n){let best=0,real=0;const se=season();
+  for(const k of ADJ[n.i]){const e=EDGES[k];if(e.type==='mer'||e.type==='detroit'||edgeClosed(e))continue;
+    let v=e.type==='via'?1.3:e.type==='route'?1.15:e.type==='col'?.45:e.type==='chemin'?.8:1;
+    if(e.type==='piste'||e.type==='chemin')v*=se==='Hiver'?.65:se==='Automne'?.8:1;
+    if(e.type==='via'||e.type==='route')real++;if(v>best)best=v}
+  return (best||.5)*(real>=3?1.25:1)}
+const hubCross=n=>{let r=0;for(const k of ADJ[n.i]){const t=EDGES[k].type;if(t==='via'||t==='route')r++}return r>=3};
+const hubDebit=n=>Math.max(1,Math.round((n.size===0?8:HUB_D[hubLvl(n)])*hubRoadK(n)*(n.port&&!hubBlocked(n)?1.15:1)*(1+.25*hubExt(n))));
+// production propre : celle du dépôt, plus forte dans une grande base, plus l'arrière-pays (villages, bourgs et domaines intacts)
+let HUB_HV=null;
+function hubHinter(n){
+  if(!HUB_HV||HUB_HV.n!==VIL.length){HUB_HV={n:VIL.length,w:{}};const W={ferme:.1,village:.25,bourg:.6};for(const v of VIL)HUB_HV.w[v.t]=(HUB_HV.w[v.t]||0)+(W[v.k]||.2)}
+  let w=HUB_HV.w[n.i]||0;if(S.vil){const W={ferme:.1,village:.25,bourg:.6};for(const id in S.vil){const st=S.vil[id],v=VIL[id];if(v&&v.t===n.i&&st.r&&S.day<st.r)w-=(W[v.k]||.2)}}
+  return Math.max(0,w)}
+function hubProd(n){const base=depProd(n),sf=base/(2+n.size*2);return base*[1,1,1.5,3][hubLvl(n)]+hubHinter(n)*sf}
+// ---- chaîne : quels hubs sont reliés à une grande base, et par où ----
+let HNET={};
+function hubNet(side){
+  const ids=[];for(const id in S.dep){const i=NI[id];if(i!=null&&ownerN(i)===side)ids.push(i)}
+  const key=Math.floor(S.day/2)+':'+ids.join(',')+':'+Object.keys(S.siege||{}).length,c=HNET[side];if(c&&c.S===S&&c.key===key)return c;
+  const info={},linked=new Set();for(const i of ids)info[i]={lk:false,up:null,sea:false,eds:[]};
+  for(const i of ids)if(hubLvl(N[i])===3&&!hubSieged(i,side)){info[i].lk=true;linked.add(i)}
+  const foes=S.armies.filter(o=>!o.dead&&!o.ship&&hostile(o,{side})),nn=N.length,blk=new Int8Array(nn).fill(-1);
+  const blocked=u=>{if(blk[u]<0)blk[u]=cityHostile(u,side)||foes.some(o=>Math.hypot(o.x-N[u].x,o.y-N[u].y)<8)?1:0;return blk[u]===1};
+  // par la route d'abord : de proche en proche, 250 km au plus entre deux hubs
+  const road=()=>{let any=false;for(let pass=0;pass<8;pass++){
+    const dist=new Float64Array(nn).fill(1e9),pe=new Int32Array(nn).fill(-1),prev=new Int32Array(nn).fill(-1),done=new Uint8Array(nn);
+    for(const i of linked)dist[i]=0;
+    for(;;){let u=-1,bd=HUB_LINK;for(let i=0;i<nn;i++)if(!done[i]&&dist[i]<=bd){bd=dist[i];u=i}
+      if(u<0)break;done[u]=1;
+      for(const k of ADJ[u]){const e=EDGES[k],v=e.a===u?e.b:e.a;if(e.type==='mer'||edgeClosed(e)||done[v]||blocked(v))continue;
+        const c2=dist[u]+e.km;if(c2<dist[v]){dist[v]=c2;prev[v]=u;pe[v]=k}}}
+    let added=false;
+    for(const i of ids){if(linked.has(i)||hubSieged(i,side)||dist[i]>HUB_LINK)continue;
+      const eds=[];let u=i;while(prev[u]>=0){eds.push(pe[u]);u=prev[u]}
+      info[i]={lk:true,up:u,sea:false,eds,km:Math.round(dist[i])};added=true}
+    for(const i of ids)if(info[i].lk)linked.add(i);
+    if(!added)break;any=true}return any};
+  // puis par mer, pour les ports que la route n'atteint pas : chaque port libre se rattache au port relié le plus proche
+  const freePort=i=>N[i].port&&!hubBlocked(N[i])&&!hubSieged(i,side);
+  const sea=()=>{let any=false;for(;;){let bi=-1,bj=-1,bd=1e9;
+    for(const i of ids){if(linked.has(i)||!freePort(i))continue;for(const j of linked){if(!freePort(j))continue;const d=Math.hypot(N[i].x-N[j].x,N[i].y-N[j].y);if(d<bd){bd=d;bi=i;bj=j}}}
+    if(bi<0)break;info[bi]={lk:true,up:bj,sea:true,eds:[]};linked.add(bi);any=true}return any};
+  for(let g=0;g<6;g++){road();if(!sea())break}
+  return HNET[side]={S,key,info}}
+// ---- départ : hubs gratuits des grandes bases, greniers romains, hubs de l'IA ----
+function hubInit(){
+  if(!S||!S.own)return;if(!S.dep||!S.conv)initLogi();
+  if(S.hub0&&!S.hub1){S.hub1=1;for(const n of N){if(n.col||n.size!==2)continue;const o=ownerN(n.i);if(HUB_SIDE(o)&&HUB_HUM(o)&&!S.dep[n.id])S.dep[n.id]={f:Math.round(hubCap(n)*.5),fr:1}}HNET={}}
+  if(S.hub0)return;S.hub0=1;S.hub1=1;
+  for(const n of N){if(n.col)continue;const o=ownerN(n.i);if(!HUB_SIDE(o))continue;
+    const want=n.size>=2||(!HUB_HUM(o)&&n.size>=1)||(o==='rom'&&(n.id==='cannae'||n.id==='placentia'));
+    if(!want)continue;const d=S.dep[n.id];if(d){if(hubLvl(n)===3)d.fr=1;continue}
+    S.dep[n.id]={f:Math.round(hubCap(n)*(HUB_GRAN[n.id]?1:.5)),fr:1}}
+  HNET={}}
+function hubAiMonthly(){for(const n of N){if(n.col||n.size<1)continue;const o=ownerN(n.i);if(!HUB_SIDE(o)||HUB_HUM(o)||S.dep[n.id]||hubSieged(n.i,o))continue;S.dep[n.id]={f:60,fr:1}}}
+// ---- journée des hubs : production, ravitaillement d'office, flux venu de l'amont (remplace depotsDaily du bloc LOGISTIQUE) ----
+depotsDaily=function(){
+  for(const id in S.dep){const i=NI[id];if(i==null){delete S.dep[id];continue}const n=N[i],d=S.dep[id],o=ownerN(i);
+    if(!HUB_SIDE(o)){delete S.dep[id];continue}
+    if(hubSieged(i,o))continue;
+    if(d.f<hubCap(n))d.f=Math.min(hubCap(n),d.f+hubProd(n));
+    if(d.auto!=null){const a=S.armies.find(x=>x.id===d.auto&&!x.dead);if(!a||a.side!==o){delete d.auto;continue}
+      if(a.ship||convsTo(a).some(c=>c.from===i))continue;const need=armyFoodMax(a)-aFood(a);
+      if(need>=Math.min(40,armyFoodMax(a)*.35)&&d.f>=30&&Math.hypot(a.x-n.x,a.y-n.y)>3.5){const c=sendConvoy(i,a,need);
+        if(!c&&!d._np){d._np=1;if(o==='car')log(`Le dépôt de ${n.n} ne trouve pas de route vers ${a.name}.`)}else if(c)d._np=0}}}
+  for(const side of ['car','rom']){const net=hubNet(side);
+    for(const k in net.info){const I=net.info[k];if(!I.lk||I.up==null)continue;const n=N[k],U=N[I.up],d=S.dep[n.id],du=S.dep[U.id];if(!d||!du)continue;
+      const amt=Math.min(hubCap(n)-d.f,hubDebit(n)*.6,du.f-hubCap(U)*.2);if(amt>0){d.f+=amt;du.f-=amt}}}
+};
+// ---- ligne de ravitaillement : seulement vers un hub à portée ----
+let HUBD=false;
+const _lineOfH=lineOf;
+lineOf=function(a){
+  if(!S||!S.dep||!HUB_SIDE(a.side))return _lineOfH(a);
+  if(a.g||a.ship||a.inG||a.reinf!=null)return {k:'none'};
+  if(ownerAt(a.x,a.y)===a.side)return {k:'home'};
+  if(seaSupplied(a))return {k:'sea'};
+  const cand=[];for(const id in S.dep){const i=NI[id];if(i==null||ownerN(i)!==a.side||hubSieged(i,a.side))continue;const n=N[i];if(Math.hypot(n.x-a.x,n.y-a.y)<=hubRad(n))cand.push(n)}
+  if(!cand.length)return {k:'cut'};
+  const D=dijkstra(a,startsOf(a).map(x=>[x[0],x[1]])),foes=S.armies.filter(o=>!o.dead&&!o.ship&&hostile(o,a));
+  cand.sort((p,q)=>D.dist[p.i]-D.dist[q.i]);
+  for(const n of cand){if(D.dist[n.i]>=1e8)continue;const path=[],eds=[];let u=n.i,ok=true,km=0;
+    while(u>=0){path.push(u);if(u!==n.i&&cityHostile(u,a.side)){ok=false;break}if(foes.some(o=>Math.hypot(o.x-N[u].x,o.y-N[u].y)<8)){ok=false;break}if(D.pe[u]>=0)km+=EDGES[D.pe[u]].km;eds.push(D.pe[u]);u=D.prev[u]}
+    if(ok&&km<=hubRad(n)*1.6)return {k:HUBD?'hubl':'line',from:n.i,km:Math.round(km),path,eds,hub:1}}
+  return {k:'cut'}};
+function hubNearest(a){let b=null;for(const id in S.dep){const i=NI[id];if(i==null||ownerN(i)!==a.side)continue;const n=N[i],km=Math.hypot(n.x-a.x,n.y-a.y);if(!b||km<b.km)b={i,km:Math.round(km),r:hubRad(n)}}return b}
+// partage du débit entre les armées servies par un même hub
+function hubSupply(snap){
+  const by={};for(const a of S.armies){if(a.dead||a.g||!a.line||a.line.k!=='line'||!a.line.hub)continue;(by[a.line.from]=by[a.line.from]||[]).push(a)}
+  for(const k in by){const n=N[k],d=S.dep[n.id],L=by[k];let tot=0;for(const a of L)tot+=a.units.length;
+    const q=d&&tot>0?Math.min(1,Math.min(hubDebit(n),d.f)/tot):0;
+    for(const a of L){const want=a.units.length;aFood(a);a.food=Math.min(armyFoodMax(a),a.food+want*q);if(d)d.f=Math.max(0,d.f-want*q);a.line.q=q;
+      const sn=snap.get(a);if(sn)for(const u of a.units){const m0=sn.get(u);if(m0!=null&&m0>u.men)u.men+=(m0-u.men)*.4*q}}}}
+{const _dH=daily;daily=function(d){
+  if(!S||S.cur||S.over)return _dH.apply(this,arguments);
+  try{hubInit()}catch(e){console.error(e)}
+  const snap=new Map(),pre=new Map();
+  for(const a of S.armies){pre.set(a,a.line&&a.line.k);snap.set(a,new Map(a.units.map(u=>[u,u.men])));if(a.line&&a.line.k==='line'&&a.line.hub)a.line.k='hubl'}
+  let r;HUBD=true;try{r=_dH.apply(this,arguments)}finally{HUBD=false;if(S&&S.armies)for(const a of S.armies)if(a.line&&a.line.k==='hubl')a.line.k='line'}
+  if(!S||S.cur||S.over)return r;
+  try{hubSupply(snap);
+    for(const a of S.armies)if(!a.dead&&a.side==='car'&&pre.get(a)==='line'&&a.line&&a.line.k==='cut')log(`La ligne de ravitaillement de ${a.name} est coupée : plus aucun hub à portée.`);
+    if(Math.floor(d)%30===0)hubAiMonthly()}catch(e){console.error(e)}
+  return r}}
+// hubs gratuits : pas d'entretien
+{const _incH=income;income=function(side){const r=_incH.apply(this,arguments);try{if(S&&S.dep&&r&&typeof r.up==='number'){let fr=0;for(const id in S.dep)if(S.dep[id].fr&&NI[id]!=null&&ownerN(NI[id])===side)fr++;if(fr)r.up=Math.max(0,r.up-2*fr)}}catch(e){}return r}}
+// prise d'un hub : le stock change de mains
+{const _cpH=capture;capture=function(i,side){const n=N[i],prev=ownerN(i),d=S&&S.dep&&S.dep[n.id],f0=d?Math.round(d.f):0;const r=_cpH.apply(this,arguments);
+  try{if(d&&prev!==side&&S.dep[n.id]===d){HNET={};
+    if(!HUB_SIDE(side))delete S.dep[n.id];
+    else{delete d.auto;let took=0,a=null,bd=8;for(const x of S.armies){if(x.dead||x.g||x.ship||x.side!==side)continue;const km=Math.hypot(x.x-n.x,x.y-n.y);if(km<bd){bd=km;a=x}}
+      if(a){aFood(a);took=Math.max(0,Math.min(d.f,armyFoodMax(a)-a.food));a.food+=took;d.f-=took}
+      d.f=Math.round(d.f*.7);d.fr=HUB_HUM(side)?0:1;
+      if(side==='car')log(`Vous saisissez les réserves de ${n.n} : ${Math.round(took)} rations pour l'armée, ${d.f} restent en magasin.`);
+      else if(prev==='car'&&f0>0)log(`L'ennemi s'empare de vos réserves à ${n.n} (${f0} rations).`)}}}catch(e){console.error(e)}
+  return r}}
+// ---- convois entre hubs ----
+function hubConvoy(i,j,amt){const n=N[i],d=S.dep[n.id];if(!d||!S.dep[N[j].id]||i===j)return null;amt=Math.min(d.f,amt,CONV_MAX);if(amt<10)return null;
+  const c={id:S.uid++,side:ownerN(i),x:n.x,y:n.y,at:i,legs:[],units:[],cool:0,scout:0,conv:1,food:amt,to:-1,hub:j,from:i,_ret:1};
+  if(!order(c,N[j].x,N[j].y,j))return null;d.f-=amt;S.conv.push(c);return c}
+{const _mcH=moveConvoys;moveConvoys=function(dd){const L=(S.conv||[]).filter(c=>c.hub!=null);_mcH.apply(this,arguments);
+  for(const c of L){if(S.conv.includes(c))continue;const n=N[c.hub],d=S.dep[n.id];
+    if(Math.hypot(c.x-n.x,c.y-n.y)<1.5&&d&&ownerN(c.hub)===c.side){d.f+=c.food;if(c.side==='car')log(`Un convoi livre ${Math.round(c.food)} rations au hub de ${n.n}.`)}}}}
+// ---- interface : ville ----
+function hubState(i,side){const I=hubNet(side).info[i];if(!I)return '';
+  if(hubSieged(i,side))return '<b style="color:var(--bad)">assiégé</b>';
+  if(!I.lk)return '<b style="color:var(--bad)">isolé</b> : aucune grande base reliée, il vit sur ses réserves';
+  if(I.up==null)return 'tête de réseau';
+  return I.sea?`relié par mer à ${N[I.up].n}`:`relié à ${N[I.up].n} (${I.km} km de route)`}
+{const _tbH=townBlock;townBlock=function(i,main){let h=_tbH.apply(this,arguments);try{const n=N[i];if(!S||!S.gens||n.col)return h;hubInit();
+  const o=ownerN(i),d=S.dep[n.id],lv=hubLvl(n),nm=HUB_N[lv];
+  if(o==='car'){
+    if(d){const info=`<p class="sub">Rayon servi ${hubRad(n)} km · débit ${hubDebit(n)} rations par jour${hubCross(n)?' (carrefour)':''} · ${hubState(i,'car')}</p>`;
+      if(h.includes('<h3>Dépôt de vivres</h3>'))h=h.replace('<h3>Dépôt de vivres</h3>',`<h3>${nm}</h3>`+info).replace(`+${Math.round(depProd(n))} par jour`,`+${Math.round(hubProd(n))} par jour`);
+      else h+=`<h3>${nm}</h3>${info}<p>${Math.round(d.f)} / ${hubCap(n)} rations <span class="sub">· +${Math.round(hubProd(n))} par jour</span></p>`;
+      {const x=d.x||0,up=x<2?`<div class="row"><button data-hubup="${i}" type="button" ${S.gold.car<HUB_XC[x]?'disabled':''} title="Plus de chariots, de bêtes et de magasins : le hub sert plus loin et livre plus">Agrandir le hub (${HUB_XC[x]}) : rayon +35 km, débit +25 %</button></div>`:`<p class="sub">Hub agrandi au maximum.</p>`;
+        const q0=h.indexOf(`<h3>${nm}</h3>`),q1=q0<0?-1:h.indexOf('<h3',q0+8);h=q1<0?h+up:h.slice(0,q1)+up+h.slice(q1)}
+      const oth=[];for(const id in S.dep){const j=NI[id];if(j!=null&&j!==i&&ownerN(j)==='car')oth.push(N[j])}
+      oth.sort((p,q)=>Math.hypot(p.x-n.x,p.y-n.y)-Math.hypot(q.x-n.x,q.y-n.y));
+      if(oth.length){const ss='font:inherit;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:4px;padding:3px;max-width:170px';
+        const tr=`<div class="rec"><select data-hubto="${i}" style="${ss}">${oth.slice(0,12).map(m=>`<option value="${m.i}">${esc(m.n)} (${Math.round(Math.hypot(m.x-n.x,m.y-n.y))} km)</option>`).join('')}</select><button data-hubsend="${i}" type="button" ${d.f<40?'disabled':''} title="Un convoi de chariots porte jusqu'à ${CONV_MAX} rations vers un autre de vos hubs. Il peut être intercepté.">Transférer des rations</button></div>`;
+        const p0=h.indexOf(`<h3>${nm}</h3>`),p1=p0<0?-1:h.indexOf('<h3',p0+8);h=p1<0?h+tr:h.slice(0,p1)+tr+h.slice(p1)}}
+    else if(n.size<1)h+=`<h3>${nm}</h3><p class="sub">Un magasin ici sert vos armées à ${hubRad(n)} km à la ronde (${hubDebit(n)} rations par jour) et prolonge votre chaîne de ravitaillement.</p><div class="row"><button data-depmk="${i}" type="button" ${S.gold.car<30?'disabled':''}>Établir un magasin (30, puis 2 par mois)</button></div>`;
+    else h=h.replace('<h3>Dépôt de vivres</h3>',`<h3>${nm} (à établir)</h3><p class="sub">Rayon servi ${hubRad(n)} km · débit ${hubDebit(n)} rations par jour${hubCross(n)?' (carrefour)':''}.</p>`)}
+  else if(d&&HUB_SIDE(o)&&visAt(n.x,n.y)>=1)h+=`<p class="sub">${nm} ennemi${n.id==='cannae'?' (grenier de l\'armée romaine)':''} : environ ${Math.max(50,Math.round(d.f/50)*50)} rations à saisir.</p>`;
+  }catch(e){console.error(e)}return h}}
+{const _btH=bindTown;bindTown=function(){const r=_btH.apply(this,arguments);try{
+  document.querySelectorAll('[data-hubsend]').forEach(b=>b.onclick=()=>{const i=+b.dataset.hubsend,s=document.querySelector(`[data-hubto="${i}"]`);if(!s)return;const j=+s.value,d=S.dep[N[i].id];if(!d)return;
+    const c=hubConvoy(i,j,Math.min(CONV_MAX,d.f-20));log(c?`Un convoi de ${Math.round(c.food)} rations part de ${N[i].n} vers ${N[j].n}.`:`Aucune route de ${N[i].n} vers ${N[j].n}.`);renderAll()});
+  document.querySelectorAll('[data-hubup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.hubup,d=S.dep[N[i].id];if(!d)return;const x=d.x||0;if(x>=2||S.gold.car<HUB_XC[x])return;
+    const fn=()=>{S.gold.car-=HUB_XC[x];d.x=x+1;log(`Le hub de ${N[i].n} est agrandi : il sert maintenant ${hubRad(N[i])} km à la ronde.`);return true};
+    try{if(typeof mpdWith==='function')mpdWith(null,fn);else fn()}catch(e){fn()}HNET={};renderAll()});
+  document.querySelectorAll('[data-depmk]').forEach(b=>b.addEventListener('click',()=>{HNET={}}))}catch(e){console.error(e)}return r}}
+// ---- interface : armée ----
+{const _lhH=logiHtml;logiHtml=function(a){let h=_lhH.apply(this,arguments);try{const L=a.line;if(!L||!HUB_SIDE(a.side))return h;
+  if(L.k==='line'&&L.hub){const n=N[L.from],q=L.q==null?1:L.q;
+    h=h.replace(/<b style="color:var\(--good\)">ligne ouverte<\/b>[^<]*?km\)[^<.]*\./,`<b style="color:var(--${q>=.99?'good':'bad'})">${HUB_N[hubLvl(n)].toLowerCase()} de ${n.n}</b> (${L.km} km), servi à ${Math.round(q*100)} %${q<.99?' : débit ou stock insuffisant':''}.`)}
+  else if(L.k==='cut'){const b=hubNearest(a);
+    h=h.replace('<b style="color:var(--bad)">aucune ligne</b>',`<b style="color:var(--bad)">aucun hub à portée</b>${b?` (le plus proche : ${N[b.i].n} à ${b.km} km, il sert ${b.r} km)`:''}`)}
+  }catch(e){console.error(e)}return h}}
+// ---- vue Logistique ----
+let HUBV=false,HUBO=false;
+function hubEdge(k,s){const e=EDGES[k],P=e.cv||[[N[e.a].x,N[e.a].y],[N[e.b].x,N[e.b].y]];ctx.moveTo(view.ox+P[0][0]*s,view.oy+P[0][1]*s);for(let j=1;j<P.length;j++)ctx.lineTo(view.ox+P[j][0]*s,view.oy+P[j][1]*s)}
+const HSEA=new Map();
+// tracé d'un lien par mer : route de navire entre les deux mouillages, puis chaque point est poussé au large
+function hubSea(i,j){const key=i+'-'+j;let P=HSEA.get(key);if(P)return P;const A=N[i],B=N[j],pa=A.anch||[A.x,A.y],pb=B.anch||[B.x,B.y];let R=null;try{R=seaPath(pa[0],pa[1],pb[0],pb[1])}catch(e){}
+  const raw=[{x:pa[0],y:pa[1]}];if(R)for(const q of R)raw.push({x:q.x,y:q.y});raw.push({x:pb[0],y:pb[1]});
+  // un point tous les 12 km environ
+  const D=[];for(let q=0;q<raw.length-1;q++){const a=raw[q],b=raw[q+1],d=Math.hypot(b.x-a.x,b.y-a.y),n=Math.max(1,Math.round(d/12));for(let t=0;t<n;t++)D.push({x:a.x+(b.x-a.x)*t/n,y:a.y+(b.y-a.y)*t/n})}D.push(raw[raw.length-1]);
+  const wet=(x,y)=>{try{return !landFine(x,y)}catch(e){return true}};
+  for(let q=1;q<D.length-1;q++){const p=D[q],f=Math.min(1,Math.min(q,D.length-1-q)/3);let vx=0,vy=0;
+    for(let a=0;a<16;a++){const ca=Math.cos(a*Math.PI/8),sa=Math.sin(a*Math.PI/8);for(const r of [6,12,20,30])if(!wet(p.x+ca*r,p.y+sa*r)){vx-=ca/r;vy-=sa/r}}
+    const m=Math.hypot(vx,vy);if(m<1e-6)continue;for(const push of [14,10,6,3]){const x=p.x+vx/m*push*f,y=p.y+vy/m*push*f;if(wet(x,y)){p.x=x;p.y=y;break}}}
+  // lissage
+  for(let it=0;it<2;it++)for(let q=1;q<D.length-1;q++){const x=(D[q-1].x+2*D[q].x+D[q+1].x)/4,y=(D[q-1].y+2*D[q].y+D[q+1].y)/4;if(wet(x,y)){D[q].x=x;D[q].y=y}}
+  P=[{x:A.x,y:A.y},...D,{x:B.x,y:B.y}];HSEA.set(key,P);return P}
+function hubDraw(s,inV){
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+  for(const side of ['car','rom']){const net=hubNet(side),own=side==='car',col=own?'120,200,110':'214,96,80';
+    for(const k in net.info){const I=net.info[k],n=N[k],d=S.dep[n.id];if(!d||(!own&&visAt(n.x,n.y)<1))continue;
+      const lv=hubLvl(n),R=hubRad(n),X=view.ox+n.x*s,Y=view.oy+n.y*s,ok=I.lk&&!hubSieged(+k,side);
+      if(inV(n.x,n.y,R*s+40)){ctx.beginPath();ctx.arc(X,Y,R*s,0,7);ctx.fillStyle=`rgba(${ok?col:'230,150,60'},.10)`;ctx.fill();
+        ctx.setLineDash(ok?[]:[7,6]);ctx.lineWidth=ok?2.2:2.4;ctx.strokeStyle=`rgba(${ok?col:'240,150,50'},.75)`;ctx.stroke();ctx.setLineDash([])}
+      if(I.lk&&I.up!=null){const U=N[I.up];ctx.beginPath();
+        if(I.sea){const P=hubSea(+k,I.up);ctx.moveTo(view.ox+P[0].x*s,view.oy+P[0].y*s);
+          for(let j=1;j<P.length-1;j++){const mx=(P[j].x+P[j+1].x)/2,my=(P[j].y+P[j+1].y)/2;ctx.quadraticCurveTo(view.ox+P[j].x*s,view.oy+P[j].y*s,view.ox+mx*s,view.oy+my*s)}
+          ctx.lineTo(view.ox+P[P.length-1].x*s,view.oy+P[P.length-1].y*s);ctx.setLineDash([10,7]);ctx.lineWidth=5;ctx.strokeStyle='rgba(15,25,40,.55)';ctx.stroke();ctx.lineWidth=2.6;ctx.strokeStyle=own?'rgba(140,210,250,.98)':'rgba(214,96,80,.6)'}
+        else{for(const e of I.eds)hubEdge(e,s);ctx.lineWidth=5;ctx.strokeStyle='rgba(20,30,15,.5)';ctx.stroke();ctx.lineWidth=2.6;ctx.strokeStyle=`rgba(${col},.95)`}
+        ctx.stroke();ctx.setLineDash([])}}
+    for(const k in net.info){const I=net.info[k],n=N[k],d=S.dep[n.id];if(!d||(!own&&visAt(n.x,n.y)<1)||!inV(n.x,n.y,40))continue;
+      const lv=hubLvl(n),X=view.ox+n.x*s,Y=view.oy+n.y*s-16,w=10+lv*4,ok=I.lk&&!hubSieged(+k,side);
+      ctx.fillStyle='rgba(28,20,10,.92)';ctx.strokeStyle=ok?`rgb(${col})`:'#f0963c';ctx.lineWidth=2;ctx.beginPath();ctx.rect(X-w/2,Y-w/2,w,w);ctx.fill();ctx.stroke();
+      ctx.fillStyle=ok?`rgb(${col})`:'#f0963c';for(let p=0;p<lv;p++)ctx.fillRect(X-w/2+3+p*4,Y-w/2+3,2.4,w-6);
+      const fr=Math.max(0,Math.min(1,d.f/hubCap(n)));ctx.fillStyle='rgba(28,20,10,.9)';ctx.fillRect(X-12,Y+w/2+2,24,4);ctx.fillStyle=fr>.3?'#e8c860':'#e06a4a';ctx.fillRect(X-11,Y+w/2+3,22*fr,2);
+      if(own||s>1){ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(30,20,10,.9)';ctx.fillStyle='#f4e2b0';
+        const t=own?`${Math.round(d.f)} · ${hubDebit(n)}/j`:`≈${Math.max(50,Math.round(d.f/50)*50)}`;ctx.strokeText(t,X,Y-w/2-4);ctx.fillText(t,X,Y-w/2-4)}}}
+  // lignes de vos armées
+  for(const a of S.armies){if(a.dead||a.g||a.side!=='car'||a.ship||!a.line||!inV(a.x,a.y,60))continue;const X=view.ox+a.x*s,Y=view.oy+a.y*s;
+    if(a.line.k==='line'&&a.line.hub){const n=N[a.line.from],q=a.line.q==null?1:a.line.q;ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(view.ox+n.x*s,view.oy+n.y*s);ctx.setLineDash([8,5]);ctx.lineWidth=2.4;ctx.strokeStyle=q>=.99?'#a8e08a':'#f0c050';ctx.stroke();ctx.setLineDash([])}
+    else if(a.line.k==='cut'){ctx.beginPath();ctx.arc(X,Y,16,0,7);ctx.lineWidth=3;ctx.strokeStyle='#e0553a';ctx.stroke()}}
+  ctx.restore()}
+{const _dfH=drawFleets;drawFleets=function(s,z,inV){try{if(HUBV&&S&&S.dep)hubDraw(s,inV)}catch(e){console.error(e)}return _dfH.apply(this,arguments)}}
+function hubPlace(el){const sd=$('side');if(!sd)return;const free=!sel;sd.style.visibility=HUBV&&free?'hidden':'';
+  if(el){let L=12;if(!free){const r=sd.getBoundingClientRect();if(r.width>0&&r.right+372<innerWidth)L=Math.round(r.right+12)}el.style.left=L+'px'}}
+function hubPanel(){let el=$('hubLeg');
+  if(!HUBV){if(el)el.remove();hubPlace(null);return}
+  if(!el){el=document.createElement('div');el.id='hubLeg';el.style.cssText='position:fixed;left:12px;bottom:12px;z-index:40;width:min(360px,calc(100vw - 24px));max-height:46vh;overflow:auto;background:rgba(30,22,12,.94);border:1px solid var(--line,#8a6a3a);border-radius:8px;padding:10px 12px;color:var(--ink,#f0e2c0);font:14px/1.35 Barlow Semi Condensed,Arial Narrow,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.5)';document.body.appendChild(el)}
+  hubPlace(el);
+  const net=hubNet('car'),L=Object.keys(net.info).map(k=>N[k]).sort((p,q)=>hubLvl(q)-hubLvl(p)||p.n.localeCompare(q.n));
+  const cut=S.armies.filter(a=>!a.dead&&!a.g&&a.side==='car'&&a.line&&a.line.k==='cut');
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Logistique</b><button id="hubX" type="button" title="Fermer la vue">Fermer</button></div>`;
+  h+=`<p class="sub" style="margin:4px 0 6px">Cercle : zone servie par un hub. Trait vert : chaîne par la route vers une grande base. Tirets bleus : chaîne par mer, de port à port. Orange : hub isolé. Tirets : ligne d'une armée (jaune si elle n'est pas servie en entier). Cercle rouge : armée sans hub à portée.</p>`;
+  if(cut.length)h+=`<p style="margin:0 0 6px;color:var(--bad,#e0553a)">Sans ravitaillement : ${cut.map(a=>esc(a.name)).join(', ')}.</p>`;
+  h+=`<details id="hubDet" ${HUBO?'open':''}><summary style="cursor:pointer;margin:2px 0 4px">Vos hubs (${L.length})</summary>`+L.map(n=>{const d=S.dep[n.id],I=net.info[n.i],ok=I.lk&&!hubSieged(n.i,'car');return `<div class="rec"><span><b>${esc(n.n)}</b> <span class="sub">· ${HUB_N[hubLvl(n)].toLowerCase()} · ${Math.round(d.f)}/${hubCap(n)} · ${hubDebit(n)}/j${ok?'':' · <b style="color:var(--bad,#e0553a)">'+(I.lk?'assiégé':'isolé')+'</b>'}</span></span><button data-hubgo="${n.i}" type="button">Voir</button></div>`}).join('')||'<p class="sub">Aucun hub. Établissez-en un dans une de vos villes.</p>';
+  h+='</details>';el.innerHTML=h;$('hubDet').ontoggle=()=>{HUBO=$('hubDet').open};$('hubX').onclick=()=>hubToggle(false);
+  el.querySelectorAll('[data-hubgo]').forEach(b=>b.onclick=()=>{const n=N[+b.dataset.hubgo];centerOn(n.x,n.y,Math.max(view.s,1.2));sel={n:n.i};renderAll()})}
+function hubToggle(v){HUBV=v==null?!HUBV:v;const b=$('bHub');if(b)b.classList.toggle('on',HUBV);try{hubInit()}catch(e){}hubPanel();try{renderAll()}catch(e){}}
+{const _rsH=renderSide;renderSide=function(){const r=_rsH.apply(this,arguments);try{if(HUBV)hubPanel()}catch(e){}return r}}
+{const mk=()=>{if($('bHub'))return;const ref=$('bSea')||$('bEco')||$('bDip');if(!ref)return;const b=document.createElement('button');b.id='bHub';b.type='button';b.textContent='Logistique';b.title='Vue Logistique : hubs, zones servies, chaîne de ravitaillement';b.onclick=()=>hubToggle();ref.after(b);
+    setTimeout(()=>{try{const top=$('bDip');if(!top||!top.querySelector('.ui-i')||b.querySelector('.ui-i'))return;
+      b.innerHTML=`<svg class="ui-i" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 10l9-6 9 6v2H3z"/><path d="M5 13h3v7H5zM10.5 13h3v7h-3zM16 13h3v7h-3z"/></svg><span>Logistique</span>`}catch(e){}},0)};
+  try{mk()}catch(e){}}
+// ================= RESSOURCES (étape 2) : blé par région, chevaux, fer, bois, éléphants =================
+// Chaque lieu produit selon sa région (RES_REG). La production d'un lieu va au hub de son camp le plus proche (200 km au plus),
+// si ce hub est relié au réseau ; les hubs reliés partagent une même réserve S.res[camp] = {ch,fe,bo,el}.
+// Tributaires et alliés livrent la moitié. Recruter, lancer des navires : payé en ressources, depuis une ville reliée au réseau.
+const RES_K=['ch','fe','bo','el'],RES_N={ch:'chevaux',fe:'fer',bo:'bois',el:'éléphants'},RES_C={ch:'#c98a4a',fe:'#9fb0c0',bo:'#6f9a5a',el:'#b9a7d6',bl:'#e8c860'},RES_L={ch:'Ch',fe:'Fe',bo:'Bo',el:'Él'},RES_PRICE={ch:12,fe:10,bo:8,el:90};
+const RES_REG={
+  ch:{'Numidie massyle':3,'Masaesylie':3,'Celtibérie':2,'Carpétanie':1,'Lusitanie':1,'Turdétanie':1,'Apulie':2,'Calabre':1,'Campanie':1,'Sicile orientale':1,'Gaule cisalpine':2,'Vénétie':2,'Thessalie':3,'Macédoine':1,'Thrace':2,'Lydie':2,'Phrygie':1},
+  fe:{'Celtibérie':3,'Étrurie':3,'Astures et Cantabres':2,'Orétanie':1,'Bastétanie':1,'Callécie':1,'Sardaigne':1,'Latium':1,'Zeugitane':1,'Éduens':1,'Arvernes':1,'Grèce centrale':2,'Péloponnèse':1,'Macédoine':1,'Dalmatie':1,'Illyrie':1,'Lydie':1,'Bithynie':1},
+  bo:{'Bruttium':3,'Macédoine':3,'Ligurie':2,'Alpes':2,'Corse':2,'Maurétanie':2,'Liburnie':2,'Thrace':2,'Mysie':2,'Troade':2,'Bithynie':2,'Numidie massyle':1,'Zeugitane':1,'Dalmatie':1,'Épire':1,'Étrurie':1,'Ombrie':1,'Samnium':1,'Latium':1,'Vasconie':1,'Callécie':1,'Ilergètes':1,'Crète':1},
+  el:{'Maurétanie':2,'Masaesylie':1,'Numidie massyle':1},
+  bl:{'Sicile orientale':1.7,'Byzacène':1.7,'Sicile occidentale':1.6,'Sardaigne':1.5,'Campanie':1.5,'Zeugitane':1.5,'Turdétanie':1.5,'Gaule cisalpine':1.4,'Apulie':1.3,'Thessalie':1.3,'Cyrénaïque':1.3,'Alpes':.6,'Ligurie':.7,'Corse':.7}};
+const RES_SZ=[.1,.2,.35,.5];
+const resBle=n=>RES_REG.bl[regOf(n)]||1;
+// ce qu'un lieu produit par mois : {ch,fe,bo,el}
+function resOf(n){if(n.col)return null;if(n._res!==undefined)return n._res;const g=regOf(n);let o=null;for(const k of RES_K){const v=RES_REG[k][g];if(v){o=o||{};o[k]=Math.round(v*RES_SZ[n.size]*(k==='el'?.5:1)*100)/100}}return n._res=o}
+// à quel camp un lieu livre, et quelle part
+function resSide(i){const o=ownerN(i);if(!o)return null;if(HUB_SIDE(o))return [o,1];const st=S.fac[o]&&S.fac[o].st,m=st&&/^(tribut|pacte|allie)_(car|rom)$/.exec(st);return m?[m[2],.5]:null}
+// le hub qui reçoit la production d'un lieu (ou qui donne accès au réseau à une ville) : le sien, sinon le plus proche à 200 km
+function resHub(i,side){const n=N[i];if(S.dep[n.id]&&ownerN(i)===side)return i;let b=null,bd=200;for(const id in S.dep){const j=NI[id];if(j==null||ownerN(j)!==side)continue;const d=Math.hypot(N[j].x-n.x,N[j].y-n.y);if(d<bd){bd=d;b=j}}return b}
+function resLinked(i,side){const h=resHub(i,side);if(h==null)return false;const I=hubNet(side).info[h];return !!(I&&I.lk&&!hubSieged(h,side))}
+function resCap(side){let c=0;const info=hubNet(side).info;for(const k in info)if(info[k].lk)c+=hubLvl(N[k])*4;return Math.min(60,10+c)}
+function resInit(){if(S.res)return;S.res={car:{ch:0,fe:0,bo:0,el:0},rom:{ch:0,fe:0,bo:0,el:0}};
+  for(const s of ['car','rom']){let b=0;for(const id in S.dep){const j=NI[id];if(j!=null&&ownerN(j)===s&&hubLvl(N[j])===3)b++}const R=S.res[s];R.ch=4+2*b;R.fe=6+2*b;R.bo=6+2*b}
+  if(NI.carthago!=null&&HUB_SIDE(ownerN(NI.carthago)))S.res[ownerN(NI.carthago)].el=3}
+// production du mois, par camp : {tot:{…}, lost:{…}}
+let RES_INC=null;
+function resIncome(side){const key=Math.floor(S.day/2)+':'+Object.keys(S.dep).length;if(RES_INC&&RES_INC.S===S&&RES_INC.key===key&&RES_INC[side])return RES_INC[side];
+  if(!RES_INC||RES_INC.S!==S||RES_INC.key!==key)RES_INC={S,key};
+  const tot={ch:0,fe:0,bo:0,el:0},lost={ch:0,fe:0,bo:0,el:0};
+  for(const n of N){const p=resOf(n);if(!p)continue;const sd=resSide(n.i);if(!sd||sd[0]!==side)continue;if(S.siege[n.id])continue;
+    const ok=resLinked(n.i,side);for(const k in p)(ok?tot:lost)[k]+=p[k]*sd[1]}
+  for(const k of RES_K){tot[k]=Math.round(tot[k]*10)/10;lost[k]=Math.round(lost[k]*10)/10}
+  return RES_INC[side]={tot,lost}}
+function resMonthly(){resInit();for(const s of ['car','rom']){const inc=resIncome(s).tot,R=S.res[s],cap=resCap(s);for(const k of RES_K)R[k]=Math.min(Math.max(R[k],k==='el'?Math.max(4,cap/8):cap),R[k]+inc[k])}}
+// coût d'un régiment ou d'une escadre
+function resCost(t){const u=UT[t];if(!u)return null;const k=u.k;return k==='eleph'?{el:1}:k==='cav'?{ch:3,fe:1}:k==='lcav'?{ch:2}:k==='inf'?{fe:t==='lib'||t==='legion'?2:1}:null}
+const RES_SHIP={quin:{bo:6},tri:{bo:4},trans:{bo:3}};
+const resTxt=c=>c?Object.keys(c).map(k=>`${c[k]} ${c[k]>1||k==='ch'||k==='el'?RES_N[k]:RES_N[k]}`).join(', ').replace(/(\b1 )chevaux/,'$1cheval').replace(/(\b1 )éléphants/,'$1éléphant'):'';
+function resHas(side,c){if(!c)return true;resInit();const R=S.res[side];for(const k in c)if((R[k]||0)<c[k])return false;return true}
+function resPay(side,c){if(!c)return;resInit();const R=S.res[side];for(const k in c)R[k]=Math.max(0,(R[k]||0)-c[k])}
+function resWhy(i,side,c){if(!c)return '';if(!resLinked(i,side))return "Cette ville n'est reliée à aucun hub du réseau (il en faut un à moins de 200 km) : les ressources n'arrivent pas jusqu'ici";
+  if(!resHas(side,c)){const R=S.res[side];return 'Il manque : '+Object.keys(c).filter(k=>(R[k]||0)<c[k]).map(k=>`${RES_N[k]} (${Math.floor(R[k]||0)} sur ${c[k]})`).join(', ')}return ''}
+// blé : la production d'un hub suit la fertilité de sa région
+{const _hp=hubProd;hubProd=function(n){return _hp(n)*resBle(n)}}
+// mois
+{const _dR=daily;daily=function(d){const r=_dR.apply(this,arguments);try{if(S&&!S.cur&&!S.over&&S.dep){resInit();if(Math.floor(d)%30===0)resMonthly()}}catch(e){console.error(e)}return r}}
+// IA : ses recrues puisent dans sa réserve ; sans ressource, le régiment sort à 60 %
+{const _arR=addRecruit;addRecruit=function(i,side,t,ds){const before=new Set();if(S&&HUB_SIDE(side)&&!HUB_HUM(side))for(const a of S.armies)if(a.side===side)for(const u of a.units)before.add(u);
+  const r=_arR.apply(this,arguments);try{if(S&&S.dep&&HUB_SIDE(side)&&!HUB_HUM(side)){resInit();const c=resCost(t);if(c){
+    if(resHas(side,c)&&resLinked(i,side))resPay(side,c);else for(const a of S.armies){if(a.side!==side||a.dead)continue;const nu=a.units.find(u=>!before.has(u));if(nu){nu.men=Math.max(1,Math.round(nu.men*.6));break}}}}}catch(e){console.error(e)}return r}}
+// prise d'un hub : une part de la réserve change de mains
+{const _cpR=capture;capture=function(i,side){const prev=ownerN(i),had=S&&S.dep&&S.dep[N[i].id]&&HUB_SIDE(prev)&&prev!==side;let nb=0;if(had){resInit();const info=hubNet(prev).info;for(const k in info)if(info[k].lk)nb++}
+  const r=_cpR.apply(this,arguments);try{if(had&&nb>0&&S.res){const P=S.res[prev],got=[];for(const k of RES_K){const x=Math.floor(P[k]/nb*hubLvl(N[i])/1.5);if(x<=0)continue;P[k]-=x;if(HUB_SIDE(side)){S.res[side][k]+=x;got.push(`${x} ${RES_N[k]}`)}}
+    if(got.length&&side==='car')log(`Dans les magasins de ${N[i].n} : ${got.join(', ')}.`);RES_INC=null}}catch(e){console.error(e)}return r}}
+// achat par mer
+function resBuy(k){resInit();const n=k==='el'?1:5,c=RES_PRICE[k]*n;if((S.gold.car||0)<c||!resSeaOk('car'))return false;
+  const fn=()=>{S.gold.car-=c;S.res.car[k]+=n;log(`Des marchands livrent ${n} ${n>1?RES_N[k]:RES_N[k].replace(/x$|s$/,'')} à vos ports (−${c} or).`);return true};
+  try{if(typeof mpdWith==='function')return mpdWith(null,fn)}catch(e){}return fn()}
+function resSeaOk(side){const info=hubNet(side).info;for(const k in info){const n=N[k];if(info[k].lk&&n.port&&!hubBlocked(n)&&hubLvl(n)===3)return true}return false}
+// ---- interface ----
+function resLine(side){resInit();const R=S.res[side],I=resIncome(side);return RES_K.map(k=>`<span style="white-space:nowrap"><b style="color:${RES_C[k]}">${RES_N[k].charAt(0).toUpperCase()+RES_N[k].slice(1)}</b> ${Math.floor(R[k])} <span class="sub">(+${I.tot[k]}/mois)</span></span>`).join(' · ')}
+{const _tbR=townBlock;townBlock=function(i,main){let h=_tbR.apply(this,arguments);try{const n=N[i];if(!S||!S.gens||n.col)return h;const p=resOf(n),bl=resBle(n);if(!p&&bl===1)return h;
+  const parts=[];if(p)for(const k in p)parts.push(`<b style="color:${RES_C[k]}">${RES_N[k]}</b> +${p[k]} par mois`);if(bl!==1)parts.push(bl>1?`<b style="color:${RES_C.bl}">terre à blé</b> (vivres des hubs ×${String(bl).replace('.',',')})`:`terre pauvre en blé (vivres des hubs ×${String(bl).replace('.',',')})`);
+  let t=`<p class="sub">Ressources de ${esc(regOf(n)||'la région')} : ${parts.join(' · ')}`;
+  if(p){const sd=resSide(i);if(sd&&sd[0]==='car')t+=resLinked(i,'car')?(sd[1]<1?' · un allié vous en livre la moitié':''):' · <b style="color:var(--bad)">perdues : aucun hub relié à 200 km</b>'}
+  t+='.</p>';const p1=h.indexOf('<h3');h=p1<0?h+t:h.slice(0,p1)+t+h.slice(p1)}catch(e){console.error(e)}return h}}
+{const _btR=bindTown;bindTown=function(){const r=_btR.apply(this,arguments);try{resInit();
+  document.querySelectorAll('[data-rec],[data-recd]').forEach(b=>{const i=+b.dataset.n,n=N[i];if(!n)return;const d=b.dataset.recd!=null?desOf(+b.dataset.recd):null,t=d?d.base:b.dataset.rec,c=resCost(t);if(!c)return;
+    const sp=b.parentElement&&b.parentElement.querySelector('.sub');if(sp&&!sp.dataset.res){sp.dataset.res=1;sp.insertAdjacentHTML('beforeend',` · ${resTxt(c)}`)}
+    if(b.disabled)return;const why=resWhy(i,'car',c);if(why){b.disabled=true;b.title=why;return}
+    const old=b.onclick;b.onclick=function(e){const id=n.id,had=!!S.q[id];const res=old&&old.call(this,e);try{if(!had&&S.q[id]){resPay('car',c);renderAll()}}catch(x){}return res}});
+  document.querySelectorAll('[data-ship]').forEach(b=>{const i=+b.dataset.n,n=N[i],c=RES_SHIP[b.dataset.ship];if(!n||!c)return;
+    const sp=b.parentElement&&b.parentElement.querySelector('.sub');if(sp&&!sp.dataset.res){sp.dataset.res=1;sp.insertAdjacentHTML('beforeend',` · ${resTxt(c)}`)}
+    if(b.disabled)return;const why=resWhy(i,'car',c);if(why){b.disabled=true;b.title=why;return}
+    const old=b.onclick;b.onclick=function(e){const id=n.id,had=!!S.fq[id];const res=old&&old.call(this,e);try{if(!had&&S.fq[id]){resPay('car',c);renderAll()}}catch(x){}return res}})}catch(e){console.error(e)}return r}}
+// carte : lieux de production (vue Logistique)
+function resDraw(s,inV){if(s<.35)return;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='700 9px Barlow Semi Condensed, Arial Narrow, sans-serif';
+  for(const n of N){const p=resOf(n);if(!p||!inV(n.x,n.y,30))continue;const ks=Object.keys(p),sd=resSide(n.i),mine=sd&&sd[0]==='car',lost=mine&&!resLinked(n.i,'car');let X=view.ox+n.x*s-(ks.length-1)*8,Y=view.oy+n.y*s+17;
+    for(const k of ks){ctx.beginPath();ctx.arc(X,Y,7,0,7);ctx.fillStyle=RES_C[k];ctx.globalAlpha=mine?1:.55;ctx.fill();ctx.lineWidth=lost?2.2:1.2;ctx.strokeStyle=lost?'#e0553a':'rgba(25,18,8,.9)';ctx.stroke();ctx.fillStyle='#1c1408';ctx.fillText(RES_L[k],X,Y+.5);X+=16}ctx.globalAlpha=1}
+  ctx.restore()}
+{const _hdR=hubDraw;hubDraw=function(s,inV){_hdR.apply(this,arguments);try{resDraw(s,inV)}catch(e){console.error(e)}}}
+// panneau : réserves et achats
+{const _hpR=hubPanel;hubPanel=function(){_hpR.apply(this,arguments);try{const el=$('hubLeg'),det=el&&$('hubDet');if(!el||!det)return;resInit();const I=resIncome('car'),sea=resSeaOk('car');
+  const lost=RES_K.filter(k=>I.lost[k]>0).map(k=>`${I.lost[k]} ${RES_N[k]}`);
+  let h=`<div id="hubRes" style="margin:0 0 6px;padding:6px 0;border-top:1px solid var(--line,#8a6a3a);border-bottom:1px solid var(--line,#8a6a3a)"><div style="line-height:1.5">${resLine('car')}</div>`;
+  if(lost.length)h+=`<div style="color:var(--bad,#e0553a)">Production perdue chaque mois, faute de hub relié : ${lost.join(', ')}.</div>`;
+  h+=`<div class="sub" id="hubResLeg" style="margin-top:3px">Pastilles sur la carte : Ch chevaux, Fe fer, Bo bois, Él éléphants (cerclées de rouge si la production se perd).</div>`;
+  h+=`<div class="row" style="margin:5px 0 0;flex-wrap:wrap;gap:4px">${RES_K.map(k=>`<button data-resbuy="${k}" type="button" ${!sea||S.gold.car<RES_PRICE[k]*(k==='el'?1:5)?'disabled':''} title="${sea?'Acheté à des marchands, livré par mer à vos ports':'Il faut une grande base portuaire libre'}">${k==='el'?'1 éléphant':'5 '+RES_N[k]} (${RES_PRICE[k]*(k==='el'?1:5)})</button>`).join('')}</div></div>`;
+  det.insertAdjacentHTML('beforebegin',h);el.querySelectorAll('[data-resbuy]').forEach(b=>b.onclick=()=>{resBuy(b.dataset.resbuy);renderAll();hubPanel()})}catch(e){console.error(e)}}}
+// ================= DESSINS DES RESSOURCES (à la place des lettres) =================
+function resIcon(c,k,X,Y,r){c.save();c.translate(X,Y);c.beginPath();c.arc(0,0,r,0,7);c.fillStyle=RES_C[k];c.fill();c.lineWidth=Math.max(1,r*.14);c.strokeStyle='rgba(25,18,8,.9)';c.stroke();
+  c.scale(r*.72,r*.72);c.fillStyle='#1c1408';c.strokeStyle='#1c1408';c.lineJoin='round';c.lineCap='round';const P=pts=>{c.beginPath();c.moveTo(pts[0],pts[1]);for(let i=2;i<pts.length;i+=2)c.lineTo(pts[i],pts[i+1]);c.closePath();c.fill()};
+  if(k==='ch'){P([-.6,.85,-.4,.05,-.12,-.5,-.1,-.95,.12,-.62,.42,-.3,.82,.3,.62,.55,.3,.25,.08,.3,.2,.85]);c.fillStyle=RES_C[k];c.beginPath();c.arc(.22,-.22,.09,0,7);c.fill()}
+  else if(k==='fe'){P([-.85,-.55,.85,-.55,.55,-.15,.25,-.15,.25,.25,.65,.6,-.65,.6,-.25,.25,-.25,-.15,-.6,-.15])}
+  else if(k==='bo'){P([0,-.9,.55,-.1,.25,-.1,.7,.5,-.7,.5,-.25,-.1,-.55,-.1]);c.fillRect(-.12,.5,.24,.4)}
+  else if(k==='el'){c.beginPath();c.ellipse(-.18,-.05,.6,.42,0,0,7);c.fill();c.beginPath();c.arc(.45,-.2,.32,0,7);c.fill();c.fillRect(-.6,.2,.22,.6);c.fillRect(.0,.2,.22,.6);
+    c.lineWidth=.17;c.beginPath();c.moveTo(.7,-.05);c.quadraticCurveTo(.92,.35,.72,.8);c.stroke();c.strokeStyle=RES_C[k];c.lineWidth=.09;c.beginPath();c.moveTo(.5,.05);c.lineTo(.72,.2);c.stroke()}
+  else{c.lineWidth=.13;c.beginPath();c.moveTo(0,.9);c.lineTo(0,-.5);c.stroke();for(const [x,y,a] of [[0,-.7,0],[-.28,-.38,-.6],[.28,-.38,.6],[-.28,.0,-.6],[.28,.0,.6],[-.28,.38,-.6],[.28,.38,.6]]){c.beginPath();c.ellipse(x,y,.14,.26,a,0,7);c.fill()}}
+  c.restore()}
+const resCan=(k,px)=>`<canvas data-ric="${k}" width="${(px||18)*2}" height="${(px||18)*2}" style="width:${px||18}px;height:${px||18}px;vertical-align:-4px"></canvas>`;
+function resIcons(root){(root||document).querySelectorAll('canvas[data-ric]').forEach(cv2=>{if(cv2.dataset.ok)return;cv2.dataset.ok=1;const c=cv2.getContext('2d'),w=cv2.width;resIcon(c,cv2.dataset.ric,w/2,w/2,w/2-2)})}
+resDraw=function(s,inV){if(s<.35)return;const r=Math.max(7,Math.min(11,6+s*2));
+  for(const n of N){const p=resOf(n),bl=resBle(n)>1.2;if((!p&&!bl)||!inV(n.x,n.y,40))continue;const ks=p?Object.keys(p):[];if(bl)ks.push('bl');
+    const sd=resSide(n.i),mine=sd&&sd[0]==='car',lost=mine&&!resLinked(n.i,'car');let X=view.ox+n.x*s-(ks.length-1)*(r+1),Y=view.oy+n.y*s+r+11;
+    ctx.globalAlpha=mine?1:.6;for(const k of ks){resIcon(ctx,k,X,Y,r);if(lost&&k!=='bl'){ctx.beginPath();ctx.arc(X,Y,r+1.5,0,7);ctx.lineWidth=2;ctx.strokeStyle='#e0553a';ctx.stroke()}X+=2*r+2}ctx.globalAlpha=1}};
+resLine=function(side){resInit();const R=S.res[side],I=resIncome(side);return RES_K.map(k=>`<span style="white-space:nowrap">${resCan(k)} <b>${RES_N[k].charAt(0).toUpperCase()+RES_N[k].slice(1)}</b> ${Math.floor(R[k])} <span class="sub">(+${I.tot[k]}/mois)</span></span>`).join(' · ')};
+// ================= RÔLE DES LIEUX (étape 3) : villages, bourgs, villes moyennes, capitales =================
+// - Villages : la production d'un lieu suit la part de ses villages, bourgs et domaines encore intacts ; relais d'étape (fatigue).
+// - Bourgs : péage aux carrefours et au pied des cols.
+// - Villes : haras, forge, scierie (bâtiments BLD.har / frg / sci) doublent la ressource de la région.
+// - Capitales : arrière-pays (villages intacts, lieux voisins tenus) ; perdu, la ville amasse moins de vivres et l'ordre baisse.
+const RES_BLD={ch:'har',fe:'frg',bo:'sci'};
+BLD.har={n:'Haras',max:1,need:n=>n.size>=1&&!!(resOf(n)&&resOf(n).ch),cost:[70],days:[30],txt:'double les chevaux que fournit la ville'};
+BLD.frg={n:'Forge',max:1,need:n=>n.size>=1&&!!(resOf(n)&&resOf(n).fe),cost:[70],days:[30],txt:'double le fer que fournit la ville'};
+BLD.sci={n:'Scierie',max:1,need:n=>n.size>=1&&!!(resOf(n)&&resOf(n).bo),cost:[60],days:[30],txt:'double le bois que fournit la ville'};
+// part des villages intacts du territoire d'un lieu (1 = tout est debout)
+function vilFrac(n){hubHinter(n);const w=HUB_HV.w[n.i]||0;return w>0?Math.max(0,Math.min(1,hubHinter(n)/w)):1}
+// production réelle du lieu : région × villages intacts × bâtiment
+function resEff(n){const p=resOf(n);if(!p)return null;const f=.3+.7*vilFrac(n),o={};for(const k in p)o[k]=Math.round(p[k]*f*(RES_BLD[k]&&bl(n.id,RES_BLD[k])?2:1)*100)/100;return o}
+resIncome=function(side){const key=Math.floor(S.day/2)+':'+Object.keys(S.dep).length+':'+Object.keys(S.vil||{}).length+':'+Object.keys(S.bq||{}).length;if(RES_INC&&RES_INC.S===S&&RES_INC.key===key&&RES_INC[side])return RES_INC[side];
+  if(!RES_INC||RES_INC.S!==S||RES_INC.key!==key)RES_INC={S,key};
+  const tot={ch:0,fe:0,bo:0,el:0},lost={ch:0,fe:0,bo:0,el:0};
+  for(const n of N){const p=resEff(n);if(!p)continue;const sd=resSide(n.i);if(!sd||sd[0]!==side)continue;if(S.siege[n.id])continue;
+    const ok=resLinked(n.i,side);for(const k in p)(ok?tot:lost)[k]+=p[k]*sd[1]}
+  for(const k of RES_K){tot[k]=Math.round(tot[k]*10)/10;lost[k]=Math.round(lost[k]*10)/10}
+  return RES_INC[side]={tot,lost}};
+// relais d'étape : une armée arrêtée près d'un village intact de son camp se repose mieux
+function relaisOf(a){if(a.g||a.ship||a.inG||a.legs.length||a.dead)return null;const v=nearestVillage(a.x,a.y,3);if(!v||vRuined(v)||ownerN(v.t)!==a.side)return null;return v}
+// péage : bourg ou village tenant un carrefour de routes ou le pied d'un col
+function peageOf(n){if(n.col||n.size>1)return 0;if(n._pg!==undefined)return n._pg;let col=false;for(const k of ADJ[n.i])if(EDGES[k].type==='col')col=true;return n._pg=col?3:hubCross(n)?2:0}
+{const _tiL=townIncome;townIncome=function(n){let v=_tiL.apply(this,arguments);try{v+=peageOf(n)}catch(e){}return v}}
+// arrière-pays d'une capitale : 0 (intact) à 1 (perdu)
+function hinterLoss(n){if(n.size<3)return 0;const o=ownerN(n.i);if(!o)return 0;let tot=0,bad=0;for(const k of ADJ[n.i]){const e=EDGES[k];if(e.type==='mer')continue;const v=e.a===n.i?e.b:e.a;if(N[v].col)continue;tot++;if(cityHostile(v,o))bad++}
+  return Math.min(1,.6*(1-vilFrac(n))+.4*(tot?bad/tot:0))}
+{const _hpL=hubProd;hubProd=function(n){return _hpL(n)*(1-.7*hinterLoss(n))}}
+{const _opL=ordParts;ordParts=function(n){const P=_opL.apply(this,arguments);try{const h=hinterLoss(n);if(h>.1)P.push(['arrière-pays perdu',-Math.round(25*h)])}catch(e){}return P}}
+{const _dL=daily;daily=function(d){const r=_dL.apply(this,arguments);try{if(S&&!S.cur&&!S.over)for(const a of S.armies){if(!HUB_SIDE(a.side)||!(a.fat>0))continue;if(relaisOf(a))a.fat=Math.max(0,a.fat-3)}}catch(e){console.error(e)}return r}}
+// ---- interface ----
+{const _tbL=townBlock;townBlock=function(i,main){let h=_tbL.apply(this,arguments);try{const n=N[i];if(!S||!S.gens||n.col)return h;const p=resOf(n),e=resEff(n),bl2=resBle(n);
+  // ligne des ressources : dessins, production réelle
+  const a=h.indexOf('<p class="sub">Ressources de '),b=a<0?-1:h.indexOf('</p>',a);
+  if(a>=0&&b>0){const parts=[];if(e)for(const k in e)parts.push(`${resCan(k)} ${RES_N[k]} +${String(e[k]).replace('.',',')} par mois${RES_BLD[k]&&bl(n.id,RES_BLD[k])?' ('+BLD[RES_BLD[k]].n.toLowerCase()+')':''}`);
+    if(bl2!==1)parts.push(bl2>1?`${resCan('bl')} terre à blé (vivres des hubs ×${String(bl2).replace('.',',')})`:`terre pauvre en blé (vivres des hubs ×${String(bl2).replace('.',',')})`);
+    let t=`<p class="sub">Ressources de ${esc(regOf(n)||'la région')} : ${parts.join(' · ')}`;const vf=vilFrac(n);
+    if(p&&vf<.98)t+=` · <b style="color:var(--bad)">villages dévastés à ${Math.round((1-vf)*100)} %</b>, la production en souffre`;
+    if(p){const sd=resSide(i);if(sd&&sd[0]==='car')t+=resLinked(i,'car')?(sd[1]<1?' · un allié vous en livre la moitié':''):' · <b style="color:var(--bad)">perdues : aucun hub relié à 200 km</b>'}
+    h=h.slice(0,a)+t+'.'+h.slice(b)}
+  let x='';const pg=peageOf(n);if(pg)x+=`<p class="sub">Péage : +${pg} or par mois (${pg===3?'au pied d\'un col':'carrefour de routes'}).</p>`;
+  if(n.size>=3){const hl=hinterLoss(n);x+=`<p class="sub">Arrière-pays : ${hl<=.1?'intact, la ville est bien nourrie':`<b style="color:var(--bad)">perdu à ${Math.round(hl*100)} %</b> (villages brûlés, lieux voisins à l'ennemi) : vivres amassés −${Math.round(70*hl)} %, ordre −${Math.round(25*hl)}`}.</p>`}
+  if(x){const p1=h.indexOf('<h3');h=p1<0?h+x:h.slice(0,p1)+x+h.slice(p1)}}catch(e2){console.error(e2)}return h}}
+{const _btL=bindTown;bindTown=function(){const r=_btL.apply(this,arguments);try{resIcons()}catch(e){}return r}}
+{const _hpI=hubPanel;hubPanel=function(){_hpI.apply(this,arguments);try{const el=$('hubLeg');if(!el)return;const sub=el.querySelector('#hubResLeg');
+  if(sub&&!sub.dataset.ic){sub.dataset.ic=1;sub.innerHTML=`Sur la carte : ${resCan('ch',16)} chevaux, ${resCan('fe',16)} fer, ${resCan('bo',16)} bois, ${resCan('el',16)} éléphants, ${resCan('bl',16)} terre à blé. Cerclé de rouge : la production se perd.`}resIcons(el)}catch(e){console.error(e)}}}
+{const _lhL=logiHtml;logiHtml=function(a){let h=_lhL.apply(this,arguments);try{const v=relaisOf(a);if(v)h+=`<div class="sub">Relais d'étape à ${esc(v.n)} : l'armée s'y repose mieux (fatigue −3 par jour).</div>`}catch(e){}return h}}
+// ================= CARAVANES (étape 4) : les ressources voyagent sur les routes =================
+// Chaque mois, un lieu qui n'a pas de hub sur place envoie sa production par caravane (S.cara) vers son hub. Une armée ennemie
+// à moins de 5 km, sans escorte amie, l'enlève. L'IA romaine au repos se jette sur une caravane proche qu'elle voit.
+function resAdd(side,load){resInit();const R=S.res[side],cap=resCap(side);for(const k in load){const c=k==='el'?Math.max(4,cap/8):cap;R[k]=Math.min(Math.max(R[k],c),R[k]+load[k])}}
+const caraTxt=load=>Object.keys(load).filter(k=>load[k]>0).map(k=>`${String(Math.round(load[k]*10)/10).replace('.',',')} ${RES_N[k]}`).join(', ');
+function caraSend(i,h,side,load){const n=N[i],c={id:S.uid++,side,x:n.x,y:n.y,at:i,legs:[],units:[],cool:0,scout:0,conv:1,res:load,hub:h,from:i};
+  try{if(!order(c,N[h].x,N[h].y,h))return false}catch(e){return false}if(!c.legs.length)return false;S.cara.push(c);return true}
+resMonthly=function(){resInit();S.cara=S.cara||[];
+  for(const s of ['car','rom'])for(const n of N){const p=resEff(n);if(!p)continue;const sd=resSide(n.i);if(!sd||sd[0]!==s||S.siege[n.id]||!resLinked(n.i,s))continue;
+    const h=resHub(n.i,s),load={};for(const k in p)load[k]=p[k]*sd[1];
+    if(h===n.i||S.cara.length>120||!caraSend(n.i,h,s,load))resAdd(s,load)}};
+function moveCara(dd){for(const c of S.cara.slice()){let budget=dd;
+  while(budget>0&&c.legs.length){const L=c.legs[0];if(typeof brOnSeg==='function'&&brOnSeg(c.x,c.y,L.x,L.y)){c.legs=[];c.blk=1;break}
+    const dist=Math.hypot(L.x-c.x,L.y-c.y),sp=legSpeed(c,L.type,L.tf,c.x,c.y),need=dist/sp;
+    if(need<=budget){c.x=L.x;c.y=L.y;budget-=need;c.legs.shift();c.at=L.n!=null?L.n:null}else{c.x+=(L.x-c.x)*budget/need;c.y+=(L.y-c.y)*budget/need;budget=0;c.at=null}}
+  if(!c.legs.length){S.cara=S.cara.filter(x=>x!==c);const n=N[c.hub];if(!c.blk&&Math.hypot(c.x-n.x,c.y-n.y)<2&&ownerN(c.hub)===c.side&&S.dep[n.id])resAdd(c.side,c.res)}}}
+function caraDaily(){if(!S.cara)return;
+  for(const c of S.cara.slice()){const foe=S.armies.find(o=>!o.dead&&!o.ship&&!o.g&&!o.inG&&hostile(o,{side:c.side})&&Math.hypot(o.x-c.x,o.y-c.y)<5);if(!foe)continue;
+    if(S.armies.some(o=>!o.dead&&!o.ship&&o.side===c.side&&Math.hypot(o.x-c.x,o.y-c.y)<5))continue;
+    S.cara=S.cara.filter(x=>x!==c);if(HUB_SIDE(foe.side))resAdd(foe.side,c.res);
+    if(c.side==='car')log(`Une caravane venue de ${N[c.from].n} (${caraTxt(c.res)}) est enlevée par ${foe.name}.`);
+    else if(foe.side==='car')log(`${foe.name} enlève une caravane ennemie : ${caraTxt(c.res)}.`)}
+  if(typeof MPRH==='function'&&MPRH('rom'))return;
+  for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship||a.inG||a.legs.length||a.units.length<2||Math.random()>.5)continue;
+    const c=S.cara.find(c=>c.side==='car'&&Math.hypot(c.x-a.x,c.y-a.y)<30&&(typeof visAtR!=='function'||visAtR(c.x,c.y)>=1));if(c){try{order(a,c.x,c.y)}catch(e){}}}}
+{const _tkC=tick;tick=function(dd){_tkC.apply(this,arguments);try{if(S&&S.cara&&S.cara.length&&!S.cur&&!S.over)moveCara(dd)}catch(e){console.error(e)}}}
+{const _dC=daily;daily=function(d){const r=_dC.apply(this,arguments);try{if(S&&!S.cur&&!S.over)caraDaily()}catch(e){console.error(e)}return r}}
+function caraDraw(s,inV){if(!S.cara||!S.cara.length||s<(HUBV?.45:.9))return;const k=Math.max(.8,Math.min(1.5,s/1.6));
+  for(const c of S.cara){if(!inV(c.x,c.y,30)||(c.side!=='car'&&visAt(c.x,c.y)<1))continue;const X=view.ox+c.x*s,Y=view.oy+c.y*s,col=FAC[c.side].c;
+    ctx.save();ctx.translate(X,Y);ctx.scale(k,k);
+    // deux mulets bâtés
+    for(const dx of [-7,5]){ctx.fillStyle='#6b4a2c';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(dx,-3,5,2.6,0,0,7);ctx.fill();ctx.stroke();ctx.fillRect(dx+3.5,-7,2.2,3.5);
+      ctx.fillStyle='#d9c79a';ctx.fillRect(dx-3,-6.5,5,2.6);ctx.strokeStyle='#2b1c0e';ctx.beginPath();ctx.moveTo(dx-3,-1);ctx.lineTo(dx-3,2.5);ctx.moveTo(dx+3,-1);ctx.lineTo(dx+3,2.5);ctx.stroke()}
+    ctx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`;ctx.fillRect(-1,-15,5,3.5);ctx.strokeStyle='#2b1c0e';ctx.beginPath();ctx.moveTo(-1,-15);ctx.lineTo(-1,-6);ctx.stroke();
+    let x=-(Object.keys(c.res).length-1)*6.5;for(const r in c.res){resIcon(ctx,r,x,-22,6);x+=13}
+    ctx.restore()}}
+{const _dfC=drawFleets;drawFleets=function(s,z,inV){try{if(S&&S.cara)caraDraw(s,inV)}catch(e){console.error(e)}return _dfC.apply(this,arguments)}}
+{const _hpC=hubPanel;hubPanel=function(){_hpC.apply(this,arguments);try{const leg=$('hubResLeg');if(!leg||!S.cara)return;const mine=S.cara.filter(c=>c.side==='car');
+  if(mine.length)leg.insertAdjacentHTML('beforebegin',`<div class="sub">Caravanes en route : ${mine.length}. Une armée ennemie à moins de 5 km les enlève si vous ne les escortez pas.</div>`)}catch(e){}}}
+/* ---- Camp pillé en bataille (res.pille={p,e} envoyé par bataille.html, fil Batailles 2D) :
+   l'armée dont le camp est pillé perd ses vivres (il en reste 15 %), tout son matériel et ses bagages ;
+   le pilleur récupère 60 % des vivres et la moitié du matériel. L'écouteur de base ne transmet pas res.pille
+   à applyResult : on le capte ici, avec la bataille en cours comme clé. ---- */
+let HPIL=null;
+window.addEventListener('message',ev=>{try{const d=ev.data,fr=$('battle3d');if(d&&d.bellum==='retour'&&d.res&&d.res.pille&&S&&S.cur&&fr&&ev.source===fr.contentWindow)HPIL={p:!!d.res.pille.p,e:!!d.res.pille.e,k:S.cur.att[0]}}catch(e){}},true);
+function campPille(lose,win,snap){
+  let f=0,m=0;const noms=[];
+  for(const a of lose){const s=snap[a.id]||{f:0,m:0},mx=armyFoodMax(a);
+    const reste=Math.min(a.dead?0:aFood(a),s.f,mx*.15);f+=Math.max(0,s.f-reste);m+=s.m;
+    if(!a.dead){a.food=reste;a.mat=0;a.bag=false;noms.push(a.name)}}
+  const w=win.find(x=>!x.dead&&x.units.length);let gf=0,gm=0;
+  if(w){const mx=armyFoodMax(w);aFood(w);gf=Math.max(0,Math.min(mx-w.food,f*.6));w.food+=gf;
+    const cap=typeof matCap==='function'?matCap(w):0;gm=Math.max(0,Math.min(cap-(w.mat||0),Math.floor(m*.5)));if(gm)w.mat=(w.mat||0)+gm}
+  const hum=s=>s==='car'||(typeof MPRH==='function'&&MPRH(s));
+  if(lose.length&&hum(lose[0].side))log(`Le camp de ${noms[0]||lose[0].name} est pillé : les vivres, le matériel et les bagages sont perdus.`);
+  if(w&&hum(w.side))log(`${w.name} pille le camp ennemi${gf>=1||gm?' : '+[gf>=1?Math.round(gf)+' rations':'',gm?gm+' de matériel':''].filter(Boolean).join(' et ')+' récupérés':''}. L\'ennemi a perdu ses vivres et son matériel.`);
+}
+{const _arP=applyResult;applyResult=function(b,res){
+  let pl=res&&res.pille;if(!pl&&HPIL&&b&&b.att&&HPIL.k===b.att[0])pl=HPIL;HPIL=null;
+  if(!pl||(!pl.p&&!pl.e))return _arP.apply(this,arguments);
+  const get=L=>(L||[]).map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),attA=get(b.att),defA=get(b.def),snap={};
+  for(const a of [...attA,...defA])snap[a.id]={f:aFood(a),m:Math.floor(a.mat||0)};
+  const r=_arP.apply(this,arguments);
+  try{const am=b.attMine!=null?b.attMine:!!(attA[0]&&attA[0].side==='car'),mine=am?attA:defA,other=am?defA:attA;
+    if(pl.p)campPille(mine,other,snap);if(pl.e)campPille(other,mine,snap)}catch(e){console.warn('campPille',e)}
+  return r}}
+window.__hubs={applyResult:(b,r)=>applyResult(b,r),caraDaily,caraSend,moveCara,resAdd,resEff,vilFrac,hinterLoss,peageOf,relaisOf,resOf,resIncome,resMonthly,resCost,resHas,resPay,resLinked,resBuy,resInit,resWhy,regOf:n=>regOf(n),addRecruit:(i,s,t)=>addRecruit(i,s,t),get N(){return N},get S(){return S},get sel(){return sel},set sel(v){sel=v},renderAll:()=>renderAll(),centerOn:(x,y,s)=>centerOn(x,y,s),capture:(i,s)=>capture(i,s),hubNet,hubLvl,hubDebit,hubProd,hubCap,hubInit,hubSupply,hubConvoy,hubToggle,hubNearest,hubHinter,lineOf:a=>lineOf(a),get HUBV(){return HUBV},HUB_R,HUB_D,HUB_N};
+/* ================= FIN HUBS ================= */

@@ -1,0 +1,34 @@
+/* ================= FATIGUE, ALLURE ET CAMPS ================= */
+// a.fat : 0 (reposée) à 100 (épuisée). a.pace : 'force' | (normale) | 'prud' (camp de marche chaque soir). a.camp : {t, ok} camp fortifié.
+const PACE={force:{n:'Marche forcée',d:'+25 % de vitesse, fatigue ×2, usure +50 %'},norm:{n:'Allure normale',d:'fatigue modérée'}};
+function lossMul(a,g){let k=1;if(hasTr(g,'dur'))k*=.65;if(a.legs.length){if(a.pace==='force')k*=1.5;else if(a.pace==='prud')k*=.8}
+  if(a.camp&&a.camp.ok)k*=.7;k*=1+(a.fat||0)/200;return k}
+const fatWord=f=>f<20?'reposée':f<45?'en forme':f<70?'fatiguée':f<85?'harassée':'épuisée';
+const fatCol=f=>f<45?'var(--good)':f<70?'var(--gold)':f<85?'#e0a060':'var(--bad)';
+function fatigueHtml(a){const f=Math.round(a.fat||0),p=a.pace||'norm',canCamp=!a.legs.length&&!a.ship&&!a.inG&&(a.at==null||ownerN(a.at)!==a.side||N[a.at].col);
+  return `<div style="margin-top:6px">Fatigue <b style="color:${fatCol(f)}">${fatWord(f)}</b> <span class="sub">(${f})</span><div class="mbar"><i style="width:${f}%;background:${fatCol(f)}"></i></div></div>
+  <div class="sub">${f>30?`Force −${Math.round(30*(f-30)/70)} %${f>60?', moral en baisse':''}${f>70?', marche ralentie':''}. `:''}${a.camp?a.camp.ok?'<b style="color:var(--good)">Camp fortifié</b> : repos rapide, +15 % en défense, usure −30 %.':'Camp en construction…':''}</div>
+  <div class="row" style="margin:6px 0 0">${Object.entries(PACE).map(([k,P])=>`<button type="button" data-pace="${k}" class="${p===k?'on':''}" title="${P.d}">${P.n}</button>`).join('')}</div>
+  ${canCamp&&!a.camp?`<div class="row" style="margin:4px 0 0"><button id="aCamp" type="button" title="Un jour de travaux ; l'armée se repose bien plus vite et se défend mieux. Le camp est abandonné au départ.">Établir un camp</button></div>`:''}`}
+function bindFatigue(a){
+  document.querySelectorAll('[data-pace]').forEach(b=>b.onclick=()=>{a.pace=b.dataset.pace==='norm'?undefined:b.dataset.pace;renderAll()});
+  if($('aCamp'))$('aCamp').onclick=()=>{a.camp={t:S.day+1,ok:false,x:a.x,y:a.y};log(`${a.name} établit un camp fortifié.`);renderAll()}}
+const _daily3=daily;
+daily=function(d){
+  _daily3(d);if(S.cur||S.over)return;const se=season();
+  for(const a of S.armies){if(a.pace==='prud')a.pace=undefined;if(a.dead||a.ship)continue;
+    if(a.camp&&(a.legs.length||Math.hypot(a.x-a.camp.x,a.y-a.camp.y)>1))a.camp=null;
+    if(a.camp&&!a.camp.ok&&S.day>=a.camp.t){a.camp.ok=true}
+    const f0=a.fat||0;let f=f0;
+    if(a.legs.length){const t=a.legs[0].type;f+=(a.pace==='force'?9:a.pace==='prud'?1.5:4)+(t==='col'?4:t==='hors'||t==='chemin'?1.5:0)+(se==='Hiver'&&ownerAt(a.x,a.y)!==a.side?1.5:0)}
+    else f-=a.camp&&a.camp.ok?15:a.inG||(a.at!=null&&ownerN(a.at)===a.side)?20:a.camp?6:8;
+    a.fat=Math.max(0,Math.min(100,f));
+    if(a.side==='car'&&!a.g&&f0<85&&a.fat>=85)log(`${a.name} est épuisée : faites une halte, idéalement dans un camp.`);
+  }
+};
+// l'IA romaine adopte le camp chaque soir quand ses armées sont fatiguées, et campe à l'arrêt hors de ses terres
+const _daily4=daily;
+daily=function(d){_daily4(d);if(S.cur||S.over)return;
+  for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship)continue;a.pace=undefined;
+    if(!a.legs.length&&!a.camp&&!a.inG&&ownerAt(a.x,a.y)!=='rom'&&(a.at==null||!S.siege[N[a.at].id]))a.camp={t:S.day+1,ok:false,x:a.x,y:a.y}}};
+

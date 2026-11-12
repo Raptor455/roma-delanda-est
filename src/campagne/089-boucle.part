@@ -1,0 +1,25 @@
+/* ================= BOUCLE ================= */
+setTimeout(async()=>{
+  await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();
+  if(!readReturn()){S=load();if(!S||!S.own||!S.own.roma)newGame()}
+  fixOldSave();
+  afterLoad();save();
+  if(!S.started&&!S.cur&&S.day===0)openHelpIntro();
+  let last=performance.now(),uiT=0;
+  function frame(now){
+    const raw=Math.min(.1,(now-last)/1000);last=now;
+    if(!S.paused&&!S.cur&&!S.over&&($('modal').hidden||MPH())/*MP*/){
+      {const _p=performance.now();tick(raw/DAY_S*S.speed);computeVis();PERF.t.sim+=performance.now()-_p}/*PERF*/
+      for(const a of S.armies)if(a.side!=='car'&&visOfArmy(a)>0)S.intel[a.id]={x:a.x,y:a.y,d:Math.floor(S.day)};
+      uiT-=raw;if(uiT<=0){uiT=.5;renderTop();if(sel&&!$('side').matches(':hover'))gaSide()/*PERF-GA*/}
+    }
+    if(sel&&sel.a&&sel.a.dead){sel=null;renderSide()}
+    {const bf=$('battle3d');if(!bf||bf.style.opacity!=='1'){stepZoom(raw||.016);const _p=performance.now();draw();PERF.t.draw+=performance.now()-_p;PERF.t.n++}/*PERF*/}requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+},20);
+window.__camp={get SRC(){return SRC},get SRCR(){return SRCR},visAt,visAtR,vsOf,vsMask,computeVisR,visDaily,romKnown,raisePatrol,patrolsMove,patTargets,viewshed,get BR(){return BR},cutBridge,bridgesDaily,legsBlocked,brOnSeg,crossRiv,seaCell,startRebuild,armyBridge,isLand:(x,y)=>isLand(x,y),landFine,landFast:(x,y)=>landFast(x,y),get SG(){return SG},fleetTarget,demH,edgeClosed,isPassable,horsLegs,planVillage,villageToRoad,season,openWorkshop,dStats,desOf,addRecruit,get VIL(){return VIL},vPillage,vForage,vBuy,vAsk,vAux,nearestVillage,armyVillage,foodDays,townIncome,get S(){return S},get sel(){return sel},set sel(v){sel=v},board,unload,orderFleet,fleetLegsTo,seaPath,canBoard,fleetsDaily,aiTurn,renderAll,daily,get view(){return view},get N(){return N},get EDGES(){return EDGES},NI,order,tick,plan,computeVis,applyResult,autoResolve,centerOn,zoomAt,prj,renderTileAt,TILES,battleTerrain,battleGround,get cur(){return S.cur},fineDetail:(...a)=>fineDetail(...a),terrFast};
+})();
+</script>
+</body>
+</html>

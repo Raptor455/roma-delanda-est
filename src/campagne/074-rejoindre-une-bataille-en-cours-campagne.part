@@ -1,0 +1,101 @@
+/* ================= REJOINDRE UNE BATAILLE EN COURS (campagne ; fil « Rejoindre une bataille en direct à plusieurs ») =================
+   En partie à plusieurs, pendant qu'une bataille se livre sur le terrain (à deux, ou un joueur contre l'IA) :
+   - la carte continue d'avancer au ralenti (LB.DAY secondes réelles par jour) pour les joueurs qui ne combattent pas,
+     tant qu'il en reste au moins un ; les armées engagées restent immobiles, aucune autre bataille ne s'engage ;
+   - les armées des autres joueurs à moins de LB.CAND km au début de la bataille sont « candidates » (b.jc) : leurs régiments
+     sont chargés sur le champ de bataille mais tenus hors du champ ;
+   - un joueur engage son armée quand elle est à moins de LB.K km (bouton du bandeau, ou d'elle-même à moins de LB.AUTO km) :
+     b.jn[id]={p,arr} ; elle entre en renfort au bout de arr secondes de bataille, par le bord qui fait face à sa marche,
+     et son joueur ouvre le champ de bataille (rôle 'j') pour commander ses régiments en direct ;
+   - au retour, seuls les candidats engagés comptent dans le résultat (pertes, victoire, retraite).
+   Repose sur pvp-campagne.js (PVPC, window.__pvp) et pvp-bataille.js. Source : /mnt/project-files/futur/rejoindre-campagne.js. */
+const LB={K:30,CAND:40,AUTO:3,DAY:60,in:false,ext:null};
+{
+  const armyOf=id=>S.armies.find(x=>x.id===id&&!x.dead);
+  const pvp=()=>window.__pvp||{};
+  const live=b=>!!(MP.role&&b&&b.mp&&b.mp.id&&b.mp.bh&&(b.mp.state==='pvp'||/^3d:/.test(b.mp.state||''))&&!(pvp().done&&pvp().done.has(b.mp.id)));
+  const fighters=b=>new Set([b.mp.bh,b.mp.bg].filter(Boolean));
+  const joinedBy=b=>new Set(Object.values(b.jn||{}).map(j=>j.p));
+  const conn=id=>id===MP.me||!!(S.mpP&&S.mpP[id]&&S.mpP[id].on!==0&&(MP.role!=='host'||(MP.gs[id]&&MP.gs[id].on)));
+  const arrS=d=>Math.round(20+Math.max(0,d)*15);           // secondes de bataille avant l'entrée en renfort
+  const distB=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  // ---- armées candidates, fixées quand la bataille sur le terrain est décidée (chez l'hôte de la partie) ----
+  function cands(b){const a0=armyOf(b.att[0]),d0=armyOf(b.def[0]);if(!a0||!d0)return [];const O=b.mp.o||{},lead=new Set(Object.values(O));
+    const L=[];for(const x of S.armies){if(x.dead||x.ship||x.inG||x.g||!x.units||!x.units.length||b.att.includes(x.id)||b.def.includes(x.id))continue;
+      if(x.side!==a0.side&&x.side!==d0.side)continue;if(distB(x,b)>LB.CAND)continue;const own=mpOwner(x);if(!own||lead.has(own)||!S.mpP||!S.mpP[own])continue;
+      L.push({id:x.id,g:x.side===a0.side?'att':'def',n:x.units.length})}
+    return L}
+  {const _r=mpResolve;mpResolve=function(){const b=S.cur;try{if(MPH()&&b&&b.mp&&!b.mp.state&&!b.jc&&!['car','rom'].some(k=>b.mp[k]===0))b.jc=cands(b)}catch(e){console.warn(e)}
+    return _r.apply(this,arguments)}}
+  // ---- le champ de bataille reçoit aussi les régiments des candidats (en fin de liste, tenus hors du champ) ----
+  {const _bf=bFlat;bFlat=function(ids){const r=_bf(ids);const X=LB.ext;if(X&&(ids===X.b.att||ids===X.b.def)){for(const c of X.b.jc)if(c.g===(ids===X.b.att?'att':'def')){const a=armyOf(c.id);if(!a)continue;r.push(..._bf([c.id]).slice(0,c.n))}}return r}}
+  {const _g3=go3D;go3D=function(){const b=S.cur;if(!b||!b.jc||!b.jc.length||!MP.role)return _g3.apply(this,arguments);
+    const had=b.arr,arr=Object.assign({},b.arr||{});for(const c of b.jc)arr[c.id]=1e9;b.arr=arr;LB.ext={b};
+    try{return _g3.apply(this,arguments)}finally{LB.ext=null;if(had)b.arr=had;else delete b.arr}}}
+  // chaque régiment emporte le joueur qui commande son armée (c.ow) et, pour un candidat, l'armée à engager (c.jn)
+  {const _dv=dive;dive=function(payload){try{const b=S.cur,pb=payload&&payload.b;if(MP.role&&b&&pb&&pb.p&&!(payload.pvp&&payload.pvp.role!=='h')){
+      const am=!!b.attMine,A=bFlat(b.att),D=bFlat(b.def),jc=new Set((b.jc||[]).map(c=>c.id));
+      const tag=(L,F)=>(L||[]).forEach((c,k)=>{const q=F[k];if(!c||!q)return;const a=S.armies.find(x=>x.id===q.aid);if(!a)return;const o=mpOwner(a);if(o)c.ow=o;if(jc.has(a.id)){c.jn=a.id;c.arr=1e9}});
+      tag(pb.p,am?A:D);tag(pb.e,am?D:A)}}catch(e){console.warn(e)}
+    return _dv.apply(this,arguments)}}
+  // ---- résultat : seuls les candidats engagés comptent ----
+  {const _ar=applyResult;applyResult=function(b,res){
+    if(!b||!b.jc||!b.jc.length||!res||!res.A||MP.role!=='host'||(MP.pvpG&&mpBKey(b)===MP.pvpG))return _ar.apply(this,arguments);
+    try{const jn=b.jn||{},la=bFlat(b.att).length,ld=bFlat(b.def).length;
+      const fix=(arr,base,g,ids)=>{const out=arr.slice(0,base);let off=base;
+        for(const c of b.jc){if(c.g!==g)continue;const part=arr.slice(off,off+c.n);off+=c.n;const a=armyOf(c.id);if(!jn[c.id]||!a)continue;
+          ids.push(c.id);a.units.forEach((u,k)=>out.push(k<part.length&&part[k]!=null?part[k]:u.men))}
+        return out};
+      const ja=[],jd=[],A=fix(res.A,la,'att',ja),D=fix(res.D,ld,'def',jd);
+      b.att=b.att.concat(ja);b.def=b.def.concat(jd);res=Object.assign({},res,{A,D})}catch(e){console.warn(e)}
+    return _ar.call(this,b,res)}}
+  // ---- engager une armée (chez l'hôte de la partie) ----
+  function doJoin(aid,pid,auto){const b=S.cur;if(MP.role!=='host'||!live(b)||!b.jc)return false;const c=b.jc.find(x=>x.id===aid),a=armyOf(aid);
+    if(!c||!a||(b.jn&&b.jn[aid])||mpOwner(a)!==pid)return false;const d=distB(a,b);if(d>LB.K)return false;
+    b.jn=b.jn||{};b.jn[aid]={p:pid,arr:arrS(d)};a.legs=[];
+    log(`${esc(mpName(pid))} engage ${esc(a.name)} dans la ${battleTitle(b).replace(/^B/,'b')}${auto?' (arrivée sur le champ)':''} : renfort dans ${Math.max(1,Math.round(arrS(d)/60))} min de bataille.`);
+    save();mpKfSoon(0);lbBanner();return true}
+  {const _h=mpOnHost;mpOnHost=function(d){if(d&&d.t==='bjoin'){try{doJoin(d.a,d.f)}catch(e){console.warn(e)}return}return _h.apply(this,arguments)}}
+  function askJoin(aid){if(MP.role==='host')doJoin(aid,MP.me);else mpSend({t:'bjoin',a:aid,k:S.cur?mpBKey(S.cur):''});const bt=document.querySelector(`#lbBar button[data-j="${aid}"]`);if(bt){bt.disabled=true;bt.textContent='Ordre envoyé…'}}
+  // ---- la carte avance au ralenti pendant la bataille (chez l'hôte de la partie) ----
+  const othersHere=b=>{const F=fighters(b),J=joinedBy(b);const ids=[MP.me,...Object.keys(MP.gs||{})];return ids.some(id=>conn(id)&&!F.has(id)&&!J.has(id))};
+  {const _sb=startBattle;startBattle=function(){if(LB.in)return;return _sb.apply(this,arguments)}}
+  let last=performance.now(),autoT=0;
+  function lbFrame(now){const raw=Math.min(.1,(now-last)/1000);last=now;
+    try{const b=S&&S.cur;if(MP.role==='host'&&live(b)&&!S.over&&othersHere(b)){
+      const fz=new Set([...b.att,...b.def,...Object.keys(b.jn||{}).map(Number)]),st=[];
+      for(const a of S.armies)if(fz.has(a.id)){st.push([a,a.legs,a.x,a.y]);a.legs=[]}
+      LB.in=true;S.cur=null;try{tick(raw/LB.DAY);computeVis()}finally{LB.in=false;S.cur=b;for(const [a,l,x,y] of st){a.legs=l;a.x=x;a.y=y}}
+      // une armée candidate arrivée sur le lieu de la bataille s'y engage d'elle-même
+      autoT-=raw;if(autoT<=0){autoT=1;for(const c of b.jc||[]){if(b.jn&&b.jn[c.id])continue;const a=armyOf(c.id);if(!a||distB(a,b)>LB.AUTO)continue;const o=mpOwner(a);if(o&&conn(o))doJoin(c.id,o,true)}}}}catch(e){console.warn(e);LB.in=false}
+    requestAnimationFrame(lbFrame)}
+  requestAnimationFrame(lbFrame);
+  // ---- côté joueurs : hôte de la bataille (transmettre les renforts), joueur qui rejoint (ouvrir le champ), bandeau ----
+  const sentJ=new Set();
+  function lbRole(b){const P=pvp(),cur=P.cur,mp=b.mp,key=mpBKey(b);
+    // hôte de la bataille : chaque armée engagée part vers le champ de bataille
+    if(cur&&cur.role==='h'&&cur.key===key&&b.jn)for(const id in b.jn){const k=mp.id+':'+id;if(sentJ.has(k))continue;sentJ.add(k);const j=b.jn[id];P.toFrame&&P.toFrame({k:'join',aid:+id,arr:j.arr,pid:j.p},MP.me)}
+    // joueur qui a engagé une armée : il entre sur le champ de bataille
+    if(!cur&&b.jn&&!fighters(b).has(MP.me)&&!(P.done&&P.done.has(mp.id))){const mineJ=Object.keys(b.jn).find(id=>b.jn[id].p===MP.me);
+      if(mineJ!=null){const c=(b.jc||[]).find(x=>x.id===+mineJ);const flip=!!c&&c.g!==(mp.s0||'att');
+        P.cur={role:'j',peer:mp.bh,key,id:mp.id,flip};MP.pvpG=key;removeBar();
+        modal(`<i data-mpb hidden></i><h2>${battleTitle(b)}</h2><p>Vous rejoignez la bataille : ${esc(mpName(mp.bh))} vous ouvre le champ de bataille…</p><p class="sub">Vos régiments entreront en renfort ; vous les commanderez en direct.</p>`);P.pvpAsk&&P.pvpAsk()}}}
+  function removeBar(){const e=$('lbBar');if(e)e.remove()}
+  function lbBanner(){const b=S&&S.cur;if(!MP.role||!live(b)||fighters(b).has(MP.me)||(pvp().cur&&pvp().cur.key===mpBKey(b))){removeBar();return}
+    const host=$('mapw')||document.body;let e=$('lbBar');if(!e){e=document.createElement('div');e.id='lbBar';e.setAttribute('role','status');
+      e.style.cssText='position:absolute;left:50%;top:48px;transform:translateX(-50%);z-index:6;max-width:min(560px,92%);padding:8px 12px;border-radius:6px;background:rgba(24,19,13,.94);border:1px solid #a8823c;color:#efe6d2;font-size:13px;line-height:1.4;box-shadow:0 4px 16px rgba(0,0,0,.45)';host.appendChild(e)}
+    const nm=ids=>ids.map(armyOf).filter(Boolean).map(a=>esc(a.name)).join(', ')||'?',mp=b.mp;
+    const who=mp.state==='pvp'?`${esc(mpName(mp.bh))} et ${esc(mpName(mp.bg))} s'affrontent`:`${esc(mpName(mp.bh))} livre la bataille contre l'IA`;
+    let h=`<b>⚔ ${battleTitle(b)}</b> : ${who} sur le terrain (${nm(b.att)} contre ${nm(b.def)}).<br><span class="sub">La carte avance au ralenti (1 jour par minute) ; les armées engagées restent immobiles.</span>`;
+    const mine=(b.jc||[]).map(c=>[c,armyOf(c.id)]).filter(([c,a])=>a&&mpOwner(a)===MP.me);
+    for(const [c,a] of mine){const d=distB(a,b),j=b.jn&&b.jn[c.id];
+      h+=`<div style="margin-top:6px">${j?`<b>${esc(a.name)}</b> est engagée : elle entre en renfort dans ${Math.max(1,Math.round(j.arr/60))} min de bataille.`
+        :d<=LB.K?`<button type="button" data-j="${c.id}">Engager ${esc(a.name)} dans la bataille</button> <span class="sub">${Math.round(d)} km : renfort dans ${Math.max(1,Math.round(arrS(d)/60))} min de bataille</span>`
+        :`<span class="sub">${esc(a.name)} est à ${Math.round(d)} km : approchez-la à moins de ${LB.K} km pour l'engager.</span>`}</div>`}
+    if(e._h!==h){e._h=h;e.innerHTML=h;e.querySelectorAll('button[data-j]').forEach(bt=>bt.onclick=ev=>{ev.stopPropagation();askJoin(+bt.dataset.j)})}}
+  window.__lbUI=b=>{if(!live(b))return false;lbRole(b);if(fighters(b).has(MP.me))return false;const P=pvp();if(P.cur&&P.cur.key===mpBKey(b))return true;
+    const mk=$('mcard')&&$('mcard').querySelector('[data-mpb]');if(mk&&!$('modal').hidden)closeModal();lbBanner();return true};
+  setInterval(()=>{try{const b=S&&S.cur;if(MP.role&&live(b)){lbRole(b);if(!fighters(b).has(MP.me))window.__lbUI(b)}else removeBar()}catch(e){console.warn(e)}},1000);
+  window.__lb={LB,live,cands,doJoin,askJoin,othersHere,own:a=>mpOwner(a)};
+}
+/* ================= FIN REJOINDRE UNE BATAILLE EN COURS (campagne) ================= */
