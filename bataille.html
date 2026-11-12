@@ -2969,7 +2969,7 @@ if(!V3D){
     const D0=EXT()?6000:mx+170+d/2;let c=mk(0,D0),best=cost(c);
     if(best)for(const de of (EXT()?[D0,mx+900,mx+500,mx+170+d/2]:[D0,D0*.6,mx*.3,0]))for(const la of [0,-260,260,-520,520,-800,800,-1100,1100,-1400,1400]){if(!la&&de<D0)continue;const q=mk(la,de);const v=cost(q)+Math.abs(la)/2000+(D0-de)/4000;if(v<best-1e-9){best=v;c=q}if(best<1)break}
     const L=(la,de)=>({x:c.x+t.x*la+n.x*de,y:c.y+t.y*la+n.y*de});
-    const slot=i=>{const col=i%cols,row=Math.floor(i/cols),la=col<half?-(KST/2+(half-col-.5)*sp):KST/2+(col-half+.5)*sp,de=-d/2+KFR+(row+.5)*sp;return Object.assign(L(la,de),{la,de})};
+    const slot=i=>{const col=i%cols,row=Math.floor(i/cols),la=(col%2?1:-1)*(KST/2+(Math.floor(col/2)+.5)*sp),de=-d/2+KFR+(row+.5)*sp;return Object.assign(L(la,de),{la,de})};
     // décor fixe : tentes (flancs, fond), tente du chef, provisions, feux, promeneurs
     const r=krnd(7919*(side+1)+N),tents=[],fires=[],sup=[],men=[];
     for(const sg of [-1,1])for(let de=-d/2+26;de<d/2-KBK+6;de+=17)for(const o of [15,34])tents.push({la:sg*(w/2-o),de:de+(o>20?8:0),a:sg>0?0:Math.PI});
