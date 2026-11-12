@@ -12,13 +12,15 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function unitLines(a,checks){return a.units.map((u,k)=>{const f=u.men/UT[u.t].men;return `<label class="unit">${checks?`<input type="checkbox" data-k="${k}">`:'<span></span>'}<span>${sqSVG(UT[u.t].k,f)} ${esc(uName(u))}</span><span class="sub">${Math.round(u.men).toLocaleString('fr-FR')}</span><span class="bar"><i style="width:${Math.round(f*100)}%"></i></span></label>`}).join('')}
 const SIZE=['Village','Bourg','Ville','Capitale'];
 const canGar=a=>!a.g&&!a.ship&&!a.inG&&!a.legs.length&&a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side;
-function where(a){if(a.at!=null&&!a.legs.length)return N[a.at].n;const t=townAt(a.x,a.y);return 'près de '+t.n}
+function where(a){if(a.at!=null&&!a.legs.length)return N[a.at].n;const t=townAt(a.x,a.y);return 'près '+deN(t.n)}
 function renderSide(){
   const el=$('side');
   if(sel&&sel.f&&!S.fleets.includes(sel.f))sel=null;
   if(sel&&sel.f){el.innerHTML=fleetPanel(sel.f);if(sel.f.side==='car')bindFleet(sel.f);return}
   if(!sel){el.innerHTML=`<h2>Carthage</h2><p class="sub">Clic gauche sur un écu violet pour choisir une armée, puis <b>clic droit</b> sur la carte pour marcher (sur mobile : toucher). L'armée suit les routes ; hors route, elle avance deux fois moins vite. Molette pour zoomer jusqu'aux rues des villes.</p>
-    <h3>Vos armées</h3>${S.armies.filter(isMine).map(a=>`<div class="rec"><span>${esc(a.name)} <span class="sub">· ${a.units.length} rég. · ${a.ship?'à bord':a.inG?'garnison, '+N[a.at].n:a.legs.length?'en marche':where(a)}</span></span><button data-sel="${a.id}" type="button">Voir</button></div>`).join('')||'<p class="sub">Aucune armée.</p>'}
+    <h3>Vos armées</h3>${(()=>{const rec=a=>`<div class="rec"><span>${esc(a.name)} <span class="sub">· ${a.units.length} rég. · ${a.ship?'à bord':a.inG?'garnison, '+N[a.at].n:a.legs.length?'en marche':where(a)}</span></span><button data-sel="${a.id}" type="button">Voir</button></div>`;
+      const M=S.armies.filter(isMine),F=M.filter(a=>!a.g),G=M.filter(a=>a.g);/* garnisons repliées en une ligne (12 nov., plan de reprise, étape 3) */
+      return (F.map(rec).join('')||'<p class="sub">Aucune armée en campagne.</p>')+(G.length?`<details class="garFold"><summary>Garnisons (${G.length}) <span class="sub">· ${Math.round(G.reduce((s,a)=>s+a.units.reduce((t,u)=>t+u.men,0),0)).toLocaleString('fr-FR')} hommes</span></summary>${G.map(rec).join('')}</details>`:'')})()}
     <h3>Vos flottes</h3>${S.fleets.filter(f=>f.side==='car').map(f=>`<div class="rec"><span>${esc(f.name)} <span class="sub">· ${shipsN(f)} navires · ${f.legs.length?'en mer':f.inG?'à l\'abri, '+N[f.at].n:f.at!=null?N[f.at].n:'au mouillage'}</span></span><button data-self="${f.id}" type="button">Voir</button></div>`).join('')||'<p class="sub">Aucune flotte.</p>'}
     <h3>Légende</h3><p class="sub">Double trait clair : voie romaine. Trait brun épais : route. Trait brun fin : piste. Tirets clairs : chemin de terre vers un village. Tirets rouges et triangle : col de montagne. Pointillés blancs et croix : fermé par la neige. Pointillés clairs : détroit, franchissable à pied. Pour passer la mer, une armée doit embarquer sur une flotte (galères et transports) depuis un port.</p>`;
     el.querySelectorAll('[data-self]').forEach(b=>b.onclick=()=>{const f=S.fleets.find(x=>x.id==b.dataset.self);sel={f};centerOn(f.x,f.y,Math.max(view.s,1));renderAll()});

@@ -19,7 +19,7 @@ function newGame(){
   army('rom','roma',[...U('legion',3),...U('velites',1)],'Garnison de Rome').g=true;
   const GAR={num:['ncav','ncav','lib'],mae:['ncav','lib'],mau:['ncav','iber'],cyr:['lib','sling'],ibe:['iber','iber','sling'],cel:['iber','iber','hcav'],lus:['iber','sling'],bal:['sling','sling'],mas:['lib','lib','sling'],gau:['gaul','gaul','hcav'],lig:['gaul','gaul'],ins:['gaul','gaul','gaul','hcav'],ven:['iber','sling'],syr:['lib','lib','lib','sling'],ill:['iber','sling'],dar:['iber','hcav'],epi:['lib','sling'],mac:['lib','lib','lib','hcav','hcav'],thr:['hcav','sling','iber'],eto:['lib','sling'],ach:['lib','lib'],ath:['lib','lib'],cre:['sling','sling']};
   N.forEach(n=>{if(!n.o0||!FAC[n.o0].a||n.size<1)return;const g=GAR[n.o0]||['iber'];const k=n.size>=3?5:n.size===2?3:1;
-    army(n.o0,n.id,Array.from({length:k},(_,j)=>({t:g[j%g.length],men:UT[g[j%g.length]].men})),'Garnison de '+n.n).g=true});
+    army(n.o0,n.id,Array.from({length:k},(_,j)=>({t:g[j%g.length],men:UT[g[j%g.length]].men})),'Garnison '+deN(n.n)).g=true});
   initFleets();
   log("Printemps 218 : Sagonte est tombée, Rome déclare la guerre. Hannibal attend vos ordres à Nova Carthago.");
 }

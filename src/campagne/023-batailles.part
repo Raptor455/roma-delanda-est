@@ -15,7 +15,7 @@ function autoResolve(b){
   const hit=(L,l)=>L.map(u=>Math.round(u.men*(1-Math.min(.95,l*(.7+Math.random()*.6)))));
   return {attWin,A:hit(A,attWin?wl:ll),D:hit(D,attWin?ll:wl)};
 }
-const placeName=b=>{const n=N[b.node],d=Math.hypot(n.x-b.x,n.y-b.y);return d<6?n.n:'près de '+n.n};
+const placeName=b=>{const n=N[b.node],d=Math.hypot(n.x-b.x,n.y-b.y);return d<6?n.n:'près '+deN(n.n)};
 const battleTitle=b=>{const p=placeName(b);return p.startsWith('près')?'Bataille '+p:'Bataille '+deN(p)};
 function applyResult(b,res){
   const A=bFlat(b.att),D=bFlat(b.def);

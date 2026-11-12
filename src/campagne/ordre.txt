@@ -87,4 +87,5 @@
 086-senat-fil-mecaniques-de-campagne-11-nov.part
 087-traites-fil-mecaniques-de-campagne-11-no.part
 088-performance-des-grandes-armees-fil-perfo.part
-089-boucle.part
+089-garnisons-population-et-journal-etape-3.part
+090-boucle.part

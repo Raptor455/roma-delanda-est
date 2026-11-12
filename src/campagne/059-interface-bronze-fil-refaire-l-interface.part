@@ -288,7 +288,7 @@ function decorate(){
   // médaillon devant le titre
   const h2=el.querySelector('h2');
   if(h2&&!h2.closest('.ui-head')){let cls='',ch='';
-    if(sel&&sel.a){cls=sel.a.side==='car'?'':'rom';ch=(sel.a.name||'?').replace(/^(Garnison de |Armée )/,'').charAt(0)}
+    if(sel&&sel.a){cls=sel.a.side==='car'?'':'rom';ch=(sel.a.name||'?').replace(/^(Garnison d(?:e |')|Armée )/,'').charAt(0)}
     else if(sel&&sel.f){cls='fl';ch=''}else if(sel&&sel.n!=null){cls='tw'}else{cls='';ch=''}
     const w=document.createElement('div');w.className='ui-head';h2.before(w);
     w.innerHTML=`<div class="ui-med ${cls}">${sel&&sel.f?ico('ship',24):sel&&(sel.n!=null||sel.v!=null)?ico('tower',24):ch?esc(ch):ico('tanit',24)}</div>`;w.appendChild(h2)}
@@ -503,5 +503,6 @@ function uaInstall(){
 setTimeout(uaInstall,0);
 const mo=new MutationObserver(()=>{if(!$('modal').hidden)tabify()});
 mo.observe($('mcard'),{childList:true});
+window.__ui={ico,townIn,logIcon};/* pour le journal et la barre (bloc GARNISONS, POPULATION ET JOURNAL) */
 })();
 /* ================= FIN INTERFACE BRONZE ================= */

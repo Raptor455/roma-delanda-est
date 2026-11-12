@@ -172,7 +172,7 @@ function dvSend(f){dvInit();const F=S.fac[f],o=DVS.offer;if(!o||F.cd>0)return;co
   DVS.view='fiche';DVS.offer=null;renderAll();openDip(f)}
 if(typeof ENV_LAB!=='undefined')ENV_LAB.neg='négociation';
 function dvGiveTown(id,f){const i=NI[id],n=N[i];if(ownerN(i)!=='car')return false;S.own[id]=f;delete S.siege[id];delete S.q[id];
-  for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===i){a.side=f;a.name='Garnison de '+n.n}
+  for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===i){a.side=f;a.name='Garnison '+deN(n.n)}
   territoryDirty=true;return true}
 function dvPromise(p){dvInit();p.id=S.dv.uid++;p.d0=Math.floor(S.day);S.dv.prom.push(p);return p}
 function dvArrive(e){dvInit();const f=e.f,F=S.fac[f];if(!F)return;F.cd=1;const o=e.o,nm=FAC[f].n;

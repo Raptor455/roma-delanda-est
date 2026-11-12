@@ -380,7 +380,7 @@ function grHire(i,j){const L=grCand(i),x=L[j];if(!x)return;const c=grCost(x);if(
   x.id=S.guid++;L.splice(j,1);x.army=null;x.sub=null;x.at=i;S.gens.push(x);log(`${x.name} est engagé à ${N[i].n} (${c} or).`);renderAll()}
 function grNewArmy(g,i){const A=grHere(i).filter(a=>a.units.length);if(!A.length)return;
   let h=`<h2>Nouvelle armée de ${esc(g.name)}</h2><p class="sub">Cochez les régiments qui partent avec lui. Ils quittent leur armée ou la garnison de ${esc(N[i].n)}.</p>`;
-  for(const a of A){h+=`<h3>${esc(a.g?'Garnison de '+N[i].n:a.name)}</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px">`+
+  for(const a of A){h+=`<h3>${esc(a.g?'Garnison '+deN(N[i].n):a.name)}</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px">`+
     a.units.map((u,k)=>`<label class="unit" style="grid-template-columns:18px 1fr"><input type="checkbox" data-gra="${a.id}" data-grk="${k}"><span>${esc(typeof uName==='function'?uName(u):u.t)} <span class="sub">${Math.round(u.men)}</span></span></label>`).join('')+`</div>`}
   h+=`<div class="row" style="margin-top:12px"><button type="button" class="go" id="grOk">Former l'armée</button><button type="button" id="grNo">Annuler</button></div>`;
   modal(h);$('mcard').classList.add('wide');$('grNo').onclick=closeModal;
@@ -424,7 +424,7 @@ const CAP_N={car:['Bodo','Adherbal','Bostar','Himilcon','Magon','Mutin','Abdmelq
 function capName(side){const r=typeof realSide==='function'?realSide(side):side,L=CAP_N[r]||CAP_N.car;return 'Capitaine '+L[Math.floor(Math.random()*L.length)]}
 function capNeed(a){return !a.dead&&!a.ship&&(a.reinf!=null||(a.g&&a.legs&&a.legs.length))}
 function capSync(){if(!S||!S.gens)return;
-  for(const g of S.gens){if(!g.capt||g.dead)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(!a||a.gen!==g.id||!capNeed(a)){if(a&&a.gen===g.id){a.gen=null;if(a.g&&a.at!=null)a.name='Garnison de '+N[a.at].n;else if(a.reinf!=null)a.name='Renforts'}g.dead=true;g.army=null}}
+  for(const g of S.gens){if(!g.capt||g.dead)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(!a||a.gen!==g.id||!capNeed(a)){if(a&&a.gen===g.id){a.gen=null;if(a.g&&a.at!=null)a.name='Garnison '+deN(N[a.at].n);else if(a.reinf!=null)a.name='Renforts'}g.dead=true;g.army=null}}
   S.gens=S.gens.filter(g=>!(g.capt&&g.dead));
   for(const a of S.armies){if(!capNeed(a)||(a.gen!=null&&S.gens.some(g=>g.id===a.gen&&!g.dead&&g.army===a.id)))continue;
     const g=mkGen(a.side,capName(a.side));g.tr=[];g.xp=0;g.capt=1;g.army=a.id;g.at=null;g.lx=a.x;g.ly=a.y;S.gens.push(g);a.gen=g.id;a.name=g.name}}
