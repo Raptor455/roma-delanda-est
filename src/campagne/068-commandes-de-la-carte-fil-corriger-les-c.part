@@ -1,0 +1,65 @@
+/* ================= COMMANDES DE LA CARTE (fil « Corriger les commandes de la campagne ») =================
+   Source : /mnt/project-files/commandes/commandes.js, injecté avant « BOUCLE » par commandes/patch.py (relançable).
+   Clic gauche = sélection ; glisser au clic gauche trace un cadre qui sélectionne plusieurs armées (Maj : ajouter) ; clic droit = tout le groupe marche. Caméra : clic droit ou molette enfoncée + glisser,
+   ZQSD / WASD (touches physiques) ou flèches, Maj pour aller plus vite. Corrige les sauts : glissement en deltas,
+   pointeur perdu (pointercancel, relâché hors fenêtre), second doigt ignoré, zoom molette borné, centrage qui annule le zoom en cours. */
+function cmdMove(e){const d=drag;if(e.pointerId!==d.id)return true;
+  if(!e.buttons&&e.pointerType==='mouse'){drag=null;return false}           // bouton relâché sans pointerup : on lâche la carte
+  if(!d.moved&&Math.hypot(e.clientX-d.x,e.clientY-d.y)>(d.btn===2?8:d.pan?5:10))d.moved=true;
+  if(d.btn===0&&!d.touch&&d.moved){d.box=true;d.bx=e.clientX;d.by=e.clientY}
+  if(d.pan&&d.moved){view.ox+=e.clientX-d.lx;view.oy+=e.clientY-d.ly;clampView()}
+  d.lx=e.clientX;d.ly=e.clientY;return d.pan&&d.moved}
+
+/* ---- cadre de sélection au clic gauche + groupe d'armées (ordre de marche donné à tout le groupe) ---- */
+let GRP=[],GRPlead=null;                                   // armées sélectionnées en plus de sel.a
+const grpOk=a=>a&&!a.dead&&isMine(a)&&!a.ship&&S.armies.includes(a);
+const grpScr=a=>[view.ox+a._p[0]*view.s+(a.inG?16:0),view.oy+a._p[1]*view.s-(a.inG?10:a.g?0:18)];
+function grpSync(){if(!sel||!sel.a||sel.a!==GRPlead){GRP=[];GRPlead=null;return}GRP=GRP.filter(a=>grpOk(a)&&a!==sel.a)}
+function grpSet(list){list=list.filter(grpOk);if(!list.length)return false;sel={a:list[0]};GRPlead=list[0];GRP=list.slice(1);preview=null;renderAll();return true}
+function cmdBox(d,e){const rc=cv.getBoundingClientRect(),x0=Math.min(d.x,e.clientX)-rc.left,x1=Math.max(d.x,e.clientX)-rc.left,y0=Math.min(d.y,e.clientY)-rc.top,y1=Math.max(d.y,e.clientY)-rc.top;
+  const inBox=a=>{if(!a._p)return false;const [X,Y]=grpScr(a);if(X>=x0&&X<=x1&&Y>=y0&&Y<=y1)return true;return !!(a._sq&&a._sq.some(([x,y])=>x>=x0&&x<=x1&&y>=y0&&y<=y1))};
+  let L=S.armies.filter(a=>grpOk(a)&&inBox(a));
+  if(L.some(a=>!a.g))L=L.filter(a=>!a.g);                 // les garnisons seulement si le cadre ne prend rien d'autre
+  if(e.shiftKey&&sel&&sel.a&&grpOk(sel.a)){grpSync();const cur=[sel.a,...GRP];for(const a of L)if(!cur.includes(a))cur.push(a);return grpSet(cur)||true}
+  if(!L.length){sel=null;preview=null;GRP=[];renderAll();return true}
+  return grpSet(L)}
+function cmdShift(e){const rc=cv.getBoundingClientRect(),a=pickArmy(e.clientX-rc.left,e.clientY-rc.top);
+  if(!grpOk(a)||!sel||!sel.a||!grpOk(sel.a))return false;grpSync();const cur=[sel.a,...GRP];
+  const i=cur.indexOf(a);if(i>=0){if(cur.length===1)return true;cur.splice(i,1)}else cur.push(a);return grpSet(cur)}
+{const _order=order;order=function(a,tx,ty,node,vil){const r=_order.apply(this,arguments);
+  if(r&&!order._in&&sel&&sel.a===a&&GRPlead===a){grpSync();order._in=1;try{for(const b of GRP)_order(b,tx,ty,node,vil)}finally{order._in=0}}return r}}
+// les armées du groupe sont dessinées comme l'armée choisie (même surbrillance), le temps de leur propre dessin
+{const asSel=f=>function(a){if(!GRP.includes(a)||!sel)return f.apply(this,arguments);const k=sel;sel={a};try{return f.apply(this,arguments)}finally{sel=k}};
+  formation=asSel(formation);genCard=asSel(genCard);campFormation=asSel(campFormation);siegeFormation=asSel(siegeFormation);
+  const _tk=token;token=function(x,y,side,txt,selected,a){return _tk.call(this,x,y,side,txt,selected||(!!a&&GRP.includes(a)),a)}}
+{const _draw=draw;draw=function(){grpSync();_draw.apply(this,arguments);const d=drag;if(!(d&&d.box))return;
+  ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);const rc=cv.getBoundingClientRect(),x=Math.min(d.x,d.bx)-rc.left,y=Math.min(d.y,d.by)-rc.top,w=Math.abs(d.bx-d.x),h=Math.abs(d.by-d.y);
+  ctx.fillStyle='rgba(214,184,120,.12)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='rgba(236,208,138,.9)';ctx.lineWidth=1;ctx.setLineDash([5,3]);ctx.strokeRect(x+.5,y+.5,w,h);ctx.setLineDash([]);ctx.restore()}}
+{const _rs=renderSide;renderSide=function(){_rs.apply(this,arguments);grpSync();if(!GRP.length)return;const el=$('side'),dv=document.createElement('div');
+  dv.className='sub';dv.style.cssText='margin:0 0 8px;padding:6px 8px;border:1px solid var(--line);border-radius:4px';
+  dv.innerHTML=`<b>Groupe de ${GRP.length+1} armées</b> : ${[sel.a,...GRP].map(a=>esc(a.name)).join(', ')}. Clic droit : toutes marchent vers le même point. <kbd>Maj</kbd> + clic : ajouter ou retirer une armée.`;el.prepend(dv)}}
+(()=>{
+  const drop=e=>{if(drag&&(!e||e.pointerId==null||e.pointerId===drag.id))drag=null};
+  cv.addEventListener('pointercancel',drop);cv.addEventListener('lostpointercapture',drop);
+  cv.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault()});            // pas de défilement auto du navigateur
+  cv.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
+  const K={KeyW:[0,1],KeyS:[0,-1],KeyA:[1,0],KeyD:[-1,0],ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[1,0],ArrowRight:[-1,0]},held=new Set();
+  const typing=t=>t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
+  window.addEventListener('keydown',e=>{if(!K[e.code]||typing(e.target)||e.ctrlKey||e.metaKey||e.altKey)return;if(!$('modal').hidden)return;e.preventDefault();held.add(e.code)});
+  window.addEventListener('keyup',e=>{held.delete(e.code)});
+  const reset=()=>{held.clear();drag=null};window.addEventListener('blur',reset);document.addEventListener('visibilitychange',()=>{if(document.hidden)reset()});
+  let last=performance.now();
+  (function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+    if(held.size&&$('modal').hidden){const bf=$('battle3d');if(!bf){let x=0,y=0;for(const c of held){x+=K[c][0];y+=K[c][1]}
+      const n=Math.hypot(x,y);if(n){const sp=(held.shift?2.5:1)*Math.max(500,Math.min(cv.clientWidth,cv.clientHeight)*.9);view.ox+=x/n*sp*dt;view.oy+=y/n*sp*dt;clampView()}}}
+    requestAnimationFrame(loop)})(last);
+  window.addEventListener('keydown',e=>{if(e.key==='Shift')held.shift=true});window.addEventListener('keyup',e=>{if(e.key==='Shift')held.shift=false});
+})();
+/* ---- « Nouvelle campagne » (menu Partie, fin de partie) rouvre l'écran de départ : pays, date, difficulté ---- */
+if(typeof openStart==='function'){
+  const toStart=()=>{const b=$('mNew');if(b)b.onclick=()=>{closeModal();openStart()}};
+  {const _om=openMenu;openMenu=function(){const r=_om.apply(this,arguments);toStart();return r}}
+  {const _eg=endGame;endGame=function(){const r=_eg.apply(this,arguments);toStart();return r}}}
+// le bouton « Partie » gardait la toute première version d'openMenu (liée au chargement) : on passe par la version enveloppée
+$('bMenu').onclick=()=>openMenu();
+/* ================= FIN COMMANDES ================= */

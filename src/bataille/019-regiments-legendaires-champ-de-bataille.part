@@ -1,0 +1,56 @@
+/* ================= RÉGIMENTS LÉGENDAIRES (champ de bataille) =================
+   Les régiments légendaires de la campagne arrivent avec leur surnom et leur étendard (c.leg={n,c,svg}) :
+   moral +20 %, étendard dessiné au-dessus du régiment ; leur déroute ébranle les voisins.
+   Chaque régiment compte les morts qu'il inflige (mêlée et traits) ; le compte part vers la campagne
+   (message « exploits ») juste avant le résultat. Bataille 2D en carrés (v131) : le régiment garde surnom et étendard
+   sur son premier carré ; l'étendard suit un carré voisin du centre (ou le plus proche du centre), le moral +20 % vaut pour les 5 carrés. Source : /mnt/project-files/futur/legendes-bataille.js. */
+{
+  let CURA=null;
+  {const _m=melee;melee=function(u){const p=CURA;CURA=u;try{return _m.apply(this,arguments)}finally{CURA=p}}}
+  {const _s=shoot;shoot=function(u){const n=projs.length,r=_s.apply(this,arguments);for(let i=n;i<projs.length;i++)if(!projs[i].srcU)projs[i].srcU=u;return r}}
+  {const _l=landProj;landProj=function(p){const q=CURA;CURA=p&&p.srcU||null;try{return _l.apply(this,arguments)}finally{CURA=q}}}
+  {const _h=hurt;hurt=function(e,cas){const a=CURA,m0=e&&e.men;const r=_h.apply(this,arguments);if(a&&e&&a.side!==e.side&&m0>e.men)a.kills=(a.kills||0)+(m0-e.men);return r}}
+  // déroute d'un régiment légendaire : les voisins vacillent
+  // régiment découpé en carrés (bataille 2D) : ses carrés, et le premier qui porte surnom et étendard
+  const grpOf=u=>{try{return window.__carres?window.__carres.regOf(u):[u]}catch(e){return [u]}};
+  const legOf=u=>u&&(u.leg||(u.reg!=null?(grpOf(u)[0]||{}).leg:null));
+  {const _r=rout;rout=function(u){const was=u&&u.routing;const r=_r.apply(this,arguments);const L=legOf(u);
+    if(L&&!was){const G5=grpOf(u),k=1/Math.max(1,G5.length);
+      for(const o of units)if(!G5.includes(o)&&o.side===u.side&&!o.dead&&!o.routing&&Math.hypot(o.x-u.x,o.y-u.y)<260*G)o.morale-=6*k;
+      // un seul message, quand la moitié des carrés a plié
+      const own=G5[0]||u;if(!own._lgR&&G5.filter(v=>v.routing||v.dead).length*2>=G5.length){own._lgR=1;
+        try{if(typeof banner==='function')banner(u.side===0?`${L.n} plient ! Leur étendard recule.`:`${L.n} plient devant vous !`,u.side===0?'#e0a060':'#e8c46a')}catch(e){}}}
+    return r}}
+  // surnom, moral et étendard à l'arrivée
+  const imgs=new Map();
+  function legImg(L){if(!L||!L.svg)return null;let im=imgs.get(L.svg);if(im)return im;im=new Image();
+    let svg=L.svg;if(!/xmlns=/.test(svg))svg=svg.replace('<svg ','<svg xmlns="http://www.w3.org/2000/svg" ');im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);imgs.set(L.svg,im);return im}
+  // appelé juste après le déploiement, avant que l'invité d'une bataille à deux n'inverse les camps : camp 0 = CAMP.b.p
+  function tagLeg(){if(!CAMP||!CAMP.b||!units)return;
+    for(const u of units){if(u.leg||u.ci==null)continue;const c=(u.side===0?CAMP.b.p:CAMP.b.e||[])[u.ci];if(!c||!c.leg||c.t!==u.type)continue;
+      u.leg=c.leg;u.T=Object.assign({},u.T,{morale:u.T.morale*1.2});u.morale=Math.max(u.morale,u.T.morale);legImg(c.leg)}}
+  {const _d=deployCamp;deployCamp=function(){const r=_d.apply(this,arguments);try{tagLeg()}catch(e){console.warn(e)}return r}}
+  // étendards au-dessus des régiments (vue de carte)
+  function drawBanners(){const cv=document.getElementById('map2d');if(!cv||cv.style.display==='none'||!units)return;const B=window.__brume;
+    let g=null,DPR=1;
+    for(const u of units){if(!u.leg)continue;const G5=grpOf(u);
+      if(!u._lgl){u._lgl=1;const nm=String(u.label).includes(u.leg.n)?u.label:u.leg.n+(/^Garde de /.test(u.label)?` (${u.label.replace(/^G/,'g')})`:'');for(const v of G5){v.label=nm;v.dirty=true}}
+      // le porte-étendard : un carré à côté du centre (le général s'y tient), sinon le carré debout le plus proche du centre
+      const live=G5.filter(v=>!v.dead&&!v.fled&&!v.pend);if(!live.length)continue;
+      let q=live.length>1?live.find(v=>v.rk===1)||live.find(v=>v.rk===4)||null:live[0];if(!q){const cx=live.reduce((a,v)=>a+v.x,0)/live.length,cy=live.reduce((a,v)=>a+v.y,0)/live.length;q=live.reduce((b,v)=>Math.hypot(v.x-cx,v.y-cy)<Math.hypot(b.x-cx,b.y-cy)?v:b)}
+      if(B&&B.on&&q.side!==0&&B.seenBy&&!B.seenBy(0,q))continue;
+      const im=legImg(u.leg);if(!im||!im.complete||!im.naturalWidth)continue;
+      if(!g){g=cv.getContext('2d');DPR=cv.width/(cv.clientWidth||1);g.save();g.setTransform(DPR,0,0,DPR,0,0)}
+      const p=toScreen(q.x,q.y,0);if(p.ok===false)continue;const h=Math.max(30,Math.min(48,32*Math.sqrt(900*Math.sqrt(G)/Math.max(300,cam.dist)))),w=h/1.4;
+      g.globalAlpha=q.routing?.55:1;g.drawImage(im,p.x-w*.5+2,p.y-h-4,w,h)}
+    if(g){g.globalAlpha=1;g.restore()}}
+  {const _rr=renderer.render;renderer.render=function(){const r=_rr.apply(this,arguments);try{drawBanners()}catch(e){}return r}}
+  // morts infligés, envoyés à la campagne avant le résultat
+  {const _cr=campReturn;campReturn=function(win){try{if(CAMP&&CAMP.b&&window.parent!==window&&!(CAMP.pvp&&(CAMP.pvp.role==='g'||CAMP.pvp.role==='j'))){
+      const p=(CAMP.b.p||[]).map(()=>0),e=(CAMP.b.e||[]).map(()=>0);
+      for(const u of units){if(u.ci==null)continue;const L=u.side===0?p:e;if(u.ci<L.length)L[u.ci]=Math.round(u.kills||0)}
+      window.parent.postMessage({bellum:'exploits',p,e},'*')}}catch(e){console.warn(e)}
+    return _cr.apply(this,arguments)}}
+  window.__lege={drawBanners,tagLeg,legOf,pos:u=>toScreen(u.x,u.y,0)};
+}
+/* ================= FIN RÉGIMENTS LÉGENDAIRES (champ de bataille) ================= */

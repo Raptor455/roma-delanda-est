@@ -1,0 +1,389 @@
+/* ================= FLOTTES ================= */
+// Les armées ne traversent plus la mer seules : il leur faut une flotte (les détroits restent franchissables à pied).
+const SHIP={quin:{n:'Quinquérèmes',one:'quinquérème',cost:8,d:40,up:.3,sp:80,cap:.25,war:1},
+  tri:{n:'Trières',one:'trière',cost:5,d:25,up:.2,sp:100,cap:0,war:1},
+  trans:{n:'Transports',one:'transport',cost:3,d:12,up:.05,sp:65,cap:1,war:0}};
+const BATCH=5,MAXW=8/*NAV*/;
+const PLACE={inf:1,skirm:1,cav:2,lcav:2,eleph:3};
+const YARD=new Set(['carthago','gades','cnova','utica','syracusae','ostia','neapolis','tarentum','massalia','brundisium','lilybaeum','panormus']);
+const ZONES=[['Océan',-9.6,37.2,"dans l'Océan"],['Détroit des Colonnes',-5.4,35.95,'au détroit des Colonnes'],["Mer d'Alboran",-3,36.2,"en mer d'Alboran"],['Mer des Baléares',1.8,39.6,'en mer des Baléares'],['Golfe du Lion',4.5,42.6,'dans le golfe du Lion'],['Mer de Ligurie',8.6,43.6,'en mer de Ligurie'],
+  ['Mer de Sardaigne',6.8,38.8,'en mer de Sardaigne'],['Mer Tyrrhénienne',12,40.2,'en mer Tyrrhénienne'],['Canal de Sicile',11.8,37.1,'dans le canal de Sicile'],['Mer de Libye',15.5,34,'en mer de Libye'],['Mer Ionienne',18.5,38.3,'en mer Ionienne'],['Adriatique',15.8,42.8,"dans l'Adriatique"],['Mer Égée',25,37.6,'en mer Égée'],['Mer de Crète',24.5,35.2,'en mer de Crète']].map(([n,lo,la,loc])=>{const [x,y]=prj(lo,la);return {n,x,y,loc}});
+const zoneOf=(x,y)=>{let b=0,bd=1e18;ZONES.forEach((z,k)=>{const d=(z.x-x)**2+(z.y-y)**2;if(d<bd){bd=d;b=k}});return b};
+const shipsN=f=>f.ships.quin+f.ships.tri+f.ships.trans,warN=f=>f.ships.quin+f.ships.tri;
+const fCap=f=>Math.floor(f.ships.trans*SHIP.trans.cap+f.ships.quin*SHIP.quin.cap);
+const armyPlaces=a=>a.units.reduce((s,u)=>s+PLACE[UT[u.t].k],0);
+const fUsed=f=>f.cargo.reduce((s,id)=>{const a=S.armies.find(x=>x.id===id);return s+(a?armyPlaces(a):0)},0);
+const fName=f=>f.name;
+function fSpeed(f){let sp=999;for(const k in SHIP)if(f.ships[k]>0)sp=Math.min(sp,SHIP[k].sp);if(sp>900)sp=80;
+  return sp*(f.mode==='cote'?.75:1)*(season()==='Hiver'?.8:1)}
+
+// ---- grille marine (3 km) pour tracer les routes des navires ; les tracés sont vérifiés sur la côte dessinée ----
+const SG={c:3,w:0,h:0,sea:null,coast:null};
+function buildSeaGrid(){
+  const c=SG.c,w=Math.ceil(MW/c),h=Math.ceil(MH/c),sea=new Uint8Array(w*h),coast=new Uint8Array(w*h),R=Math.round(12/c);
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++)sea[j*w+i]=landR((i+.5)*c,(j+.5)*c)?0:1;
+  // côte = mer à moins de 12 km d'une terre (dilatation séparable)
+  const t=new Uint8Array(w*h);for(let j=0;j<h;j++){let last=-1e9;for(let i=0;i<w;i++){if(!sea[j*w+i])last=i;if(i-last<=R)t[j*w+i]=1}last=1e9;for(let i=w-1;i>=0;i--){if(!sea[j*w+i])last=i;if(last-i<=R)t[j*w+i]=1}}
+  for(let i=0;i<w;i++){let last=-1e9;for(let j=0;j<h;j++){if(t[j*w+i]&&!sea[j*w+i])last=j;if(j-last<=R&&sea[j*w+i])coast[j*w+i]=1}last=1e9;for(let j=h-1;j>=0;j--){if(t[j*w+i]&&!sea[j*w+i])last=j;if(last-j<=R&&sea[j*w+i])coast[j*w+i]=1}}
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){const k=j*w+i;if(sea[k]&&t[k])coast[k]=1}
+  // passages permis entre cases voisines : la ligne entre les centres reste en mer
+  const mv=new Uint8Array(w*h),DD=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){const k=j*w+i;if(!sea[k])continue;const x=(i+.5)*c,y=(j+.5)*c;let m=0;
+    for(let d=0;d<8;d++){const ii=i+DD[d][0],jj=j+DD[d][1];if(ii<0||jj<0||ii>=w||jj>=h||!sea[jj*w+ii])continue;let ok=true;for(let s=1;s<12;s++){if(landC(x+DD[d][0]*c*s/12,y+DD[d][1]*c*s/12)){ok=false;break}}if(ok)m|=1<<d}mv[k]=m}
+  Object.assign(SG,{w,h,sea,coast,mv});
+  // mouillage de chaque port : de l'eau tout près de la ville, reliée en ligne droite à la grille
+  for(const n of N)if(n.port){n.anch=null;const W=nearestWater(n.x,n.y,8,.5);if(W&&seaCell(W[0],W[1])>=0)n.anch=W;
+    if(!n.anch){const k=seaCell(n.x,n.y);if(k>=0)n.anch=sgXY(k)}}
+}
+const sgIdx=(x,y)=>{const i=Math.floor(x/SG.c),j=Math.floor(y/SG.c);return i<0||j<0||i>=SG.w||j>=SG.h?-1:j*SG.w+i};
+const sgXY=k=>[(k%SG.w+.5)*SG.c,(Math.floor(k/SG.w)+.5)*SG.c];
+// ligne droite entièrement en mer (côte dessinée) ; « cote » : sans quitter la bande côtière
+function seaLine(ax,ay,bx,by,mode){const L=Math.hypot(bx-ax,by-ay),m=Math.ceil(L/.35);
+  for(let q=1;q<m;q++){const x=ax+(bx-ax)*q/m,y=ay+(by-ay)*q/m;if(landFine(x,y))return false;if(mode==='cote'){const k=sgIdx(x,y);if(k>=0&&SG.sea[k]&&!SG.coast[k])return false}}return true}
+function nearestSea(x,y,maxKm){const i0=Math.floor(x/SG.c),j0=Math.floor(y/SG.c),R=Math.ceil(maxKm/SG.c);let best=-1,bd=1e9;
+  for(let dj=-R;dj<=R;dj++)for(let di=-R;di<=R;di++){const i=i0+di,j=j0+dj;if(i<0||j<0||i>=SG.w||j>=SG.h)continue;const k=j*SG.w+i;if(!SG.sea[k])continue;const [cx,cy]=sgXY(k),d=Math.hypot(cx-x,cy-y);if(d<bd&&d<=maxKm){bd=d;best=k}}
+  return best}
+// case de mer la plus proche que l'on rejoint en ligne droite sans toucher terre
+function seaCell(x,y,maxKm){maxKm=maxKm||30;const i0=Math.floor(x/SG.c),j0=Math.floor(y/SG.c),R=Math.ceil(maxKm/SG.c),c=[];
+  for(let dj=-R;dj<=R;dj++)for(let di=-R;di<=R;di++){const i=i0+di,j=j0+dj;if(i<0||j<0||i>=SG.w||j>=SG.h)continue;const k=j*SG.w+i;if(!SG.sea[k])continue;const [cx,cy]=sgXY(k),d=Math.hypot(cx-x,cy-y);if(d<=maxKm)c.push([d,k])}
+  c.sort((p,q)=>p[0]-q[0]);for(const [,k] of c.slice(0,60)){const [cx,cy]=sgXY(k);if(!landFine(cx,cy)&&seaLine(x,y,cx,cy))return k}
+  return c.length?c[0][1]:-1}
+function nearestCoast(x,y){let best=-1,bd=1e18;for(let k=0;k<SG.w*SG.h;k++){if(!SG.coast[k])continue;const [cx,cy]=sgXY(k),d=(cx-x)**2+(cy-y)**2;if(d<bd){bd=d;best=k}}return best}
+const onCoast=(x,y)=>{const k=sgIdx(x,y);return k>=0&&SG.sea[k]&&SG.coast[k]};
+// A* sur la grille ; « cote » : le cabotage évite la haute mer
+let SPB=null;
+function seaPath(x0,y0,x1,y1,mode){
+  const s=seaCell(x0,y0),t=seaCell(x1,y1);if(s<0||t<0)return null;
+  const w=SG.w,n=w*SG.h;if(!SPB||SPB.n!==n)SPB={n,g:new Float32Array(n),prev:new Int32Array(n),st:new Uint32Array(n),cl:new Uint32Array(n),gen:0};
+  const B=SPB;B.gen++;const gen=B.gen,g=B.g,prev=B.prev,st=B.st,cl=B.cl;
+  const [tx,ty]=sgXY(t),H=k=>{const [x,y]=sgXY(k);return Math.hypot(x-tx,y-ty)};
+  const heap=[],push=(k,f)=>{heap.push([f,k]);let i=heap.length-1;while(i>0){const p=(i-1)>>1;if(heap[p][0]<=heap[i][0])break;[heap[p],heap[i]]=[heap[i],heap[p]];i=p}},
+    pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===i)break;[heap[m],heap[i]]=[heap[i],heap[m]];i=m}}return top};
+  g[s]=0;st[s]=gen;prev[s]=-1;push(s,H(s));const D=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+  while(heap.length){const [,k]=pop();if(cl[k]===gen)continue;cl[k]=gen;if(k===t)break;const i=k%w,j=(k-i)/w;
+    const mvk=SG.mv[k];for(let d=0;d<8;d++){if(!(mvk>>d&1))continue;const [di,dj,l]=D[d],ii=i+di,jj=j+dj;const q=jj*w+ii;if(cl[q]===gen)continue;
+      const c=g[k]+l*SG.c*(mode==='cote'&&!SG.coast[q]?5:1);if(st[q]!==gen||c<g[q]){g[q]=c;st[q]=gen;prev[q]=k;push(q,c+H(q))}}}
+  if(t!==s&&(st[t]!==gen||cl[t]!==gen))return null;
+  const cells=[];for(let k=t;k>=0;k=k===s?-1:prev[k]){cells.unshift(k);if(k===s)break}
+  // simplification : on va d'un point au plus lointain que l'on voit en ligne droite sans toucher terre
+  const P=[[x0,y0],...cells.map(sgXY),[x1,y1]],pts=[];let a=0;
+  const ok=(i,j)=>seaLine(P[i][0],P[i][1],P[j][0],P[j][1],mode==='cote'&&i>0&&j<P.length-1?'cote':null);
+  while(a<P.length-1){let lo=a+1,step=1;while(lo+step<P.length&&ok(a,lo+step)){lo+=step;step*=2}
+    let hi=Math.min(lo+step,P.length-1);if(hi>lo&&ok(a,hi))lo=hi;else while(hi-lo>1){const m=(lo+hi)>>1;if(ok(a,m))lo=m;else hi=m}
+    pts.push(P[lo]);a=lo}
+  return pts.map(([x,y])=>({x,y}));
+}
+// traversées (détroits, lignes de mer) tracées en mer d'un mouillage à l'autre
+function seaCurves(){for(const e of EDGES){if(e.type!=='mer'&&e.type!=='detroit')continue;const A=N[e.a],B=N[e.b],pa=A.anch||[A.x,A.y],pb=B.anch||[B.x,B.y];
+  const P=seaPath(pa[0],pa[1],pb[0],pb[1],'cote');e.sv=P?[[A.x,A.y],pa,...P.map(p=>[p.x,p.y]),[B.x,B.y]]:null}}
+// étapes d'un tronçon du réseau, de prev vers w
+function edgeLegs(k,prev,w){const e=EDGES[k];
+  if(e.cv)return e.a===prev?cvLegs(k,1,e.cv.length-1):cvLegs(k,e.cv.length-2,0);
+  if(e.sv){const P=e.a===prev?e.sv:e.sv.slice().reverse();return P.slice(1).map((p,q,arr)=>({x:p[0],y:p[1],n:q===arr.length-1?w:null,type:e.type,tf:e.tf}))}
+  return [{x:N[w].x,y:N[w].y,n:w,type:e.type,tf:e.tf}]}
+function fleetLegsTo(f,x,y){const p=seaPath(f.x,f.y,x,y,f.mode);if(!p)return null;if(p.length)p[p.length-1]={x,y};else p.push({x,y});return p}
+const legsDays=(f,legs)=>{let d=0,px=f.x,py=f.y;for(const L of legs){d+=Math.hypot(L.x-px,L.y-py);px=L.x;py=L.y}return d/fSpeed(f)};
+
+// ---- création ----
+function newFleet(side,i,ships,name){const n=N[i],[x,y]=n.anch||[n.x,n.y];const f={id:S.uid++,side,name:name||'Flotte '+deN(n.n),x,y,at:i,legs:[],ships:{quin:0,tri:0,trans:0,...ships},cargo:[],mode:'cote',water:MAXW,task:null,dest:null};S.fleets.push(f);return f}
+function initFleets(){
+  S.fleets=[];S.fq={};S.raid={};S.block={};
+  const F=(side,id,q,t,tr,nm)=>{if(NI[id]!=null)newFleet(side,NI[id],{quin:q,tri:t,trans:tr},nm)};
+  F('car','carthago',40,10,10,'Flotte de Carthage');F('car','cnova',30,5,20,"Flotte d'Hispanie");
+  F('rom','ostia',50,10,0,"Flotte d'Ostie");F('rom','ostia',10,0,40,"Convoi d'Ostie");F('rom','lilybaeum',60,10,0,'Flotte de Sicile');F('rom','lilybaeum',20,0,30,'Convoi de Sicile');F('rom','brundisium',20,5,0,"Escadre de l'Adriatique");
+}
+function fixOldSave(){
+  if(!S.fleets)initFleets();S.fq=S.fq||{};S.vil=S.vil||{};S.pont=S.pont||{};for(const f of S.fleets){if(f.at!=null&&!f.inG&&!f.legs.length&&N[f.at].anch){f.x=N[f.at].anch[0];f.y=N[f.at].anch[1]}else if(landFine(f.x,f.y)){const W=nearestWater(f.x,f.y,10,.3);if(W){f.x=W[0];f.y=W[1]}}}S.raid=S.raid||{};S.block=S.block||{};
+  for(const a of S.armies)if(a.legs.some(L=>L.type==='mer')){a.legs=[];if(a.at==null){const n=nearestNode(a.x,a.y,n=>!n.col);a.x=n.x;a.y=n.y;a.at=n.i}}
+}
+function cleanFleet(f){
+  for(const k in f.ships)f.ships[k]=Math.max(0,Math.round(f.ships[k]));
+  // cargaison au-delà de la capacité : l'armée perd ce qui ne tient plus à bord
+  if(f.cargo.length){const cap=fCap(f),used=fUsed(f);if(used>cap){const keep=cap/used;for(const id of f.cargo){const a=S.armies.find(x=>x.id===id);if(a){a.units.forEach(u=>u.men*=keep);cleanArmy(a)}}}}
+  f.cargo=f.cargo.filter(id=>S.armies.some(a=>a.id===id&&!a.dead));
+  if(!shipsN(f)){S.fleets=S.fleets.filter(x=>x!==f);if(sel&&sel.f===f)sel=null;if(f.side==='car')log(`${f.name} n'existe plus.`)}
+}
+// pertes : une part des navires sombre, l'armée à bord perd autant
+function sink(f,frac,kinds){let lost=0;for(const k of kinds||Object.keys(SHIP)){const n=f.ships[k],l=Math.min(n,Math.round(n*frac+(Math.random()<n*frac%1?1:0)));f.ships[k]-=l;lost+=l}
+  if(!kinds||kinds.includes('trans'))for(const id of f.cargo){const a=S.armies.find(x=>x.id===id);if(a){a.units.forEach(u=>u.men*=1-frac);cleanArmy(a)}}
+  return lost}
+
+// ---- embarquer / débarquer ----
+function canBoard(a,f){if(a.ship||a.side!==f.side||a.g||f.inG)return false;const near=Math.hypot(a.x-f.x,a.y-f.y)<(f.at!=null&&a.at===f.at?40:10);return near&&!a.legs.length&&!f.legs.length&&fUsed(f)+armyPlaces(a)<=fCap(f)}
+function board(a,f){a.inG=false;a.gate=null;a.ship=f.id;a.at=null;a.legs=[];f.cargo.push(a.id);a.x=f.x;a.y=f.y;const sg=S.siege;for(const id in sg)if(sg[id].a===a.id)delete sg[id]}
+function landingSpot(f){
+  if(f.at!=null){const n=N[f.at];return {x:n.x,y:n.y,at:n.i}}
+  {const p=nearestLand(f.x,f.y,14,.3);if(p)return {x:p[0],y:p[1],at:null}}
+  return null}
+function unload(f){const L=landingSpot(f);if(!L)return false;
+  for(const id of f.cargo){const a=S.armies.find(x=>x.id===id);if(!a)continue;a.ship=null;a.x=L.x+(Math.random()-.5)*.6;a.y=L.y+(Math.random()-.5)*.6;a.at=L.at;a.legs=[];a.cool=Math.max(a.cool,1);if(L.at!=null)arrive(a)}
+  f.cargo=[];return true}
+
+// ---- mouvement ----
+function tickFleets(dd){
+  for(const f of S.fleets){
+    let budget=dd;
+    while(budget>0&&f.legs.length){const L=f.legs[0],d=Math.hypot(L.x-f.x,L.y-f.y),need=d/fSpeed(f);
+      if(need<=budget){f.x=L.x;f.y=L.y;budget-=need;f.legs.shift()}else{f.x+=(L.x-f.x)*budget/need;f.y+=(L.y-f.y)*budget/need;budget=0}
+      f.at=null}
+    if(!f.legs.length&&f.dest!=null){const n=N[f.dest];if(n.anch&&Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)<4){if(!ownerN(n.i)||ownerN(n.i)===f.side||!cityHostile(n.i,f.side))f.at=n.i;
+      if(f.side==='car'&&f.at!=null)log(`${f.name} entre au port de ${n.n}.`)}f.dest=null}
+    if(!f.legs.length&&f.ai&&f.ai.land!=null)aiLand(f);
+    for(const id of f.cargo){const a=S.armies.find(x=>x.id===id);if(a){a.x=f.x;a.y=f.y}}
+  }
+}
+function fleetsDaily(d){
+  const se=season();S.block={};
+  for(const f of S.fleets.slice()){
+    if(f.inG&&(f.at==null||ownerN(f.at)!==f.side)){if(f.at!=null)leavePort(f);else f.inG=false}
+    const atSea=f.at==null,coast=!atSea||onCoast(f.x,f.y),z=zoneOf(f.x,f.y);
+    // eau douce : les galères relâchent chaque soir le long des côtes ; au large, la réserve s'épuise
+    if(coast)f.water=MAXW;else{f.water--;if(f.water<0){const l=sink(f,.04);if(l&&(f.side==='car'||visAt(f.x,f.y)>=1))log(`${f.name} manque d'eau au large : ${l} navires abandonnés.`)}
+      // à court d'eau et sans ordre : la flotte rallie d'elle-même la côte la plus proche
+      if(f.water<=1&&!f.legs.length){const k=nearestCoast(f.x,f.y);if(k>=0){const [x,y]=sgXY(k),L=seaPath(f.x,f.y,x,y,'large');if(L){f.legs=L;if(f.side==='car')log(`${f.name} manque d'eau : elle rallie la côte.`)}}}}
+    if(atSea&&!window.__navStorm/*NAV*/){const p=(se==='Été'?.002:se==='Hiver'?.04:.006)*(coast?1:2.5);
+      if(Math.random()<p){const fr=.08+Math.random()*.17,l=sink(f,fr);if(l&&(f.side==='car'||visAt(f.x,f.y)>=1))log(`Tempête ${ZONES[z].loc} : ${f.name} perd ${l} navires.`);if(f.side==='car')S.paused=true}}
+    // convoi mal escorté : les escadres ennemies de la zone le traquent
+    if(atSea&&!window.__navStorm/*NAV*/&&f.ships.trans>0&&warN(f)*4<f.ships.trans){
+      const hunters=S.fleets.filter(o=>o.side!==f.side&&hostileSides(o.side,f.side)&&warN(o)>=8&&zoneOf(o.x,o.y)===z&&(o.task&&o.task.k==='patrol'||Math.hypot(o.x-f.x,o.y-f.y)<80));
+      if(hunters.length){const p=(warN(f)?.12:.3)*(hunters.some(o=>o.task&&o.task.k==='patrol')?1:.6);
+        if(Math.random()<p){const fr=.25+Math.random()*.35,l=sink(f,fr,['trans']);if(l)log(`${hunters[0].name} surprend un convoi mal escorté ${ZONES[z].loc} : ${f.name} perd ${l} transports${f.cargo.length?', avec les troupes à bord':''}.`);if(f.side==='car')S.paused=true}}}
+    // blocus et pillage
+    if(f.task&&f.task.k==='block'){const n=N[f.task.n];if(n.anch&&Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)<20&&cityHostile(n.i,f.side)&&warN(f)>=5){const r=S.block[n.id];if(!r||warN(f)>r.w)S.block[n.id]={side:f.side,w:warN(f)}}else if(!f.legs.length)f.task=null}
+    if(f.task&&f.task.k==='raid'){const n=N[f.task.n];if(Math.hypot(n.x-f.x,n.y-f.y)<30&&cityHostile(n.i,f.side)&&warN(f)>=5){const g=2+Math.round(warN(f)/10);S.gold[f.side]=(S.gold[f.side]||0)+g;
+        if(!S.raid[n.id]||S.raid[n.id]<10){const o=ownerN(n.i);if(f.side==='car'||o==='car')log(`${f.name} pille les côtes autour ${deN(n.n)} (+${g} par jour).`);if(o==='car')S.paused=true}S.raid[n.id]=45}
+      else if(!f.legs.length)f.task=null}
+    cleanFleet(f);
+  }
+  for(const id in S.raid){S.raid[id]--;if(S.raid[id]<=0)delete S.raid[id]}
+  // une flotte ennemie plus forte au mouillage brise le blocus
+  for(const id in S.block){const n=N[NI[id]],b=S.block[id],def=S.fleets.filter(f=>f.side===ownerN(n.i)&&f.at===n.i&&!f.inG).reduce((s,f)=>s+warN(f),0);if(def>b.w)delete S.block[id]}
+  for(const id in S.fq){const q=S.fq[id];q.d--;if(q.d<=0){const i=NI[id];if(ownerN(i)===q.side){let f=S.fleets.find(x=>x.side===q.side&&x.at===i&&!x.legs.length);if(!f)f=newFleet(q.side,i,{});f.ships[q.t]+=q.n;if(q.side==='car')log(`${q.n} ${SHIP[q.t].n.toLowerCase()} lancées à ${N[i].n}.`)}delete S.fq[id]}}
+}
+const hostileSides=(a,b)=>a!==b&&(!FAC[a].a&&!FAC[b].a||(FAC[a].a?S.fac[a]&&S.fac[a].st==='guerre_'+b:S.fac[b]&&S.fac[b].st==='guerre_'+a));
+// ravitaillement par mer : un port ami libre à moins de 60 km, ou un convoi ami tout près
+function seaSupplied(a){
+  if(N.some(n=>n.port&&ownerN(n.i)===a.side&&!(S.block[n.id]&&S.block[n.id].side!==a.side)&&Math.hypot(n.x-a.x,n.y-a.y)<60))return true;
+  return S.fleets.some(f=>f.side===a.side&&f.ships.trans>=5&&Math.hypot(f.x-a.x,f.y-a.y)<25)}
+function fleetUpkeep(side){let u=0;for(const f of S.fleets||[])if(f.side===side)for(const k in SHIP)u+=f.ships[k]*SHIP[k].up*(f.inG?.5:1);return u}
+function townIncome(n){let v=n.inc;if(S.block&&S.block[n.id])v=Math.round((v-2)*.5);if(S.raid&&S.raid[n.id])v=Math.round(v*.6);if(S.vil)v-=Math.round(ruinLoss(n));return Math.max(0,v)}
+
+// ---- IA romaine en mer ----
+function homePort(f){let b=null,bd=1e9;for(const n of N){if(!n.port||!n.anch||ownerN(n.i)!==f.side||S.block[n.id])continue;const d=Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y);if(d<bd){bd=d;b=n}}return b}
+function goHome(f){const n=homePort(f);if(!n)return false;const L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(!L)return false;f.legs=L;f.at=null;f.dest=n.i;f.task=null;return true}
+function aiLand(f){const t=f.ai.land;f.ai=null;const ids=f.cargo.slice();if(!unload(f))return;
+  for(const id of ids){const a=S.armies.find(x=>x.id===id);if(a){a.ai=null;order(a,0,0,t)}}
+  goHome(f)}
+function aiFleets(){
+  // chantiers romains : remplacer les pertes
+  if(S.gold.rom>320&&Math.random()<.15&&S.fleets.filter(f=>f.side==='rom').reduce((s,f)=>s+warN(f),0)<170){const ys=N.filter(n=>YARD.has(n.id)&&ownerN(n.i)==='rom'&&!S.fq[n.id]&&!S.block[n.id]);
+    if(ys.length){const n=ys[Math.floor(Math.random()*ys.length)],war=S.fleets.filter(f=>f.side==='rom').reduce((s,f)=>s+warN(f),0),t=war<120||S.fleets.some(f=>f.side==='rom'&&f.ships.trans>=20)?'quin':'trans';S.gold.rom-=SHIP[t].cost*BATCH;S.fq[n.id]={t,d:SHIP[t].d,n:BATCH,side:'rom'}}}
+  const winter=season()==='Hiver';
+  // escadres au même port : on les réunit (sauf les convois)
+  for(const f of S.fleets.slice()){if(f.side!=='rom'||f.at==null||f.legs.length||f.cargo.length||f.ships.trans>=10||!S.fleets.includes(f))continue;
+    for(const o of S.fleets.slice())if(o!==f&&o.side==='rom'&&o.at===f.at&&!o.legs.length&&!o.cargo.length&&o.ships.trans<10&&!o.ai){for(const k in SHIP)f.ships[k]+=o.ships[k];S.fleets=S.fleets.filter(x=>x!==o)}}
+  for(const f of S.fleets){if(f.side!=='rom'||f.legs.length||f.cargo.length||f.ai)continue;
+    // l'hiver, la mer est fermée : les escadres rentrent au port
+    if(winter){if(f.at==null)goHome(f);continue}
+    if(warN(f)<12){if(f.at==null&&!f.task)goHome(f);continue} // petite escadre : attend au port d'être renforcée
+    if(f.at==null&&!f.task){goHome(f);continue}
+    if(f.task&&Math.random()<.85)continue;
+    // soutenir un siège côtier, sinon bloquer ou piller un port punique, sinon patrouiller
+    const tgt=[];for(const n of N){if(!n.port||!n.anch||!cityHostile(n.i,'rom'))continue;const d=Math.hypot(n.x-f.x,n.y-f.y);if(d>700)continue;
+      if(n.lat<37.4&&n.lon>-6&&S.day<120)continue;const sg=S.siege[n.id];tgt.push({n,v:(sg&&sg.side==='rom'?5:1)*(n.size+1)/(1+d/150)})}
+    tgt.sort((a,b)=>b.v-a.v);
+    if(f.ships.trans>=10)continue; // flotte de transport : reste au port pour les expéditions
+    const r=Math.random();
+    if(tgt.length&&r<.55){const n=tgt[0].n,L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(L){f.legs=L;f.at=null;f.task={k:'block',n:n.i}}}
+    else if(tgt.length&&r<.75){const n=tgt[Math.floor(Math.random()*Math.min(3,tgt.length))].n,L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(L){f.legs=L;f.at=null;f.task={k:'raid',n:n.i}}}
+    else{const z=ZONES[[8,7,6,3][Math.floor(Math.random()*4)]],k=nearestCoast(z.x,z.y),[px,py]=k>=0?sgXY(k):[z.x,z.y],L=fleetLegsTo(f,px,py);if(L){f.legs=L;f.at=null;f.task={k:'patrol'}}}
+  }
+}
+// expédition : une armée sans cible terrestre gagne un port, embarque et part assiéger une ville punique d'outre-mer
+function aiExpedition(a,bv0=0){
+  if(a.ai==='embark'){const f=S.fleets.find(x=>x.id===a.aiF);if(!f||f.legs.length||f.cargo.length){a.ai=null;return true}
+    if(a.at===f.at&&f.at!=null){if(!canBoard(a,f)){a.ai=null;return true}const n=N[a.aiT];board(a,f);const L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(!L){unload(f);a.ai=null;return true}
+      f.legs=L;f.at=null;f.task=null;f.dest=a.aiT;f.ai={land:a.aiT};a.ai=null;return true}
+    if(!a.legs.length)order(a,0,0,f.at);return true}
+  if(a.units.length<6||S.day<15)return false;
+  const D=dijkstra(a,startsOf(a));let best=null,bv=bv0*1.25;
+  for(const f of S.fleets){if(f.side!=='rom'||f.at==null||f.legs.length||f.cargo.length||fCap(f)<armyPlaces(a))continue;const days=D.dist[f.at];if(days>=1e9||days>12)continue;
+    for(const n of N){if(!n.port||!n.anch||n.col||!cityHostile(n.i,'rom'))continue;if(n.lat<37.4&&n.lon>-6&&S.day<330)continue;
+      const def=aiDef(n).reduce((s,x)=>s+strength(x),0);if(def>strength(a)*.8)continue;
+      const sea=Math.hypot(n.x-N[f.at].x,n.y-N[f.at].y)/70,v=(n.inc+12+(n.id==='carthago'?30:0))/(8+days+sea);if(v>bv){bv=v;best={f,n}}}}
+  if(!best)return false;
+  a.ai='embark';a.aiF=best.f.id;a.aiT=best.n.i;order(a,0,0,best.f.at);return true}
+
+// ---- dessin ----
+function drawFleet(f,X,Y,selected,v){
+  const c=FAC[f.side].c,n=shipsN(f),k=Math.min(5,1+Math.floor(Math.log2(1+n/8)));
+  ctx.save();ctx.translate(X,Y);ctx.save();ctx.scale(1.3,1.3);
+  for(let q=k-1;q>=0;q--){const ox=(q%3-1)*9+(q>2?4:0),oy=(q>2?7:0)-(q%3===1?4:0);ctx.save();ctx.translate(ox,oy);
+    ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(1,3,10,3,0,0,7);ctx.fill();
+    ctx.strokeStyle='rgba(60,40,20,.8)';ctx.lineWidth=1;ctx.beginPath();for(let o=-6;o<=6;o+=3){ctx.moveTo(o,1);ctx.lineTo(o-2,5)}ctx.stroke();
+    ctx.fillStyle='#6b4a2c';ctx.beginPath();ctx.moveTo(-10,0);ctx.quadraticCurveTo(0,4,10,-1);ctx.lineTo(12,-3);ctx.lineTo(8,-2);ctx.quadraticCurveTo(0,-1,-9,-2);ctx.closePath();ctx.fill();
+    ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fillRect(-1,-12,1.4,10);ctx.beginPath();ctx.moveTo(.4,-11);ctx.lineTo(7,-8);ctx.lineTo(.4,-4);ctx.closePath();ctx.fill();ctx.restore()}
+  ctx.restore();
+  ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+  const t=v===2?(f.side==='car'?`${f.name} · ${n}`:`${n} navires`):'Flotte ?',tw=ctx.measureText(t).width;
+  ctx.fillStyle=selected?'rgba(255,243,196,.95)':'rgba(240,232,212,.85)';ctx.fillRect(20,-20,tw+8,14);ctx.strokeStyle=selected?'#fff3c4':'rgba(30,22,14,.7)';ctx.lineWidth=selected?2:1;ctx.strokeRect(20,-20,tw+8,14);
+  ctx.fillStyle='#2b2115';ctx.fillText(t,24,-13);
+  if(f.cargo.length&&v===2){ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.beginPath();ctx.arc(14,4,5,0,7);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.2;ctx.stroke()}
+  if(f.task&&v===2){ctx.fillStyle='#2b2115';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(f.task.k==='block'?'⛓':f.task.k==='raid'?'🔥':'⚓',-18,-4)}
+  ctx.restore()}
+function drawFleets(s,z,inV){
+  for(const f of S.fleets){f._p=null;updTrail(f,[f.x,f.y],'f');const v=f.side==='car'?2:visAt(f.x,f.y);if(!v||!inV(f.x,f.y,60))continue;f._p=[f.x,f.y];
+    if(!f.inG&&(f.side==='car'||v===2)&&f.legs.length&&(f.side==='car'||sel&&sel.f===f)){ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);ctx.setLineDash([7*z,4*z]);ctx.strokeStyle=f.side==='car'?'rgba(52,26,82,.8)':'rgba(150,40,30,.75)';ctx.lineWidth=(sel&&sel.f===f?3.2:2)*z;ctx.beginPath();ctx.moveTo(f.x,f.y);for(const L of f.legs)ctx.lineTo(L.x,L.y);ctx.stroke();ctx.setLineDash([])}
+  }
+  if(preview&&preview.f){ctx.setTransform(dpr*s,0,0,dpr*s,dpr*view.ox,dpr*view.oy);ctx.setLineDash([8*z,5*z]);ctx.strokeStyle='rgba(255,240,190,.95)';ctx.lineWidth=2.8*z;ctx.beginPath();ctx.moveTo(preview.f.x,preview.f.y);for(const L of preview.legs)ctx.lineTo(L.x,L.y);ctx.stroke();ctx.setLineDash([])}
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const id in S.block){const n=N[NI[id]];if(!n||!inV(n.x,n.y,40))continue;if(S.block[id].side!=='car'&&ownerN(n.i)!=='car'&&visAt(n.x,n.y)<1)continue;const X=view.ox+n.x*s,Y=view.oy+n.y*s;ctx.strokeStyle=S.block[id].side==='car'?'rgba(150,100,220,.9)':'rgba(210,70,60,.9)';ctx.lineWidth=2;ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(X,Y,16,0,7);ctx.stroke();ctx.setLineDash([])}
+  // escadres empilées au même mouillage : décalées côte à côte
+  const pos={};for(const f of S.fleets){if(!f._p||f.inG)continue;const k=Math.round(f._p[0]*s/18)+','+Math.round(f._p[1]*s/18);const n=pos[k]=(pos[k]||0)+1;if(n>1)f._p=[f._p[0]+(n-1)*26/s,f._p[1]]}
+  const CARD_S=UNIT_MIN_PX/UNIT_KM;
+  for(const f of S.fleets){if(!f.inG||!f._p)continue;const h=f._h||(f._h=harborPt(f));f._p=[h.x,h.y];const X=view.ox+h.x*s,Y=view.oy+h.y*s+10;f._sq=[[X,Y-10]];if(f.side==='car'||visAt(h.x,h.y)===2)garToken(X,Y,f.side,String(shipsN(f)),sel&&sel.f===f,true)}
+  for(const f of S.fleets){if(f.inG)continue;f._sq=null;if(!f._p)continue;const v=f.side==='car'?2:visAt(f.x,f.y);if(v===2&&s>=CARD_S)fleetFormation(f,s)}
+  for(const f of S.fleets.filter(f=>f._p&&!f.inG&&(f.side==='car'||visAt(f.x,f.y)===2)&&s<CARD_S).sort((p,q)=>p._p[1]-q._p[1]))fleetCard(f,s);
+  for(const f of S.fleets)if(f._p&&!f.inG&&f.side!=='car'&&visAt(f.x,f.y)===1)token(view.ox+f._p[0]*s,view.oy+f._p[1]*s-18,f.side,'~',sel&&sel.f===f,{g:false});
+}
+/* ---- flottes sur la carte : même langage que les armées ---- */
+// escadres de 10 navires (davantage si la flotte est énorme), dans l'ordre de marche : galères devant, transports derrière
+function squadrons(f){const tot=shipsN(f),per=Math.max(10,Math.ceil(tot/20/5)*5),out=[];
+  for(const k of ['quin','tri','trans']){let n=f.ships[k];while(n>0){const m=Math.min(per,n);out.push({k,f:m/per});n-=m}}return out}
+// coque vue de dessus, proue vers ang ; quinquérème : deux rangs de rames, trière : un, transport : coque ronde et cale
+function shipSq(x,y,q,sq,c,dark,ang,tile){
+  if(tile){// cartouche : carré du camp, coque dessinée dedans (comme les carrés de régiments)
+    const h=q/2;ctx.fillStyle="rgba(0,0,0,.28)";ctx.fillRect(x-h+1,y-h+1.5,q,q);ctx.fillStyle=sq.k==='trans'?`rgb(${c.map(v=>Math.round(v+(255-v)*.45)).join(',')})`:`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fillRect(x-h,y-h,q,q);
+    if(sq.f<.98){ctx.fillStyle='rgba(20,14,8,.55)';ctx.fillRect(x-h,y-h+q*sq.f,q,q*(1-sq.f))}
+    ctx.strokeStyle=dark;ctx.lineWidth=1;ctx.strokeRect(x-h+.5,y-h+.5,q-1,q-1);
+    const L=q*.78,W=q*(sq.k==='trans'?.42:.32);ctx.beginPath();
+    if(sq.k==='trans')ctx.ellipse(x,y,L/2,W/2,0,0,7);else{ctx.moveTo(x+L/2,y);ctx.quadraticCurveTo(x+L*.2,y-W/2,x-L*.2,y-W/2);ctx.lineTo(x-L/2,y-W*.3);ctx.lineTo(x-L/2,y+W*.3);ctx.lineTo(x-L*.2,y+W/2);ctx.quadraticCurveTo(x+L*.2,y+W/2,x+L/2,y)}
+    ctx.stroke();ctx.beginPath();if(sq.k==='quin'){ctx.moveTo(x-L*.25,y-q*.3);ctx.lineTo(x+L*.25,y-q*.3);ctx.moveTo(x-L*.25,y+q*.3);ctx.lineTo(x+L*.25,y+q*.3)}else if(sq.k==='tri'){ctx.moveTo(x-L*.25,y-q*.3);ctx.lineTo(x+L*.25,y-q*.3)}ctx.stroke();return}
+  const L=q*1.6,W=q*(sq.k==='trans'?.75:.6);ctx.save();ctx.translate(x,y);ctx.rotate(ang);
+  const hull=()=>{ctx.beginPath();if(sq.k==='trans'){ctx.ellipse(0,0,L/2,W/2,0,0,7)}else{ctx.moveTo(L/2,0);ctx.quadraticCurveTo(L*.22,-W/2,-L*.2,-W/2);ctx.lineTo(-L/2,-W*.32);ctx.lineTo(-L/2,W*.32);ctx.lineTo(-L*.2,W/2);ctx.quadraticCurveTo(L*.22,W/2,L/2,0);ctx.closePath()}};
+  ctx.save();ctx.translate(Math.max(1,q*.08),Math.max(1.5,q*.12));hull();ctx.fillStyle='rgba(0,0,0,.28)';ctx.fill();ctx.restore();
+  hull();ctx.fillStyle=sq.k==='trans'?`rgb(${c.map(v=>Math.round(v+(255-v)*.45)).join(',')})`:`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fill();
+  if(sq.f<.98){ctx.save();hull();ctx.clip();ctx.fillStyle='rgba(20,14,8,.55)';ctx.fillRect(-L/2,-W/2,L*(1-sq.f),W);ctx.restore()}
+  const lw=Math.max(1,q/11);hull();ctx.strokeStyle=dark;ctx.lineWidth=lw;ctx.stroke();
+  ctx.beginPath();if(sq.k==='quin'){for(const o of [-.17,.17]){ctx.moveTo(-L*.3,o*W*1.4);ctx.lineTo(L*.28,o*W*1.4)}}else if(sq.k==='tri'){ctx.moveTo(-L*.3,0);ctx.lineTo(L*.3,0)}else{ctx.rect(-L*.16,-W*.2,L*.32,W*.4)}
+  ctx.stroke();
+  if(sq.k!=='trans'){ctx.beginPath();ctx.moveTo(L/2,0);ctx.lineTo(L/2+q*.14,0);ctx.lineWidth=lw*1.4;ctx.stroke()} // éperon
+  ctx.restore()}
+// point de sortie du port : juste au-delà de la rive et des murs, vers le mouillage
+const wallKm=n=>(.55+n.size*.55)*.9;
+function harborPt(f){const n=N[f.at!=null?f.at:f.gate];const ang=Math.atan2((n.anch?n.anch[1]:f.y)-n.y,(n.anch?n.anch[0]:f.x)-n.x),ux=Math.cos(ang),uy=Math.sin(ang);
+  let d=wallKm(n);while(d<25&&landFine(n.x+ux*d,n.y+uy*d))d+=.1;d+=.35;return {x:n.x+ux*d,y:n.y+uy*d,ang}}
+function leavePort(f){f._h=null;f.gate=f.at;const h=harborPt(f);f.inG=false;f.x=h.x;f.y=h.y;delete TRAIL['f'+f.id]}
+// unités encore derrière les murs (ou dans le bassin) : on ne les dessine pas
+function behindGate(o,px,py,s,extra,isFleet){if(o.gate==null||!o.legs.length)return false;if(extra)return true;const n=N[o.gate],wx=(px-view.ox)/s,wy=(py-view.oy)/s;
+  return Math.hypot(wx-n.x,wy-n.y)<wallKm(n)+.1||(isFleet&&landFast(wx,wy))}
+function fleetFormation(f,s){
+  if(f.gate!=null&&f.legs.length&&!(TRAIL['f'+f.id]&&TRAIL['f'+f.id].length>1)){f._sq=[];return}
+  const c=FAC[f.side].c,dark='rgba(26,18,10,.95)',q=UNIT_KM*s,sp=q*1.9,U=squadrons(f);
+  let X=view.ox+f._p[0]*s,Y=view.oy+f._p[1]*s;const pts=[],angs=[],hid=[];const T=TRAIL['f'+f.id];
+  if(f.legs.length&&T&&T.length>1){
+    // en route : file d'escadres dans le sillage
+    const P=[[X,Y]];for(let k=T.length-1;k>=0;k--)P.push([view.ox+T[k][0]*s,view.oy+T[k][1]*s]);
+    let seg=0,acc=0;const dirBack=(()=>{for(let k=P.length-1;k>0;k--){const dx=P[k][0]-P[k-1][0],dy=P[k][1]-P[k-1][1],l=Math.hypot(dx,dy);if(l>1)return [dx/l,dy/l]}return [-1,0]})();
+    for(let i=0;i<U.length;i++){const d=Math.max(8,q*.7)+i*sp;
+      while(seg<P.length-1){const l=Math.hypot(P[seg+1][0]-P[seg][0],P[seg+1][1]-P[seg][1]);if(acc+l>=d){const t=(d-acc)/(l||1);pts.push([P[seg][0]+(P[seg+1][0]-P[seg][0])*t,P[seg][1]+(P[seg+1][1]-P[seg][1])*t]);angs.push(Math.atan2(P[seg][1]-P[seg+1][1],P[seg][0]-P[seg+1][0]));break}acc+=l;seg++}
+      if(pts.length<=i){const L=P[P.length-1],rest=d-acc;pts.push([L[0]+dirBack[0]*rest,L[1]+dirBack[1]*rest]);angs.push(Math.atan2(-dirBack[1],-dirBack[0]));hid[i]=behindGate(f,0,0,s,true,true)}
+      else hid[i]=behindGate(f,pts[i][0],pts[i][1],s,false,true)}
+    // sillage d'écume
+    ctx.strokeStyle='rgba(235,245,250,.35)';ctx.lineWidth=q*.45;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(X,Y);pts.forEach((p,i)=>{if(!hid[i])ctx.lineTo(p[0],p[1])});ctx.stroke();
+  }else{
+    // au mouillage : rangs serrés, proues vers le large ; au port, à côté de la ville
+    const per=Math.max(3,Math.min(6,Math.ceil(Math.sqrt(U.length*1.5))));let ang=0;
+    if(f.at!=null){const n=N[f.at];ang=Math.atan2(f.y-n.y,f.x-n.x);const ux=Math.cos(ang),uy=Math.sin(ang);
+      // premier rang juste après la rive et les murs, puis vers le large
+      let d=(.55+n.size*.55)*.9;while(d<25&&landFast(n.x+ux*d,n.y+uy*d))d+=.1;d+=.35;X=view.ox+(n.x+ux*d)*s;Y=view.oy+(n.y+uy*d)*s}
+    const ux=Math.cos(ang),uy=Math.sin(ang);
+    U.forEach((u,i)=>{const r=Math.floor(i/per),m=Math.min(per,U.length-r*per),o=(i%per-(m-1)/2)*sp*.7,b=r*sp;pts.push([X-uy*o+ux*b,Y+ux*o+uy*b]);angs.push(ang)});
+  }
+  if(sel&&sel.f===f){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y],i)=>{if(hid[i])return;ctx.beginPath();ctx.arc(x,y,q*.85,0,7);ctx.fill()})}
+  U.forEach((u,i)=>{if(!hid[i])shipSq(pts[i][0],pts[i][1],q,u,c,dark,angs[i])});
+  f._sq=pts.filter((p,i)=>!hid[i]);
+  if(s>1.4||f.side==='car'){const lx=X+14,ly=Y-30;ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';const t=f.name+(f.cargo.length?' · troupes à bord':'')+(f.task?(f.task.k==='block'?' · blocus':f.task.k==='raid'?' · pillage':(window.NAVTK&&NAVTK[f.task.k]||' · patrouille')/*NAV*/):''),tw=ctx.measureText(t).width;
+    ctx.fillStyle='rgba(238,226,196,.92)';ctx.strokeStyle='rgba(60,40,20,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.rect(lx,ly-7,tw+10,14);ctx.fill();ctx.stroke();ctx.fillStyle='#2b2115';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(t,lx+5,ly)}
+}
+// cartouche d'une flotte en vue dézoomée : médaillon à l'ancre, nom, escadres, et troupes à bord
+function fleetCard(f,s){
+  const k=s<.5?.78:s<.8?.9:1,c=FAC[f.side].c,sel_=sel&&sel.f===f,X=Math.round(view.ox+f._p[0]*s),Y=Math.round(view.oy+f._p[1]*s);
+  const U=squadrons(f),per=5,q=Math.round(12*k),g=Math.max(2,Math.round(2.5*k)),rows=Math.ceil(U.length/per)||1;
+  const A=f.cargo.map(id=>S.armies.find(a=>a.id===id)).filter(Boolean).flatMap(a=>a.units).sort((p,r)=>MARCH[UT[p.t].k]-MARCH[UT[r.t].k]),qa=Math.round(7*k),pa=10,ra=Math.ceil(A.length/pa);
+  const gridW=Math.min(per,U.length||1)*(q+g)-g,gridH=rows*(q+g)-g,cargoH=ra?ra*(qa+2)+3*k:0,cargoW=Math.min(pa,A.length)*(qa+2)-2;
+  ctx.save();ctx.font=`600 ${Math.round(11*k)}px Marcellus, Georgia, serif`;const name=f.name.toUpperCase(),tw=ctx.measureText(name).width;
+  const pw=Math.max(tw+14*k,gridW+8*k,cargoW+8*k),ph=Math.round(18*k),mr=Math.round(16*k);
+  const gy=Y-8*k,ctop=gy-cargoH,top=ctop-gridH,py=top-3*k-ph,my=py-mr*.55;
+  ctx.strokeStyle='rgba(30,20,10,.8)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(X,gy);ctx.lineTo(X,Y);ctx.stroke();
+  ctx.strokeStyle='rgba(235,245,250,.7)';ctx.lineWidth=1.2;ctx.beginPath();ctx.ellipse(X,Y,6,2.4,0,0,7);ctx.stroke();
+  // médaillon : emblème du camp sur fond de mer, ancre en dessous
+  ctx.beginPath();ctx.arc(X,my,mr+2,0,7);ctx.fillStyle=sel_?'#f3d98a':'#5a3d22';ctx.fill();
+  ctx.beginPath();ctx.arc(X,my,mr,0,7);const gr=ctx.createRadialGradient(X-mr*.3,my-mr*.3,1,X,my,mr);gr.addColorStop(0,'#e3ecea');gr.addColorStop(1,rgb(c.map(v=>Math.round(v*.3+95)),1));ctx.fillStyle=gr;ctx.fill();
+  ctx.lineWidth=1.2;ctx.strokeStyle='rgba(40,26,12,.8)';ctx.stroke();
+  ctx.save();ctx.translate(X,my);ctx.strokeStyle='rgba(40,26,12,.9)';ctx.lineWidth=Math.max(1.2,mr*.11);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(0,-mr*.55);ctx.lineTo(0,mr*.55);ctx.moveTo(-mr*.3,-mr*.3);ctx.lineTo(mr*.3,-mr*.3);ctx.moveTo(-mr*.5,mr*.15);ctx.quadraticCurveTo(-mr*.45,mr*.62,0,mr*.6);ctx.quadraticCurveTo(mr*.45,mr*.62,mr*.5,mr*.15);ctx.stroke();ctx.beginPath();ctx.arc(0,-mr*.66,mr*.12,0,7);ctx.stroke();ctx.restore();
+  // plaque du nom
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X-pw/2+1.5,py+2,pw,ph);
+  const pg=ctx.createLinearGradient(0,py,0,py+ph);pg.addColorStop(0,'#4f6670');pg.addColorStop(1,'#2f424b');ctx.fillStyle=pg;ctx.fillRect(X-pw/2,py,pw,ph);
+  ctx.strokeStyle=sel_?'#f3d98a':'#16222a';ctx.lineWidth=sel_?2:1.2;ctx.strokeRect(X-pw/2+.5,py+.5,pw-1,ph-1);ctx.strokeStyle='rgba(200,225,235,.3)';ctx.lineWidth=1;ctx.strokeRect(X-pw/2+2.5,py+2.5,pw-5,ph-5);
+  ctx.fillStyle='#eef3ef';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(name,X,py+ph/2+.5);
+  // escadres, cinq par rang
+  const dark='rgba(26,18,10,.95)',pts=[];
+  U.forEach((u,i)=>{const r=Math.floor(i/per),n=Math.min(per,U.length-r*per),x=X-(n*(q+g)-g)/2+(i%per)*(q+g)+q/2,y=top+r*(q+g)+q/2;pts.push([x,y]);shipSq(x,y,q,u,c,dark,0,true)});
+  // troupes à bord : petits carrés sous les navires
+  A.forEach((u,i)=>{const r=Math.floor(i/pa),n=Math.min(pa,A.length-r*pa),x=X-(n*(qa+2)-2)/2+(i%pa)*(qa+2)+qa/2,y=ctop+3*k+r*(qa+2)+qa/2;unitSq(x,y,qa,u,c,dark)});
+  ctx.restore();
+  f._sq=[...pts,[X,py+ph/2],[X,my]];
+}
+function pickFleet(mx,my,bd=18){let best=null;for(const f of S.fleets){if(!f._p)continue;let d=Math.hypot(view.ox+f._p[0]*view.s-mx,view.oy+f._p[1]*view.s-my);if(f._sq)for(const [x,y] of f._sq)d=Math.min(d,Math.hypot(x-mx,y-my)+4);if(d<bd){bd=d;best=f}}return best}
+
+// ---- ordres du joueur ----
+function fleetTarget(mx,my){const n=pickTown(mx,my),[wx,wy]=toWorld(mx,my);
+  if(n&&n.port&&n.anch)return {x:n.anch[0],y:n.anch[1],n:n.i};
+  if(!landFine(wx,wy)&&seaCell(wx,wy,20)>=0)return {x:wx,y:wy,n:null};
+  const W=nearestWater(wx,wy,4,.3);if(W)return {x:W[0],y:W[1],n:null};const q=seaCell(wx,wy,20);if(q>=0){const [x,y]=sgXY(q);return {x,y,n:null}}return null}
+function orderFleet(f,mx,my){const t=fleetTarget(mx,my);if(!t)return false;if(f.inG)leavePort(f);const L=fleetLegsTo(f,t.x,t.y);if(!L)return false;f.legs=L;f.at=null;f.dest=t.n;if(f.task&&f.task.k!=='patrol')f.task=null;else f.task=null;return true}
+function fleetPanel(f){
+  const v=f.side==='car'?2:visAt(f.x,f.y);
+  if(f.side!=='car')return `<h2>${esc(v===2?f.name:'Flotte inconnue')}</h2><p><span class="tag" style="border-color:rgb(${FAC[f.side].c})">${sideName(f.side)}</span></p>`+(v===2?`<p>${f.ships.quin} quinquérèmes, ${f.ships.tri} trières, ${f.ships.trans} transports${f.cargo.length?' · une armée à bord':''}.</p>`:'<p>Des voiles au loin. Approchez-vous pour les compter.</p>');
+  const z=ZONES[zoneOf(f.x,f.y)].loc,eta=f.legs.length?Math.ceil(legsDays(f,f.legs)):0,cap=fCap(f),used=fUsed(f);
+  const st=f.legs.length?`En mer vers ${f.dest!=null?'<b>'+N[f.dest].n+'</b>':'le point choisi'}, ≈ ${Math.max(1,eta)} jours.`:f.inG?`À l'abri dans le port de <b>${N[f.at].n}</b> : navires désarmés, entretien réduit de moitié. Clic droit sur la mer pour reprendre la mer.`:f.at!=null?`Au port de <b>${N[f.at].n}</b>.`:`Au mouillage ${z}.`;
+  const task=f.task?(f.task.k==='patrol'?`En patrouille ${z}.`:f.task.k==='block'?`Blocus de ${N[f.task.n].n}.`:(f.task.n==null/*NAV*/?((window.NAVTK&&NAVTK[f.task.k]||' · mission').slice(3).replace(/^./,c=>c.toUpperCase())+'.'):`Pillage des côtes autour ${deN(N[f.task.n].n)}.`)):'';
+  const near=N.filter(n=>!n.col&&cityHostile(n.i,'car')&&Math.hypot(n.x-f.x,n.y-f.y)<30).sort((a,b)=>Math.hypot(a.x-f.x,a.y-f.y)-Math.hypot(b.x-f.x,b.y-f.y))[0];
+  const nearPort=N.filter(n=>n.port&&n.anch&&cityHostile(n.i,'car')&&Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)<20)[0];
+  const others=S.fleets.filter(o=>o!==f&&o.side==='car'&&!o.legs.length&&!f.legs.length&&Math.hypot(o.x-f.x,o.y-f.y)<6);
+  const cargo=f.cargo.map(id=>S.armies.find(a=>a.id===id)).filter(Boolean);
+  const coastNow=f.at!=null||onCoast(f.x,f.y);
+  return `<h2>${esc(f.name)}</h2><p>${st} ${task}</p>
+    <p class="sub">${f.ships.quin} quinquérèmes · ${f.ships.tri} trières · ${f.ships.trans} transports · ${Math.round(fSpeed(f))} km/jour · eau ${coastNow?'renouvelée chaque soir':f.water+' j'}</p>
+    <div class="row"><button id="fCote" type="button" class="${f.mode==='cote'?'on':''}" title="Longer les côtes : plus lent, sûr, eau douce chaque soir">Cabotage</button><button id="fLarge" type="button" class="${f.mode==='large'?'on':''}" title="Couper au large : plus rapide, mais tempêtes plus dures et eau limitée à ${MAXW} jours">Haute mer</button></div>
+    ${f.inG||f.at!=null&&!f.legs.length&&ownerN(f.at)==='car'?`<div class="row"><button id="fGar" type="button" class="${f.inG?'on':''}">${f.inG?'Réarmer la flotte':'Mettre à l\'abri au port'}</button></div>`:''}
+    <div class="row"><button id="fHalt" type="button" ${f.legs.length?'':'disabled'}>Halte</button><button id="fPatrol" type="button" ${f.legs.length||!warN(f)?'disabled':''} title="Surveille la zone : vue étendue, traque les convois ennemis mal escortés">Patrouiller</button>
+      ${nearPort?`<button id="fBlock" type="button" ${warN(f)<5?'disabled':''} title="Coupe le commerce du port et le ravitaillement par mer de la ville">Bloquer ${esc(nearPort.n)}</button>`:''}
+      ${near?`<button id="fRaid" type="button" ${warN(f)<5?'disabled':''} title="Rapporte de l'or chaque jour et réduit le revenu de la ville">Piller ${esc(near.n)}</button>`:''}
+      ${others.length?`<button id="fMerge" type="button">Réunir (${others.length})</button>`:''}${f.ships.trans&&warN(f)?`<button id="fSplit" type="button" ${f.legs.length?'disabled':''}>Séparer les transports</button>`:''}<button id="fFind" type="button">Centrer</button></div>
+    <h3>À bord (${used}/${cap} places)</h3>${cargo.length?cargo.map(a=>`<p>${esc(a.name)} <span class="sub">· ${a.units.length} rég. · ${armyPlaces(a)} places</span></p>`).join('')+`<div class="row"><button id="fUnload" type="button" ${f.legs.length?'disabled':''}>Débarquer</button></div>`:'<p class="sub">Aucune troupe. Une armée embarque depuis son panneau quand la flotte est au même port. Un transport porte un régiment d\'infanterie, un régiment de cavalerie en prend deux, les éléphants trois.</p>'}
+    <p class="sub" style="margin-top:10px"><b>Clic droit</b> sur la mer ou sur un port : naviguer. Les convois sans escorte (une galère de guerre pour quatre transports) sont des proies.</p>`}
+function bindFleet(f){
+  const R=()=>renderAll();
+  $('fCote').onclick=()=>{f.mode='cote';if(f.legs.length){const L=f.legs[f.legs.length-1],N2=fleetLegsTo(f,L.x,L.y);if(N2)f.legs=N2}R()};
+  $('fLarge').onclick=()=>{f.mode='large';if(f.legs.length){const L=f.legs[f.legs.length-1],N2=fleetLegsTo(f,L.x,L.y);if(N2)f.legs=N2}R()};
+  $('fHalt').onclick=()=>{f.legs=[];f.dest=null;R()};
+  if($('fGar'))$('fGar').onclick=()=>{if(f.inG)leavePort(f);else{f.inG=true;f.task=null;const n=N[f.at];if(n.anch){f.x=n.anch[0];f.y=n.anch[1]}log(`${f.name} rentre à l'abri dans le port de ${n.n}.`)}R()};
+  $('fPatrol').onclick=()=>{f.task={k:'patrol'};computeVis();R()};
+  $('fFind').onclick=()=>centerOn(f.x,f.y,Math.max(view.s,1));
+  if($('fBlock'))$('fBlock').onclick=()=>{const n=N.filter(n=>n.port&&n.anch&&cityHostile(n.i,'car')&&Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)<20)[0];f.task={k:'block',n:n.i};log(`${f.name} commence le blocus de ${n.n}.`);R()};
+  if($('fRaid'))$('fRaid').onclick=()=>{const n=N.filter(n=>!n.col&&cityHostile(n.i,'car')&&Math.hypot(n.x-f.x,n.y-f.y)<30).sort((a,b)=>Math.hypot(a.x-f.x,a.y-f.y)-Math.hypot(b.x-f.x,b.y-f.y))[0];f.task={k:'raid',n:n.i};R()};
+  if($('fMerge'))$('fMerge').onclick=()=>{for(const o of S.fleets.filter(o=>o!==f&&o.side==='car'&&!o.legs.length&&Math.hypot(o.x-f.x,o.y-f.y)<6)){for(const k in SHIP)f.ships[k]+=o.ships[k];f.cargo.push(...o.cargo);S.fleets=S.fleets.filter(x=>x!==o)}R()};
+  if($('fSplit'))$('fSplit').onclick=()=>{const g={id:S.uid++,side:'car',name:'Convoi de '+f.name.replace(/^Flotte (de |d')/,''),x:f.x+1,y:f.y,at:f.at,legs:[],ships:{quin:0,tri:0,trans:f.ships.trans},cargo:f.cargo,mode:f.mode,water:f.water,task:null,dest:null};f.ships.trans=0;f.cargo=[];S.fleets.push(g);sel={f:g};R()};
+  if($('fUnload'))$('fUnload').onclick=()=>{if(!unload(f))log("Pas de plage où débarquer ici : approchez la flotte d'une côte.");computeVis();R()};
+}
+function shipyardBlock(n){
+  if(!n.port||ownerN(n.i)!=='car')return '';
+  const yard=YARD.has(n.id),blocked=S.block[n.id]&&S.block[n.id].side!=='car',q=S.fq[n.id];
+  let h=`<h3>Chantier naval ${yard?'':'(transports seulement)'}</h3>`;
+  if(blocked)return h+'<p class="sub">Le port est bloqué : aucun navire ne peut être lancé.</p>';
+  if(q)return h+`<p>${q.n} ${SHIP[q.t].n.toLowerCase()} en construction : ${q.d} jours.</p>`;
+  return h+Object.keys(SHIP).filter(k=>yard||k==='trans').map(k=>`<div class="rec"><span>${BATCH} ${SHIP[k].n.toLowerCase()} <span class="sub">· ${SHIP[k].d} j · entretien ${+(SHIP[k].up*BATCH).toFixed(2)}/mois</span></span><button data-ship="${k}" data-n="${n.i}" type="button" ${S.gold.car<SHIP[k].cost*BATCH?'disabled':''}>${SHIP[k].cost*BATCH}</button></div>`).join('')}
+function bindShipyard(){document.querySelectorAll('[data-ship]').forEach(b=>b.onclick=()=>{const k=b.dataset.ship,i=+b.dataset.n,c=SHIP[k].cost*BATCH;if(S.gold.car<c)return;S.gold.car-=c;S.fq[N[i].id]={t:k,d:SHIP[k].d,n:BATCH,side:'car'};renderAll()})}
+

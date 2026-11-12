@@ -1,0 +1,240 @@
+/* ================= FINS DE SIÈGE : reddition négociée, pillage ou clémence, mine ================= */
+// sg.sack : 'pil' (piller à la prise) | 'ep' (épargner) ; sg.mine : {t0,t} ; sg.breach : brèche ouverte (murs ×0,7, siège avancé)
+let CAPMODE=null;
+const LOOT=[15,30,60,120],MINE_D=[5,7,9,12];
+const _capture8=capture;
+capture=function(i,side){const n=N[i],sg=S.siege[n.id],prev=ownerN(i);
+  const mode=CAPMODE||(sg&&sg.side===side&&sg.sack)||(side==='rom'&&sg&&sg.side==='rom'&&Math.random()<.4?'pil':null);
+  _capture8.apply(this,arguments);if(S.over||ownerN(i)!==side||prev===side)return;
+  const seen=side==='car'||prev==='car'||visAt(n.x,n.y)>=1;
+  if(mode==='pil'){const g=LOOT[n.size];S.gold[side]=(S.gold[side]||0)+g;
+    for(const a of S.armies)if(a.side===side&&!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<8)a.mor=Math.min(100,(a.mor==null?MOR0:a.mor)+8);
+    if(prev){shiftOpinion(n.x,n.y,prev,side);shiftOpinion(n.x,n.y,prev,side)}
+    if(S.ord&&S.ord[n.id]!=null)S.ord[n.id]=Math.min(S.ord[n.id],6);
+    S.sacked=S.sacked||{};S.sacked[n.id]=Math.floor(S.day);
+    if(seen)log(`${n.n} est mise à sac : ${g} or de butin, les soldats exultent (moral +8), mais les peuples voisins s'en souviendront.`)}
+  else if(mode==='ep'||mode==='neg'){if(prev)shiftOpinion(n.x,n.y,side,prev);
+    if(seen&&mode==='ep')log(`${n.n} est épargnée : la clémence du vainqueur rassure les peuples voisins.`)}};
+function negotiate(a,i,fromInside){const n=N[i],sg=S.siege[n.id];if(!sg)return;
+  const G=shutIn(i).filter(x=>x.side!==sg.side),B=besiegers(i,sg.side);
+  const pG=G.reduce((t,x)=>t+strength(x),0),pB=B.reduce((t,x)=>t+strength(x),0),f=sg.d/sg.need;
+  let p=fromInside?.45+.45*f:.12+.6*f+(pB>pG*3?.15:0)-(N[i].port&&!(S.block[n.id]&&S.block[n.id].side===sg.side)?.2:0)+(sg.breach?.15:0)+(lineOk(sg.cv)?.08:0);
+  p=Math.max(.05,Math.min(.95,p));sg.negT=Math.floor(S.day)+10;
+  const ok=Math.random()<p;
+  if(!ok){log(fromInside?`Les assiégeants de ${n.n} refusent de vous laisser partir.`:`La garnison de ${n.n} refuse de se rendre.`);return false}
+  log(fromInside?`Accord conclu : votre garnison quitte ${n.n} avec les honneurs ; la ville ouvre ses portes.`:`${n.n} accepte de se rendre : la garnison sort libre, la ville est épargnée.`);
+  for(const x of G){x.inG=false;x.cool=6;x.mor=Math.max(0,(x.mor==null?MOR0:x.mor)-5);const before=x.units.map(u=>u.men);retreat(x);if(!x.dead)x.units.forEach((u,k)=>{if(before[k]!=null)u.men=Math.max(u.men,before[k]*.98)})}
+  CAPMODE='neg';try{capture(i,sg.side)}finally{CAPMODE=null}return true}
+function startMine(a,i){const sg=S.siege[N[i].id];if(!sg||sg.mine||sg.breach)return;const d=lineDays(a,MINE_D[N[i].size]);sg.mine={t0:Math.floor(S.day),t:Math.floor(S.day)+d};
+  if(a.side==='car')log(`${a.name} fait creuser une mine sous les murs de ${N[i].n} (${d} jours).`)}
+
+/* ---- daily : lignes, mine, hiver, vétérans, marche de nuit, rivalités, mercenaires ---- */
+const _daily8=daily;
+daily=function(d){
+  const pre={};for(const id in S.siege)pre[id]=S.siege[id].d;
+  _daily8(d);if(S.cur||S.over)return;const se=season();
+  for(const id in S.siege){const sg=S.siege[id],i=NI[id],a=S.armies.find(x=>x.id===sg.a);if(!a||a.dead)continue;
+    // contrevallation : le blocus est plus serré
+    if(lineOk(sg.cv)&&pre[id]!=null&&sg.d>pre[id])sg.d+=(sg.d-pre[id])*.25;
+    // mine : brèche, ou contre-mine des assiégés
+    if(sg.mine&&S.day>=sg.mine.t){const G=shutIn(i).filter(x=>x.side!==sg.side);sg.mine=null;
+      if(G.length&&Math.random()<.3){if(sg.side==='car'||ownerN(i)==='car')log(`Les assiégés de ${N[i].n} ont contre-miné : la galerie s'effondre.`)}
+      else{sg.breach=1;sg.d+=sg.need*.25;if(sg.side==='car'||ownerN(i)==='car')log(`La mine s'effondre sous les murs de ${N[i].n} : une brèche est ouverte (murs ×0,7, siège avancé).`)}}
+    if(sg.d>=sg.need&&ownerN(i)!==sg.side){if(shutIn(i).length)surrender(i,sg.side);else capture(i,sg.side);continue}
+    // l'IA romaine creuse ses lignes et ses mines
+    if(sg.side==='rom'&&!(typeof MPRH==='function'&&MPRH('rom'))){if(!sg.cv)sg.cv={t0:d,t:d+lineDays(a,CV_D)};else if(!sg.cc&&lineOk(sg.cv)&&N[i].size>=1)sg.cc={t0:d,t:d+lineDays(a,CC_D)};
+      if(!sg.mine&&!sg.breach&&N[i].size>=2&&sg.d>sg.need*.2&&Math.random()<.05)startMine(a,i)}}
+  let elLost=0,mtLost=0;
+  for(const a of S.armies){if(a.dead||a.ship)continue;
+    // vétérans : les renforts diluent l'expérience
+    for(const u of a.units){if(u._m!=null&&u.xp&&u.men>u._m+1)u.xp*=u._m/u.men;u._m=Math.round(u.men)}
+    if(a.legs.length){a.amb=false}
+    if(a.mo==='nuit'&&a.legs.length){a.fat=Math.min(100,(a.fat||0)+5);if(a.mor!=null)a.mor=Math.max(0,a.mor-.3)}
+    // hiver hors des quartiers : les éléphants meurent de froid, la montagne tue
+    if(se==='Hiver'&&!a.g&&!a.qh&&!a.inG&&!(a.at!=null&&ownerN(a.at)===a.side)){const k=a.camp&&a.camp.ok?.5:1,mt=terrainAt(a.x,a.y)==='montagne';
+      for(const u of a.units){let l=0;if(UT[u.t].k==='eleph')l+=.012*k;if(mt)l+=.004*k;if(l){const m=u.men*l;u.men-=m;if(a.side==='car'){if(UT[u.t].k==='eleph')elLost+=m;else mtLost+=m}}}
+      cleanArmy(a)}
+    // rivalités : deux généraux côte à côte qui ne s'entendent pas
+    const R=!a.legs.length&&nearRival(a);if(R&&R.r.k<.9){a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-.4);
+      if(a.side==='car'&&d%30===0&&a.id<R.o.id)log(`${R.r.g.name} et ${R.r.h.name} se disputent le commandement (moral en baisse, −15 % s'ils combattent ensemble).`)}
+    // mercenaires : partent plus vite quand le moral s'effondre
+    if((a.mor==null?MOR0:a.mor)<30)for(const u of a.units)if(u.merc)u.men*=.99;
+  }
+  if(d%30===0){if(elLost>=1)log(`Le froid de l'hiver tue ${Math.round(elLost)} éléphants ce mois-ci : abritez-les en quartiers d'hiver.`);
+    if(mtLost>=50)log(`L'hiver en montagne coûte ${Math.round(mtLost)} hommes de plus ce mois-ci.`)}
+  // solde impayée : les bandes engagées en route s'en vont tout entières
+  if(d%30===0)for(const side of ['car','rom']){if(S.gold[side]>0)continue;const {inc,up}=income(side);if(up<=inc)continue;let n=0;
+    for(const a of S.armies){if(a.side!==side)continue;const k=a.units.length;a.units=a.units.filter(u=>!(u.merc&&Math.random()<.35));n+=k-a.units.length;if(k!==a.units.length)cleanArmy(a)}
+    if(side==='car'&&n)log(`Faute de solde, ${n} bande${n>1?'s':''} de mercenaires plie${n>1?'nt':''} bagage et s'en va.`)}
+  // l'IA romaine marche en ordre, avec avant-garde, hors de ses terres
+  for(const a of S.armies)if(a.side==='rom'&&!a.g&&!a.dead)a.mo=a.legs.length&&ownerAt(a.x,a.y)!=='rom'?'ag':undefined;
+};
+
+/* ---- bataille : se dérober, armée de secours ---- */
+function refuseTry(att,defs){const D=defs.filter(x=>!x.dead),main=D[0];if(!main||PEND)return false;
+  const ai=main.side==='rom'&&!(typeof MPRH==='function'&&MPRH('rom'));
+  let want=D.every(x=>x.refus);
+  if(ai&&!want&&!insideOf(main)&&!(main.at!=null&&S.siege[N[main.at].id]&&S.siege[N[main.at].id].a===main.id)){const b={att:[att.id],def:D.map(x=>x.id),x:main.x,y:main.y,node:nearestNode(main.x,main.y).i};
+    try{want=odds(b)>.72&&Math.random()<(hasTr(genOf(main),'prud')?.9:.5)}catch(e){}}
+  if(!want||D.some(x=>insideOf(x)||x.g))return false;
+  const cs=L=>{const p=L.reduce((t,x)=>t+strength(x),0)||1;return L.reduce((t,x)=>t+power(x.units.filter(u=>isCavK(UT[u.t].k))),0)/p};
+  const fat=Math.max(...D.map(x=>x.fat||0));let p=.65+.25*cs(D)-.3*cs([att])-(fat>60?.25:0)-(D.some(x=>x.amb)?0:0)+(hasTr(genOf(main),'prud')?.1:0);
+  p=Math.max(.1,Math.min(.9,p));
+  const seen=att.side==='car'||main.side==='car';
+  if(Math.random()>=p){if(seen)log(`${main.side==='car'?main.name+' tente':'L’ennemi tente'} de se dérober, mais ${main.side==='car'?"l'ennemi le rattrape":'vous le rattrapez'} : la bataille s'engage.`);for(const x of D){x.refus=false;x.fat=Math.min(100,(x.fat||0)+8)}return false}
+  for(const x of D){x.fat=Math.min(100,(x.fat||0)+20);x.mor=Math.max(0,(x.mor==null?MOR0:x.mor)-3);x.units.forEach(u=>u.men*=.98);x.cool=3;x.camp=null;x.amb=false;
+    const dx=x.x-att.x,dy=x.y-att.y,dd=Math.hypot(dx,dy)||1;x.legs=[];x.at=null;
+    if(!order(x,x.x+dx/dd*25,x.y+dy/dd*25,null)){x.legs=[]}cleanArmy(x)}
+  att.cool=Math.max(att.cool||0,2);
+  if(seen)log(`${main.side==='car'?main.name+' refuse':'L’ennemi refuse'} la bataille et se dérobe (fatigue +20).`);
+  return true}
+const _startBattle8=startBattle;
+startBattle=function(att,defs){
+  if(refuseTry(att,defs))return;
+  const c0=S.cur;_startBattle8.apply(this,arguments);
+  if(S.cur&&S.cur!==c0&&S.cur.att[0]===att.id&&!PEND){if(reliefize(S.cur)){try{openBattle()}catch(e){console.warn(e)}}}
+};
+const _odds8=odds;
+odds=function(b){const p=Math.min(.999,Math.max(.001,_odds8(b)));let r=Math.sqrt(p/(1-p));
+  r*=vetMul(b.att)/vetMul(b.def);r*=rivalMul(b.att)/rivalMul(b.def);r*=ambushMul(b);
+  if(b.sortie!=null){const sg=S.siege[N[b.sortie].id];if(sg&&lineOk(sg.cv))r/=1.25}
+  if(b.relief!=null){const sg=S.siege[N[b.relief].id];if(sg&&lineOk(sg.cc))r/=1.3}
+  return r*r/(r*r+1)};
+const _applyResult8=applyResult;
+applyResult=function(b,res){
+  const attA=sideArmies(b.att),defA=sideArmies(b.def),win=res.attWin?attA:defA,lose=res.attWin?defA:attA;
+  const i=b.relief,gar=i!=null?attA.filter(x=>x.id!==b.att[0]):[];
+  _applyResult8(b,res);
+  for(const a of win)if(!a.dead)for(const u of a.units)u.xp=(u.xp||0)+2;
+  for(const a of lose)if(!a.dead)for(const u of a.units)u.xp=(u.xp||0)+1;
+  for(const a of [...win,...lose])if(!a.dead)for(const u of a.units)u._m=Math.round(u.men);
+  for(const a of [...attA,...defA])a.amb=false;
+  if(i!=null){const n=N[i];
+    if(!res.attWin){for(const x of gar)if(!x.dead&&ownerN(i)===x.side){x.legs=[];x.at=i;x.x=n.x;x.y=n.y;x.cool=0}}
+    else{delete S.siege[n.id];if(attA[0]&&(attA[0].side==='car'||defA[0]&&defA[0].side==='car'))log(`Le siège de ${n.n} est levé !`)}}
+};
+
+/* ---- panneau : ordres de marche, postures, lignes, mine, reddition, pillage, mercenaires, rivalités, chevrons ---- */
+const _renderSide8=renderSide;
+renderSide=function(){_renderSide8.apply(this,arguments);if(!S||!(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)))return;const a=sel.a,el=$('side'),box=el&&el.querySelector('.genbox');
+  // chevrons sur les régiments
+  try{const T=el.querySelectorAll('.ui-tiles label, label.unit');if(T.length===a.units.length)a.units.forEach((u,k)=>{const c=chev(u);if(!c&&!u.merc)return;const L=T[k],tile=L.classList.contains('ui-tile'),s=tile?L:L.querySelectorAll('span')[1]||L,mt='<span title="Mercenaires engagés en route : double solde, partent si elle manque" style="color:#e8c46a;font-size:10px;font-weight:bold">M</span>';
+    if(tile)L.style.position='relative';
+    if(c)s.insertAdjacentHTML('beforeend',tile?`<span style="position:absolute;top:1px;right:1px;line-height:0">${chevSVG(c)}</span>`:chevSVG(c));
+    if(u.merc)s.insertAdjacentHTML('beforeend',tile?`<span style="position:absolute;top:0;left:3px">${mt}</span>`:' '+mt);
+    L.title=(L.title||'')+(c?` · ${CHEV_W[c]} (expérience ${Math.floor(u.xp)})`:'')+(u.merc?' · mercenaires':'')})}catch(e){}
+  if(!box||a.g||a.ship)return;let h='';
+  const btn=(id,t,tt,on,dis)=>`<button id="${id}" type="button" class="${on?'on':''}" title="${tt}" ${dis?'disabled':''}>${t}</button>`;
+  // ordres de marche et postures
+  const mo=a.mo||'col';
+  h+=`<p class="sub" style="margin:8px 0 2px">Ordre de marche</p><div class="row">${Object.entries(MO).map(([k,M])=>`<button type="button" data-mo="${k}" class="${mo===k?'on':''}" title="${M.d}">${M.n}</button>`).join('')}</div>`;
+  const ca=canAmb(a);
+  h+=`<div class="row" style="margin-top:4px">${btn('aAmb',a.amb?'En embuscade':'Tendre une embuscade',ca?"L'armée se cache (forêt, montagne, marais, col) : une colonne ennemie qui tombe dessus combat à ×1/1,35 (×1/1,5 de nuit, ×1/1,1 si elle a une avant-garde). Annulée dès qu'elle bouge.":"Possible seulement à l'arrêt en forêt, en montagne, dans un marais ou près d'un col.",a.amb,!ca&&!a.amb)}${btn('aRef',a.refus?'Refuse la bataille':'Refuser la bataille',"Si l'ennemi l'attaque, l'armée tente de se dérober (≈65 %, mieux avec de la cavalerie et un général prudent, moins si elle est épuisée) : fatigue +20, 2 % de pertes, et elle recule de 25 km.",a.refus,insideOf(a))}</div>`;
+  // rivalité
+  const R=nearRival(a);if(R)h+=`<p class="sub" style="margin:6px 0 0;color:#e0a060">Commandement disputé avec ${esc(R.o.name)} (${esc(R.r.g.name)} / ${esc(R.r.h.name)}) : −${Math.round((1-R.r.k)*100)} % s'ils combattent ensemble${R.r.k<.9?', moral en baisse':''}. Séparez-les, ou réunissez les troupes sous un seul général.</p>`;
+  // mercenaires
+  const mn=mercNode(a);if(mn&&a.side==='car'){const m=mercOffer(mn),L=[...new Set(MERC_T[mn.cul])];
+    h+=`<p class="sub" style="margin:8px 0 2px">Mercenaires près de ${esc(mn.n)} : ${m.left>0?m.left+' bande'+(m.left>1?'s':'')+' à engager':'plus personne avant '+Math.ceil(m.until-S.day)+' jours'}</p><div class="row">${L.map(t=>`<button type="button" data-merc="${t}" title="Régiment complet et aguerri ; double solde chaque mois ; s'en va tout entier si la solde manque" ${m.left<=0||S.gold.car<mercPrice(t)||a.units.length>=MAXU?'disabled':''}>${SHORT[t]} (${mercPrice(t)} or)</button>`).join('')}</div>`}
+  // siège : lignes, mine, reddition, sort de la ville
+  if(a.at!=null&&!a.legs.length){const n=N[a.at],sg=S.siege[n.id];
+    if(sg&&sg.side===a.side&&!n.col){const st=(w,D)=>!w?'':lineOk(w)?' ✓':` (${Math.max(0,Math.ceil(w.t-S.day))} j)`;
+      h+=`<p class="sub" style="margin:8px 0 2px">Travaux de siège</p><div class="row">${btn('aCv','Contrevallation'+st(sg.cv),`Un fossé et un rempart tout autour de la ville (${lineDays(a,CV_D)} jours) : les sorties de la garnison sont bien plus dures (×1,25), et le siège avance 25 % plus vite.`,lineOk(sg.cv),!!sg.cv)}${btn('aCc','Circonvallation'+st(sg.cc),`Un second anneau tourné vers l'extérieur (${lineDays(a,CC_D)} jours) : face à une armée de secours, vos assiégeants comptent ×1,3.`,lineOk(sg.cc),!!sg.cc)}</div>`;
+      h+=`<div class="row" style="margin-top:4px">${btn('aMine',sg.breach?'Brèche ouverte':sg.mine?`Mine (${Math.max(0,Math.ceil(sg.mine.t-S.day))} j)`:'Creuser une mine',`Une galerie sous les murs (${lineDays(a,MINE_D[n.size])} jours). Si elle n'est pas contre-minée (30 %), elle ouvre une brèche : le siège avance d'un quart, et à l'assaut les murs ne comptent plus que ×0,7.`,!!sg.breach,!!sg.mine||!!sg.breach)}${btn('aNeg','Proposer une reddition',"La garnison sort libre et la ville est épargnée. Plus le siège est avancé, plus elle a de chances d'accepter. Un refus : attendre dix jours.",false,sg.negT&&S.day<sg.negT)}</div>`;
+      h+=`<p class="sub" style="margin:6px 0 2px">À la prise de ${esc(n.n)}</p><div class="row">${btn('aEp','Épargner',"Clémence : les peuples voisins vous en savent gré.",sg.sack==='ep')}${btn('aPil','Piller',`Butin de ${LOOT[n.size]} or et moral +8, mais la ville est ruinée et les peuples voisins vous haïront.`,sg.sack==='pil')}</div>`}
+    else if(sg&&sg.side!==a.side&&insideOf(a))h+=`<div class="row" style="margin-top:4px">${btn('aNegIn','Négocier une sortie libre',"Vos troupes quittent la ville avec les honneurs et rejoignent vos terres ; la ville est livrée à l'ennemi.",false,sg.negT&&S.day<sg.negT)}</div>`}
+  box.insertAdjacentHTML('beforeend',h);
+  const RA=()=>renderAll();
+  box.querySelectorAll('[data-mo]').forEach(b=>b.onclick=()=>{a.mo=b.dataset.mo==='col'?undefined:b.dataset.mo;RA()});
+  box.querySelectorAll('[data-merc]').forEach(b=>b.onclick=()=>{hireMerc(a,mn,b.dataset.merc);RA()});
+  const on=(id,f)=>{const e=$(id);if(e)e.onclick=()=>{f();RA()}};
+  on('aAmb',()=>{a.amb=!a.amb;if(a.amb){a.refus=false;log(`${a.name} se cache et tend une embuscade.`)}});
+  on('aRef',()=>{a.refus=!a.refus;if(a.refus)a.amb=false});
+  const sg=a.at!=null&&S.siege[N[a.at].id];
+  on('aCv',()=>{sg.cv={t0:Math.floor(S.day),t:Math.floor(S.day)+lineDays(a,CV_D)};log(`${a.name} entreprend la contrevallation de ${N[a.at].n}.`)});
+  on('aCc',()=>{sg.cc={t0:Math.floor(S.day),t:Math.floor(S.day)+lineDays(a,CC_D)};log(`${a.name} entreprend la circonvallation de ${N[a.at].n}.`)});
+  on('aMine',()=>startMine(a,a.at));
+  on('aNeg',()=>negotiate(a,a.at,false));
+  on('aNegIn',()=>negotiate(a,a.at,true));
+  on('aEp',()=>{sg.sack=sg.sack==='ep'?undefined:'ep'});
+  on('aPil',()=>{sg.sack=sg.sack==='pil'?undefined:'pil'});
+};
+
+/* ---- dessin : fossés et remparts des lignes, galerie de mine, embuscade ---- */
+function siegeLinesDraw(a,s,sg){const n=N[a.at],g=cityGeom(n),SX=x=>view.ox+x*s,SY=y=>view.oy+y*s,T=S.day*DAY_S,fc=FAC[a.side].c,col=`rgb(${fc[0]},${fc[1]},${fc[2]})`;
+  const R=g.wall.map(w=>({ang:Math.atan2(w[1]-g.cy,w[0]-g.cx),rr:Math.hypot(w[0]-g.cx,w[1]-g.cy)}));
+  const at=(r,d)=>[g.cx+Math.cos(r.ang)*(r.rr+d),g.cy+Math.sin(r.ang)*(r.rr+d)];
+  const scr=(r,d)=>{const p=at(r,d);return [SX(p[0]),SY(p[1])]};
+  const man=(x,y,e,c,arm)=>{ctx.fillStyle=c||col;ctx.fillRect(x-e*.35,y-e*.9,e*.7,e*.9);ctx.fillStyle='#d9b48a';ctx.fillRect(x-e*.22,y-e*1.3,e*.44,e*.4);
+    if(arm!=null){ctx.strokeStyle='#3a2a18';ctx.lineWidth=Math.max(1,e*.18);ctx.beginPath();ctx.moveTo(x,y-e*.7);ctx.lineTo(x+Math.cos(arm)*e*1.1,y-e*.7+Math.sin(arm)*e*1.1);ctx.stroke()}};
+  const ring=(w,d,outer,seed)=>{if(!w)return;const L=R.length,ok=R.map(r=>{const p=at(r,d);return landFast(p[0],p[1])}),done=lineOk(w);
+    const f=done?1:Math.max(.04,Math.min(1,(S.day-w.t0)/Math.max(1,w.t-w.t0)));
+    const nk=Math.max(1,Math.round(L*f)),lw=Math.max(1.5,.07*s),e=Math.max(3,Math.min(10,.075*s)),k0=Math.floor(hsh(seed+n.i)*L);
+    const K=j=>(k0+j)%L; // la ligne commence d'un côté et fait le tour
+    // point le long de la ligne (u en nombre de pans depuis le départ)
+    const along=(u,dd)=>{const j=Math.floor(u),t=u-j,A=R[K(j)],B=R[K(j+1)],p=at(A,dd),q=at(B,dd);return [SX(p[0]+(q[0]-p[0])*t),SY(p[1]+(q[1]-p[1])*t),ok[K(j)]&&ok[K(j+1)]]};
+    ctx.lineCap='round';
+    // fossé (côté ville pour la contrevallation, côté campagne pour la circonvallation) puis rempart de terre
+    const dd=outer?d+.12:d-.12;
+    for(const [dist,st,wd,dash] of [[dd,'rgba(30,22,12,.55)',lw*1.3,null],[d,'rgba(40,28,14,.5)',lw*3.2,null],[d,'#8a6a3e',lw*1.8,null],[d,'#c9a46a',lw*.6,[lw*1.2,lw*1.6]]]){
+      ctx.beginPath();let open=false;for(let j=0;j<=nk&&j<=L;j++){const kk=K(j);if(!ok[kk]){open=false;continue}const [x,y]=scr(R[kk],dist);if(open)ctx.lineTo(x,y);else{ctx.moveTo(x,y);open=true}}
+      ctx.strokeStyle=st;ctx.lineWidth=wd;ctx.setLineDash(dash||[]);ctx.stroke()}
+    ctx.setLineDash([]);
+    // palissade : pieux pointus sur la crête
+    if(s>28){const step=Math.max(.06,.5/(s/40));
+      for(let u=0;u<Math.min(nk,L);u+=step){const [x,y,o]=along(u,d+(outer?-.03:.03));if(!o)continue;ctx.strokeStyle='#3a2612';ctx.lineWidth=Math.max(1.4,e*.28);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-e*1.1);ctx.stroke();ctx.fillStyle='#d8b878';ctx.fillRect(x-e*.12,y-e*1.2,e*.24,e*.22)}}
+    // circonvallation : trous de loup et pieux tournés vers l'extérieur
+    if(outer&&s>22){for(let u=.3;u<Math.min(nk,L);u+=.34){const [x,y,o]=along(u,d+.32+.06*Math.sin(u*7));if(!o)continue;ctx.fillStyle='rgba(25,15,8,.8)';ctx.beginPath();ctx.ellipse(x,y,e*.6,e*.4,0,0,7);ctx.fill();ctx.strokeStyle='#a07a48';ctx.lineWidth=1;ctx.stroke();ctx.strokeStyle='#d8b878';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-e*.5);ctx.stroke()}
+      ctx.strokeStyle='#6b4a2a';ctx.lineWidth=Math.max(1,e*.2);for(let u=.05;u<Math.min(nk,L);u+=.33){const [x,y,o]=along(u,d+.2);if(!o)continue;const an=R[K(Math.floor(u))].ang;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(an)*e*.9,y+Math.sin(an)*e*.9-e*.3);ctx.stroke()}}
+    // tours : feu de braise, fanion qui claque, guetteur
+    const tStep=Math.max(2,Math.round(L/10)),towers=[];
+    if(s>14)for(let j=0;j<nk&&j<L;j+=tStep){const kk=K(j);if(!ok[kk])continue;const [x,y]=scr(R[kk],d),te=Math.max(4,Math.min(16,.13*s));towers.push([x,y,te]);
+      ctx.fillStyle='#6b4a2a';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.fillRect(x-te/2,y-te*1.2,te,te*1.2);ctx.strokeRect(x-te/2,y-te*1.2,te,te*1.2);ctx.fillStyle='#4a3218';ctx.fillRect(x-te*.65,y-te*1.35,te*1.3,te*.25);
+      if(done){const fl=.6+.4*Math.sin(T*9+j*1.7)*Math.sin(T*5.3+j);const gr=ctx.createRadialGradient(x,y-te*1.5,0,x,y-te*1.5,te*2);gr.addColorStop(0,`rgba(255,190,80,${.8*fl})`);gr.addColorStop(1,'rgba(255,120,40,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(x,y-te*1.5,te*2,0,7);ctx.fill();
+        ctx.fillStyle=`rgba(255,${170+Math.floor(60*fl)},60,.95)`;ctx.beginPath();ctx.arc(x,y-te*1.45,te*.18,0,7);ctx.fill();
+        for(let q=0;q<3;q++){const ph=(T*.3+q/3+hsh(j))%1;ctx.fillStyle=`rgba(80,75,70,${.35*(1-ph)})`;ctx.beginPath();ctx.arc(x+ph*te*1.2,y-te*1.6-ph*te*3,te*(.2+ph*.5),0,7);ctx.fill()}
+        const wv=Math.sin(T*6+j);ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+te*.45,y-te*1.35);ctx.lineTo(x+te*.45,y-te*2.4);ctx.stroke();
+        ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x+te*.45,y-te*2.4);ctx.quadraticCurveTo(x+te*1.1,y-te*(2.2+.15*wv),x+te*1.5,y-te*(2.15+.25*wv));ctx.lineTo(x+te*.45,y-te*1.95);ctx.fill();
+        man(x-te*.1,y-te*1.35,te*.45,col)}}
+    if(!done&&s>10){
+      const h=Math.min(nk,L-1);
+      // arpenteur en tête, avec son jalon et le cordeau tendu vers la suite
+      {const [x,y]=scr(R[K(h+1)],d),[x0,y0]=scr(R[K(h)],d);ctx.strokeStyle='rgba(240,230,200,.7)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x,y);const [x2,y2]=scr(R[K(h+2)],d);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
+        man(x,y,e,'#8a7a5a');ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(x+e*.6,y);ctx.lineTo(x+e*.6,y-e*2.6);ctx.stroke();ctx.fillStyle='#c0392b';ctx.fillRect(x+e*.6,y-e*2.6,e*.8,e*.5)}
+      // terrassiers : pioches qui montent et retombent, mottes qui volent
+      for(let q=0;q<10;q++){const u=Math.max(0,h-.15-q*.3);const [x,y,o]=along(u,dd);if(!o)continue;const ph=(T*1.6+q*.37)%1,arm=-Math.PI/2+(ph<.25?ph/.25*2.2:2.2*(1-(ph-.25)/.75));man(x,y,e,null,arm-.4);
+        if(ph<.3){const fx=x+(ph*12-1)*e*.6,fy=y-e*(.5+Math.sin(ph/.3*Math.PI)*1.4);ctx.fillStyle='#7a5a38';ctx.fillRect(fx,fy,e*.35,e*.3)}}
+      // porteurs de paniers entre le fossé et le rempart
+      for(let q=0;q<6;q++){const u=Math.max(0,h-.3-q*.45),ph=(T*.5+q*.29)%1,tt=ph<.5?ph*2:2-ph*2;const [x1,y1]=along(u,dd),[x2,y2]=along(u,d+(outer?-.06:.06));const x=x1+(x2-x1)*tt,y=y1+(y2-y1)*tt;
+        man(x,y,e*.9,'#8b6b4a');if(ph<.5){ctx.fillStyle='#6b4a2a';ctx.beginPath();ctx.arc(x,y-e*1.5,e*.42,0,7);ctx.fill()}}
+      // poseurs de pieux : maillet
+      for(let q=0;q<3;q++){const u=Math.max(0,h-1.6-q*.8);const [x,y,o]=along(u,d);if(!o)continue;const ph=(T*2.2+q*.5)%1;ctx.strokeStyle='#5a3e22';ctx.lineWidth=Math.max(1,e*.25);ctx.beginPath();ctx.moveTo(x+e*.7,y);ctx.lineTo(x+e*.7,y-e*(1.4-(ph<.15?ph*2:.3)));ctx.stroke();man(x,y,e,null,-Math.PI/2-1+(ph<.15?1.6*ph/.15:1.6*(1-(ph-.15)/.85)))}
+      // chariot de bois qui fait l'aller-retour depuis le camp
+      {const ph=(T*.07+seed)%1,tt=ph<.5?ph*2:2-ph*2,u=Math.max(0,h-1.2);const [xa,ya]=along(u,d+(outer?.9:1.6)),[xb,yb]=along(u,d+(outer?.25:-.25));const x=xa+(xb-xa)*tt,y=ya+(yb-ya)*tt;
+        ctx.fillStyle='#6b4a2a';ctx.fillRect(x-e*1.4,y-e*.7,e*2.2,e*1.1);if(ph<.5){ctx.fillStyle='#a07a48';for(let q=0;q<3;q++)ctx.fillRect(x-e*1.3,y-e*(1-q*.3),e*2.1,e*.22)}
+        ctx.fillStyle='#2b1c0e';ctx.beginPath();ctx.arc(x-e*.9,y+e*.45,e*.35,0,7);ctx.arc(x+e*.5,y+e*.45,e*.35,0,7);ctx.fill();ctx.fillStyle='#7a6a55';ctx.fillRect(x+e*.9,y-e*.5,e*1.2,e*.8);ctx.fillRect(x+e*2.2,y-e*.4,e*1.1,e*.7)}
+      // poussière du chantier
+      for(let q=0;q<5;q++){const ph=(T*.4+q/5)%1,[x,y]=along(Math.max(0,h-q*.5),dd);ctx.fillStyle=`rgba(170,140,100,${.3*(1-ph)})`;ctx.beginPath();ctx.arc(x+ph*e*3,y-ph*e*4,e*(.5+ph*1.5),0,7);ctx.fill()}}
+    if(done&&s>12){
+      // rondes sur le rempart, en sens contraires
+      for(let q=0;q<4;q++){const dir=q%2?1:-1,u=((T*.07*dir/L+q/4+seed)%1+1)%1*L;const [x,y,o]=along(u,d);if(!o)continue;for(let m=0;m<3;m++){const [mx,my,mo]=along((u-dir*.12*m+L)%L,d);if(mo)man(mx,my-1,e*.8,col)}}
+      // signal lumineux qui court de tour en tour
+      if(towers.length>1){const cyc=(T*.12+seed)%1,j=Math.floor(cyc*towers.length),[x,y,te]=towers[j],pulse=1-(cyc*towers.length-j);ctx.strokeStyle=`rgba(255,210,120,${.8*pulse})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y-te*1.5,te*(1+2*(1-pulse)),0,7);ctx.stroke()}
+      // contrevallation : archers qui tirent vers la ville
+      if(!outer)for(let q=0;q<4;q++){const u=(q+.5)*L/4,[x,y,o]=along(u,d-.05);if(!o)continue;man(x,y,e*.85,col);const ph=(T*.45+q*.31)%1;if(ph<.6){const [tx,ty]=[SX(g.cx)+(x-SX(g.cx))*.55,SY(g.cy)+(y-SY(g.cy))*.55],t=ph/.6;
+        const ax=x+(tx-x)*t,ay=y+(ty-y)*t-Math.sin(t*Math.PI)*e*6,bx=x+(tx-x)*(t-.05),by=y+(ty-y)*(t-.05)-Math.sin((t-.05)*Math.PI)*e*6;ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(ax,ay);ctx.stroke()}}
+      // circonvallation : vedettes tournées vers la campagne, cor qui sonne
+      if(outer)for(let q=0;q<3;q++){const u=(q+.2)*L/3,[x,y,o]=along(u,d+.08);if(!o)continue;man(x,y,e*.85,col);const ph=(T*.2+q*.4)%1;if(ph<.25){ctx.strokeStyle=`rgba(232,196,106,${1-ph*4})`;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y-e,e*(1+ph*10),0,7);ctx.stroke()}}}};
+  ring(sg.cv,1.08,false,.13);ring(sg.cc,2.55,true,.61)}
+function mineDraw(a,s,sg){if(!sg.mine&&!sg.breach)return;const n=N[a.at],g=cityGeom(n),SX=x=>view.ox+x*s,SY=y=>view.oy+y*s;
+  const k=Math.floor(hsh(n.i+7)*g.wall.length),w=g.wall[k],ang=Math.atan2(w[1]-g.cy,w[0]-g.cx),rr=Math.hypot(w[0]-g.cx,w[1]-g.cy);
+  const P=d=>[SX(g.cx+Math.cos(ang)*(rr+d)),SY(g.cy+Math.sin(ang)*(rr+d))],[x0,y0]=P(1.5),[x1,y1]=P(0),e=Math.max(2,.06*s);
+  if(sg.breach){ctx.fillStyle='rgba(90,70,50,.9)';for(let j=0;j<7;j++){const an=hsh(j+n.i)*6.28,rd=e*(1+hsh(j*5)*2);ctx.beginPath();ctx.arc(x1+Math.cos(an)*rd,y1+Math.sin(an)*rd,e*(.6+hsh(j*3)*.8),0,7);ctx.fill()}
+    ctx.strokeStyle='#e8c46a';ctx.lineWidth=1.5;ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(x1,y1,e*3.2,0,7);ctx.stroke();ctx.setLineDash([]);
+    if(s>30){ctx.font=`${Math.max(10,Math.min(14,.12*s))}px Georgia,serif`;ctx.textAlign='center';ctx.fillStyle='rgba(20,12,6,.75)';const tx=x1+(x0-x1)*.7,ty=y1+(y0-y1)*.7;ctx.fillRect(tx-24,ty-9,48,15);ctx.fillStyle='#e8c46a';ctx.fillText('brèche',tx,ty+3)}return}
+  const f=Math.max(.05,Math.min(1,(S.day-sg.mine.t0)/Math.max(1,sg.mine.t-sg.mine.t0)));
+  ctx.strokeStyle='rgba(60,40,20,.85)';ctx.lineWidth=Math.max(1.5,e*.7);ctx.setLineDash([e*.8,e*.8]);ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x0+(x1-x0)*f,y0+(y1-y0)*f);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#8a6a3e';ctx.beginPath();ctx.ellipse(x0,y0,e*2.2,e*1.3,0,0,7);ctx.fill();ctx.fillStyle='#2b1c0e';ctx.beginPath();ctx.arc(x0,y0,e*.7,0,7);ctx.fill();
+  const T=S.day*DAY_S;for(let j=0;j<2;j++){const ph=(T*.6+j*.5)%1;ctx.fillStyle='#5a4028';ctx.fillRect(x0-e*2+ph*e*4,y0+e*1.4,e*.9,e*.7)}}
+const _siegeFormation8=siegeFormation;
+siegeFormation=function(a,s,sg){try{if(sg&&(sg.cv||sg.cc))siegeLinesDraw(a,s,sg)}catch(e){}_siegeFormation8.apply(this,arguments);try{if(sg)mineDraw(a,s,sg)}catch(e){}};
+

@@ -1,0 +1,65 @@
+/* ================= ENTRÉES ================= */
+function pickArmy(mx,my){let best=null,bd=16;for(const a of S.armies){if(!a._p)continue;const X=view.ox+a._p[0]*view.s+(a.inG?16:0),Y=view.oy+a._p[1]*view.s-(a.inG?10:a.g?0:18);let d=Math.hypot(X-mx,Y-my);if(a._sq)for(const [x,y] of a._sq)d=Math.min(d,Math.hypot(x-mx,y-my)+6);if(d<bd){bd=d;best=a}}return best}
+function pickTown(mx,my){let best=null,bd=14;for(const n of N){const X=view.ox+n.x*view.s,Y=view.oy+n.y*view.s,r=Math.max(10,(.55+n.size*.55)*view.s),d=Math.hypot(X-mx,Y-my);if(d<Math.max(bd,r)&&d<(best?best[1]:1e9)){best=[n,d]}}return best&&best[0]}
+function tryOrder(mx,my){
+  const a=sel.a;const n=pickTown(mx,my),vv=!n&&pickVillage(mx,my);let [wx,wy]=toWorld(mx,my);if(vv){wx=vv.x;wy=vv.y}
+  if(!n&&!vv&&!isLand(wx,wy))return;
+  const o=n&&ownerN(n.i),F=o&&S.fac[o];
+  const go=()=>{if(order(a,wx,wy,n?n.i:null,vv||null)){preview=null;renderAll()}};
+  if(n&&F&&F.st==='neutre'){modal(`<h2>Attaquer ${n.n} ?</h2><p>Assiéger une ville des ${FAC[o].n} vous mettra en guerre avec ce peuple neutre, et ses voisins de même culture le verront d'un mauvais œil.</p><div class="row"><button class="warn" id="mYes" type="button">Marcher quand même</button><button class="go" id="mNo" type="button">Annuler</button></div>`);
+    $('mYes').onclick=()=>{closeModal();go()};$('mNo').onclick=closeModal;return}
+  go();
+}
+let drag=null,lastPrev=0;
+cv.addEventListener('pointerdown',e=>{if(drag&&drag.id!==e.pointerId)return;try{cv.setPointerCapture(e.pointerId)}catch(_){}drag={id:e.pointerId,x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:false,btn:e.button,touch:e.pointerType==='touch',pan:e.pointerType==='touch'||e.button===1||e.button===2}});/*CMD*/
+cv.addEventListener('pointermove',e=>{
+  const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
+  if(drag&&cmdMove(e))return;/*CMD*/
+  const tip=$('tip'),a=pickArmy(mx,my),n=pickTown(mx,my),[wx,wy]=toWorld(mx,my);
+  if(sel&&sel.f&&sel.f.side==='car'){if(performance.now()-lastPrev>110){lastPrev=performance.now();const t=fleetTarget(mx,my),L=t&&fleetLegsTo(sel.f,t.x,t.y);preview=L?{f:sel.f,legs:L}:null;
+      if(L){const d=legsDays(sel.f,L);tip.hidden=false;tip.textContent=`${t.n!=null?N[t.n].n:'Ici'} : ≈ ${Math.max(1,Math.ceil(d))} jours de mer · ${sel.f.mode==='cote'?'cabotage':'haute mer'}${sel.f.mode==='large'&&d>MAXW?' · eau insuffisante !':''}`}else tip.hidden=true}
+    tip.style.left=(mx+14)+'px';tip.style.top=(my+12)+'px';return}
+  const fl=!a&&pickFleet(mx,my);
+  if(sel&&sel.a&&isMine(sel.a)&&!a&&performance.now()-lastPrev>70){lastPrev=performance.now();
+    if(fl&&fl.side==='car'&&!sel.a.ship){preview=null;tip.hidden=false;tip.textContent=canBoard(sel.a,fl)?`Embarquer sur ${fl.name}`:`${fl.name} · amenez l'armée au port pour embarquer`}else{
+    const vv=!n&&pickVillage(mx,my),tx=vv?vv.x:wx,ty=vv?vv.y:wy;const land=n||vv||isLand(wx,wy);const p=land&&!sel.a.ship?(vv?planVillage(sel.a,vv):plan(sel.a,tx,ty,n?n.i:null)):null;preview=p?{a:sel.a,legs:p.legs}:null;
+    if(!p&&land&&!sel.a.ship){tip.hidden=false;tip.textContent=!isPassable(tx,ty)?'Impraticable : hauteurs'+(season()==='Hiver'?' enneigées':'')+', aucun passage hors des cols':!landFine(tx,ty)?'Impraticable : c\'est la mer':'Aucun passage : fleuve sans pont, pont coupé ou neige'}
+    if(p){const off=p.legs.some(L=>L.type==='hors');tip.hidden=false;tip.textContent=`${n?n.n:vv?vv.n:'Ici'} : ≈ ${Math.max(1,Math.ceil(p.days))} jours${off?' · hors route':''}${n&&cityHostile(n.i,'car')||n&&ownerN(n.i)&&FAC[ownerN(n.i)].a&&ownerN(n.i)!=='car'?' · siège':''}`}else tip.hidden=true}}
+  else if(!sel||!sel.a||!isMine(sel.a)||a){preview=null;
+    if(a){tip.hidden=false;tip.textContent=visOfArmy(a)===2?`${a.name} · ${a.units.length} régiments`:`Armée ${sideName(a.side)} · ${approx(a.units.length)} rég.`}
+    else if(fl){tip.hidden=false;const v=fl.side==='car'?2:visAt(fl.x,fl.y);tip.textContent=v===2?`${fl.name} · ${shipsN(fl)} navires${fl.cargo.length?' · troupes à bord':''}`:`Flotte ${sideName(fl.side)}`}
+    else if(n){tip.hidden=false;const o=ownerN(n.i);tip.textContent=`${n.n}${n.col?'':' · '+SIZE[n.size].toLowerCase()+(o?' · '+sideName(o):'')}`}
+    else if(pickBridge(mx,my)){const b=pickBridge(mx,my);tip.hidden=false;tip.textContent=`${b.sea?'Pont du bras de mer':'Pont sur '+b.riv} · ${brDown(b)?'coupé'+(S.pont[b.id].rb?' · chantier en cours':''):'intact'}`}
+    else if(pickVillage(mx,my)){const v=pickVillage(mx,my);tip.hidden=false;tip.textContent=`${v.n} · ${VK[v.k].n.toLowerCase()}${vRuined(v)?' · pillé':''} · dépend ${deN(N[v.t].n)}`}
+    else if(view.s>.6&&isLand(wx,wy)){tip.hidden=false;tip.textContent=`${TERR[terrainAt(wx,wy)].n} · territoire de ${townAt(wx,wy).n}`}else tip.hidden=true}
+  tip.style.left=(mx+14)+'px';tip.style.top=(my+12)+'px';
+});
+cv.addEventListener('pointerup',e=>{
+  if(drag&&e.pointerId!==drag.id)return;/*CMD*/const d=drag;drag=null;if(d&&d.box&&cmdBox(d,e))return;if(d&&!d.moved&&d.btn===0&&e.shiftKey&&cmdShift(e))return;if(!d||d.moved)return;
+  const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
+  const fl=pickFleet(mx,my,10),a=fl?null:pickArmy(mx,my);
+  if(sel&&sel.f&&sel.f.side==='car'&&(d.btn===2||d.touch)&&!(fl&&fl.side==='car')){if(orderFleet(sel.f,mx,my)){preview=null;renderAll()}return}
+  if(sel&&sel.a&&isMine(sel.a)&&(d.btn===2||d.touch)&&fl&&fl.side==='car'){if(canBoard(sel.a,fl)){board(sel.a,fl);log(`${sel.a.name} embarque sur ${fl.name}.`);sel={f:fl};preview=null;renderAll()}else if(fl.at!=null&&!sel.a.ship){order(sel.a,0,0,fl.at);preview=null;renderAll()}return}
+  if(d.btn===2){if(sel&&sel.a&&isMine(sel.a)&&!sel.a.ship&&!(a&&a.side==='car'))tryOrder(mx,my);else{sel=null;preview=null;renderAll()}return}
+  if(d.touch&&sel&&sel.a&&isMine(sel.a)&&!sel.a.ship&&!(a&&a.side==='car')){tryOrder(mx,my);return}
+  if(fl){sel={f:fl};preview=null;renderAll();return}
+  if(a){sel={a};preview=null;renderAll();return}
+  const n=pickTown(mx,my);if(n){sel={n:n.i};preview=null;renderAll();return}
+  const vv=pickVillage(mx,my);if(vv){sel={v:vv.id};preview=null;renderAll();return}
+  sel=null;preview=null;renderAll();
+});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();const rc=cv.getBoundingClientRect();zoomSmooth(e.clientX-rc.left,e.clientY-rc.top,Math.max(.5,Math.min(2,Math.exp(-e.deltaY*(e.deltaMode===1?.06:.0018)))))},{passive:false});
+cv.addEventListener('pointerleave',()=>{$('tip').hidden=true});
+$('zIn').onclick=()=>zoomSmooth(cv.clientWidth/2,cv.clientHeight/2,1.8);$('zOut').onclick=()=>zoomSmooth(cv.clientWidth/2,cv.clientHeight/2,1/1.8);
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.code==='Space'){e.preventDefault();if(!S.cur&&!S.over){S.paused=!S.paused;S.started=true;renderTop()}}
+  if(e.key==='Escape'){if(!$('modal').hidden&&!S.cur){closeModal();return}sel=null;preview=null;renderAll()}
+  if(e.key==='+')zoomSmooth(cv.clientWidth/2,cv.clientHeight/2,1.4);if(e.key==='-')zoomSmooth(cv.clientWidth/2,cv.clientHeight/2,1/1.4);
+});
+$('bPause').onclick=()=>{if(S.cur||S.over)return;S.paused=!S.paused;S.started=true;renderTop()};
+document.querySelectorAll('.spd').forEach(b=>b.onclick=()=>{if(S.cur||S.over)return;S.speed=+b.dataset.s;S.paused=false;S.started=true;renderTop()});
+$('bWork').onclick=()=>openWorkshop();$('bDip').onclick=openDip;$('bHelp').onclick=openHelp;$('bMenu').onclick=openMenu;
+window.addEventListener('resize',()=>{const c=toWorld(cv.clientWidth/2,cv.clientHeight/2);fit();centerOn(c[0],c[1])});
+

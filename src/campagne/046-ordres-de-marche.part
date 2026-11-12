@@ -1,0 +1,17 @@
+/* ================= ORDRES DE MARCHE ================= */
+// a.mo : 'ag' avant-garde et arrière-garde (−8 % de vitesse, pas surprise) | 'nuit' marche de nuit (+20 % de vitesse, fatigue, gare aux embuscades)
+// a.amb : embuscade (à l'arrêt, en forêt, montagne ou marais) ; a.refus : refuser la bataille (se dérober si on est attaqué)
+const MO={col:{n:'En colonne',d:'allure ordinaire'},ag:{n:'Avant-garde',d:'avant-garde et arrière-garde : −8 % de vitesse, mais la colonne ne se laisse pas surprendre (embuscade ×1,1 au lieu de ×1,35) et se défend mieux en marche'},
+  nuit:{n:'De nuit',d:'marche de nuit : +20 % de vitesse, fatigue +5 par jour, moral en légère baisse ; attaque surprise (+12 %), mais une embuscade la frappe deux fois plus fort'}};
+const AMB_T=['foret','montagne','marais'];
+const canAmb=a=>!a.legs.length&&!a.ship&&!a.g&&!insideOf(a)&&(AMB_T.includes(terrainAt(a.x,a.y))||N.some(n=>n.col&&Math.hypot(n.x-a.x,n.y-a.y)<12));
+const _legSpeed8=legSpeed;
+legSpeed=function(a,type){let v=_legSpeed8.apply(null,arguments);if(!a||type==='mer'||a.par)return v;if(a.mo==='ag')v*=.92;else if(a.mo==='nuit')v*=1.2;return v};
+function ambushMul(b){// > 1 : avantage à l'attaquant, < 1 : au défenseur
+  let m=1;const A=b.att.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),D=b.def.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);
+  const amb=L=>L.some(x=>x.amb&&!x.legs.length),mo=(L,k)=>L.some(x=>x.mo===k&&x.legs.length);
+  if(amb(D)&&A.some(x=>x.legs.length))m/=mo(A,'ag')?1.1:mo(A,'nuit')?1.5:1.35;
+  if(mo(A,'nuit')&&!amb(D))m*=1.12;
+  if(mo(D,'ag'))m/=1.08;
+  return m}
+

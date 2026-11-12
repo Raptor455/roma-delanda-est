@@ -1,0 +1,50 @@
+/* ================= PERFORMANCE DES GRANDES BATAILLES (fil Performance, 11 nov., Baptiste : « même chose en bataille » avec la grande armée d'Hannibal) =================
+   Source : /mnt/project-files/performance/bataille-ga.js, injecté juste avant « BOUCLE » de bataille.html par performance/patch_bat_ga.py (relançable).
+   À passer après tous les autres patchs de bataille.html (il enveloppe le shoot et le corpsTick finaux). Avec 40 régiments contre 20
+   (600 carrés), chaque pas de simulation testait toutes les paires de carrés et chaque tireur parcourait toute l'armée ennemie.
+   Mêmes règles, mêmes résultats, seulement moins de calculs :
+   1. Contacts (step, retouche marquée PERF-GA) : seules les paires de carrés voisins sont testées (grille), listes de contacts dans le même ordre.
+   2. Tireurs : s'il n'y a aucun ennemi à portée, on recharge sans lancer la recherche complète (ni le masquage de la brume).
+   3. corpsTick (moral autour des généraux) : ne parcourt que les carrés engagés ; la chute d'un chef passe par l'original. */
+function gaContacts(live){
+  let mw=0,ok=true;for(const u of live){const w=+u.w||0;if(w>mw)mw=w;if(!isFinite(u.x)||!isFinite(u.y))ok=false}
+  const C=mw+31;
+  if(!ok||!(C>0)||live.length<40){for(let i=0;i<live.length;i++)for(let j=i+1;j<live.length;j++){const a=live[i],b=live[j];if(a.side!==b.side&&inContact(a,b)){a.contacts.push(b);b.contacts.push(a)}}return}
+  const grid=new Map(),K=(x,y)=>x*131072+y;
+  for(let i=0;i<live.length;i++){const u=live[i];u._gi=i;const cx=Math.floor(u.x/C),cy=Math.floor(u.y/C);u._gx=cx;u._gy=cy;const k=K(cx,cy);let c=grid.get(k);if(!c)grid.set(k,c=[]);c.push(u)}
+  for(let i=0;i<live.length;i++){const a=live[i];
+    for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const c=grid.get(K(a._gx+di,a._gy+dj));if(!c)continue;
+      for(const b of c){if(b._gi<=i||a.side===b.side)continue;if(inContact(a,b)){a.contacts.push(b);b.contacts.push(a)}}}}
+  for(const u of live)if(u.contacts.length>1)u.contacts.sort((x,y)=>x._gi-y._gi)}
+{
+  // 2. tireurs sans cible à portée
+  // grille des ennemis vivants, refaite à chaque pas (marge large : les carrés bougent un peu pendant le pas)
+  let gaT=null,gaG=null;
+  const gridOf=()=>{if(gaT===time&&gaG)return gaG;gaT=time;let mr=0,mw=0;
+    for(const e of units){if(e.dead)continue;const w=+e.w||0;if(w>mw)mw=w;const r=e.T&&e.T.ranged;if(r&&r.range>mr)mr=r.range}
+    const C=(mr+mw/3+2)*1.25+20,M=[new Map(),new Map()];let ok=C>0&&isFinite(C);
+    if(ok)for(const e of units){if(e.dead)continue;if(!isFinite(e.x)||!isFinite(e.y)){ok=false;break}const m=M[e.side===0?0:1],k=Math.floor(e.x/C)*131072+Math.floor(e.y/C);let c=m.get(k);if(!c)m.set(k,c=[]);c.push(e)}
+    gaG={C,M,ok};return gaG};
+  const _sh=shoot;
+  shoot=function(u,dt){try{const r=u&&u.T&&u.T.ranged;
+      if(r&&!u.routing&&!u.contacts.length&&u.cd-dt<=0&&!(u.order&&u.order.type==='attack')&&(u.side===0||u.side===1)){
+        const g=gridOf();if(g.ok&&r.range<=(g.C-20)/1.25){const m=g.M[u.side===0?1:0],cx=Math.floor(u.x/g.C),cy=Math.floor(u.y/g.C);let any=false;
+          for(let i=-1;i<=1&&!any;i++)for(let j=-1;j<=1&&!any;j++){const c=m.get((cx+i)*131072+cy+j);if(!c)continue;
+            for(const e of c){if(e.dead)continue;const R=r.range+(e.w||0)/3+1,dx=e.x-u.x,dy=e.y-u.y;if(!(dx*dx+dy*dy>=R*R)){any=true;break}}}
+          if(!any){u.cd-=dt;return}}}}catch(e){}
+    return _sh.apply(this,arguments)};
+  // 3. moral autour des généraux
+  if(typeof corpsTick==='function'&&typeof CORPS3!=='undefined'){const _ct=corpsTick,SETS=new WeakMap();
+    const setOf=o=>{let m=SETS.get(o);if(!m||m.a!==o.us||m.n!==o.us.length){m={a:o.us,n:o.us.length,s:new Set(o.us)};SETS.set(o,m)}return m.s};
+    corpsTick=function(dt){try{
+      for(const s of [0,1])for(const o of CORPS3[s]){const g=o.gu;if(!g||g.pend||o.fell)continue;if(g.dead||g.routing)return _ct.apply(this,arguments)}
+      const E=[[],[]];for(const u of units){if(u.dead||u.routing||u.pend)continue;if(!(u.contacts.length||u.underFire>0))continue;if(u.side===0||u.side===1)E[u.side].push(u)}
+      if(!E[0].length&&!E[1].length)return;
+      for(const s of [0,1])for(const o of CORPS3[s]){const g=o.gu;if(!g||g.pend||o.fell)continue;
+        const R=(o.chef?420:320)*G,R2=R*R,k=(.35+.05*(o.st||0))*dt,S=setOf(o);
+        for(const u of E[s]){if(u===g)continue;const dx=u.x-g.x,dy=u.y-g.y;if(dx*dx+dy*dy>R2)continue;
+          if(S.has(u))u.morale=Math.min(u.T.morale,u.morale+k);else if(o.chef)u.morale=Math.min(u.T.morale,u.morale+k*.5)}}
+      }catch(e){console.warn(e);return _ct.apply(this,arguments)}}}
+  window.__bga={gaContacts};
+}
+/* ================= FIN PERFORMANCE DES GRANDES BATAILLES ================= */

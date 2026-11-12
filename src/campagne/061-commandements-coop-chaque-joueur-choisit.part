@@ -1,0 +1,167 @@
+/* ================= COMMANDEMENTS (coop : chaque joueur choisit son général) =================
+   Quand deux joueurs ou plus tiennent le même camp, le camp se partage en commandements : chacun a ses villes,
+   son trésor, ses armées et ses flottes. Carthage : les suffètes (Carthage et l'Afrique), Hannibal (Nouvelle-Carthage,
+   l'est de l'Ibérie, ses conquêtes), Hasdrubal (l'ouest de l'Ibérie). Rome : le Sénat (Rome et l'Italie), les Scipions
+   (Ibérie et Gaule), Sempronius (Sicile, Sardaigne, Afrique). Un commandement sans joueur est tenu par le premier joueur du camp.
+   État : S.mpD[k]={s,p,g} (camp interne, joueur, or), S.mpCity[idVille]=k, a.dm / f.dm. S.gold[camp] reste le trésor
+   « affiché » (celui du commandement du joueur) ; l'hôte attribue chaque variation au bon commandement (mpdSync). */
+const MPD_DEF={
+  car:[{k:'suf',n:'Les suffètes',t:"Carthage et l'Afrique",c:'#8a5fc0'},{k:'han',n:'Hannibal',t:"Nouvelle-Carthage, l'est de l'Ibérie et ses conquêtes",c:'#c9a24a'},{k:'has',n:'Hasdrubal',t:"L'ouest de l'Ibérie",c:'#4f8f86'}],
+  rom:[{k:'sen',n:'Le Sénat',t:"Rome et l'Italie",c:'#b8433a'},{k:'sci',n:'Les Scipions',t:"Pise, puis la guerre d'Ibérie et de Gaule",c:'#c9a24a'},{k:'sem',n:'Sempronius',t:"La Sicile, la Sardaigne et l'Afrique",c:'#4f8f86'}]};
+const MPD_ALL={};for(const s in MPD_DEF)for(const d of MPD_DEF[s])MPD_ALL[d.k]=d;
+MP.dv={};MP.dl={};
+const mpdReal=X=>realSide(X);
+const mpdOn=X=>!!(S&&S.mpD&&!S.peo&&Object.keys(S.mpD).some(k=>S.mpD[k].s===X));
+const mpdKeys=X=>S&&S.mpD?Object.keys(S.mpD).filter(k=>S.mpD[k].s===X):[];
+const mpdName=k=>MPD_ALL[k]?MPD_ALL[k].n:k;
+function mpdGeo(lon,lat,X){const r=mpdReal(X);
+  if(r==='car'){const afr=lat<36||(lon>-1.5&&lat<37.5);if(!afr&&lon<4&&lat<44)return lon<-3?'has':'han';if(lat>41.5)return 'han';return 'suf'}
+  if(lon<7.6&&lat>36)return 'sci';if(lat<38.4||(lon<10&&lat<41.4))return 'sem';return 'sen'}
+function mpdNearTown(x,y){let b=null,bd=1e9;for(const n of N){const d=Math.hypot(n.x-x,n.y-y);if(d<bd){bd=d;b=n}}return b}
+function mpdCity(n){const o=ownerN(n.i);if(!mpdOn(o))return null;const k=S.mpCity&&S.mpCity[n.id];return k&&S.mpD[k]&&S.mpD[k].s===o?k:mpdGeo(n.lon,n.lat,o)}
+function mpdGuessArmy(a){const r=mpdReal(a.side),nm=a.name||'';
+  if(r==='car'){if(/Hasdrubal/.test(nm))return 'has';if(/Hannibal/.test(nm))return 'han'}else{if(/Scipio/.test(nm))return 'sci';if(/Sempronius/.test(nm))return 'sem'}
+  const n=mpdNearTown(a.x,a.y);return n?mpdGeo(n.lon,n.lat,a.side):MPD_DEF[r][0].k}
+function mpdArmy(a){if(!a||!mpdOn(a.side))return null;return a.dm&&S.mpD[a.dm]&&S.mpD[a.dm].s===a.side?a.dm:mpdGuessArmy(a)}
+function mpdOwner(k){const D=S.mpD[k];if(!D)return null;const p=D.p&&S.mpP&&S.mpP[D.p];return p&&p.side===D.s?D.p:mpLeader(D.s)}
+function mpdFor(pid,X){const ks=mpdKeys(X);if(!ks.length)return null;const me=S.mpP&&S.mpP[pid];
+  if(me&&me.side===X){if(me.dm&&ks.includes(me.dm))return me.dm;const o=ks.find(k=>mpdOwner(k)===pid);if(o)return o}return ks[0]}
+const mpdView=X=>mpdFor(MP.me,X);
+// revenus d'un commandement : part des villes, entretien de ses armées et flottes
+let _mpdInc=null;
+function mpdInc(k){const D=S.mpD[k],X=D.s;MP.inDom=true;const A=S.armies,F=S.fleets;
+  try{const full=_mpdInc(X);let tot=0,mine=0;for(const n of N)if(!n.col&&ownerN(n.i)===X){const v=Math.max(0,townIncome(n));tot+=v;if(mpdCity(n)===k)mine+=v}
+    S.armies=A.filter(a=>a.side!==X||mpdArmy(a)===k);S.fleets=(F||[]).filter(f=>f.side!==X||mpdArmy(f)===k);
+    const part=_mpdInc(X);return {inc:tot?Math.round(full.inc*mine/tot):0,up:part.up}}
+  finally{S.armies=A;S.fleets=F;MP.inDom=false}}
+{_mpdInc=income;income=function(side){if(MP.inDom||!mpdOn(side))return _mpdInc.apply(this,arguments);const k=mpdView(side);return k?mpdInc(k):_mpdInc.apply(this,arguments)}}
+// l'hôte : toute variation du trésor affiché revient au commandement affiché
+function mpdSync(){if(MP.role==='guest'||!S||!S.mpD)return;
+  for(const X of ['car','rom']){if(!mpdOn(X))continue;const v=mpdView(X),D=S.mpD;
+    if(MP.dv[X]===undefined||!D[MP.dv[X]]){MP.dv[X]=v;S.gold[X]=D[v].g;MP.dl[X]=S.gold[X];continue}
+    const old=MP.dv[X];D[old].g=Math.max(0,D[old].g+(S.gold[X]-MP.dl[X]));
+    if(old!==v)MP.dv[X]=v;S.gold[X]=D[v].g;MP.dl[X]=S.gold[X]}}
+// exécuter fn avec le trésor d'un autre commandement (achats de vivres, pillage, actions d'un invité)
+function mpdWith(k,fn){if(!k||!S.mpD||!S.mpD[k]||MP.role==='guest')return fn();mpdSync();const X=S.mpD[k].s;if(MP.dv[X]===k)return fn();
+  S.gold[X]=S.mpD[k].g;try{return fn()}finally{S.mpD[k].g=Math.max(0,S.gold[X]);S.gold[X]=S.mpD[MP.dv[X]].g;MP.dl[X]=S.gold[X]}}
+function mpdInit(X){const defs=MPD_DEF[mpdReal(X)];if(!defs||S.peo)return;S.mpD=S.mpD||{};S.mpCity=S.mpCity||{};
+  const w={};for(const d of defs){S.mpD[d.k]={s:X,p:null,g:0};w[d.k]=0}
+  for(const n of N)if(!n.col&&ownerN(n.i)===X){let k=mpdGeo(n.lon,n.lat,X);if(n.id==='pisae'&&mpdReal(X)==='rom')k='sci';/* Baptiste 10 nov. : les Scipions commencent avec Pise */S.mpCity[n.id]=k;w[k]+=Math.max(1,townIncome(n))}
+  for(const a of S.armies)if(a.side===X)a.dm=mpdGuessArmy(a);for(const f of S.fleets||[])if(f.side===X)f.dm=mpdGuessArmy(f);
+  let tw=0;for(const k in w){w[k]=Math.max(w[k],1);tw+=w[k]}let left=Math.round(S.gold[X]||0);
+  defs.forEach((d,i)=>{const g=i===defs.length-1?left:Math.round((S.gold[X]||0)*Math.max(.15,w[d.k]/tw));S.mpD[d.k].g=Math.min(left,g);left-=S.mpD[d.k].g});
+  if(left>0)S.mpD[defs[0].k].g+=left;delete MP.dv[X];
+  mpdNews(X,`Le camp se partage entre ${defs.map(d=>d.n).join(', ')} : chacun ses villes, son trésor, ses armées et ses flottes. Choisissez votre général (bouton « Commandements »).`)}
+// fin du jeu à plusieurs : tout redevient commun
+function mpdMerge(){if(!S||!S.mpD)return;for(const X of ['car','rom']){const ks=mpdKeys(X);if(!ks.length)continue;mpdSync();S.gold[X]=ks.reduce((s,k)=>s+S.mpD[k].g,0)}
+  delete S.mpD;delete S.mpCity;for(const a of S.armies)delete a.dm;for(const f of S.fleets||[])delete f.dm;MP.dv={};MP.dl={}}
+function mpdNews(X,t){S.mpNews=S.mpNews||[];S.mpNews.push({k:(S.mpK=(S.mpK||0)+1),t,sd:X});if(S.mpNews.length>8)S.mpNews.shift();
+  if(MP.role!=='guest'&&(!S.mpP||!S.mpP[MP.me]||S.mpP[MP.me].side===X))log(t)}
+const mpdLbl=k=>{const o=mpdOwner(k);return `${mpdName(k)}${o?` (${esc(mpName(o))}${o===MP.me?', vous':''})`:''}`};
+// actions de commandement (l'hôte les applique ; un invité les envoie)
+function mpdAct(c){if(MP.role==='guest'){mpGuestDiff({k:'dom',c});return}mpdDo(MP.me,c);mpdSync();mpKfSoon(0);renderAll()}
+function mpdDo(by,c){if(!S.mpD||!S.mpP||!S.mpP[by])return;const P=S.mpP[by],D=S.mpD,who=esc(mpName(by));
+  if(c.a==='claim'){const d=D[c.k];if(!d||d.s!==P.side)return;if(d.p&&d.p!==by&&S.mpP[d.p]&&S.mpP[d.p].on)return;
+    for(const k in D)if(D[k].p===by)D[k].p=null;d.p=by;P.dm=c.k;mpdNews(d.s,`${who} prend le commandement : ${mpdName(c.k)}.`);return}
+  if(c.a==='gold'){const f=D[c.f],t=D[c.t];if(!f||!t||f.s!==t.s||mpdOwner(c.f)!==by||c.f===c.t)return;mpdSync();const n=Math.max(0,Math.min(Math.round(+c.n||0),Math.floor(f.g)));if(!n)return;
+    f.g-=n;t.g+=n;for(const X of ['car','rom'])if(MP.dv[X]&&D[MP.dv[X]]){S.gold[X]=D[MP.dv[X]].g;MP.dl[X]=S.gold[X]}
+    mpdNews(f.s,`${mpdName(c.f)} envoie ${n} or à ${mpdName(c.t)}.`);return}
+  if(c.a==='army'||c.a==='fleet'){const L=c.a==='army'?S.armies:S.fleets||[],a=L.find(x=>x.id===c.id),t=D[c.t];if(!a||!t||t.s!==a.side)return;
+    const k=mpdArmy(a);if(mpdOwner(k)!==by)return;a.dm=c.t;delete a.cmd;mpdNews(a.side,`${esc(a.name)} passe sous le commandement de ${mpdName(c.t)}.`);return}
+  if(c.a==='city'){const i=NI[c.id],t=D[c.t];if(i==null||!t)return;const k=mpdCity(N[i]);if(!k||mpdOwner(k)!==by||t.s!==ownerN(i))return;
+    S.mpCity[c.id]=c.t;mpdNews(t.s,`${N[i].n} passe sous l'autorité de ${mpdName(c.t)}.`);return}
+  if(c.a==='help'){const t=D[c.t];if(!t)return;const m={or:"manque d'or",hom:"a besoin de troupes",flo:"a besoin de navires"}[c.w]||'demande de l\'aide';
+    mpdNews(t.s,`${mpdName(mpdFor(by,P.side))} (${who}) ${m} et appelle ${mpdName(c.t)} à l'aide.`)}}
+// l'hôte : activer le partage dès que deux joueurs tiennent le même camp ; rattacher les nouvelles armées
+setInterval(()=>{if(MP.role!=='host'||!S||!S.mpP||S.peo)return;
+  for(const X of ['car','rom']){const n=Object.values(S.mpP).filter(p=>p.side===X).length;if(n>=2&&!mpdOn(X)){mpdInit(X);mpKfSoon(0);renderAll()}}
+  if(!S.mpD)return;for(const L of [S.armies,S.fleets||[]])for(const a of L)if(mpdOn(a.side)&&!(a.dm&&S.mpD[a.dm]&&S.mpD[a.dm].s===a.side))a.dm=mpdGuessArmy(a);
+  mpdSync()},500);
+{const _d=daily;daily=function(d){if(MP.role==='host')mpdSync();const r=_d.apply(this,arguments);
+  if(MP.role==='host'&&S.mpD&&d%30===0){mpdSync();for(const X of ['car','rom']){if(!mpdOn(X))continue;for(const k of mpdKeys(X)){if(k===MP.dv[X])continue;const {inc,up}=mpdInc(k);S.mpD[k].g=Math.max(0,S.mpD[k].g+inc-up)}}}
+  return r}}
+if(typeof polMonthly==='function'){const _pm=polMonthly;polMonthly=function(){return mpdWith(S&&S.mpD&&mpdOn('car')&&realSide('car')==='car'?mpdKeys('car')[0]:null,()=>_pm.apply(this,arguments))}} // le Sénat de Carthage finance les suffètes
+if(typeof eventsMonthly==='function'){const _em=eventsMonthly;eventsMonthly=function(){return mpdWith(S&&S.mpD&&mpdOn('car')&&realSide('car')==='car'?mpdKeys('car')[0]:null,()=>_em.apply(this,arguments))}} // les événements de Carthage touchent le trésor des suffètes
+if(typeof vBuy==='function'){const _vb=vBuy;vBuy=function(v,a){return mpdWith(mpdArmy(a),()=>_vb.apply(this,arguments))}}
+if(typeof vPillage==='function'){const _vp=vPillage;vPillage=function(v,a){return mpdWith(mpdArmy(a),()=>_vp.apply(this,arguments))}}
+// une ville prise revient au commandement de l'armée qui l'a prise
+{const _cp=capture;capture=function(i,side){const r=_cp.apply(this,arguments);try{if(S.mpD&&mpdOn(side)&&ownerN(i)===side){const n=N[i];let b=null,bd=80;
+  for(const a of S.armies)if(a.side===side&&!a.dead){const d=a.at===i?0:Math.hypot(a.x-n.x,a.y-n.y);if(d<bd){bd=d;b=a}}
+  S.mpCity[n.id]=b?mpdArmy(b):mpdGeo(n.lon,n.lat,side)}}catch(e){console.error('[MP]',e)}return r}}
+{const _al=afterLoad;afterLoad=function(){const r=_al.apply(this,arguments);if(!MP.role&&S&&S.mpD)mpdMerge();return r}}
+/* ---- fenêtre « Commandements » ---- */
+function openDom(){const X='car',ks=mpdKeys(X);if(!ks.length){openMP();return}const mine=mpdView(X),myD=S.mpD[mine];
+  const card=k=>{const d=S.mpD[k],def=MPD_ALL[k],o=mpdOwner(k),own=o===MP.me,{inc,up}=mpdInc(k),net=inc-up;
+    let towns=0;for(const n of N)if(!n.col&&ownerN(n.i)===X&&mpdCity(n)===k)towns++;
+    const A=S.armies.filter(a=>a.side===X&&!a.dead&&!a.g&&mpdArmy(a)===k),men=A.reduce((s,a)=>s+a.units.reduce((t,u)=>t+u.men,0),0),F=(S.fleets||[]).filter(f=>f.side===X&&mpdArmy(f)===k);
+    const taken=d.p&&S.mpP[d.p]&&S.mpP[d.p].on&&d.p!==MP.me;
+    let b='';if(d.p!==MP.me&&!taken)b+=`<button type="button" class="go" data-dclaim="${k}">${own?'Le prendre pour vous':'Prendre ce commandement'}</button>`;
+    if(k!==mine&&myD)b+=[50,150,400].map(n=>`<button type="button" data-dgold="${k}" data-n="${n}" ${S.gold[X]<n?'disabled':''}>Envoyer ${n} or</button>`).join('');
+    if(k!==mine&&!own)b+=`<select data-dhelp="${k}" style="font:inherit;color:var(--ink);background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;padding:4px"><option value="">Appeler à l'aide…</option><option value="or">Il me faut de l'or</option><option value="hom">Il me faut des troupes</option><option value="flo">Il me faut des navires</option></select>`;
+    return `<div style="border:1px solid ${k===mine?def.c:'var(--line)'};border-left:4px solid ${def.c};border-radius:6px;padding:8px 10px;margin:8px 0">
+      <div class="rec"><span><b style="font-size:17px">${def.n}</b>${k===mine?' <span class="tag">votre commandement</span>':''}<br><span class="sub">${def.t}</span></span>
+      <span style="text-align:right"><b style="color:var(--gold)">${Math.round(k===mine?S.gold[X]:d.g)}</b> or<br><span class="sub">${net>=0?'+':''}${net} par mois</span></span></div>
+      <div class="sub">${d.p&&S.mpP[d.p]?`Tenu par <b>${esc(mpName(d.p))}</b>${S.mpP[d.p].on?'':' (absent)'}`:`Sans joueur : tenu par ${esc(mpName(o))}`} · ${towns} ville${towns>1?'s':''} · ${A.length} armée${A.length>1?'s':''} (${men.toLocaleString('fr-FR')} hommes) · ${F.length} flotte${F.length>1?'s':''}</div>
+      ${b?`<div class="row" style="margin:6px 0 0">${b}</div>`:''}</div>`};
+  modal(`<h2>Commandements</h2><p class="sub">Chaque général a ses villes, son trésor, ses armées et ses flottes. Entraidez-vous : envoyez de l'or, confiez une armée ou une flotte (choisissez-la sur la carte), cédez une ville (choisissez-la).</p>
+    ${ks.map(card).join('')}<div class="row" style="justify-content:flex-end"><button id="mClose" type="button">Fermer</button></div>`);
+  $('mClose').onclick=closeModal;
+  document.querySelectorAll('[data-dclaim]').forEach(b=>b.onclick=()=>{mpdAct({a:'claim',k:b.dataset.dclaim});setTimeout(openDom,MP.role==='guest'?1800:0)});
+  document.querySelectorAll('[data-dgold]').forEach(b=>b.onclick=()=>{mpdAct({a:'gold',f:mine,t:b.dataset.dgold,n:+b.dataset.n});if(MP.role!=='guest')openDom();else{b.disabled=true;b.textContent='Envoyé'}});
+  document.querySelectorAll('[data-dhelp]').forEach(s=>s.onchange=()=>{if(!s.value)return;mpdAct({a:'help',t:s.dataset.dhelp,w:s.value});s.disabled=true})}
+// bouton dans la barre, visible quand le camp est partagé
+function mpdBtn(){let b=$('bDom');const on=MP.role&&mpdOn('car');if(!b){if(!on)return;b=document.createElement('button');b.id='bDom';b.type='button';b.textContent='Commandements';b.title='Les généraux de votre camp, leurs villes et leur trésor';b.onclick=openDom;($('bDip')||$('bMenu')).before(b);if($('bDip')&&$('bDip').querySelector('.ui-i'))b.innerHTML='<svg class="ui-i" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="18" cy="7" r="3"/><circle cx="12" cy="5" r="3.2"/><path d="M1 19c0-4 2.5-6 5-6s5 2 5 6zM13 19c0-4 2.5-6 5-6s5 2 5 6zM6.5 21c0-5 2.6-8 5.5-8s5.5 3 5.5 8z"/></svg><span>Commandements</span>'}
+  b.hidden=!on;if(on){const k=mpdView('car');b.style.borderColor=MPD_ALL[k]?MPD_ALL[k].c:''}}
+{const _rt=renderTop;renderTop=function(){const r=_rt.apply(this,arguments);try{mpdBtn();if(MP.role&&mpdOn('car')){const g=$('gold'),k=mpdView('car');if(g&&k&&!g.querySelector('.mpdN'))g.insertAdjacentHTML('afterbegin',`<span class="mpdN sub" style="margin-right:6px">${mpdName(k)} ·</span>`)}}catch(e){}return r}}
+// panneau latéral : ville d'un autre commandement (pas de levée), céder une ville
+{const _rs2=renderSide;renderSide=function(){const r=_rs2.apply(this,arguments);try{mpdSide()}catch(e){console.error('[MP]',e)}return r}}
+function mpdSide(){if(!MP.role||!mpdOn('car')||!sel||sel.n==null)return;const n=N[sel.n];if(!n||ownerN(n.i)!=='car')return;const k=mpdCity(n),o=mpdOwner(k),el=$('side');if(!el||el.querySelector('.mpdbox'))return;
+  let h=`<div class="mpdbox" style="margin:8px 0;padding:6px 8px;border:1px solid var(--line);border-left:4px solid ${MPD_ALL[k].c};border-radius:4px;font-size:13px">Ville de <b>${mpdLbl(k)}</b>`;
+  if(o!==MP.me){h+=`<div class="sub">Seul ${esc(mpName(o))} peut y lever des troupes ou y construire.</div>`;el.querySelectorAll('[data-rec],[data-recd],[data-work]').forEach(b=>{b.disabled=true;b.title='Ville d\'un autre commandement'})}
+  else{const oth=mpdKeys('car').filter(x=>x!==k);if(oth.length)h+=`<div class="row" style="margin:6px 0 0">${oth.map(x=>`<button type="button" data-dcity="${x}">Céder à ${mpdName(x)}</button>`).join('')}</div>`}
+  h+='</div>';const h2=el.querySelector('h2');if(h2)h2.insertAdjacentHTML('afterend',h);else el.insertAdjacentHTML('afterbegin',h);
+  el.querySelectorAll('[data-dcity]').forEach(b=>b.onclick=()=>{mpdAct({a:'city',id:n.id,t:b.dataset.dcity});b.disabled=true})}
+// un invité qui n'a pas encore de général le choisit en arrivant
+setInterval(()=>{if(!MP.role||!S||!S.mpP||!mpdOn('car')||MP.domAsked)return;const me=S.mpP[MP.me];if(!me||(MP.role==='guest'&&!MP.ready))return;
+  if(me.dm&&S.mpD[me.dm])return;const free=mpdKeys('car').filter(k=>{const d=S.mpD[k];return !(d.p&&S.mpP[d.p]&&S.mpP[d.p].on)});if(!free.length)return;
+  if(!$('modal').hidden||S.cur)return;MP.domAsked=true;openDom();const h=document.querySelector('#mcard h2');if(h)h.textContent='Choisissez votre général'},700);
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='mpDom')openDom()});
+window.__mpd={mpdOn,mpdKeys,mpdView,mpdInc,mpdArmy,mpdCity,mpdOwner,mpdAct,openDom,mpdSync};
+/* ---- COULEURS DES JOUEURS d'un même camp (Baptiste 11 nov. : « voir rapidement qui a quelle armée et quelle terre est à qui,
+   peut-être un dégradé de couleurs ») : chaque joueur reçoit une nuance de la couleur de son pays (1er : la couleur du pays,
+   2e : plus claire, 3e : plus sombre…). Terres : villes de son commandement (coop). Armées : pastille à son initiale. Légende en haut à gauche. ---- */
+let MPTERR=null,mpColSig='';
+function mpSidePlayers(X){const P=S&&S.mpP;if(!P)return [];return Object.keys(P).filter(id=>P[id]&&P[id].side===X)}
+const mpMulti=X=>!!MP.role&&(X==='car'||X==='rom')&&mpSidePlayers(X).length>1;
+function mpShadeOf(X,pid){const L=mpSidePlayers(X),i=Math.max(0,L.indexOf(pid)),c=(FAC[X]&&FAC[X].c)||[128,128,128];
+  const mix=(t,k)=>c.map((v,j)=>Math.round(v+(t[j]-v)*k));
+  return [c,mix([255,255,255],.5),mix([0,0,0],.5),mix([255,232,170],.72),mix([0,0,0],.72),mix([255,255,255],.82)][i%6]}
+{const _bo=buildOwnerPaths;buildOwnerPaths=function(){const r=_bo.apply(this,arguments);MPTERR=null;
+  try{if(MP.role&&S.mpD)for(const X of ['car','rom']){if(!mpdOn(X)||!mpMulti(X))continue;const T={};
+      for(const n of N){if(n.col||!CELL[n.i]||ownerN(n.i)!==X)continue;const k=mpdCity(n),p=k?mpdOwner(k):null,key=p||'_';(T[key]=T[key]||new Path2D()).addPath(CELL[n.i].path)}
+      (MPTERR=MPTERR||{})[X]=T}}catch(e){console.warn(e);MPTERR=null}
+  return r}}
+function mpTerrFill(X,tA){const T=MPTERR&&MPTERR[X];if(!T)return false;for(const p in T){const c=p==='_'?FAC[X].c:mpShadeOf(X,p);ctx.fillStyle=rgb(c,.55*tA);ctx.fill(T[p])}return true}
+{const _tk=token;token=function(x,y,side,txt,selected,a){const r=_tk.apply(this,arguments);
+  try{if(a&&!a.g&&!a.dead&&a.units&&mpMulti(side)){const p=mpOwner(a);if(p){
+      mpBadge(x+11,y-11,7,side,p)}}}catch(e){}
+  return r}}
+function mpBadge(x,y,r,side,p){const c=mpShadeOf(side,p),nm=String(mpName(p)||'?').trim()||'?';
+  ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fill();ctx.lineWidth=Math.max(1.4,r*.2);ctx.strokeStyle='#f3e6c4';ctx.stroke();
+  const lum=c[0]*.3+c[1]*.59+c[2]*.11;ctx.fillStyle=lum>150?'#1e160d':'#fff6e0';ctx.font=`700 ${Math.round(r*1.25)}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(nm[0].toUpperCase(),x,y+.5);ctx.restore()}
+// cartouche d'armée (médaillon du général) : pastille du joueur en haut à droite du médaillon
+{const _gc=genCard;genCard=function(a,s){const r=_gc.apply(this,arguments);
+  try{if(a&&!a.g&&a._sq&&a._sq.length&&mpMulti(a.side)){const p=mpOwner(a);if(p){const [X,my]=a._sq[a._sq.length-1],k=s<.5?.78:s<.8?.9:1,mr=Math.round(27*k);mpBadge(X+mr*.8,my-mr*.62,Math.round(11*k),a.side,p)}}}catch(e){}
+  return r}}
+function mpColLegend(){let e=$('mpCol');const sides=['car','rom'].filter(mpMulti);
+  if(!sides.length){if(e)e.remove();return}
+  if(!e){e=document.createElement('div');e.id='mpCol';e.setAttribute('role','note');
+    e.style.cssText='position:absolute;left:12px;bottom:200px;z-index:5;padding:6px 9px;border-radius:6px;background:rgba(24,19,13,.86);border:1px solid #a8823c;color:#efe6d2;font:12px Georgia,serif;line-height:1.5;pointer-events:none;max-width:220px';
+    ($('mapw')||document.body).appendChild(e)}
+  let h='';for(const X of sides){for(const id of mpSidePlayers(X)){const c=mpShadeOf(X,id),on=S.mpP[id].on!==0;
+      h+=`<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis${on?'':';opacity:.55'}"><i style="display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:6px;background:rgb(${c[0]},${c[1]},${c[2]});border:1px solid #f3e6c4"></i>${esc(mpName(id))}${id===MP.me?' <span style="opacity:.7">(vous)</span>':''}</div>`}}
+  if(e._h!==h){e._h=h;e.innerHTML=h}}
+setInterval(()=>{try{if(!MP.role||!S){const e=$('mpCol');if(e)e.remove();return}mpColLegend();
+    const sig=JSON.stringify([S.mpCity||null,S.mpD?Object.keys(S.mpD).map(k=>[k,S.mpD[k].p]):null,mpSidePlayers('car'),mpSidePlayers('rom')]);
+    if(sig!==mpColSig){mpColSig=sig;territoryDirty=true}}catch(e){}},1000);
+/* ================= FIN MULTIJOUEUR ================= */

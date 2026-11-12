@@ -1,0 +1,228 @@
+/* ================= ATELIER : unités composées par le joueur ================= */
+// Un modèle = un corps de troupe (figurines, effectif, villes où l'on recrute) + un équipement choisi pièce par pièce, puis un nom.
+// Le régiment garde t = type de base (marche, carrés, figurines 3D) et porte d = id du modèle (S.designs).
+const CORPS={
+  lib:{n:'Libyens',adj:'libyens',k:'inf',skin:'#8c6244',m:{mor:8,def:.03,atk:.3},txt:'Discipline et ténacité.'},
+  iber:{n:'Ibères',adj:'ibères',k:'inf',skin:'#c39872',m:{chg:.15,spd:.6},txt:'Agiles, charge vive.'},
+  gaul:{n:'Gaulois',adj:'gaulois',adjP:{per:'galates'},k:'inf',skin:'#d9b290',m:{chg:.3,atk:.4,mor:-8},cm:.85,txt:'Charge furieuse, moral fragile, bon marché.'},
+  sling:{n:'Tirailleurs',adj:'',k:'skirm',skin:'#b98d68',m:{},txt:'Troupe légère de harcèlement.'},
+  hcav:{n:'Cavaliers',adj:'',k:'cav',skin:'#c39872',m:{},txt:'Cavalerie de choc.'},
+  ncav:{n:'Numides',adj:'numides',k:'lcav',skin:'#74503a',m:{spd:2,mor:-4},txt:'Montés à cru, insaisissables.'},
+  legion:{n:'Légionnaires',adj:'romains',k:'inf',m:{atk:.5,mor:8,def:.03},txt:'Citoyens de Rome : discipline des manipules, pilum puis glaive.'},
+  velites:{n:'Vélites',adj:'romains',k:'skirm',m:{mor:4},cm:.9,txt:'Jeunes citoyens pauvres, javelots et peau de loup.'},
+  rcav:{n:'Chevaliers',adj:'romains',k:'cav',m:{mor:5},txt:'Les equites, fils des familles aisées de Rome.'},
+  acav:{n:'Cavaliers alliés',adj:'italiens',k:'cav',m:{},cm:.9,txt:'Cavalerie des alliés italiens, nombreuse et bon marché.'},
+  phalange:{n:'Phalange',adj:'macédoniens',k:'inf',m:{def:.06,mor:6},txt:'Un hérisson de sarisses, imprenable de face.'},
+  hypasp:{n:'Hypaspistes',adj:'royaux',k:'inf',m:{atk:.8,mor:14,def:.04},cm:1.25,txt:"Garde d'élite du roi, à l'aise partout."},
+  peltaste:{n:'Thraces',adj:'thraces',k:'skirm',m:{atk:.8,chg:.15},txt:'Javeliniers capables de tenir au corps à corps.'},
+  cretois:{n:'Crétois',adj:'crétois',k:'skirm',m:{mor:4},cm:1.1,txt:'Les meilleurs archers du monde grec.'},
+  compagnons:{n:'Compagnons',adj:'macédoniens',k:'cav',m:{atk:1,mor:14,chg:.3},cm:1.3,txt:'La cavalerie royale, en coin, à la tête de la charge.'},
+  thessal:{n:'Thessaliens',adj:'thessaliens',k:'cav',m:{mor:6,chg:.2},txt:'Cavaliers des plaines, en losange.'},
+  athoplites:{n:'Hoplites',adj:'grecs',adjP:{syr:'syracusains',ath:'athéniens',per:'pergaméniens'},k:'inf',m:{def:.05,mor:6},txt:'Citoyens-soldats en phalange, lance et grand bouclier.'},
+  thureo:{n:'Thuréophores',adj:'mercenaires',k:'inf',m:{spd:.5,chg:.1},cm:.95,txt:"Mercenaires au bouclier ovale, bons partout."},
+  athpelt:{n:'Peltastes grecs',adj:'grecs',k:'skirm',m:{atk:.6},txt:'Infanterie légère : javelots et pelte.'},
+  hippeis:{n:'Hippeis',adj:'grecs',adjP:{syr:'syracusains',ath:'athéniens',per:'pergaméniens'},k:'cav',m:{mor:4},txt:'Cavalerie des citoyens les plus riches.'},
+  scythes:{n:'Scythes',adj:'scythes',k:'skirm',m:{},txt:"Archers des steppes au service d'Athènes."}
+};
+// équipement de départ de chaque corps (un nouveau modèle part de là)
+const BDEF={legion:{helm:'bronze',crest:'plumes',armor:'pect',jamb:'une',shield:'scutum',arm:'glaive',jet:'pilum',teinte:'rouge'},
+  velites:{helm:'cuir',armor:'tunique',shield:'parma',arm:'glaive',jet:'javelots',teinte:'rouge'},
+  rcav:{helm:'attique',crest:'crete',armor:'pect',shield:'parma',arm:'lance',teinte:'rouge'},
+  acav:{helm:'bronze',armor:'lin',shield:'rond',arm:'lance',jet:'javelots',teinte:'vert'},
+  phalange:{helm:'thrace',armor:'lin',jamb:'cnemides',shield:'macedonien',arm:'sarisse',teinte:'bronze'},
+  hypasp:{helm:'attique',crest:'crin',armor:'lin',jamb:'cnemides',shield:'hoplon',arm:'lance',teinte:'bronze'},
+  peltaste:{helm:'phrygien',armor:'tunique',shield:'pelte',arm:'kopis',jet:'javelots',manteau:'ocre'},
+  cretois:{helm:'nu',armor:'tunique',shield:'pelte',arm:'dague',jet:'arc'},
+  compagnons:{helm:'beotien',armor:'lin',shield:'aucun',arm:'xyston',manteau:'pourpre'},
+  thessal:{helm:'petase',armor:'cuir',shield:'aucun',arm:'xyston',jet:'javelots',manteau:'pourpre'},
+  athoplites:{helm:'corinthien',crest:'crin',armor:'lin',jamb:'cnemides',shield:'hoplon',arm:'lance',teinte:'bronze'},
+  thureo:{helm:'pilos',armor:'lin',shield:'ovale',arm:'lance',jet:'javelots',teinte:'blanc'},
+  athpelt:{helm:'pilos',armor:'tunique',shield:'pelte',arm:'epee',jet:'javelots'},
+  hippeis:{helm:'petase',armor:'cuir',shield:'aucun',arm:'lance',jet:'javelots',manteau:'bleu'},
+  scythes:{helm:'phrygien',armor:'tunique',shield:'aucun',arm:'dague',jet:'arc'}};
+// couleurs par défaut des peuples qui recrutent les corps de Carthage
+const PEO_LOOK={num:{tenue:'blanc',teinte:'ocre'},mae:{tenue:'ocre',teinte:'ocre'},ins:{tenue:'vert',teinte:'vert'},per:{tenue:'bleu',teinte:'bleu'}};
+// corps que le peuple joué peut lever quelque part
+function wsPool(){const p=new Set();for(const v of Object.values(POOL_CAR))for(const t of v)if(CORPS[t])p.add(t);return [...p]}
+// « tunique, tête nue, sans bouclier » par catégorie (mêmes grandeurs que la bataille 3D ; spd en m/s, cost en or)
+const DBASE={inf:{atk:8,def:.62,mor:88,chg:1.1,spd:14,cost:34},skirm:{atk:2.6,def:.5,mor:66,chg:1,spd:20,cost:18},
+  cav:{atk:8.4,def:.68,mor:88,chg:1.9,spd:36,cost:46},lcav:{atk:5.6,def:.6,mor:80,chg:1.5,spd:48,cost:40}};
+// k : catégories qui y ont droit (toutes si absent) ; mk : effet propre à une catégorie ; km : km/jour en campagne
+const GEAR={
+  helm:{n:'Casque',o:{
+    nu:{n:'Tête nue',m:{}},
+    cuir:{n:'Bonnet de cuir',m:{def:.03,cost:2}},
+    petase:{n:'Pétase (chapeau à larges bords)',m:{def:.01,mor:1,cost:1}},
+    phrygien:{n:'Bonnet phrygien',m:{def:.03,mor:1,cost:2}},
+    bronze:{n:'Casque de bronze',m:{def:.07,mor:3,cost:5}},
+    pilos:{n:'Pilos (conique)',m:{def:.06,mor:2,cost:4}},
+    attique:{n:'Casque attique',m:{def:.09,mor:4,cost:7},k:['inf','cav']},
+    fer:{n:'Casque de fer à couvre-joues',m:{def:.1,mor:5,cost:8},k:['inf','cav']},
+    thrace:{n:'Casque thrace à visière',m:{def:.12,mor:6,cost:10},k:['inf','cav']},
+    beotien:{n:'Casque béotien',m:{def:.08,mor:3,cost:6},k:['inf','cav']},
+    corinthien:{n:'Casque corinthien',m:{def:.14,mor:6,spd:-.2,cost:11},k:['inf']}}},
+  crest:{n:'Cimier',o:{
+    rien:{n:'Aucun',m:{}},
+    crin:{n:'Crinière transversale',m:{mor:3,cost:2},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)},
+    crete:{n:'Crête de crin rouge',m:{mor:3,cost:2},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)},
+    noire:{n:'Crête noire à flamme',m:{mor:4,cost:3},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)},
+    aigrette:{n:'Aigrette',m:{mor:2,cost:1},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)},
+    plumes:{n:'Trois plumes',m:{mor:4,cost:3},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)},
+    cornes:{n:'Cornes de bronze',m:{mor:5,cost:4},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)},
+    roue:{n:'Roue solaire',m:{mor:4,cost:3},need:d=>!['nu','cuir','petase','phrygien'].includes(d.helm)}}},
+  armor:{n:'Armure',o:{
+    tunique:{n:'Tunique',m:{spd:.5}},
+    cuir:{n:'Pourpoint de cuir',m:{def:.05,cost:3}},
+    lin:{n:'Linothorax (lin collé)',m:{def:.08,cost:6}},
+    pect:{n:'Plaque pectorale',m:{def:.05,cost:4},k:['inf','cav']},
+    maille:{n:'Cotte de mailles',m:{def:.2,spd:-1,km:-1,cost:16},k:['inf','cav']},
+    ecailles:{n:"Cuirasse d'écailles",m:{def:.18,mor:2,spd:-1,km:-1,cost:15},k:['inf','cav']},
+    bronze:{n:'Cuirasse de bronze',m:{def:.16,mor:4,spd:-1,km:-1,cost:14},k:['inf','cav']}}},
+  jamb:{n:'Jambières',o:{
+    aucune:{n:'Aucune',m:{}},
+    bandes:{n:'Bandes molletières',m:{def:.02,cost:1}},
+    une:{n:'Jambière unique (à la romaine)',m:{def:.025,cost:2},k:['inf']},
+    cnemides:{n:'Cnémides de bronze',m:{def:.05,spd:-.2,cost:4},k:['inf','cav']}}},
+  shield:{n:'Bouclier',o:{
+    aucun:{n:'Aucun',m:{}},
+    pelte:{n:'Pelte (petit, en croissant)',m:{def:.12,cost:3}},
+    peau:{n:'Bouclier de peau',m:{def:.1,spd:.3,cost:2}},
+    parma:{n:'Parma (petit rond cerclé)',m:{def:.16,cost:4}},
+    macedonien:{n:'Bouclier macédonien',m:{def:.18,cost:5},k:['inf','cav']},
+    rond:{n:'Bouclier rond',m:{def:.24,cost:6}},
+    ovale:{n:'Bouclier ovale',m:{def:.22,chg:.05,cost:5},k:['inf','cav']},
+    scutum:{n:'Scutum',m:{def:.3,spd:-.5,cost:8},k:['inf']},
+    hoplon:{n:'Hoplon (grand bouclier argien)',m:{def:.32,mor:3,spd:-.6,cost:10},k:['inf']}}},
+  motif:{n:'Motif du bouclier',look:1,sh:1,o:{
+    peuple:{n:'Emblème du peuple',m:{}},tanit:{n:'Signe de Tanit',m:{},need:d=>d.shield!=='aucun'},cheval:{n:'Tête de cheval',m:{},need:d=>d.shield!=='aucun'},palmier:{n:'Palmier',m:{},need:d=>d.shield!=='aucun'},
+    elephant:{n:'Éléphant',m:{},need:d=>d.shield!=='aucun'},moon:{n:'Disque et croissant',m:{},need:d=>d.shield!=='aucun'},soleil:{n:'Soleil',m:{},need:d=>d.shield!=='aucun'},etoile:{n:'Étoile',m:{},need:d=>d.shield!=='aucun'},
+    rings:{n:'Rosace',m:{},need:d=>d.shield!=='aucun'},triskel:{n:'Triskèle',m:{},need:d=>d.shield!=='aucun'},sanglier:{n:'Sanglier',m:{},need:d=>d.shield!=='aucun'},loup:{n:'Loup',m:{},need:d=>d.shield!=='aucun'},
+    foudre:{n:'Foudre ailé',m:{},need:d=>d.shield!=='aucun'},chouette:{n:'Chouette',m:{},need:d=>d.shield!=='aucun'},serpent:{n:'Serpent d\'Asclépios',m:{},need:d=>d.shield!=='aucun'},aigle:{n:'Aigle',m:{},need:d=>d.shield!=='aucun'},gorgone:{n:'Gorgone',m:{},need:d=>d.shield!=='aucun'},bandes:{n:'Bandes',m:{},need:d=>d.shield!=='aucun'},uni:{n:'Uni',m:{},need:d=>d.shield!=='aucun'}}},
+  teinte:{n:'Couleur du bouclier',look:1,sh:1,o:{
+    pourpre:{n:'Pourpre',m:{}},rouge:{n:'Rouge',m:{}},noir:{n:'Noir',m:{}},blanc:{n:'Blanc',m:{}},ocre:{n:'Ocre',m:{}},bleu:{n:'Bleu',m:{}},vert:{n:'Vert',m:{}},bronze:{n:'Bronze poli',m:{}},jaune:{n:'Jaune',m:{}}}},
+  tenue:{n:'Couleur de la tenue',look:1,o:{
+    peuple:{n:'Celle du peuple',m:{}},pourpre:{n:'Pourpre',m:{}},rouge:{n:'Rouge',m:{}},blanc:{n:'Blanc',m:{}},ecru:{n:'Écru',m:{}},bleu:{n:'Bleu',m:{}},vert:{n:'Vert',m:{}},ocre:{n:'Ocre',m:{}},jaune:{n:'Jaune',m:{}},noir:{n:'Noir',m:{}}}},
+  manteau:{n:'Manteau',look:1,o:{
+    aucun:{n:'Aucun',m:{}},rouge:{n:'Rouge',m:{}},pourpre:{n:'Pourpre',m:{}},blanc:{n:'Blanc',m:{}},bleu:{n:'Bleu',m:{}},vert:{n:'Vert',m:{}},ocre:{n:'Ocre',m:{}},jaune:{n:'Jaune',m:{}},noir:{n:'Noir',m:{}}}},
+  arm:{n:'Arme',o:{
+    lance:{n:'Lance',m:{def:.04},mk:{cav:{chg:.4},lcav:{chg:.2}},k:['inf','cav','lcav']},
+    sarisse:{n:'Sarisse (pique)',m:{def:.2,atk:-.5,chg:-.2,spd:-1,cost:6},k:['inf'],need:d=>!['scutum','ovale','hoplon'].includes(d.shield)},
+    epee:{n:'Épée courte (falcata)',m:{atk:1.1,chg:.1,cost:4}},
+    glaive:{n:'Glaive (gladius)',m:{atk:1.2,chg:.1,cost:5}},
+    kopis:{n:'Kopis (sabre courbe)',m:{atk:1.15,chg:.2,cost:5}},
+    xyston:{n:'Xyston (longue lance de cavalerie)',m:{atk:.3,def:.02,chg:.6,cost:5},k:['cav']},
+    longue:{n:'Épée longue',m:{atk:.8,chg:.3,cost:5},k:['inf','cav']},
+    hache:{n:'Hache de guerre',m:{atk:1.3,def:-.03,chg:.2,cost:4},k:['inf','cav']},
+    dague:{n:'Dague',m:{},k:['skirm']}}},
+  jet:{n:'Arme de jet',o:{
+    aucune:{n:'Aucune',m:{},k:['inf','cav','lcav']},
+    javelots:{n:'Javelots',m:{chg:.3,cost:4},mk:{skirm:{ranged:{range:150,dmg:6,cd:2},cost:6},cav:{chg:.2,cost:4},lcav:{ranged:{range:130,dmg:3,cd:2.2},cost:6}}},
+    pilum:{n:'Pilum (deux par homme)',m:{chg:.55,atk:.2,cost:7},k:['inf']},
+    soliferrum:{n:'Soliferrum (tout en fer)',m:{chg:.45,cost:6},mk:{cav:{chg:.3,cost:6}},k:['inf','cav']},
+    fronde:{n:'Fronde',m:{ranged:{range:200,dmg:6,cd:1.6},cost:8},k:['skirm']},
+    arc:{n:'Arc',m:{ranged:{range:220,dmg:5,cd:1.9},cost:9},k:['skirm']}}},
+  train:{n:'Entraînement',o:{
+    levee:{n:'Levée',m:{mor:-10,atk:-.5},cm:.7,tm:.6},
+    reg:{n:'Réguliers',m:{}},
+    vet:{n:'Vétérans',m:{mor:12,atk:.7,def:.05},cm:1.4,tm:1.5}}}
+};
+const SLOTS=Object.keys(GEAR);
+const STD3D={lib:{atk:8.5,def:1.1,mor:105},iber:{atk:8.5,def:1,mor:95},gaul:{atk:9,def:.9,mor:90},sling:{atk:2.5,def:.6,mor:70},hcav:{atk:10,def:1,mor:100},ncav:{atk:6,def:.8,mor:80},
+  legion:{atk:9,def:1.15,mor:100},velites:{atk:3,def:.65,mor:70},rcav:{atk:9,def:1,mor:95},acav:{atk:8.5,def:.95,mor:90},phalange:{atk:7,def:1.5,mor:100},hypasp:{atk:9.5,def:1.15,mor:112},
+  peltaste:{atk:4,def:.75,mor:75},cretois:{atk:2.5,def:.6,mor:72},compagnons:{atk:11,def:1.05,mor:110},thessal:{atk:9.5,def:1,mor:100},athoplites:{atk:8.5,def:1.2,mor:100},thureo:{atk:8.5,def:1,mor:92},
+  athpelt:{atk:4,def:.7,mor:74},hippeis:{atk:9,def:1,mor:96},scythes:{atk:2.5,def:.6,mor:70}};
+const gearOk=(slot,key,d)=>{const o=GEAR[slot].o[key],k=CORPS[d.base].k;return !!o&&(!o.k||o.k.includes(k))&&(!o.need||o.need(d))};
+function dFix(d){for(const s of SLOTS)if(!gearOk(s,d[s],d))d[s]=Object.keys(GEAR[s].o).find(key=>gearOk(s,key,d));return d}
+function dStats(d){
+  const c=CORPS[d.base],k=c.k,b=DBASE[k],s={atk:b.atk,def:b.def,mor:b.mor,chg:b.chg,spd:b.spd,cost:b.cost,km:0,ranged:null};
+  let cm=c.cm||1,tm=1;
+  const add=m=>{for(const f in m)if(f==='ranged')s.ranged=m.ranged;else s[f]+=m[f]};
+  add(c.m);
+  for(const sl of SLOTS){const o=GEAR[sl].o[d[sl]];if(!o)continue;add((o.mk&&o.mk[k])||o.m);if(o.cm)cm*=o.cm;if(o.tm)tm*=o.tm}
+  s.cost=Math.max(10,Math.round(s.cost*cm));s.days=Math.round(TRAIN[k]*tm);s.km=KSPEED[k]+s.km;s.men=UT[d.base].men;
+  s.def=Math.round(s.def*100)/100;s.atk=Math.round(s.atk*10)/10;s.chg=Math.round(s.chg*100)/100;s.spd=Math.round(s.spd*10)/10;
+  return s;
+}
+function dAutoName(d){
+  const c=CORPS[d.base],k=c.k,adj=(c.adjP&&typeof S!=='undefined'&&S&&c.adjP[S.peo])||c.adj;
+  let w=k==='skirm'?(d.jet==='javelots'&&d.shield==='pelte'?'Peltastes':{javelots:'Javeliniers',fronde:'Frondeurs',arc:'Archers'}[d.jet]):
+    k==='cav'||k==='lcav'?(d.arm==='xyston'?'Cavaliers au xyston':d.arm==='lance'?'Lanciers montés':'Cavaliers'):
+    d.jet==='pilum'&&(d.arm==='glaive'||d.arm==='epee')?'Légionnaires':
+    d.shield==='hoplon'&&d.arm==='lance'?'Hoplites':
+    d.shield==='ovale'&&d.jet==='javelots'&&d.arm==='lance'?'Thuréophores':
+    {lance:'Lanciers',sarisse:'Phalangites',epee:'Épéistes',glaive:'Épéistes',kopis:'Épéistes',longue:'Guerriers',hache:'Porte-haches'}[d.arm];
+  if(d.armor==='maille'||d.armor==='bronze'||d.armor==='ecailles')w+=k==='inf'?' cuirassés':'';
+  w=w||'Soldats';if(d.train==='vet')w='Vétérans '+w[0].toLowerCase()+w.slice(1);
+  return w+(adj&&k!=='lcav'?' '+adj:k==='lcav'?' numides':'');
+}
+const desOf=id=>id==null||!S.designs?null:S.designs.find(x=>x.id===id);
+const uName=u=>{const d=desOf(u.d!=null?u.d:u.ds);return d?d.name:UT[u.t].n};
+const uCost=u=>{const d=desOf(u.d);return d?dStats(d).cost:UT[u.t].cost};
+const uKm=u=>{const d=desOf(u.d);return d?dStats(d).km:KSPEED[UT[u.t].k]};
+// statistiques envoyées à la bataille 3D (remplacent celles du type de base)
+function u3D(u){const d=desOf(u.d);if(!d)return null;const s=dStats(d);
+  return {name:d.name,atk:s.atk,def:s.def,morale:s.mor,charge:s.chg,speed:s.spd,ranged:s.ranged,
+    gear:{base:d.base,helm:d.helm,crest:d.crest,armor:d.armor,shield:d.shield,arm:d.arm,jet:d.jet,train:d.train,motif:d.motif||'peuple',teinte:d.teinte||'pourpre',jamb:d.jamb||'aucune',tenue:d.tenue||'peuple',manteau:d.manteau||'aucun'}}} // gear : pour dessiner l'équipement en 3D
+function dInUse(id){return S.armies.some(a=>a.units.some(u=>u.d===id))||Object.values(S.q).some(q=>q.ds===id)}
+
+/* ---- aperçu : soldat dessiné d'après l'équipement (aplats cernés, une ombre par pièce) ---- */
+// Chaque peuple a son visage, sa coiffure, sa tenue et le motif de son bouclier ; chaque pièce choisie se dessine par-dessus.
+const DOLL_LOOK={
+  lib:{skin:'#8a5a3c',sh:'#6b432b',hair:'#17110c',hs:'curly',beard:'short',tun:'#6b3f9f',tunS:'#4f2c78',band:'#e3c27a',emb:'tanit'},
+  iber:{skin:'#c08a62',sh:'#9c6c49',hair:'#2b1d14',hs:'short',beard:'none',tun:'#ece4d2',tunS:'#cbbfa6',band:'#6b3f9f',emb:'rings',belt:'plate'},
+  gaul:{skin:'#e3b994',sh:'#c3946f',hair:'#c48a3c',hs:'long',beard:'moust',tun:'#6b3f9f',tunS:'#4f2c78',band:'#c9a64a',emb:'triskel',braies:1,torque:1},
+  sling:{skin:'#b78660',sh:'#946646',hair:'#3a2616',hs:'curly',beard:'none',tun:'#d8c7a4',tunS:'#b6a37e',band:'#6b3f9f',emb:'tanit',sash:1},
+  hcav:{skin:'#c08a62',sh:'#9c6c49',hair:'#2b1d14',hs:'short',beard:'short',tun:'#6b3f9f',tunS:'#4f2c78',band:'#e3c27a',emb:'rings'},
+  ncav:{skin:'#6a4430',sh:'#4f3122',hair:'#120c08',hs:'locks',beard:'short',tun:'#efe7d4',tunS:'#cdbfa2',band:'#6b3f9f',emb:'moon'},
+  // Rome
+  legion:{skin:'#cf9f78',sh:'#a97b57',hair:'#3a2616',hs:'short',beard:'none',tun:'#9b2a22',tunS:'#701c16',band:'#e3c27a',emb:'foudre',car:'#9b2a22'},
+  velites:{skin:'#c99670',sh:'#a3734f',hair:'#2b1d14',hs:'short',beard:'none',tun:'#d8c7a4',tunS:'#b6a37e',band:'#9b2a22',emb:'rings',pelt:1,car:'#9b2a22'},
+  rcav:{skin:'#cf9f78',sh:'#a97b57',hair:'#3a2616',hs:'short',beard:'none',tun:'#ece4d2',tunS:'#cbbfa6',band:'#9b2a22',emb:'aigle',car:'#9b2a22'},
+  acav:{skin:'#c08a62',sh:'#9c6c49',hair:'#2b1d14',hs:'short',beard:'short',tun:'#b8743a',tunS:'#8a5428',band:'#3f6b4a',emb:'sanglier',car:'#3f6b4a'},
+  // Macédoine
+  phalange:{skin:'#d6a882',sh:'#b0815c',hair:'#4a3020',hs:'short',beard:'short',tun:'#9b2a22',tunS:'#701c16',band:'#e3c27a',emb:'etoile',car:'#9b2a22'},
+  hypasp:{skin:'#d6a882',sh:'#b0815c',hair:'#2b1d14',hs:'short',beard:'short',tun:'#7a1f3d',tunS:'#58142b',band:'#e3c27a',emb:'etoile',car:'#7a1f3d'},
+  peltaste:{skin:'#e0b48e',sh:'#bf8f6a',hair:'#6a4426',hs:'long',beard:'short',tun:'#c08a3e',tunS:'#8a6128',band:'#2e2620',emb:'moon',zig:1},
+  cretois:{skin:'#c99670',sh:'#a3734f',hair:'#1c140e',hs:'curly',beard:'short',tun:'#ece4d2',tunS:'#cbbfa6',band:'#2f4f7a',emb:'rings'},
+  compagnons:{skin:'#d6a882',sh:'#b0815c',hair:'#5a3a22',hs:'short',beard:'none',tun:'#d9b24a',tunS:'#a8852e',band:'#7a1f3d',emb:'etoile',car:'#7a1f3d'},
+  thessal:{skin:'#d0a07a',sh:'#aa7c58',hair:'#3a2616',hs:'long',beard:'short',tun:'#6b3f9f',tunS:'#4f2c78',band:'#ece4d2',emb:'cheval',car:'#6b3f9f'},
+  // Syracuse et Athènes (emblème selon la cité jouée)
+  athoplites:{skin:'#d0a07a',sh:'#aa7c58',hair:'#2b1d14',hs:'curly',beard:'short',tun:'#9b2a22',tunS:'#701c16',band:'#ece4d2',emb:'gorgone',embP:{syr:'triskel',ath:'chouette',per:'serpent'},car:'#2f4f7a'},
+  thureo:{skin:'#c08a62',sh:'#9c6c49',hair:'#2b1d14',hs:'short',beard:'short',tun:'#c08a3e',tunS:'#8a6128',band:'#2e2620',emb:'rings',embP:{syr:'triskel',ath:'chouette',per:'serpent'}},
+  athpelt:{skin:'#d0a07a',sh:'#aa7c58',hair:'#4a3020',hs:'long',beard:'short',tun:'#d8c7a4',tunS:'#b6a37e',band:'#2f4f7a',emb:'moon'},
+  hippeis:{skin:'#d0a07a',sh:'#aa7c58',hair:'#3a2616',hs:'short',beard:'short',tun:'#ece4d2',tunS:'#cbbfa6',band:'#2f4f7a',emb:'cheval',car:'#2f4f7a'},
+  scythes:{skin:'#e3b994',sh:'#c3946f',hair:'#8a5e24',hs:'long',beard:'short',tun:'#b8743a',tunS:'#8a5428',band:'#2e2620',emb:'moon',braies:'zig'}
+};
+// couleurs de la tenue et du manteau (apparence seule)
+const TENUE={pourpre:['#6b3f9f','#4f2c78'],rouge:['#9b2a22','#701c16'],blanc:['#ece4d2','#cbbfa6'],ecru:['#d8c7a4','#b6a37e'],bleu:['#2f4f7a','#203856'],vert:['#3f6b4a','#2b4c33'],ocre:['#c08a3e','#8a6128'],jaune:['#d9b24a','#a8852e'],noir:['#3a302a','#241d18']};
+// peuple joué (S est masqué dans dollSVG par la chaîne de style)
+const peoNow=()=>typeof S!=='undefined'&&S?S.peo:null;
+let dollN=0;
+// teintes du bouclier : fond, ombre, couleur du motif
+const SH_TINT={pourpre:['#6b3f9f','#4f2c78','#e0b84f'],rouge:['#9b2a22','#701c16','#ecd08a'],noir:['#2e2620','#1b1612','#e0b84f'],blanc:['#ece4d0','#c4b896','#5a2f6e'],ocre:['#c08a3e','#8a6128','#2e1d10'],bleu:['#2f4f7a','#203856','#ecd08a'],vert:['#3f6b4a','#2b4c33','#ecd08a'],bronze:['#c39a4e','#8a6630','#5a2f1a'],jaune:['#d9b24a','#a8852e','#5a2f1a']};
+// motifs dessinés dans une boîte de 20 × 20 centrée, mis à l'échelle du bouclier
+const EMB_P={
+  cheval:'M-5 9 L-4 1 Q-6 -5 -1 -8 L1 -10 L2 -7 Q7 -5 9 0 Q10 3 8 4 L4 2 Q2 5 3 9Z',
+  elephant:'M-9 5 Q-10 -4 -2 -5 Q5 -6 7 -1 Q10 1 10 6 L9 9 L8 6 Q7 4 6 5 L6 9 L3.5 9 L3.5 4 L-4 4 L-4 9 L-6.5 9 L-6.5 4.5 Q-8 7 -9 5Z M3 -4 Q-1 -3 0 2 Q3 3 4 -1Z',
+  sanglier:'M-10 3 Q-9 -4 -2 -5 L-1 -8 L1 -5 Q7 -5 9 -1 L11 0 L10 2.5 Q8 3.5 6.5 3 L6.5 8 L4.5 8 L4.5 4 L-4 4 L-4 8 L-6 8 L-6 3.5 Q-9 5 -10 3Z M-6 -5 l1 -3 l1 3 M-3 -6 l1 -3 l1 3',
+  foudre:'M-1 -10 L3 -10 L0.5 -1.5 L4 -1.5 L-2 10 L-0.5 1.5 L-4 1.5Z M-9 -2 Q-6 -6 -1 -3 Q-6 -3 -9 -2Z M9 2 Q6 6 1 3 Q6 3 9 2Z',
+  palmier:'M-1 9 Q-0.5 2 0 -3 L1.2 -3 Q1 2 1 9Z M0.5 -3 Q-6 -9 -10 -3 Q-5 -6 0.5 -2 Q6 -6 10 -3 Q6 -9 0.5 -3Z M0.5 -4 Q-3 -11 -8 -9 Q-3 -8 0.5 -3 Q4 -8 8 -9 Q4 -11 0.5 -4Z',
+  chouette:'M-6 9 Q-8.5 -1 -5 -6 L-6 -10 L-2.5 -7 Q0 -8 2.5 -7 L6 -10 L5 -6 Q8.5 -1 6 9Z M-5.2 -3 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0Z M0.4 -3 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0Z M-1 0 L0 2.4 L1 0Z',
+  aigle:'M0 -9.5 Q2.2 -9.5 2 -6.5 L1.6 -4 Q6 -7 10.5 -8 Q8.5 -4 5 -2 Q8.5 -1.6 9.5 0.5 Q5 1.2 2 0 L2 4 L4.5 9 L0 6.4 L-4.5 9 L-2 4 L-2 0 Q-5 1.2 -9.5 0.5 Q-8.5 -1.6 -5 -2 Q-8.5 -4 -10.5 -8 Q-6 -7 -1.6 -4 L-2 -6.5 Q-2.2 -9.5 0 -9.5Z',
+  loup:'M-10 4 Q-8 -2 -2 -3 L2 -8 L3 -4 L5 -7 L5.5 -3 Q9 -2 10 1 L7 2 Q4 2 3 3 L4 8 L2 8 L0 3 L-5 3 L-6 8 L-8 8 L-7 2Z'
+};
+function embSVG(m,cx,cy,r,col){
+  const sc=`transform="translate(${cx} ${cy}) scale(${r/10})"`;
+  if(m==='uni')return '';
+  if(EMB_P[m])return `<path d="${EMB_P[m]}" ${sc} fill="${col}" fill-rule="evenodd"/>`;
+  if(m==='tanit')return `<g ${sc} fill="${col}"><circle cy="-6.2" r="2.4"/><path d="M-5.5 -3 h11 v1.4 h-11z"/><path d="M0 -2.2 L4.8 7 H-4.8Z"/></g>`;
+  if(m==='rings')return `<g ${sc} fill="none" stroke="${col}" stroke-width=".9"><circle r="7.5"/><circle r="4.8"/>${[0,1,2,3,4,5,6,7].map(i=>{const a=i*Math.PI/4;return `<path d="M${Math.cos(a)*5} ${Math.sin(a)*5} L${Math.cos(a)*7.3} ${Math.sin(a)*7.3}"/>`}).join('')}</g>`;
+  if(m==='triskel')return `<g ${sc} fill="none" stroke="${col}" stroke-width="1.2" stroke-linecap="round">${[0,1,2].map(i=>`<path d="M0 0 q5.5 -1 5.5 -5.5 q0 -3 -2.8 -3" transform="rotate(${i*120})"/>`).join('')}</g>`;
+  if(m==='moon')return `<g ${sc} fill="${col}"><path d="M-6 -3.5 a6 6 0 0 0 12 0 a6 4.5 0 0 1 -12 0z"/><circle cy="-4.2" r="2.2"/></g>`;
+  if(m==='soleil')return `<g ${sc} fill="${col}"><circle r="3.6"/>${[...Array(12)].map((_,i)=>`<path d="M-1 -5 L0 -9.5 L1 -5Z" transform="rotate(${i*30})"/>`).join('')}</g>`;
+  if(m==='etoile')return `<g ${sc} fill="${col}"><circle r="2.4"/>${[...Array(8)].map((_,i)=>`<path d="M-1.6 -2 L0 -9.5 L1.6 -2Z" transform="rotate(${i*45})"/>`).join('')}</g>`;
+  if(m==='serpent')return `<g ${sc}><path d="M-.9 -9.5 h1.8 v19 h-1.8z" fill="${col}"/><path d="M-1 8 Q-6 6 -4 3 Q-1 1 3 0 Q6 -2 3 -4 Q0 -5.5 -3 -6 Q-5 -7 -3 -9" fill="none" stroke="${col}" stroke-width="1.9" stroke-linecap="round"/><circle cx="-2.6" cy="-9.4" r="1.5" fill="${col}"/></g>`;
+  if(m==='gorgone')return `<g ${sc}><path d="M0 -5 a5 5 0 1 0 0.01 0Z M-2.9 -1.4 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0Z M0.9 -1.4 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0Z M-2 2.2 Q0 3.8 2 2.2 L1.5 3.2 Q0 4.2 -1.5 3.2Z" fill="${col}" fill-rule="evenodd"/><g fill="none" stroke="${col}" stroke-width="1.1" stroke-linecap="round">${[...Array(9)].map((_,i)=>`<path d="M0 -5.6 q1.4 -1.4 0 -2.4 q-1.4 -1 0 -2.2" transform="rotate(${-120+i*30})"/>`).join('')}</g></g>`;
+  if(m==='bandes')return `<g ${sc} fill="none" stroke="${col}" stroke-width="1.6"><path d="M-9 -4 L9 4 M-9 2 L5 9 M-5 -9 L9 -2"/></g>`;
+  return '';
+}

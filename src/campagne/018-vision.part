@@ -1,0 +1,99 @@
+/* ================= VISION ================= */
+/* Champ de vision : portées réalistes (km), relief et forêts qui masquent (DEM), villes limitées à leurs abords,
+   patrouilles levées dans les villes, messagers qui rapportent avec retard. Les Romains jouent avec les mêmes règles. */
+const VIS={army:15,cav:30,scout:40,town:8,pat:25,fleet:25,fpat:40,band:1.4,rays:240,tol:30,patR:22,patSp:45,patCost:3,msgR:28};
+let SRC=[],SRCR=[];
+const VSC=new Map();
+const forestAt=(x,y)=>{if(!TGRID)buildTGrid();const i=x|0,j=y|0;return i>=0&&j>=0&&i<TGRID.w&&j<TGRID.h&&TGRID.a[j*TGRID.w+i]===3};
+// visibilité depuis (sx,sy) : rayons sur le relief réel ; 2 = vu, 1 = aperçu au loin, 0 = caché
+function viewshed(sx,sy,r,eye){
+  const W=S&&season()==='Hiver'?1:0,key=Math.round(sx*2)+','+Math.round(sy*2)+','+r+','+eye+','+W;
+  let v=VSC.get(key);if(v)return v;
+  const rr=r*(W?.75:1)*(forestAt(sx,sy)?.8:1),R1=rr*VIS.band,st=Math.max(.5,R1/60),ns=Math.ceil(R1/st),nr=VIS.rays;
+  const a=new Uint8Array(nr*ns),h0=Math.max(0,demH(sx,sy))+eye;
+  for(let k=0;k<nr;k++){const t=k/nr*2*Math.PI,dx=Math.cos(t),dy=Math.sin(t);let mx=-1e9,fc=0;
+    for(let q=0;q<ns;q++){const d=(q+1)*st,x=sx+dx*d,y=sy+dy*d,g=Math.max(0,demH(x,y))-d*d*.0785,f=forestAt(x,y);
+      if(f)fc+=st;
+      // une armée (cavaliers, enseignes, poussière : ≈ 20 m) se voit si rien ne s'interpose ; au-delà de 4 km de forêt, plus rien.
+      // Seul un vrai relief cache (une crête qui dépasse la ligne de visée d'au moins VIS.tol m : le DEM lissé a ses bosses).
+      const ok=d<2||((g+20-h0)/d>=mx&&fc<=4);
+      a[k*ns+q]=ok?(d<=rr?2:1):0;
+      const s=(g+(f?18:0)-VIS.tol-h0)/d;if(s>mx)mx=s}}
+  v={x:sx,y:sy,R1,rr,st,ns,nr,a,c:null};
+  if(VSC.size>700)VSC.clear();VSC.set(key,v);return v}
+const vsOf=s=>s.v||(s.v=viewshed(s[0],s[1],s[2],s[3]||10));
+function visIn(L,x,y){let m=0;for(const s of L){const dx=x-s[0],dy=y-s[1];if(Math.abs(dx)>s[2]*VIS.band||Math.abs(dy)>s[2]*VIS.band)continue;
+  const d=Math.hypot(dx,dy);if(d<1.5)return 2;const v=vsOf(s);if(d>=v.R1)continue;
+  const k=Math.round(Math.atan2(dy,dx)/(2*Math.PI)*v.nr+v.nr)%v.nr,q=Math.min(v.ns-1,Math.floor(d/v.st)),o=v.a[k*v.ns+q];if(o===2)return 2;if(o>m)m=o}return m}
+// masque du brouillard d'une source (128 px pour tout le disque)
+function vsMask(v){if(v.c)return v.c;const N2=160,c=document.createElement('canvas');c.width=c.height=N2;const g=c.getContext('2d'),im=g.createImageData(N2,N2),D=im.data;
+  for(let j=0;j<N2;j++)for(let i=0;i<N2;i++){const dx=((i+.5)/N2*2-1)*v.R1,dy=((j+.5)/N2*2-1)*v.R1,d=Math.hypot(dx,dy);if(d>=v.R1)continue;
+    let o;if(d<1.5)o=2;else{const k=Math.round(Math.atan2(dy,dx)/(2*Math.PI)*v.nr+v.nr)%v.nr,q=Math.min(v.ns-1,Math.floor(d/v.st));o=v.a[k*v.ns+q]}
+    // vu : clair ; caché par le relief mais à portée : le terrain se devine (voile léger), seules les troupes y échappent
+    const fade=d<=v.rr?1:1-(d-v.rr)/(v.R1-v.rr),e=o===2?255:o===1?Math.round(190*fade+40):Math.round(150*fade);D[(j*N2+i)*4+3]=e}
+  g.putImageData(im,0,0);const c2=document.createElement('canvas');c2.width=c2.height=N2;const g2=c2.getContext('2d');g2.filter='blur(1.2px)';g2.drawImage(c,0,0);v.c=c2;return c2}
+function sourcesOf(side){const L=[];
+  for(const a of S.armies){if(a.side!==side||a.dead)continue;if(a.g){continue}const cav=a.units.filter(u=>UT[u.t].k==='cav'||UT[u.t].k==='lcav').length;
+    L.push([a.x,a.y,a.scout>0?VIS.scout:(cav>=2||a.units.some(u=>u.t==='ncav'))?VIS.cav:VIS.army,a.ship?15:20])}
+  for(const n of N)if(!n.col&&ownerN(n.i)===side)L.push([n.x,n.y,VIS.town+n.size,20]);
+  for(const f of S.fleets||[])if(f.side===side)L.push([f.x,f.y,f.task&&f.task.k==='patrol'?VIS.fpat:VIS.fleet,15]);
+  for(const p of S.tpat||[])if(p.side===side)L.push([p.x,p.y,VIS.pat,10]);
+  return L}
+function computeVis(){SRC=sourcesOf('car')}
+function computeVisR(){SRCR=sourcesOf('rom');if(S.par)for(const p of S.par)if(p.side==='rom')SRCR.push([p.x,p.y,p.k==='scout'?45:12])}
+function visAt(x,y){return visIn(SRC,x,y)}
+const visAtR=(x,y)=>visIn(SRCR,x,y);
+const visOfArmy=a=>a.side==='car'?2:visAt(a.x,a.y);
+/* patrouilles de cavalerie levées dans une ville : sorties en étoile sur ≈ 22 km, interceptées par l'ennemi */
+const PTG={};
+function patTargets(i){if(PTG[i])return PTG[i];const n=N[i],L=[];
+  for(const R of [VIS.patR,14,8])for(let k=0;k<16;k++){const t=k/16*2*Math.PI,x=n.x+Math.cos(t)*R,y=n.y+Math.sin(t)*R;if(!isPassable(x,y,'Été'))continue;
+    let ok=true;for(let m=1;m<R;m++){const u=m/R;if(!landFine(n.x+(x-n.x)*u,n.y+(y-n.y)*u)){ok=false;break}}
+    if(ok&&!crossRiv(n.x,n.y,x,y)&&!L.some(p=>Math.atan2(p[1]-n.y,p[0]-n.x)===t))L.push([x,y])}
+  return PTG[i]=L.length?L:[[n.x,n.y]]}
+const patMax=n=>Math.max(1,n.size);
+const patsAt=i=>(S.tpat||[]).filter(p=>p.n===i);
+function raisePatrol(i,side){S.tpat=S.tpat||[];const n=N[i];S.tpat.push({id:S.uid++,side,n:i,x:n.x,y:n.y,wp:null})}
+function patrolsMove(dd){for(const p of S.tpat||[]){const n=N[p.n];let b=dd*VIS.patSp,g=0;
+  while(b>1e-6&&g++<6){if(!p.wp){if(Math.hypot(p.x-n.x,p.y-n.y)<.5){const T=patTargets(p.n);p.wp=T[Math.floor(Math.random()*T.length)]}else p.wp=[n.x,n.y]}
+    const d=Math.hypot(p.wp[0]-p.x,p.wp[1]-p.y);if(d<=b){p.x=p.wp[0];p.y=p.wp[1];b-=d;p.wp=null}else{p.x+=(p.wp[0]-p.x)*b/d;p.y+=(p.wp[1]-p.y)*b/d;b=0}}}}
+/* jours : interceptions, solde, patrouilles romaines, messagers, ce que voit Rome */
+function visDaily(d){
+  S.tpat=S.tpat||[];S.msg=S.msg||[];S.intelR=S.intelR||{};S.rep=S.rep||{};
+  for(const p of S.tpat.slice()){const n=N[p.n];
+    if(ownerN(p.n)!==p.side){S.tpat=S.tpat.filter(x=>x!==p);continue}
+    const e=S.armies.find(e=>!e.dead&&!e.ship&&!e.g&&!e.inG&&hostileSides(e.side,p.side)&&Math.hypot(e.x-p.x,e.y-p.y)<2.5);
+    if(e){S.tpat=S.tpat.filter(x=>x!==p);
+      if(p.side==='car'){log(`La patrouille de ${n.n} a été taillée en pièces par ${visOfArmy(e)?armyLabel(e):'une armée ennemie'}.`);S.intel[e.id]={x:e.x,y:e.y,d:Math.floor(S.day)}}
+      else{S.intelR[e.id]={x:e.x,y:e.y,d:Math.floor(S.day)};if(e.side==='car')log(`${e.name} surprend et taille en pièces une patrouille romaine près ${deN(n.n)}.`)}}}
+  if(d%30===0){const mine=S.tpat.filter(p=>p.side==='car');for(const p of mine){if(S.gold.car>=VIS.patCost)S.gold.car-=VIS.patCost;else{S.tpat=S.tpat.filter(x=>x!==p);log(`Faute de solde, la patrouille de ${N[p.n].n} se disperse.`)}}}
+  if(d%10===0&&!MPRH()/*MP*/)for(const n of N){if(n.col||ownerN(n.i)!=='rom'||n.size<2)continue;const k=patsAt(n.i).length;if(k<n.size-1)raisePatrol(n.i,'rom')}
+  // messagers : une ville prévient quand l'ennemi entre sur ses terres
+  for(const n of N){const o=ownerN(n.i);if(n.col||(o!=='car'&&o!=='rom'))continue;
+    for(const e of S.armies){if(e.dead||e.ship||e.g||!hostileSides(e.side,o)||Math.hypot(e.x-n.x,e.y-n.y)>VIS.msgR)continue;const rk=n.i+':'+e.id;if(S.rep[rk]>d-8)continue;S.rep[rk]=d;
+      const H=S.armies.filter(a=>a.side===o&&!a.dead&&!a.g&&!a.ship).map(a=>Math.hypot(a.x-n.x,a.y-n.y)),cap=N[NI[o==='car'?'carthago':'roma']];
+      const dist=Math.min(cap?Math.hypot(cap.x-n.x,cap.y-n.y):300,...H);S.msg.push({t:d+Math.max(1,Math.round(1+dist/60)),side:o,id:e.id,x:e.x,y:e.y,d,n:n.i})}}
+  for(const m of S.msg.filter(m=>m.t<=d)){const e=S.armies.find(x=>x.id===m.id);if(e&&!e.dead){const I=m.side==='car'?S.intel:S.intelR;const old=I[m.id];
+      if(!old||old.d<m.d){I[m.id]={x:m.x,y:m.y,d:m.d,msg:1};if(m.side==='car'&&visOfArmy(e)<2&&(!old||d-old.d>10))log(`Un messager de ${N[m.n].n} : ${e.side==='rom'?'une armée romaine':'une armée ennemie'} (${approx(e.units.length)} régiments) a été vue près de la ville il y a ${d-m.d} j.`)}}}
+  S.msg=S.msg.filter(m=>m.t>d);
+  for(const k in S.rep)if(S.rep[k]<d-30)delete S.rep[k];
+  // ce que voient les Romains
+  computeVisR();
+  for(const a of S.armies){if(a.side==='rom'||a.dead||!hostileSides(a.side,'rom'))continue;if(visAtR(a.x,a.y)===2)S.intelR[a.id]={x:a.x,y:a.y,d}}
+  for(const id in S.intelR){const it=S.intelR[id],a=S.armies.find(x=>x.id==id);if(!a||a.dead||d-it.d>45){delete S.intelR[id];continue}
+    if(it.d<d&&visAtR(it.x,it.y)===2&&visAtR(a.x,a.y)<2)delete S.intelR[id]}
+}
+// les ennemis que Rome connaît, à la position où elle les croit
+function romKnown(){S.intelR=S.intelR||{};const L=[];for(const a of S.armies){if(a.side!=='car'||a.dead)continue;const it=S.intelR[a.id];if(!it)continue;const p=Object.create(a);p.x=it.x;p.y=it.y;L.push(p)}return L}
+const aiDef=n=>(ownerN(n.i)==='car'?romKnown():S.armies.filter(x=>x.side===ownerN(n.i))).filter(x=>Math.hypot(x.x-n.x,x.y-n.y)<6);
+function drawPatrols(s,inV){for(const p of S.tpat||[]){if(!inV(p.x,p.y,10))continue;if(p.side!=='car'&&visAt(p.x,p.y)<2)continue;
+  const X=view.ox+p.x*s,Y=view.oy+p.y*s,c=FAC[p.side].c;ctx.save();ctx.translate(X,Y);ctx.fillStyle=`rgb(${c})`;ctx.strokeStyle='rgba(250,240,215,.95)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(5,0);ctx.lineTo(0,6);ctx.lineTo(-5,0);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle='rgba(250,240,215,.95)';ctx.beginPath();ctx.arc(0,0,1.6,0,7);ctx.fill();ctx.restore()}}
+function patrolBlock(i){const n=N[i],k=patsAt(i).filter(p=>p.side==='car').length,mx=patMax(n);
+  return `<h3>Patrouilles</h3><p class="sub">La ville ne voit que ses abords (${VIS.town+n.size} km). Une patrouille de cavalerie bat la campagne sur ${VIS.patR} km et voit ${VIS.pat} km, mais une armée ennemie peut la surprendre. ${VIS.patCost} or par mois chacune.</p>
+  <div class="row"><button type="button" id="tPat" ${k>=mx||S.gold.car<VIS.patCost?'disabled':''}>Lever une patrouille (${k} / ${mx})</button><button type="button" id="tPatX" ${k?'':'disabled'}>Rappeler</button></div>`}
+function bindPatrol(i){const b=$('tPat');if(b)b.onclick=()=>{const n=N[i];if(patsAt(i).filter(p=>p.side==='car').length>=patMax(n)||S.gold.car<VIS.patCost)return;S.gold.car-=VIS.patCost;raisePatrol(i,'car');computeVis();renderAll()};
+  const x=$('tPatX');if(x)x.onclick=()=>{const p=patsAt(i).find(p=>p.side==='car');if(p)S.tpat=S.tpat.filter(q=>q!==p);computeVis();renderAll()}}
+const approx=n=>n<=2?'1 à 3':n<=5?'environ 4':n<=8?'environ 7':n<=12?'une dizaine':n<=16?'environ 15':'près de 20';
+

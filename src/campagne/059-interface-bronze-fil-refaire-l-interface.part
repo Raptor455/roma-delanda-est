@@ -1,0 +1,507 @@
+/* ================= INTERFACE BRONZE (fil « Refaire l'interface ») =================
+   Habillage de la campagne choisi par Baptiste (maquette « Bronze et frise ») :
+   barre du haut à icônes + frise, tablette flottante en bas à gauche (armée, ville, flotte),
+   messagers en haut à droite, régiments en tuiles, fenêtres à onglets.
+   Ne réécrit aucune règle : enveloppe renderTop, renderLog, renderSide, unitLines et modal.
+   Réappliquer avec interface/patch.py après armees/patch.py et mecaniques/patch.py. */
+(function(){
+const ICO={
+ tanit:'<circle cx="12" cy="6" r="3"/><rect x="5" y="10" width="14" height="2"/><path d="M12 11 L18 22 H6Z"/>',
+ coin:'<circle cx="12" cy="12" r="8" fill="none" stroke-width="2"/><circle cx="12" cy="12" r="4"/>',
+ helm:'<path d="M5 15c0-6 3-10 7-10s7 4 7 10v3h-4v-4h-6v4H5z"/><path d="M11 2h2v4h-2z"/>',
+ col:'<path d="M4 4h16v3H4zM6 8h3v11H6zM10.5 8h3v11h-3zM15 8h3v11h-3zM3 20h18v2H3z"/>',
+ anvil:'<path d="M3 7h13c0 3 2 4 5 4v2c-3 0-5 1-6 3l1 3H6l1-3c-1-2-2-3-4-3z"/>',
+ scroll:'<path d="M6 4h11a3 3 0 0 1 0 6h-1v8a2 2 0 0 1-2 2H5a2 2 0 0 1 0-4h1z" fill="none" stroke-width="2"/><path d="M9 8h5M9 12h5" fill="none" stroke-width="1.6"/>',
+ menu:'<path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke-width="2.2"/>',
+ help:'<circle cx="12" cy="12" r="9" fill="none" stroke-width="2"/><path d="M9.5 9.5a2.6 2.6 0 1 1 3.6 2.4c-.8.4-1.1.9-1.1 1.8" fill="none" stroke-width="2"/><circle cx="12" cy="17" r="1.2"/>',
+ boot:'<path d="M7 3h6v9l6 3v5H5V12z"/>',
+ eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke-width="2"/><circle cx="12" cy="12" r="3"/>',
+ tent:'<path d="M12 3 2 20h20zM12 10l-4 10h8z" fill-rule="evenodd"/>',
+ ship:'<path d="M3 14h18l-3 5H6z"/><path d="M11 3h2v10h-2z"/><path d="M13 4l6 7h-6z"/>',
+ split:'<path d="M12 3v7M12 10l-7 9M12 10l7 9" fill="none" stroke-width="2.4"/>',
+ merge:'<path d="M5 3l7 9 7-9M12 12v9" fill="none" stroke-width="2.4"/>',
+ halt:'<rect x="6" y="6" width="12" height="12"/>',
+ target:'<circle cx="12" cy="12" r="7" fill="none" stroke-width="2"/><circle cx="12" cy="12" r="2.5"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5" fill="none" stroke-width="2"/>',
+ tower:'<path d="M5 21V8h2V5h3v3h4V5h3v3h2v13h-5v-5h-4v5z"/>',
+ swords:'<path d="M4 3l9 9-2 2-9-9V3zM20 3v2l-9 9-2-2 9-9zM6 15l3 3-3 3-3-3zM18 15l3 3-3 3-3-3z"/>',
+ wheat:'<path d="M12 22V6" fill="none" stroke-width="2"/><ellipse cx="9" cy="9" rx="2" ry="3.2"/><ellipse cx="15" cy="9" rx="2" ry="3.2"/><ellipse cx="9" cy="14" rx="2" ry="3.2"/><ellipse cx="15" cy="14" rx="2" ry="3.2"/>',
+ x:'<path d="M6 6l12 12M18 6L6 18" fill="none" stroke-width="2.4"/>',
+ bag:'<path d="M8 7V5a4 4 0 0 1 8 0v2h3l1 14H4L5 7zm2 0h4V5a2 2 0 0 0-4 0z"/>',
+ fire:'<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-7 0 3 1 4 2 4 0-3-1-6 1-9z"/>'
+};
+const ico=(n,s)=>`<svg class="ui-i" viewBox="0 0 24 24" width="${s||18}" height="${s||18}" fill="currentColor" stroke="currentColor" stroke-width="0" aria-hidden="true">${ICO[n]||''}</svg>`;
+function symSVG(k,s){s=s||22;const c='currentColor',w=1.6;let o=`<svg class="ui-sym" viewBox="0 0 20 14" width="${s}" height="${Math.round(s*.7)}" aria-hidden="true"><rect x="1" y="1" width="18" height="12" fill="none" stroke="${c}" stroke-width="${w}"/>`;
+  if(k==='inf')o+=`<path d="M1 1L19 13M19 1L1 13" stroke="${c}" stroke-width="${w}"/>`;
+  else if(k==='cav')o+=`<path d="M1 13L19 1" stroke="${c}" stroke-width="${w}"/>`;
+  else if(k==='lcav')o+=`<path d="M1 13L19 1" stroke="${c}" stroke-width="${w}"/><circle cx="15" cy="10" r="1.5" fill="${c}"/>`;
+  else if(k==='eleph')o+=`<path d="M5 10c0-5 3-7 5-7s5 2 5 7M10 3v8" fill="none" stroke="${c}" stroke-width="${w}"/>`;
+  else o+=`<circle cx="6" cy="7" r="1.6" fill="${c}"/><circle cx="10" cy="7" r="1.6" fill="${c}"/><circle cx="14" cy="7" r="1.6" fill="${c}"/>`;
+  return o+'</svg>'}
+
+/* ---------- styles ---------- */
+const css=`
+:root{--bz:#8a6a3c;--bzL:#d2ae6c;--bzD:#1d1712;--pan2:linear-gradient(180deg,#2b2219,#1c1611);--tx:#efe4cc;--mu2:#b9a98a}
+#app{grid-template-columns:1fr!important;grid-template-rows:auto 1fr!important}
+#top{position:relative;z-index:6;background:var(--pan2);border-bottom:2px solid var(--bz);padding:6px 14px 6px 10px;gap:8px 14px;flex-wrap:nowrap;min-height:62px}
+#top::after{content:"";position:absolute;left:0;right:0;top:100%;height:9px;pointer-events:none;background:
+ repeating-linear-gradient(90deg,transparent 0 2px,var(--bz) 2px 4px,transparent 4px 12px,var(--bz) 12px 14px,transparent 14px 18px),
+ linear-gradient(var(--bz),var(--bz)) 0 0/100% 2px no-repeat,linear-gradient(var(--bz),var(--bz)) 0 100%/100% 2px no-repeat,var(--bzD)}
+#top button{border-radius:2px}
+.ui-fac{display:flex;align-items:center;gap:10px;flex:none}
+.ui-med{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#f3e2b8;background:radial-gradient(circle at 35% 30%,#8f62c4,#4b2a75);border:2px solid var(--bzL);box-shadow:0 0 0 3px var(--bzD),0 0 0 4px var(--bz);flex:none}
+.ui-fac b{display:block;font-family:var(--display);font-weight:400;font-size:21px;letter-spacing:.04em;line-height:1.1;color:var(--tx)}
+.ui-fac small{display:block;font-size:11.5px;color:var(--mu2);letter-spacing:.1em;text-transform:uppercase}
+#gold{display:flex;gap:6px;flex:none}
+.ui-r{display:flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid rgba(210,174,108,.25);border-radius:3px;background:rgba(0,0,0,.22);color:var(--bzL);white-space:nowrap}
+.ui-r b{font-size:17px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums}
+.ui-r i{font-style:normal;font-size:12.5px;color:#9fd18c}.ui-r i.neg{color:#e58b7a}
+.ui-clock{display:grid;justify-items:center;gap:3px;margin-left:auto;flex:none}
+#date{min-width:0;text-align:center;font-size:17px;white-space:nowrap}
+#date small{display:inline;margin-left:6px;font-size:11.5px}
+#speeds{gap:0}
+#speeds button{min-height:22px;padding:0 9px;font-size:12.5px;border-color:var(--bz);background:transparent;color:var(--mu2);margin-left:-1px}
+#speeds button.on{background:var(--bzL);color:var(--bzD);border-color:var(--bzL)}
+#top .sp{display:none}
+.ui-menu{margin-left:auto;gap:2px!important}
+.ui-menu button{display:grid;justify-items:center;gap:1px;min-width:66px;padding:4px 6px 3px;background:transparent;border:1px solid transparent;color:var(--mu2);font-size:12.5px;line-height:1.1}
+.ui-menu button:hover{border-color:var(--bz);background:rgba(210,174,108,.1);color:var(--tx)}
+.ui-menu button .ui-i{width:22px;height:22px}
+#side{position:fixed;left:14px;bottom:14px;width:430px;max-height:calc(100% - 104px);z-index:5;background:var(--pan2);border:1px solid var(--bz);border-left:1px solid var(--bz);box-shadow:0 0 0 1px #0d0a07,0 10px 28px rgba(0,0,0,.55);padding:14px 16px 16px;overflow:auto;scrollbar-width:thin}
+#side::before{content:"";position:sticky;display:block;top:-14px;height:0}
+#side h2{font-size:23px;color:var(--tx);padding-right:26px}
+#side h3{color:var(--bzL);border-bottom:1px solid rgba(210,174,108,.2);padding-bottom:3px}
+.ui-x{position:absolute;right:8px;top:8px;width:26px;height:26px;min-height:0!important;padding:0!important;display:grid;place-items:center;background:transparent!important;border:1px solid transparent!important;color:var(--mu2)}
+.ui-x:hover{border-color:var(--bz)!important;color:var(--tx)}
+.ui-head{display:flex;gap:12px;align-items:center;margin-bottom:4px}
+.ui-head .ui-med{width:50px;height:50px;font-family:var(--display);font-size:22px}
+.ui-head .ui-med.rom{background:radial-gradient(circle at 35% 30%,#d8645a,#7d221b)}
+.ui-head .ui-med.fl{background:radial-gradient(circle at 35% 30%,#4f8fa3,#244d5c)}
+.ui-head .ui-med.tw{background:radial-gradient(circle at 35% 30%,#b89a6c,#5a4228)}
+.ui-head h2{margin:0!important}
+#side .row{gap:5px}
+#side .row button{min-height:30px;padding:3px 9px;font-size:14px}
+#mcard tr.ui-link{cursor:pointer}#mcard tr.ui-link:hover td{background:rgba(210,174,108,.09)}
+#mcard tr.ui-link td > button:only-child{visibility:hidden}
+#side button{border-radius:2px;border-color:rgba(210,174,108,.38);background:rgba(210,174,108,.07);display:inline-flex;align-items:center;gap:6px}
+#side button.on,#side button.go{background:var(--bzL);color:var(--bzD);border-color:var(--bzL)}
+#side button .ui-i{width:16px;height:16px;flex:none}
+.genbox{border-color:rgba(210,174,108,.4)!important;border-radius:2px!important;background:rgba(0,0,0,.2)!important}
+.ui-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:4px 0 6px}
+.ui-tile{position:relative;height:56px;border:1px solid rgba(210,174,108,.3);background:rgba(0,0,0,.25);display:grid;justify-items:center;align-content:center;gap:1px;font-size:11px;line-height:1.1;color:var(--mu2);cursor:pointer;text-align:center;padding:0 2px 5px;overflow:hidden}
+.ui-tile .ui-sym{color:#c9a6ef}
+.ui-tile .n{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ui-tile b{font-weight:600;color:var(--tx);font-size:11.5px;font-variant-numeric:tabular-nums}
+.ui-tile u{position:absolute;left:3px;right:3px;bottom:3px;height:3px;background:rgba(255,255,255,.1);text-decoration:none}
+.ui-tile u i{display:block;height:100%;background:var(--bzL)}
+.ui-tile u i.lo{background:#e58b7a}
+.ui-tile input{position:absolute;opacity:0;pointer-events:none}
+.ui-tile:has(input:checked){border-color:#f1d08a;background:rgba(241,208,138,.16);box-shadow:inset 0 0 0 1px #f1d08a}
+.ui-tile.rom .ui-sym{color:#f0948b}
+#side .rec.ui-link{cursor:pointer;padding:5px 6px;margin:2px -6px;border-radius:2px}
+#side .rec.ui-link:hover{background:rgba(210,174,108,.1)}
+#side .rec.ui-link > button{display:none}
+#side .rec.ui-link::after{content:"›";color:var(--bzL);font-size:18px;line-height:1}
+#log{left:auto!important;right:14px;top:84px;bottom:auto!important;width:300px;max-width:42%;background:none!important;border:0!important;padding:0!important;display:grid;gap:6px;pointer-events:none}
+#log > div{pointer-events:auto;position:relative;padding:7px 10px 7px 38px;background:var(--pan2);border:1px solid var(--bz);box-shadow:0 0 0 1px #0d0a07,0 6px 16px rgba(0,0,0,.4);font-size:13px;line-height:1.3;color:var(--tx)}
+#log > div:nth-child(n+3){opacity:.72}
+#log > div.ui-go{cursor:pointer}#log > div.ui-go:hover{border-color:var(--bzL)}
+#log > div em{display:block;font-size:11px;color:var(--mu2);margin:1px 0 0}
+#log > div .ui-i{position:absolute;left:10px;top:8px;width:19px;height:19px;color:var(--bzL)}
+#log > div .ui-i.red{color:#e0675d}
+#zoom{top:auto!important;bottom:14px;right:14px!important}
+#zoom button{border-radius:2px;border-color:var(--bz);background:var(--pan2)!important}
+#pauseTag{top:16px!important;background:var(--pan2)!important;border-color:var(--bz)!important;border-radius:2px!important}
+.overlay{background:rgba(10,8,5,.55)!important}
+.card{background:var(--pan2)!important;border:1px solid var(--bz)!important;border-radius:2px!important;box-shadow:0 0 0 1px #0d0a07,0 16px 40px rgba(0,0,0,.6);position:relative;padding-top:24px!important}
+.card::before{content:"";position:absolute;left:0;right:0;top:0;height:9px;background:
+ repeating-linear-gradient(90deg,transparent 0 2px,var(--bz) 2px 4px,transparent 4px 12px,var(--bz) 12px 14px,transparent 14px 18px),
+ linear-gradient(var(--bz),var(--bz)) 0 100%/100% 2px no-repeat}
+.card h2{font-size:28px!important;color:var(--tx)}
+.card button{border-radius:2px}
+.ui-tabs{display:flex;flex-wrap:wrap;gap:0;margin:10px 0 12px;border-bottom:1px solid var(--bz)}
+.ui-tabs button{min-height:30px;border:1px solid transparent;border-bottom:0;background:transparent;color:var(--mu2);border-radius:0;margin-bottom:-1px;padding:5px 14px;font-size:14px}
+.ui-tabs button:hover:not(.on){background:rgba(210,174,108,.08)}
+.ui-tabs button.on{background:#2b2219;color:var(--tx);border-color:var(--bz)}
+.ui-pane > h3:first-child{display:none}
+details.ui-rules{margin:4px 0 8px;font-size:13.5px;color:var(--mu2)}
+details.ui-rules summary{cursor:pointer;color:var(--bzL);list-style:none;display:inline-flex;gap:6px;align-items:center}
+details.ui-rules summary::-webkit-details-marker{display:none}
+details.ui-rules[open] summary{margin-bottom:4px}
+table.dip tr:hover td{background:rgba(210,174,108,.05)}
+.att .g{height:7px!important;border-radius:1px!important}
+/* --- compact (Baptiste : laisser plus de carte visible) --- */
+#top{min-height:44px;padding:3px 10px 3px 8px;gap:6px 10px}
+.ui-med{width:32px;height:32px;box-shadow:0 0 0 2px var(--bzD),0 0 0 3px var(--bz)}
+.ui-med .ui-i{width:18px;height:18px}
+.ui-fac b{font-size:17px}.ui-fac small{display:none}
+.ui-r{padding:1px 7px;gap:5px}.ui-r b{font-size:14px}.ui-r .ui-i{width:15px;height:15px}
+#date{font-size:14px}#date small{font-size:10.5px}
+#speeds button{min-height:19px;padding:0 7px;font-size:11.5px}
+.ui-clock{gap:1px}
+.ui-menu button{min-width:0;padding:3px 7px;font-size:0;gap:0}
+.ui-menu button .ui-i{width:19px;height:19px}
+#side{width:330px;left:10px;bottom:10px;max-height:min(62%,calc(100% - 80px));padding:9px 11px 11px;font-size:13px}
+#side h2{font-size:18px}#side h3{font-size:11px;margin:10px 0 4px}
+#side p{margin:3px 0}
+.ui-head{gap:8px;margin-bottom:2px}
+.ui-head .ui-med{width:34px;height:34px;font-size:16px}
+.ui-x{width:22px;height:22px;right:5px;top:5px}
+#side .row{margin:5px 0;gap:4px}
+#side .row button,#side button{min-height:24px;padding:1px 7px;font-size:12.5px;gap:4px}
+#side button .ui-i{width:13px;height:13px}
+.genbox{padding:5px 8px!important;margin:5px 0!important;font-size:12.5px}
+.ui-tiles{grid-template-columns:repeat(6,1fr);gap:3px}
+.ui-tile{height:42px;font-size:10px;padding-bottom:4px}
+.ui-tile .ui-sym{width:20px;height:14px}
+.ui-tile b{font-size:10.5px}
+.unit,.rec{font-size:13px}
+#side .rec.ui-link{padding:3px 6px;margin:1px -6px}
+#log{width:230px;top:60px;right:10px;gap:4px}
+#log > div{padding:4px 8px 4px 28px;font-size:11.5px}
+#log > div:nth-child(n+4){display:none}
+#log > div .ui-i{left:7px;top:5px;width:15px;height:15px}
+#log > div em{font-size:10px}
+#zoom{bottom:10px;right:10px!important}
+#zoom button{min-height:26px;width:28px}
+#pauseTag{top:10px!important;padding:2px 10px!important;font-size:12px}
+.card{max-width:560px!important;padding:18px 16px 12px!important;font-size:13.5px}
+#mcard.card.wide{max-width:920px!important}
+.card h2{font-size:22px!important;margin-bottom:2px!important}
+.card p{margin:5px 0}
+.card button{min-height:26px;padding:2px 8px;font-size:13px}
+table.dip{font-size:13px!important}table.dip td,table.dip th{padding:3px 4px!important;line-height:1.25}
+table.dip button{min-height:22px!important;padding:0 7px!important;font-size:12px!important}
+table.dip td:last-child{white-space:nowrap}
+.ui-tabs{margin:6px 0 8px}.ui-tabs button{min-height:26px;padding:3px 11px;font-size:13px}
+#tip{font-size:12px;padding:3px 7px}
+.ui-tt{position:fixed;z-index:60;pointer-events:none;min-width:150px;max-width:260px;padding:7px 10px 8px;background:var(--pan2);border:1px solid var(--bz);box-shadow:0 0 0 1px #0d0a07,0 8px 20px rgba(0,0,0,.55);color:var(--tx);font-size:12.5px;line-height:1.35;opacity:0;transform:translateY(-3px);transition:opacity .12s,transform .12s}
+.ui-tt.on{opacity:1;transform:none}
+.ui-tt b{display:block;font-family:var(--display);font-weight:400;font-size:15px;color:#f3e2b8;letter-spacing:.02em;margin-bottom:1px}
+.ui-tt span{color:var(--mu2)}
+.ui-tt::before{content:"";position:absolute;top:-6px;left:var(--ax,50%);width:10px;height:10px;margin-left:-5px;background:#2b2219;border-left:1px solid var(--bz);border-top:1px solid var(--bz);transform:rotate(45deg)}
+@media (prefers-reduced-motion:reduce){.ui-tt{transition:none}}
+@media (max-width:900px){
+ #top{flex-wrap:wrap;min-height:0}
+ .ui-fac small,#gold .ui-r:nth-child(n+3){display:none}
+ .ui-menu button{min-width:0;font-size:0;padding:4px 7px}.ui-menu button .ui-i{width:20px;height:20px}
+ #side{left:8px;right:8px;width:auto;max-height:46%;bottom:8px}
+ #log{display:none!important}
+}/* fiche d'armée à onglets (9 nov.) */
+#side.ua{display:flex;flex-direction:column;overflow:hidden;max-height:min(64%,calc(100% - 92px));padding-bottom:0}
+#side.ua>.ua-head{flex:none}
+.ua-gen{display:flex;flex-wrap:wrap;align-items:center;gap:3px 4px;margin:2px 0 2px}
+.ua-gen .stars{color:#e5c06c;font-size:12px;margin-right:3px}
+#side .ua-gen .tr{font-size:11px;padding:0 5px;margin:0}
+#side.ua .ui-tile{height:50px;padding-bottom:7px}
+#side.ua .ui-tiles{margin:2px 0 4px}
+.ua-gg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:6px 0 8px}
+.ua-g{min-width:0;border:1px solid rgba(210,174,108,.22);background:rgba(0,0,0,.22);padding:3px 6px 5px;display:grid;line-height:1.15}
+.ua-g small{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mu2)}
+.ua-g b{font-size:15px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ua-g em{font-style:normal;font-size:10.5px;color:var(--mu2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
+.ua-g s{display:block;height:3px;margin-top:3px;background:rgba(255,255,255,.09);text-decoration:none}
+.ua-g s i{display:block;height:100%}
+.ua-tabs{display:flex;flex:none;border-bottom:1px solid var(--bz);margin:0 -11px;padding:0 8px}
+#side .ua-tabs button{background:transparent;border:1px solid transparent;border-bottom:0;margin-bottom:-1px;min-height:26px;padding:3px 8px;color:var(--mu2);font-size:12.5px;border-radius:0}
+#side .ua-tabs button:hover{color:var(--tx)}
+#side .ua-tabs button.on{color:var(--tx);border-color:var(--bz);background:#2b2219;font-weight:600}
+.ua-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5c06c;margin-left:4px}
+.ua-body{flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -11px;padding:6px 11px 8px;scrollbar-width:thin}
+.ua-foot{flex:none;display:flex;flex-wrap:wrap;gap:4px;margin:0 -11px;padding:6px 11px;border-top:1px solid rgba(210,174,108,.25)}
+#side .ua-ctab{flex:none;display:flex;align-items:center;gap:6px;margin:0 -11px;padding:5px 11px;border:0;border-top:1px solid rgba(210,174,108,.25);background:rgba(0,0,0,.28);color:var(--mu2);font-size:12.5px;width:calc(100% + 22px);min-height:30px;border-radius:0;text-align:left}
+#side .ua-ctab:hover{background:rgba(210,174,108,.1)}
+.ua-ctab span{color:var(--bzL)}.ua-ctab b{color:var(--tx)}.ua-ctab small{margin-left:auto;font-size:11.5px}
+#side .ua-lbl{font-weight:600;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--bzL);display:flex;align-items:center;gap:8px;margin:10px 0 4px}
+#side .ua-lbl:first-child{margin-top:2px}
+.ua-lbl::after{content:"";flex:1;height:1px;background:rgba(210,174,108,.22)}
+.ua-corps{display:flex;align-items:baseline;gap:4px;font-size:12px;color:var(--mu2);margin:6px 0 2px}
+.ua-corps b{color:var(--tx);font-weight:600}
+.ua-corps span{margin-left:auto;font-size:11px}
+#side .ua-pane>h3:first-child{margin-top:2px}
+.ua-why{font-size:12px;color:var(--mu2);margin-top:8px}
+.ua-why summary{cursor:pointer}
+.ua-why p{margin:3px 0 0}
+.ua-why b{color:var(--tx);font-weight:600}
+.ua-reg{display:flex;border-bottom:1px solid var(--bz);margin:4px 0 10px}
+#mcard .ua-reg button{background:transparent;border:1px solid transparent;border-bottom:0;margin-bottom:-1px;border-radius:0;color:var(--mu2);padding:5px 14px}
+#mcard .ua-reg button.on{color:var(--tx);border-color:var(--bz);background:#2b2219;font-weight:600}
+.ua-drag{cursor:grab}.ua-lift{opacity:.45}
+#mcard .ua-over{outline:1px dashed #f1d08a;outline-offset:-1px;background:rgba(241,208,138,.07)!important}
+@media (max-width:760px){#side.ua{max-height:min(52%,calc(100% - 80px))}}
+`;
+const st=document.createElement('style');st.id='ui-bronze';st.textContent=css;document.head.appendChild(st);
+
+/* ---------- barre du haut ---------- */
+(function buildTop(){
+  const top=$('top');if(!top)return;
+  const br=top.querySelector('.brand');
+  if(br){br.outerHTML=`<div class="ui-fac" title="Roma Delenda Est, campagne de la 2e guerre punique"><div class="ui-med">${ico('tanit',26)}</div><div><b>Carthage</b><small>Famille Barca</small></div></div>`}
+  const clock=document.createElement('div');clock.className='ui-clock';
+  const d=$('date'),sp=$('speeds');if(d&&sp){d.before(clock);clock.append(d,sp)}
+  if($('gold'))clock.before($('gold'));
+  const grp=$('bDip')&&$('bDip').parentElement;if(grp){grp.classList.add('ui-menu');top.appendChild(grp)}
+  const MI={bWork:['anvil','Atelier'],bEco:['coin','Économie'],bDip:['scroll','Diplomatie'],bPol:['col','Politique'],bHelp:['help','Aide'],bMenu:['menu','Partie']};
+  for(const id in MI){const b=$(id);if(b&&!b.querySelector('.ui-i')){b.innerHTML=ico(MI[id][0],22)+`<span>${MI[id][1]}</span>`;b.title=b.title||MI[id][1];b.setAttribute('aria-label',MI[id][1])}}
+  if($('bPause'))$('bPause').title='Pause (Espace)';
+})();
+const _rTop=renderTop;
+renderTop=function(){_rTop();if(!S)return;
+  document.querySelectorAll('.ui-menu button:not([title])').forEach(b=>{b.title=b.textContent.trim()});
+  const {inc,up}=income('car'),net=Math.round(inc-up);
+  let men=0;for(const a of S.armies)if(a.side==='car'&&!a.dead)for(const u of a.units)men+=u.men;
+  const sen=S.pol&&S.pol.bar!=null?Math.round(S.pol.bar):null;
+  $('gold').innerHTML=`<div class="ui-r" data-tt="Trésor, or de Carthage et solde du mois">${ico('coin',18)}<b>${Math.round(S.gold.car).toLocaleString('fr-FR')}</b><i class="${net<0?'neg':''}">${net>=0?'+':''}${net}</i></div>`+
+    `<div class="ui-r" data-tt="Hommes sous les armes, armées et garnisons">${ico('helm',18)}<b>${Math.round(men).toLocaleString('fr-FR')}</b></div>`+
+    (sen!=null?`<div class="ui-r" data-tt="Sénat, appui des Barcides au Sénat de Carthage">${ico('col',18)}<b>${sen} %</b></div>`:'');
+};
+
+/* ---------- messagers ---------- */
+let NAMES=null;
+function townIn(t){if(!NAMES&&typeof TOWNS!=='undefined'&&TOWNS)NAMES=TOWNS.filter(n=>n.n&&n.n.length>3).sort((a,b)=>b.n.length-a.n.length);if(!NAMES)return null;
+  for(const n of NAMES)if(t.includes(n.n))return n;return null}
+function logIcon(t){const s=t.toLowerCase();
+  if(/bataille|vaincu|victoire|défaite|massacr|attaqu|guerre/.test(s))return ico('swords',19).replace('ui-i','ui-i red');
+  if(/siège|assiég|murs|rend|garnison/.test(s))return ico('tower',19);
+  if(/messager|éclaireur|aperçu|vue? |repér|signal/.test(s))return ico('eye',19);
+  if(/tribut|or |trésor|revenu|impôt|marché/.test(s))return ico('coin',19);
+  if(/flotte|navire|embarqu|port/.test(s))return ico('ship',19);
+  if(/sénat|consul|élit|alli|traité|émissaire|ambassad/.test(s))return ico('col',19);
+  return ico('scroll',19)}
+const _rLog=renderLog;
+renderLog=function(){const el=$('log');if(!el||!S)return;
+  el.innerHTML=S.log.slice(0,3).map((l,k)=>{const c=cal(l.d),tn=townIn(l.t);return `<div${tn?` class="ui-go" data-ui-town="${tn.i}" title="Centrer sur ${esc(tn.n)}"`:''}>${logIcon(l.t)}${l.t}<em>${c.dm===1?'1er':c.dm} ${MONTHS[c.mo]}</em></div>`}).join('');
+  el.querySelectorAll('[data-ui-town]').forEach(d=>d.onclick=()=>{const n=N[+d.dataset.uiTown];if(n)centerOn(n.x,n.y,Math.max(view.s,1.2))});
+};
+
+/* ---------- régiments en tuiles ---------- */
+unitLines=function(a,checks){
+  const rom=a.side!=='car';
+  return `<div class="ui-tiles">`+a.units.map((u,k)=>{const T=UT[u.t],f=u.men/T.men,nm=uName(u),sh=(u.d==null&&u.ds==null&&SHORT[u.t])||nm;
+    return `<label class="ui-tile${rom?' rom':''}" title="${esc(nm)} · ${Math.round(u.men).toLocaleString('fr-FR')} hommes">${checks?`<input type="checkbox" data-k="${k}">`:''}${symSVG(T.k,26)}<span class="n">${esc(sh)}</span><b>${Math.round(u.men).toLocaleString('fr-FR')}</b><u><i class="${f<.5?'lo':''}" style="width:${Math.round(Math.min(1,f)*100)}%"></i></u></label>`}).join('')+`</div>`};
+
+/* ---------- tablette (panneau de sélection) ---------- */
+const BI={aHalt:'halt',aScout:'eye',aSplit:'split',aMerge:'merge',aFind:'target',aGar:'tower',aShip:'ship',aOrg:'split',aCamp:'tent',aRaid:'wheat',aBag:'bag',aSortie:'swords',aAssaut:'swords',fFind:'target',fHalt:'halt',fGar:'tower',fSplit:'split',fMerge:'merge',fUnload:'ship',fRaid:'fire',fBlock:'ship',fPatrol:'eye'};
+function decorate(){
+  const el=$('side');if(!el)return;
+  // bouton de fermeture
+  if(sel&&!el.querySelector('.ui-x')){const x=document.createElement('button');x.type='button';x.className='ui-x';x.title='Désélectionner (Échap)';x.innerHTML=ico('x',14);x.onclick=()=>{sel=null;renderAll()};el.prepend(x)}
+  // médaillon devant le titre
+  const h2=el.querySelector('h2');
+  if(h2&&!h2.closest('.ui-head')){let cls='',ch='';
+    if(sel&&sel.a){cls=sel.a.side==='car'?'':'rom';ch=(sel.a.name||'?').replace(/^(Garnison de |Armée )/,'').charAt(0)}
+    else if(sel&&sel.f){cls='fl';ch=''}else if(sel&&sel.n!=null){cls='tw'}else{cls='';ch=''}
+    const w=document.createElement('div');w.className='ui-head';h2.before(w);
+    w.innerHTML=`<div class="ui-med ${cls}">${sel&&sel.f?ico('ship',24):sel&&(sel.n!=null||sel.v!=null)?ico('tower',24):ch?esc(ch):ico('tanit',24)}</div>`;w.appendChild(h2)}
+  // sans sélection : on garde la liste, pas le mode d'emploi ni la légende (dans l'aide)
+  if(!sel){const p=el.querySelector('.ui-head + p.sub');if(p)p.remove();
+    el.querySelectorAll('h3').forEach(h=>{if(/^Légende/.test(h.textContent)){const n=h.nextElementSibling;if(n&&n.tagName==='P')n.remove();h.remove()}})}
+  // lignes « Voir » cliquables en entier
+  el.querySelectorAll('.rec').forEach(r=>{const bs=r.querySelectorAll(':scope > button');if(bs.length===1&&/^Voir$/.test(bs[0].textContent.trim())&&!r.classList.contains('ui-link')){r.classList.add('ui-link');r.onclick=e=>{if(e.target!==bs[0])bs[0].click()}}});
+  // icônes sur les ordres
+  for(const id in BI){const b=$(id);if(b&&el.contains(b)&&!b.querySelector('.ui-i'))b.insertAdjacentHTML('afterbegin',ico(BI[id],16))}
+  el.querySelectorAll('[data-board]').forEach(b=>{if(!b.querySelector('.ui-i'))b.insertAdjacentHTML('afterbegin',ico('ship',16))});
+  el.scrollTop=el._uiTop||0;
+}
+const _rSide=renderSide;
+renderSide=function(){const el=$('side');const key=sel?(sel.a?'a'+sel.a.id:sel.f?'f'+sel.f.id:sel.n!=null?'n'+sel.n:sel.v!=null?'v'+sel.v:''):'';
+  el._uiTop=el._uiKey===key?el.scrollTop:0;el._uiKey=key;_rSide();decorate()};
+$('side')&&$('side').addEventListener('scroll',function(){this._uiTop=this.scrollTop},{passive:true});
+
+/* ---------- fenêtres : onglets et règles repliées ---------- */
+const TAB={};
+function tabify(){
+  const c=$('mcard');if(!c||c._uiDone===c.innerHTML.length)return;
+  const title=(c.querySelector('h2')||{}).textContent||'';
+  // long paragraphe de règles juste sous le titre → replié
+  const h=c.querySelector(':scope > h2');let p=h&&h.nextElementSibling;
+  if(p&&p.tagName==='P'&&p.textContent.length>200&&!c.querySelector('.ui-rules')){const d=document.createElement('details');d.className='ui-rules';d.innerHTML=`<summary>${ico('help',15)}Comment ça marche</summary>`;p.before(d);d.appendChild(p)}
+  const kids=[...c.children],hs=kids.filter(e=>e.tagName==='H3');
+  if(hs.length>=2&&!c.querySelector('.ui-tabs')){
+    const last=kids[kids.length-1],keep=last&&last.querySelector&&last.querySelector('#mClose')?last:null;
+    const bar=document.createElement('div');bar.className='ui-tabs';hs[0].before(bar);
+    const panes=hs.map(hh=>{const pane=document.createElement('div');pane.className='ui-pane';hh.before(pane);let n=hh;while(n&&n!==keep&&!(n!==hh&&n.tagName==='H3')&&n!==pane){const nx=n.nextElementSibling;pane.appendChild(n);n=nx}return pane});
+    const want=TAB[title]!=null&&TAB[title]<panes.length?TAB[title]:0;
+    hs.forEach((hh,i)=>{const b=document.createElement('button');b.type='button';b.textContent=hh.textContent.replace(/\s*\(.*\)$/,'');
+      b.onclick=()=>{TAB[title]=i;bar.querySelectorAll('button').forEach((x,j)=>x.classList.toggle('on',j===i));panes.forEach((pp,j)=>pp.hidden=j!==i)};bar.appendChild(b)});
+    bar.children[want].click();
+  }
+  if(!c.querySelector('.ui-x')&&$('mClose')){const x=document.createElement('button');x.type='button';x.className='ui-x';x.title='Fermer';x.innerHTML=ico('x',15);x.onclick=()=>{const m=$('mClose');if(m)m.click()};c.prepend(x)}
+  c.querySelectorAll('tr').forEach(r=>{const bs=r.querySelectorAll('button');if(bs.length===1&&/^Voir$/.test(bs[0].textContent.trim())){r.classList.add('ui-link');r.onclick=e=>{if(e.target!==bs[0])bs[0].click()}}});
+  if(c._uiTitle!==title){c.scrollTop=0;c._uiTitle=title}
+  c._uiDone=c.innerHTML.length;
+}
+/* la barre du haut change de hauteur (polices, icônes, boutons ajoutés) : on remet la carte à la taille réelle de sa zone */
+if(window.ResizeObserver){let lw=0,lh=0;new ResizeObserver(()=>{const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h||(w===lw&&h===lh))return;lw=w;lh=h;
+  if(Math.round(cv.height/dpr)===h&&Math.round(cv.width/dpr)===w)return;const c=toWorld(w/2,h/2);fit();centerOn(c[0],c[1])}).observe(cv)}
+/* ---------- infobulles des boutons du haut ---------- */
+const TT={bWork:['Atelier','Créer, équiper et nommer vos propres unités.'],bEco:['Économie','Villes, bâtiments, impôts et revenu du mois.'],
+ bDip:['Diplomatie','Alliés de Rome, peuples, tributaires, traités et otages.'],bPol:['Politique','Sénat de Carthage, appui des Barcides, consuls de Rome.'],
+ bAg:['Agents','Espions et agents en mission.'],bChr:['Chroniques','Le récit de votre campagne, jour après jour.'],
+ bHelp:['Aide','Commandes, règles et légende de la carte.'],bMenu:['Partie','Nouvelle partie, sauvegarde et options.'],mpTag:['À plusieurs','Héberger ou rejoindre une partie avec des amis.'],
+ bPause:['Pause','Arrête ou relance le temps (Espace).']};
+const tt=document.createElement('div');tt.className='ui-tt';tt.setAttribute('role','tooltip');document.body.appendChild(tt);
+let ttEl=null;
+function ttInfo(e){if(e.id&&TT[e.id])return TT[e.id];
+  if(e.dataset.s)return ['Vitesse ×'+e.dataset.s,'Le temps passe '+e.dataset.s+' fois plus vite.'];
+  const t=e.dataset.tt||e.getAttribute('title')||e.textContent.trim();return [e.classList.contains('ui-r')?t.split(',')[0]:t.split(/[(:]/)[0].trim()||t,e.classList.contains('ui-r')&&t.includes(',')?t.split(',').slice(1).join(',').trim():'']}
+function ttShow(e){const [n,d]=ttInfo(e);if(!n)return;ttEl=e;tt.innerHTML=`<b>${esc(n)}</b>${d?`<span>${esc(d)}</span>`:''}`;
+  const r=e.getBoundingClientRect(),w=tt.offsetWidth,x=Math.max(6,Math.min(innerWidth-w-6,r.left+r.width/2-w/2));
+  tt.style.left=x+'px';tt.style.top=(r.bottom+9)+'px';tt.style.setProperty('--ax',(r.left+r.width/2-x)+'px');tt.classList.add('on')}
+function ttHide(){ttEl=null;tt.classList.remove('on')}
+const TSEL='.ui-menu button,#speeds button,.ui-r,#mpTag';
+$('top').addEventListener('mouseover',ev=>{const e=ev.target.closest(TSEL);if(!e||e===ttEl)return;if(e.title){e.dataset.tt=e.title;e.removeAttribute('title')}ttShow(e)});
+$('top').addEventListener('mouseout',ev=>{const e=ev.target.closest(TSEL);if(e&&!e.contains(ev.relatedTarget))ttHide()});
+$('top').addEventListener('focusin',ev=>{const e=ev.target.closest(TSEL);if(e){if(e.title){e.dataset.tt=e.title;e.removeAttribute('title')}ttShow(e)}});
+$('top').addEventListener('focusout',ttHide);
+addEventListener('pointerdown',ttHide,true);
+/* ---------- fiche d'armée à onglets et registre (9 nov., choix de Baptiste : proposition A + registre) ----------
+   Après tous les autres modules (installé au premier rendu), on range le panneau d'une armée en onglets
+   Troupes / Ordres / Corps / Intendance, la ville à part derrière une languette, et on réunit
+   « Organiser l'armée » et « Organiser les corps » dans une seule fenêtre à deux onglets, le registre.
+   Les éléments sont déplacés, jamais recréés : leurs actions restent celles des autres modules. */
+const UA={tab:{},city:{},top:{},reg:'corps'};
+const UA_T=[['tr','Troupes'],['or','Ordres'],['co','Corps'],['in','Intendance']];
+const UA_ROM=['','Ier','IIe','IIIe','IVe','Ve'];
+function uaKind(n,cur){
+  const t=(n.textContent||'').trim(),q=s=>n.querySelector&&n.querySelector(s);
+  if(n.matches&&n.matches('.ui-x,.ui-head'))return 'head';
+  if(q('#aEmb'))return 'co';
+  if(q('[data-csub],[data-cauto],#cWin,#cGuard'))return 'co';
+  if(q('#aBag,[data-merc],[data-board],#aShip,#aRaid'))return 'in';
+  if(q('[data-pace],[data-mo],#aAmb,#aRef,#aGar,#aFeux,#aBoeufs,#aTransf,#aCamp'))return 'or';
+  if(n.classList&&n.classList.contains('sub')){
+    if(/^(Ordre de marche|Ruses|Allure)/.test(t))return 'or';
+    if(/^(Mercenaires|Ravitaillement|Bagages|Vitesse)/.test(t))return 'in';
+    if(/^(Chaîne de commandement|État-major|Conseil)/.test(t))return 'co';
+  }
+  return cur;
+}
+function uaCell(l,v,w,pct,col,tt){const d=document.createElement('div');d.className='ua-g';if(tt)d.title=tt;
+  d.innerHTML=`<small>${esc(l)}</small><b>${esc(v)}</b><em style="${col?'color:'+col:''}">${esc(w||'')}</em><s><i style="width:${pct};background:${col||'var(--bzL)'}"></i></s>`;return d}
+function uaGauge(n){const lab=((n.firstChild&&n.firstChild.nodeType===3?n.firstChild.textContent:'')||'').trim(),b=n.querySelector('b'),s=n.querySelector('.sub'),i=n.querySelector('.mbar i');
+  const v=s?s.textContent.replace(/[()]/g,'').trim():'';
+  return uaCell(lab||'État',v||(b?b.textContent:''),v?(b?b.textContent:''):'',i?i.style.width:'0%',i?i.style.background:'',n.textContent.replace(/\s+/g,' ').trim())}
+function uaGen(gb,top,gg,P,stash){
+  let cur='gen';
+  for(const n of [...gb.childNodes]){
+    if(n.nodeType!==1){if(cur!=='gen'&&n.textContent.trim())P[cur].appendChild(n);continue}
+    if(cur==='gen'&&(n.matches('.stars,.tr')||n.tagName==='BR'||n.tagName==='B')){if(n.tagName!=='BR'&&n.tagName!=='B')top.appendChild(n);continue}
+    if(n.querySelector('.mbar')){gg.appendChild(uaGauge(n));continue}
+    if(n.classList.contains('sub')&&/\d\s*hommes/.test(n.textContent)){const m=n.textContent.match(/(\d[\d\s  ]*)\s*hommes/);/* armée nommée : le nombre n'est plus en tête */
+      const c=uaCell('Hommes',m?m[1].trim():'?','',  '100%','',n.textContent.trim());c.dataset.men='1';gg.prepend(c);continue}
+    if(n.classList.contains('sub')&&!n.textContent.trim()&&!n.children.length)continue;
+    if(n.querySelector('#aOrg')){stash.appendChild(n);continue}
+    const k=uaKind(n,cur==='gen'?'or':cur);cur=k;P[k].appendChild(n);
+  }
+  return cur;
+}
+function uaLbl(t){const p=document.createElement('p');p.className='ua-lbl';p.textContent=t;return p}
+function armTabs(){
+  const el=$('side');if(!el)return;
+  const a=sel&&sel.a,gb=el.querySelector(':scope > .genbox');
+  const on=!!(a&&!a.dead&&gb&&(typeof isMine!=='function'||isMine(a)));
+  el.classList.toggle('ua',on);
+  if(!on||el.querySelector(':scope > .ua-body'))return;
+  const id=a.id,kids=[...el.children];
+  const head=document.createElement('div');head.className='ua-head';
+  const top=document.createElement('div');top.className='ua-gen';
+  const gg=document.createElement('div');gg.className='ua-gg';
+  const bar=document.createElement('div');bar.className='ua-tabs';bar.setAttribute('role','tablist');
+  const body=document.createElement('div');body.className='ua-body';
+  const P={};UA_T.forEach(([k])=>{P[k]=document.createElement('div');P[k].className='ua-pane';P[k].dataset.k=k;body.appendChild(P[k])});
+  const city=document.createElement('div');city.className='ua-pane ua-city';body.appendChild(city);
+  const foot=document.createElement('div');foot.className='ua-foot';
+  const stash=document.createElement('div');stash.hidden=true;
+  let cur='head',seen=false,phase=0,cityName='';
+  const put=(n,k)=>{if(k==='head')head.appendChild(n);else if(k==='city')city.appendChild(n);else P[k].appendChild(n)};
+  for(const n of kids){
+    if(n===gb){seen=true;cur=uaGen(gb,top,gg,P,stash);gb.remove();continue}
+    if(n.tagName==='H3'&&/^Régiments/.test(n.textContent)){phase=1;n.classList.add('ua-h');put(n,'tr');continue}
+    if(phase>=1&&n.tagName==='H3'&&phase===1){phase=2;cityName=(n.textContent.split(':').pop()||'').trim()}
+    if(phase===2){put(n,'city');continue}
+    if(n.querySelector&&n.querySelector('#aHalt')){[...n.children].forEach(b=>{if(b.id==='aSplit'){const r=document.createElement('div');r.className='row ua-split';r.appendChild(b);P.tr.appendChild(r)}else foot.appendChild(b)});n.remove();continue}
+    if(phase===1){put(n,'tr');continue}
+    if(!seen){put(n,uaKind(n,'head'));continue}
+    const k=uaKind(n,cur);put(n,k==='head'?cur:k);if(k!=='head')cur=k;
+  }
+  // titre : étoiles et traits sous le nom
+  const hh=head.querySelector('.ui-head');if(hh&&top.childNodes.length)hh.after(top)
+  else if(top.childNodes.length)head.appendChild(top);
+  // vivres et hommes
+  const vtxt=P.in.textContent,vm=vtxt.match(/vivres\s+(\d+)\s*j/),vx=vtxt.match(/jusqu'à\s+(\d+)\s*j/);
+  if(vm){const d=+vm[1],mx=vx?+vx[1]:30,col=d<7?'var(--bad,#d24a3a)':d<15?'#e0883c':'';gg.appendChild(uaCell('Vivres',d+' j','',Math.min(100,Math.round(d/mx*100))+'%',col,'Vivres de l\'armée : '+d+' jours'))}
+  const rh=P.tr.querySelector('h3'),rm=rh&&rh.textContent.match(/(\d+)\s*\/\s*(\d+)/),mc=gg.querySelector('[data-men]');
+  if(mc&&rm){mc.querySelector('em').textContent=rm[1]+'/'+rm[2]+' rég.';mc.querySelector('s i').style.width=Math.round(rm[1]/rm[2]*100)+'%'}
+  if(gg.children.length){gg.style.gridTemplateColumns=`repeat(${gg.children.length},minmax(0,1fr))`;head.appendChild(gg)}
+  // régiments rangés par corps
+  const tiles=P.tr.querySelector('.ui-tiles');
+  if(tiles&&typeof corpsOf==='function'){try{const C=corpsOf(a);if(C&&C.length>1){
+    const by={};tiles.querySelectorAll(':scope > .ui-tile').forEach(t=>{const i=t.querySelector('input[data-k]');if(i)by[i.dataset.k]=t});
+    const frag=document.createDocumentFragment();
+    for(const c of C){const ts=c.u.map(i=>by[i]).filter(Boolean);if(!ts.length)continue;
+      const h=document.createElement('div');h.className='ua-corps';h.innerHTML=`<b>${c.k?(typeof corpsN==='function'?corpsN(c.k):UA_ROM[c.k]+' corps'):'Corps du chef'}</b>${c.g?' · '+esc(c.g.name):''}<span>${ts.length}</span>`;
+      const g=document.createElement('div');g.className='ui-tiles';ts.forEach(t=>{g.appendChild(t);delete by[t.querySelector('input').dataset.k]});frag.appendChild(h);frag.appendChild(g)}
+    const rest=Object.values(by);if(rest.length){const g=document.createElement('div');g.className='ui-tiles';rest.forEach(t=>g.appendChild(t));frag.appendChild(g)}
+    tiles.replaceWith(frag)}}catch(e){console.error('[UI]',e)}}
+  const sp=P.tr.querySelector('.ua-split');if(sp)P.tr.appendChild(sp);
+  // étiquettes de section
+  [P.or,P.in,P.co].forEach(p=>p.querySelectorAll(':scope > p.sub').forEach(x=>{if(x.textContent.trim().length<40&&!/\d/.test(x.textContent))x.className='ua-lbl'}));
+  const pace=P.or.querySelector('[data-pace]');if(pace){const r=pace.closest('#side .ua-pane > *');if(r)r.before(uaLbl('Allure'))}
+  const gar=P.or.querySelector('#aGar');if(gar){const r=gar.closest('.ua-pane > *');if(r){P.or.appendChild(uaLbl('Position'));P.or.appendChild(r)}}
+  const rav=[...P.in.children].find(x=>/^Ravitaillement/.test(x.textContent.trim()));if(rav)rav.before(uaLbl('Vivres'));
+  const emb=P.co.querySelector('#aEmb');if(emb){const r=emb.closest('.ua-pane > *');if(r){P.co.appendChild(uaLbl('Étendard'));P.co.appendChild(r)}}
+  // ordres impossibles ici : restent visibles en gris (9 nov. : Baptiste croyait les mécaniques disparues), la raison au survol
+  P.or.querySelectorAll('button[disabled]').forEach(b=>{if(b.title&&!/^Impossible ici/.test(b.title))b.title='Impossible ici : '+b.title});
+  // terre brûlée : un ordre, même quand l'armée est dans une ville
+  const sco=body.querySelector('#aScorch');if(sco){const r=sco.closest('.ua-pane > *')||sco;P.or.appendChild(uaLbl('Dévastation'));P.or.appendChild(r)}
+  // pied : organiser, halte, éclaireurs, centrer
+  const org=document.createElement('button');org.type='button';org.className='go';org.innerHTML=ico('split',14)+'Organiser…';org.title='Registre de l\'armée : corps, garde, général et régiments';
+  org.onclick=()=>{if(UA.reg==='org'&&$('aOrg'))$('aOrg').click();else if(typeof corpsWin==='function')corpsWin(a);else if($('aOrg'))$('aOrg').click()};
+  foot.prepend(org);
+  const sc=foot.querySelector('#aScout');if(sc){const t=[...sc.childNodes].reverse().find(x=>x.nodeType===3&&x.textContent.trim());if(t)t.textContent='Éclaireurs'}
+  // onglets
+  const want=UA.tab[id]&&P[UA.tab[id]].childNodes.length?UA.tab[id]:'tr';
+  const show=k=>{UA.tab[id]=k;bar.querySelectorAll('button').forEach(b=>{const o=b.dataset.k===k;b.classList.toggle('on',o);b.setAttribute('aria-selected',o)});UA_T.forEach(([x])=>P[x].hidden=x!==k)};
+  UA_T.forEach(([k,n])=>{if(!P[k].childNodes.length)return;const b=document.createElement('button');b.type='button';b.dataset.k=k;b.setAttribute('role','tab');b.textContent=n;
+    if(k==='in'&&(P.in.querySelector('[data-merc]')||(vm&&+vm[1]<7))){const i=document.createElement('i');i.className='ua-dot';i.title=vm&&+vm[1]<7?'Vivres bas':'Mercenaires à engager';b.appendChild(i)}
+    b.onclick=()=>{show(k);body.scrollTop=0;UA.top[id+k]=0};bar.appendChild(b)});
+  // ville derrière une languette
+  let ct=null;
+  if(city.childNodes.length){ct=document.createElement('button');ct.type='button';ct.className='ua-ctab';
+    const setC=v=>{UA.city[id]=v;el.classList.toggle('ua-incity',v);city.hidden=!v;bar.hidden=v;if(v)UA_T.forEach(([x])=>P[x].hidden=true);else show(UA.tab[id]||want);
+      ct.innerHTML=v?`<span>◂</span> Retour à l'armée`:`<span>▴</span> <b>${esc(cityName||'Ville')}</b><small>recruter, chantier, dépôt</small>`;body.scrollTop=0};
+    ct.onclick=()=>setC(!UA.city[id]);ct._set=setC}
+  el.append(head,bar,body,foot);if(ct)el.appendChild(ct);el.appendChild(stash);
+  show(want);city.hidden=true;if(ct)ct._set(!!UA.city[id]);else el.classList.remove('ua-incity');
+  const key=id+(UA.city[id]?'c':UA.tab[id]);body.scrollTop=UA.top[key]||0;
+  body.addEventListener('scroll',()=>{UA.top[id+(UA.city[id]?'c':UA.tab[id])]=body.scrollTop},{passive:true});
+}
+/* registre : une fenêtre, deux onglets ; glisser un régiment d'un corps à l'autre */
+function regHead(a,which){const c=$('mcard');if(!c||!a||c.querySelector('.ua-reg'))return;UA.reg=which;
+  const h2=c.querySelector('h2');if(h2)h2.textContent='Registre · '+(a.name||'armée');
+  const bar=document.createElement('div');bar.className='ua-reg';bar.setAttribute('role','tablist');
+  bar.innerHTML=`<button type="button" data-r="corps" class="${which==='corps'?'on':''}">Corps et garde</button><button type="button" data-r="org" class="${which==='org'?'on':''}">Général et régiments</button>`;
+  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(b.dataset.r===which)return;if(b.dataset.r==='corps')corpsWin(a);else openOrg(a)});
+  if(h2)h2.after(bar);else c.prepend(bar)}
+function regDrag(a){const c=$('mcard');if(!c||typeof corpsOf!=='function')return;const C=corpsOf(a);
+  const cols=[...c.querySelectorAll('div[style*="grid-template-columns:repeat"] > div')];if(cols.length!==C.length)return;
+  let from=null;
+  cols.forEach((col,j)=>{
+    col.querySelectorAll('[data-cmv]').forEach(b=>{const row=b.parentElement;if(row._uaD)return;row._uaD=1;row.draggable=true;row.classList.add('ua-drag');
+      row.addEventListener('dragstart',e=>{from=+b.dataset.cmv.split(':')[0];e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',String(from))}catch(_){}row.classList.add('ua-lift')});
+      row.addEventListener('dragend',()=>{row.classList.remove('ua-lift');cols.forEach(x=>x.classList.remove('ua-over'))})});
+    col.addEventListener('dragover',e=>{if(from==null)return;e.preventDefault();cols.forEach(x=>x.classList.toggle('ua-over',x===col))});
+    col.addEventListener('drop',e=>{e.preventDefault();const u=a.units[from],k=C[j].k;from=null;if(!u||u.cp===k){cols.forEach(x=>x.classList.remove('ua-over'));return}
+      u.cp=k;if(k)u.gd=0;corpsWin(a);renderAll()})});
+  const p=c.querySelector(':scope > p.sub');if(p&&!p._uaD){p._uaD=1;p.insertAdjacentHTML('beforeend',' Vous pouvez aussi glisser un régiment d\'une colonne à l\'autre.')}}
+function uaInstall(){
+  const _rs=renderSide;renderSide=function(){const r=_rs.apply(this,arguments);try{armTabs()}catch(e){console.error('[UI onglets]',e)}return r};
+  if(typeof corpsWin==='function'){const _cw=corpsWin;corpsWin=function(a){const r=_cw.apply(this,arguments);try{regHead(a,'corps');regDrag(a)}catch(e){console.error('[UI registre]',e)}return r}}
+  if(typeof openOrg==='function'){const _oo=openOrg;openOrg=function(a){const r=_oo.apply(this,arguments);try{regHead(a,'org')}catch(e){console.error('[UI registre]',e)}return r}}
+  try{if(sel&&sel.a)renderSide()}catch(e){}
+}
+setTimeout(uaInstall,0);
+const mo=new MutationObserver(()=>{if(!$('modal').hidden)tabify()});
+mo.observe($('mcard'),{childList:true});
+})();
+/* ================= FIN INTERFACE BRONZE ================= */

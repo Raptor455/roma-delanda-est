@@ -1,0 +1,16 @@
+/* ================= MERCENAIRES ENGAGÉS EN ROUTE ================= */
+// Sur les terres des Gaulois, des Ibères ou des Baléares (hors terres romaines), une armée à l'arrêt peut engager des bandes.
+// Elles coûtent cher, touchent une solde double et s'en vont tout entières si la solde manque.
+const MERC_T={gau:['gaul'],ibe:['iber','iber','sling'],bal:['sling']};
+function mercNode(a){if(a.legs.length||a.ship||a.g||insideOf(a)&&ownerN(a.at)!==a.side)return null;let best=null,bd=40;
+  for(const n of N){if(n.col||!MERC_T[n.cul])continue;const d=Math.hypot(n.x-a.x,n.y-a.y);if(d>=bd)continue;const o=ownerN(n.i);
+    if(o==='rom'&&a.side==='car'||o==='car'&&a.side==='rom')continue;if(o&&FAC[o].a&&S.fac[o]&&String(S.fac[o].st).startsWith('guerre'))continue;bd=d;best=n}return best}
+function mercOffer(n){S.merc=S.merc||{};let m=S.merc[n.id];if(!m||S.day>=m.until)m=S.merc[n.id]={left:1+n.size+(n.cul==='gau'?1:0),until:Math.floor(S.day)+60};return m}
+const mercPrice=t=>Math.round(UT[t].cost*1.4);
+function hireMerc(a,n,t){const m=mercOffer(n),c=mercPrice(t);if(m.left<=0||S.gold[a.side]<c||a.units.length>=MAXU)return false;
+  S.gold[a.side]-=c;m.left--;a.units.push({t,men:UT[t].men,merc:1,xp:2});
+  if(a.side==='car')log(`${a.name} engage une bande de ${SHORT[t]} près de ${n.n} (${c} or). Elle touchera double solde.`);return true}
+const _income8=income;
+income=function(side){const r=_income8.apply(this,arguments);let x=0;for(const a of S.armies)if(a.side===side)for(const u of a.units)if(u.merc)x+=uCost(u)/12;
+  return Object.assign({},r,{up:Math.round(r.up+x)})};
+

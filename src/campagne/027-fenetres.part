@@ -1,0 +1,49 @@
+/* ================= FENÊTRES ================= */
+function modal(html){$('mcard').classList.remove('wide');$('mcard').innerHTML=html;$('modal').hidden=false}
+function closeModal(){$('modal').hidden=true}
+function openDip(){
+  const rows=Object.keys(S.fac).map(f=>{const F=S.fac[f],c=contact('car',f);
+    const bar=(v,col)=>`<i style="background:${col};${v>=0?`left:50%;width:${v/2}%`:`right:50%;width:${-v/2}%`}"></i>`;
+    const st=F.st==='neutre'?(c?'':'<span class="sub">hors de portée</span>'):F.st==='allie_car'?'<b style="color:var(--good)">allié</b>':F.st==='allie_rom'?'<b style="color:var(--bad)">allié de Rome</b>':F.st==='soumis'?'<span class="sub">soumis</span>':'<b style="color:var(--bad)">en guerre</b>';
+    const act=F.st==='neutre'&&c?`<button data-d="env" data-f="${f}" type="button" ${F.cd>0||S.gold.car<25?'disabled':''}>Émissaires 25</button> <button data-d="gift" data-f="${f}" type="button" ${F.cd>0||S.gold.car<120?'disabled':''}>Présents 120</button> <button data-d="ally" data-f="${f}" type="button" ${F.cd>0||!canAlly(F)?'disabled':''} title="Possible quand leur attitude envers Carthage dépasse 50 et celle envers Rome de 15 points">Alliance</button>`:'';
+    return `<tr><td><b>${FAC[f].n}</b><br><span class="sub">${N.filter(n=>ownerN(n.i)===f).map(n=>n.n).slice(0,5).join(', ')||'—'}</span></td><td style="min-width:190px"><div class="att"><span>Carthage</span><span class="g">${bar(F.car,'var(--punic)')}</span><span>${Math.round(F.car)}</span></div><div class="att"><span>Rome</span><span class="g">${bar(F.rom,'var(--roma)')}</span><span>${Math.round(F.rom)}</span></div></td><td>${st}<br>${act}</td></tr>`}).join('');
+  modal(`<h2>Diplomatie</h2><p class="sub">Les peuples proches de vos villes ou de vos armées peuvent recevoir vos émissaires (une démarche par peuple et par mois). Les victoires proches font pencher les indécis ; traverser leurs terres sans y être invité les agace ; attaquer un peuple fâche ses voisins de même culture. Un peuple rallié vous donne ses villes et ses troupes. Rome courtise les neutres de son côté.</p>
+   <table class="dip"><tr><th>Peuple</th><th>Attitude</th><th></th></tr>${rows}</table><div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>dipAction(b.dataset.f,b.dataset.d));
+  $('mClose').onclick=closeModal;
+}
+function openBattle(){
+  const b=S.cur;if(!b)return;
+  const A=bFlat(b.att),D=bFlat(b.def),att=S.armies.find(x=>x.id===b.att[0]),attMine=att&&att.side==='car';
+  const P=attMine?A:D,E=attMine?D:A,eArmy=S.armies.find(x=>x.id===(attMine?b.def[0]:b.att[0])),eSide=eArmy.side;
+  const p=odds(b),mine=attMine?p:1-p,txt=mine>.75?'très favorables':mine>.55?'favorables':mine>.45?'incertaines':mine>.25?'défavorables':'très mauvaises';
+  const list=L=>{const c={};L.forEach(u=>{const k=uName(u);c[k]=(c[k]||0)+1});return Object.entries(c).map(([t,n])=>`<li>${n} × ${esc(t)}</li>`).join('')};
+  const names=ids=>ids.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean).map(a=>a.name).join(', ');
+  const ter=TERR[terrainAt(b.x,b.y)].n.toLowerCase();
+  modal(`<h2>${battleTitle(b)}</h2><p>${attMine?`Vos troupes attaquent ${FAC[eSide].a?'une garnison ('+FAC[eSide].n+')':"l'armée romaine"} (terrain : ${ter}).`:`${sideName(eSide)} attaque vos troupes (terrain : ${ter}).`}</p>
+    <div class="vs"><div><h4 style="color:#b48ae6">Carthage</h4><p class="sub">${esc(names(attMine?b.att:b.def))}</p><ul>${list(P)}</ul></div><div><h4 style="color:#e2665a">${sideName(eSide)}</h4><p class="sub">${esc(names(attMine?b.def:b.att))}</p><ul>${list(E)}</ul></div></div>
+    <p class="odds">Chances estimées : <b>${txt}</b>.</p>
+    <div class="row"><button class="go" id="b3d" type="button">Livrer bataille</button><button id="bAuto" type="button">Résolution automatique</button><button id="bFlee" class="warn" type="button">${attMine?'Renoncer et se replier':'Battre en retraite'}</button></div>
+    <p class="sub">Sur le champ de bataille, vous commandez toujours Carthage (violet) ; les pertes reviennent dans la campagne. Battre en retraite coûte des hommes.</p>`);
+  $('b3d').onclick=()=>go3D(attMine);
+  $('bAuto').onclick=()=>{const res=autoResolve(b);finishBattle(res)};
+  $('bFlee').onclick=()=>{const mineIds=attMine?b.att:b.def;for(const id of mineIds){const a=S.armies.find(x=>x.id===id);if(!a)continue;a.units.forEach(u=>u.men*=attMine?.97:.85);a.legs=[];retreat(a)}S.cur=null;closeModal();refreshAfterBattle()};
+}
+function finishBattle(res){const b=S.cur;S.cur=null;applyResult(b,res);closeModal();refreshAfterBattle()}
+function refreshAfterBattle(){computeVis();save();renderAll();if(S.over)endGame()}
+const BATTLE_URL=/campagne\.html$/i.test(location.pathname)?'index.html':'bataille.html';
+const ROMAN=['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX'];
+function go3D(attMine){
+  const b=S.cur,A=bFlat(b.att),D=bFlat(b.def);
+  const P=attMine?A:D,E=attMine?D:A,eSide=S.armies.find(x=>x.id===(attMine?b.def[0]:b.att[0])).side;
+  const mk=L=>{const cnt={};return L.map(u=>{const x=u3D(u),key=x?'d'+u.d:u.t;cnt[key]=(cnt[key]||0)+1;const r={t:u.t,men:Math.round(u.men),label:(x?x.name:SHORT[u.t])+' '+ROMAN[(cnt[key]-1)%20]};if(x)r.x=x;return r})};
+  const c=cal(Math.floor(S.day));b.attMine=attMine;
+  const ter=terrainAt(b.x,b.y);
+  const payload={v:2,st:S,b:{title:`${placeName(b).replace(/^./,m=>m.toUpperCase())}, ${c.season.toLowerCase()} ${c.year} av. J.-C.`,
+    desc:`${attMine?'Vous attaquez':'Vous êtes attaqué par'} ${sideName(eSide)} (terrain : ${TERR[ter].n.toLowerCase()}). Vos ${P.length} régiments contre ${E.length}.`,
+    enemy:sideName(eSide),terrain:ter,p:mk(P),e:mk(E)},t:battleTerrain(b,attMine)};
+  save();
+  // la bataille s'ouvre dans la même page, par-dessus la carte ; le résultat revient par message
+  if(!window.__noFrame){closeModal();dive(payload);return}
+  location.href=BATTLE_URL+'#c='+encodeURIComponent(JSON.stringify(payload));
+}

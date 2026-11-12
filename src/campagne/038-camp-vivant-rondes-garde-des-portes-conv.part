@@ -1,0 +1,70 @@
+/* ================= CAMP VIVANT : rondes, garde des portes, convoi, exercice, corvées, relève, estafette ================= */
+const _campFormation2=campFormation;
+campFormation=function(a,s){
+  _campFormation2(a,s);
+  if(!a.camp||!a.camp.ok)return;const q=UNIT_KM*s;if(q<6)return;
+  const c=FAC[a.side].c,rgb=k=>`rgb(${k[0]},${k[1]},${k[2]})`,INK='rgba(26,18,10,.95)',T=S.day*DAY_S,L=campLayout(a);
+  const cx=view.ox+a.camp.x*s,cy=view.oy+a.camp.y*s,W=L.W*s,H=L.H*s,x0=cx-W/2,y0=cy-H/2,dot=Math.max(1.6,q*.08);
+  const sm=(a0,b0,x)=>{const t=Math.max(0,Math.min(1,(x-a0)/(b0-a0)));return t*t*(3-2*t)};
+  const pt=(k,r)=>{const vx=Math.cos(k),vy=Math.sin(k);return [cx+vx*r,cy+vy*r]};
+  const man=(x,y)=>{ctx.fillStyle=rgb(c);ctx.beginPath();ctx.arc(x,y,dot,0,6.283);ctx.fill();ctx.strokeStyle=INK;ctx.lineWidth=.7;ctx.stroke()};
+  ctx.save();
+  // rondes extérieures : deux files de 4 hommes qui font le tour du fossé en sens contraires
+  const m=q*1.1,X0=x0-m,Y0=y0-m,PW=W+2*m,PH=H+2*m,per=2*(PW+PH);
+  const onRect=d=>{d=((d%per)+per)%per;if(d<PW)return [X0+d,Y0];d-=PW;if(d<PH)return [X0+PW,Y0+d];d-=PH;if(d<PW)return [X0+PW-d,Y0+PH];d-=PW;return [X0,Y0+PH-d]};
+  for(let f=0;f<2;f++){const dir=f?-1:1,base=dir*T*q*.55+f*per/2;for(let k=0;k<4;k++){const [x,y]=onRect(base-dir*k*dot*3.2);man(x,y+Math.sin(T*8+k)*dot*.25)}}
+  // portes : deux gardes immobiles et un petit étendard qui flotte sur chaque tour
+  const gates=[[cx,y0,1,0],[x0+W,cy,0,1],[cx,y0+H,1,0],[x0,cy,0,1]],gap=q*.9;
+  gates.forEach(([gx,gy,ux,uy],i)=>{const nx=uy,ny=ux;[-1,1].forEach(sg=>{man(gx+ux*sg*gap*.32+(i===1?dot*2.4:i===3?-dot*2.4:0),gy+uy*sg*gap*.32+(i===0?-dot*2.4:i===2?dot*2.4:0))});
+    const fx=gx+ux*gap/2,fy=gy+uy*gap/2,fh=Math.max(6,q*.7);ctx.strokeStyle='#3a2a1a';ctx.lineWidth=Math.max(1,q*.05);ctx.beginPath();ctx.moveTo(fx,fy);ctx.lineTo(fx,fy-fh);ctx.stroke();
+    ctx.fillStyle=rgb(c);ctx.beginPath();ctx.moveTo(fx,fy-fh);for(let k=0;k<=5;k++){const t=k/5;ctx.lineTo(fx+t*fh*.5,fy-fh+Math.sin(T*4.5-t*5+i)*fh*.07*t)}
+    for(let k=5;k>=0;k--){const t=k/5;ctx.lineTo(fx+t*fh*.5,fy-fh+fh*.28+Math.sin(T*4.5-t*5+i)*fh*.07*t)}ctx.closePath();ctx.fill()});
+  // convoi de ravitaillement : deux chariots arrivent par la porte ouest, déchargent au carrefour, repartent
+  const ph=(T/40)%1,wx=x=>x;
+  {const along=ph<.35?sm(0,.35,ph):ph<.55?1:1-sm(.55,.9,ph),sx=x0-q*5,ex=cx-q*2.9;
+   if(ph<.92)for(let k=0;k<2;k++){const x=sx+(ex-sx)*along-k*q*1.25*(ph<.55?1:-1),y=cy+q*.12,wl=Math.max(5,q*.75),wh=wl*.55,mov=(ph<.35||ph>.55)&&ph<.9,dirx=ph<.55?1:-1;
+     ctx.save();ctx.translate(x,y);ctx.fillStyle='rgba(0,0,0,.2)';ctx.fillRect(-wl/2+wl*.08,-wh/2+wh*.2,wl,wh);
+     ctx.fillStyle='#8a6038';ctx.fillRect(-wl/2,-wh/2,wl,wh);ctx.strokeStyle=INK;ctx.lineWidth=.8;ctx.strokeRect(-wl/2,-wh/2,wl,wh);
+     ctx.fillStyle='#e6dcc2';ctx.fillRect(-wl*.38,-wh*.38,wl*.76,wh*.76); // bâche
+     ctx.fillStyle='#3a2a1a';const wr=Math.max(1.2,wh*.28),rot=mov?T*6:0;[-1,1].forEach(sg=>[-1,1].forEach(sy=>{ctx.beginPath();ctx.ellipse(sg*wl*.3,sy*wh*.55,wr,wr*.45,0,0,6.283);ctx.fill()}));
+     // bœufs devant
+     const ox=dirx*(wl*.5+wl*.35);ctx.fillStyle='#b89a74';[-1,1].forEach(sy=>{ctx.beginPath();ctx.ellipse(ox+Math.sin(T*5+sy)*(mov?wl*.03:0),sy*wh*.22,wl*.2,wh*.16,0,0,6.283);ctx.fill();ctx.strokeStyle=INK;ctx.lineWidth=.6;ctx.stroke()});
+     if(mov){ctx.fillStyle='rgba(190,170,130,.25)';for(let d=1;d<3;d++){ctx.beginPath();ctx.arc(-dirx*(wl*.5+d*wl*.25),0,wh*.3*d,0,6.283);ctx.fill()}}
+     ctx.restore()}
+   // déchargement : sacs qui s'empilent au carrefour pendant l'arrêt
+   if(ph>.35&&ph<.92){const nb=Math.floor(1+5*sm(.35,.55,ph));for(let k=0;k<nb;k++){ctx.fillStyle='#d8c79c';ctx.strokeStyle=INK;ctx.lineWidth=.6;const bx=cx-q*2.3+(k%3)*q*.28,by=cy+q*.5+Math.floor(k/3)*q*.22;ctx.beginPath();ctx.ellipse(bx,by,q*.13,q*.09,0,0,6.283);ctx.fill();ctx.stroke()}}}
+  // champ de manœuvre à l'est : deux carrés à l'exercice (marche, demi-tour, conversion)
+  {const fx0=x0+W+q*2.4,fy0=cy-q*1.6,fw=q*3,fh=q*3.2;ctx.fillStyle='rgba(170,150,105,.35)';ctx.fillRect(fx0,fy0,fw,fh);ctx.strokeStyle='rgba(90,70,40,.5)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.strokeRect(fx0,fy0,fw,fh);ctx.setLineDash([]);
+   for(let k=0;k<2;k++){const t=(T/14+k*.5)%1,lap=t<.5?sm(0,.4,t):1-sm(.5,.9,t),rot=(t>.4&&t<.5)||(t>.9)?sm(.4,.5,t%0.5+(t>.9?.4:0))*Math.PI:0;
+     const x=fx0+fw*(.3+.4*k),y=fy0+q*.6+(fh-q*1.2)*lap,sq=q*.62;
+     ctx.save();ctx.translate(x,y);ctx.rotate(t<.5?rot:Math.PI+rot);ctx.fillStyle=rgb(c);ctx.fillRect(-sq/2,-sq/2,sq,sq);ctx.strokeStyle=INK;ctx.lineWidth=1;ctx.strokeRect(-sq/2,-sq/2,sq,sq);
+     ctx.beginPath();ctx.moveTo(-sq*.3,-sq*.3);ctx.lineTo(sq*.3,sq*.3);ctx.moveTo(sq*.3,-sq*.3);ctx.lineTo(-sq*.3,sq*.3);ctx.stroke();
+     ctx.fillStyle='#e0b84f';ctx.fillRect(-sq*.08,-sq*.62,sq*.16,sq*.16);ctx.restore()}
+   // cibles et volées d'entraînement
+   const tx=fx0+fw+q*.45;[0,1].forEach(k=>{const ty=fy0+fh*(.3+.4*k);ctx.fillStyle='#f0e6cc';ctx.beginPath();ctx.arc(tx,ty,q*.16,0,6.283);ctx.fill();ctx.strokeStyle='#8a2a1a';ctx.lineWidth=1;ctx.stroke();ctx.beginPath();ctx.arc(tx,ty,q*.07,0,6.283);ctx.stroke();
+     const t=(T*.8+k*.5)%1;if(t<.5){const u=t/.5,x=fx0+fw*.85+(tx-fx0-fw*.85)*u,y=ty-Math.sin(u*Math.PI)*q*.3;ctx.strokeStyle='rgba(25,18,10,.9)';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-q*.18,y+(u-.5)*q*.1);ctx.stroke()}})}
+  // vie dans les rues : corvées (petits carrés) qui vont d'une porte au prétoire, relève de la garde, estafette à cheval
+  {const G=[[cx,y0+q*.4],[x0+W-q*.4,cy],[cx,y0+H-q*.4],[x0+q*.4,cy]],P2=q*1.25,E=[[cx,cy-P2],[cx+P2,cy],[cx,cy+P2],[cx-P2,cy]],ms=Math.max(3.2,q*.36);
+   const msq=(x,y,col,mark)=>{ctx.fillStyle=col;ctx.fillRect(x-ms/2,y-ms/2,ms,ms);ctx.strokeStyle=INK;ctx.lineWidth=.8;ctx.strokeRect(x-ms/2,y-ms/2,ms,ms);if(mark){ctx.fillStyle='#e0b84f';ctx.fillRect(x-ms*.12,y-ms*.62,ms*.24,ms*.2)}};
+   const leg=(A,B,t)=>[A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t];
+   // corvées : aller-retour porte → bord de la place, pause, retour ; une par porte, décalées
+   for(let i=0;i<4;i++){const per=18+i*3,t=((T+i*5.1)/per)%1,u=t<.4?sm(0,.4,t):t<.5?1:t<.9?1-sm(.5,.9,t):0;const [x,y]=leg(G[i],E[i],u);
+     const w=(t<.4||(t>.5&&t<.9))?Math.sin(T*10+i)*ms*.06:0;msq(x+(i%2?0:w),y+(i%2?w:0),i===1?'#b89a74':`rgb(${c[0]},${c[1]},${c[2]})`,false);
+     if(i===1){ctx.fillStyle='#d8c79c';ctx.fillRect(x-ms*.3,y-ms*.3,ms*.6,ms*.6)}} // porteurs d'eau et de bois
+   // relève de la garde : un carré à plumet doré fait le tour des quatre portes
+   {const per=44,t=(T/per)%1,seg=Math.floor(t*8),f=(t*8)%1,gi=Math.floor(seg/2),go=seg%2===0,A=go?E[gi]:G[gi],B=go?G[gi]:E[(gi+1)%4];
+    const [x,y]=leg(A,B,sm(0,.8,f));msq(x,y,`rgb(${c[0]},${c[1]},${c[2]})`,true)}
+   // estafette : cavalier qui sort du prétoire, file vers une porte et quitte le camp, puis revient
+   {const per=26,t=(T/per)%1,gi=Math.floor(T/per)%4,out=[G[gi][0]+(G[gi][0]-cx)*.0+(gi===1?q*3:gi===3?-q*3:0),G[gi][1]+(gi===0?-q*3:gi===2?q*3:0)];
+    let x,y;if(t<.45){[x,y]=leg(E[gi],G[gi],sm(0,.25,t));if(t>.25)[x,y]=leg(G[gi],out,sm(.25,.45,t))}else if(t<.55){x=out[0];y=out[1]}else{[x,y]=t<.75?leg(out,G[gi],sm(.55,.75,t)):leg(G[gi],E[gi],sm(.75,.95,t))}
+    if(t<.45||t>.55){const mv=t<.95;if(mv){ctx.fillStyle='rgba(190,170,130,.3)';for(let d=1;d<3;d++){ctx.beginPath();ctx.arc(x-(gi===1?d*ms*.6:gi===3?-d*ms*.6:0)*(t<.5?1:-1),y-(gi===2?d*ms*.6:gi===0?-d*ms*.6:0)*(t<.5?1:-1),ms*.35*d,0,6.283);ctx.fill()}}
+      ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fillRect(-ms*.4,-ms*.4,ms*.8,ms*.8);ctx.strokeStyle='#e0b84f';ctx.lineWidth=1.2;ctx.strokeRect(-ms*.4,-ms*.4,ms*.8,ms*.8);ctx.restore()}}
+  }
+  ctx.restore();
+};
+
+// vue dézoomée : petite tente à côté du cartouche d'une armée qui campe
+const _genCard2=genCard;
+genCard=function(a,s){_genCard2(a,s);if(!a.camp||!a._sq||a.legs.length)return;const [X,my]=a._sq[a._sq.length-1],k=s<.5?.78:s<.8?.9:1,mr=Math.round(18*k);
+  ctx.save();tent(X-mr-9*k,my+mr*.4,12*k,FAC[a.side].c,!!a.camp.ok);ctx.restore()};
+

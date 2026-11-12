@@ -1,0 +1,34 @@
+/* ================= LIEN AVEC LA BATAILLE 3D : général, moral, fatigue, camp, murs ================= */
+// Chaque régiment envoyé à la bataille 3D emporte des multiplicateurs tirés de son armée (mêmes règles que la résolution
+// automatique) ; la bataille (bloc ARMÉES-CAMPAGNE de bataille.html) les applique à ses statistiques.
+function battleMods(b,a,role,u){
+  let atk=1,def=1,mo=1,sp=1;const g=genOf(a),k=UT[u.t].k;
+  if(!a.g){if(!g)mo*=.92;else{const st=stars(g);atk*=1+.04*st;mo*=1+.03*st;if(hasTr(g,'tact'))atk*=1.08;
+    if(hasTr(g,'fouge')){if(role==='att')atk*=1.12;else def*=.95}if(hasTr(g,'prud')&&role==='def')def*=1.12;
+    if(hasTr(g,'tem')){if(role==='att')atk*=1.06;else def*=.9}if(hasTr(g,'cav')&&isCavK(k))atk*=1.25;
+    if(hasTr(g,'aime'))mo*=1.08;if(hasTr(g,'impop'))mo*=.92}}
+  const mor=a.mor==null?MOR0:a.mor;mo*=(.75+.5*mor/100)/(.75+.5*MOR0/100);
+  const fat=a.fat||0;if(fat>20){sp*=1-.4*(fat-20)/80;atk*=1-.2*(fat-20)/80}
+  if(role==='def'&&a.camp&&a.camp.ok)def*=1.15;
+  if(role==='def'&&b.assault!=null){def*=wallsOf(b.assault);mo*=1.25}
+  const c=chev(u);atk*=1+.05*c;mo*=1+.04*c;atk*=rivalMul(role==='att'?b.att:b.def);
+  const am=ambushMul(b);if(am!==1){const q=Math.sqrt(role==='att'?am:1/am);atk*=q;mo*=q}
+  if(role==='def'&&b.sortie!=null){const sg=S.siege[N[b.sortie].id];if(sg&&lineOk(sg.cv))def*=1.15}
+  if(role==='def'&&b.relief!=null){const sg=S.siege[N[b.relief].id];if(sg&&lineOk(sg.cc))def*=1.2}
+  const r=v=>Math.round(v*1000)/1000;return {a:r(atk),d:r(def),m:r(mo),s:r(sp)}}
+function sideSummary(b,ids){const A=ids.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);if(!A.length)return '';
+  const main=A.slice().sort((p,q)=>strength(q)-strength(p))[0],g=genOf(main),men=A.reduce((t,a)=>t+a.units.reduce((s,u)=>s+u.men,0),0)||1;
+  const mor=Math.round(A.reduce((t,a)=>t+(a.mor==null?MOR0:a.mor)*a.units.reduce((s,u)=>s+u.men,0),0)/men),fat=Math.round(Math.max(...A.map(a=>a.fat||0)));
+  return (g?`${g.name} ${'★'.repeat(stars(g))}${g.tr&&g.tr.length?' ('+g.tr.map(t=>TRAITS[t].n).join(', ')+')':''}`:main.g?esc(main.name):'sans général')+` · moral ${mor}`+(fat>20?` · fatigue ${fat} %`:'')+(A.some(a=>a.camp&&a.camp.ok)&&ids===b.def?' · retranché dans son camp':'')}
+const _dive7=dive;
+dive=function(payload){try{addBattleMods(payload)}catch(e){console.warn(e)}return _dive7(payload)};
+function addBattleMods(payload){const b=S.cur;if(!b||!payload||!payload.b)return;const attMine=b.attMine;
+  const put=(L,ids,role)=>{const F=bFlat(ids);F.forEach((f,k)=>{if(!L[k])return;const a=S.armies.find(x=>x.id===f.aid);if(a)L[k].mod=battleMods(b,a,role,a.units[f.k]||f)})};
+  put(payload.b.p,attMine?b.att:b.def,attMine?'att':'def');put(payload.b.e,attMine?b.def:b.att,attMine?'def':'att');
+  payload.b.cmd={p:sideSummary(b,attMine?b.att:b.def),e:sideSummary(b,attMine?b.def:b.att)};
+  if(b.assault!=null){const W=wallsOf(b.assault);payload.b.walls={side:attMine?'e':'p',k:W,n:N[b.assault].n};
+    payload.b.desc+=` Assaut des murs de ${N[b.assault].n} : ${attMine?'les défenseurs':'vos troupes'} combattent derrière les remparts (défense ×${W.toFixed(2).replace('.',',')}, moral +25 %).`}
+  if(b.sortie!=null)payload.b.desc+=` Sortie de la garnison de ${N[b.sortie].n}.`
+  if(b.relief!=null)payload.b.desc+=` Armée de secours devant ${N[b.relief].n} : la garnison sort et prend les assiégeants à revers.`
+  const am=ambushMul(b);if(am<.95)payload.b.desc+=attMine?' Votre colonne tombe dans une embuscade !':' Vos troupes surgissent de leur embuscade !';else if(am>1.05&&!attMine)payload.b.desc+=' Votre colonne est surprise.'}
+

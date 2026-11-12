@@ -1,0 +1,13 @@
+/* ================= RENFORTS EN CARRÉS (champ de bataille ; fil « Rejoindre une bataille en direct à plusieurs ») =================
+   La fonction arrive() du bloc ÉCHELLE est déclarée dans un bloc { } : la boucle des renforts appelle donc la version du bloc,
+   pas celle que BATAILLE 2D enveloppe pour faire entrer les 5 carrés d'un régiment. Seul le premier carré entrait.
+   On fait entrer les renforts ici, avant la boucle, avec window.__echelle.arrive (la version enveloppée). */
+{
+  const E=window.__echelle;
+  if(E&&E.res){
+    const due=s=>{for(const r of E.res)if(!r.done&&(s==null?time>=r.arr:r.side===s))try{E.arrive(r)}catch(e){console.warn(e)}};
+    const _st=step;step=function(dt){if(started&&!ended)due(null);return _st.apply(this,arguments)};
+    const _ce=checkEnd;checkEnd=function(){try{if(!ended&&units)for(const s of [0,1])if(!units.some(u=>u.side===s&&!u.dead&&!u.routing))due(s)}catch(e){console.warn(e)}return _ce.apply(this,arguments)};
+  }
+}
+/* ================= FIN RENFORTS EN CARRÉS ================= */

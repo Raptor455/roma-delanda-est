@@ -1,0 +1,504 @@
+/* ================= DIPLOMATIE VIVANTE (fil « Repenser la diplomatie de campagne ») =================
+   Source : /mnt/project-files/diplomatie/dipl.js, injecté juste avant « BOUCLE » par diplomatie/patch.py (relançable, remplace le bloc sur place).
+   1 fiche par peuple (chef, caractère, désirs) · 2 trois jauges : confiance (S.fac[f].car), intérêt et crainte (calculés)
+   3 table de négociation (offre + demandes, réponse motivée, contre-proposition, ambassade sur la carte via S.env, kind 'n')
+   4 parole donnée : promesses à échéance (S.dv.prom) et réputation (S.dv.rep) · 5 monde vivant : demandes des peuples (S.dv.req),
+   ambassades romaines visibles et interceptables (S.dv.renv), rivalités, carte diplomatique.
+   Enveloppe sans les réécrire : openDip, aiDiplomacy, envArrive, capture, declareWar, joinAlliance, daily, drawDynamic, renderTop, dipOpenFac.
+   Côté joueur = 'car' (en mode Rome, l'état est en miroir et mirFix inverse les noms dans les fenêtres). */
+const DV_TR={
+  fier:{n:'fier',d:"Sensible à l'honneur : une offre mesquine l'insulte, une parole tenue compte double.",gold:1,prom:1.4,fear:.35,town:1,vic:1,ins:1},
+  cupide:{n:'cupide',d:"L'or parle plus fort que les serments.",gold:1.6,prom:.8,fear:.35,town:1,vic:1},
+  prudent:{n:'prudent',d:"Craint la vengeance du plus fort et veut des garanties avant de s'engager.",gold:1,prom:1.1,fear:.6,town:1,vic:.8},
+  belliqueux:{n:'belliqueux',d:"Aime la guerre et le butin : vos victoires l'attirent plus que vos présents.",gold:.85,prom:1,fear:.25,town:1,vic:1.6},
+  ambitieux:{n:'ambitieux',d:"Veut des terres et des villes ; il calcule froidement.",gold:1,prom:.9,fear:.4,town:1.6,vic:1},
+  fidele:{n:'fidèle à ses amis',d:"Change lentement de camp et tient à ses alliances.",gold:.8,prom:1.2,fear:.3,town:1,vic:.8}
+};
+// chef, caractère, désirs, rivaux, amis. Désirs : chasse (villes à reprendre), guerre (contre un rival), or, butin, protect, mariage, ville, commerce
+const DV_P={
+  num:{c:'Gaïa, roi des Massyles',t:'fier',w:[['guerre','mae'],['mariage'],['ville','hipporeg']],r:['mae']},
+  mae:{c:'Syphax, roi des Masaesyles',t:'ambitieux',w:[['chasse',['cirta'],'Cirta, capitale des Massyles'],['mariage'],['or']],r:['num']},
+  mau:{c:'Baga, roi des Maures',t:'prudent',w:[['or'],['commerce']]},
+  cyr:{c:'le gouverneur de Ptolémée IV',t:'prudent',w:[['commerce'],['protect']]},
+  ibe:{c:'Indibilis et Mandonius, chefs ilergètes',t:'fier',w:[['protect'],['butin']],r:['mas']},
+  cel:{c:'Allucius, prince celtibère',t:'cupide',w:[['or'],['butin']],a:['lus']},
+  lus:{c:'les chefs lusitaniens',t:'belliqueux',w:[['butin'],['or']],a:['cel']},
+  bal:{c:'les chefs des Baléares',t:'cupide',w:[['or']]},
+  mas:{c:'les Timouques de Massalia',t:'fidele',w:[['commerce'],['guerre','lig']],r:['gau','lig']},
+  gau:{c:'Brancus, roi des Allobroges',t:'fier',w:[['or'],['butin']],r:['mas'],a:['ins']},
+  lig:{c:'les chefs ligures',t:'belliqueux',w:[['chasse',['pisae'],'Pisae, place romaine'],['butin']],r:['mas'],a:['ins']},
+  ins:{c:'Magalos, chef des Boïens',t:'belliqueux',w:[['chasse',['placentia','cremona'],'Placentia et Crémone, colonies romaines sur leurs terres'],['butin']],r:['ven'],a:['lig','gau']},
+  ven:{c:'le conseil des Vénètes',t:'prudent',w:[['guerre','ins'],['commerce']],r:['ins']},
+  syr:{c:'Hiéron II',t:'fidele',w:[['commerce'],['or']]},
+  ill:{c:'Scerdilaïdas',t:'cupide',w:[['or'],['butin'],['chasse',['epidamnus','apollonia'],'les ports du protectorat romain']],r:['mac']},
+  dar:{c:'les chefs dardaniens',t:'belliqueux',w:[['butin'],['guerre','mac']],r:['mac']},
+  epi:{c:'la Ligue épirote',t:'prudent',w:[['protect']],r:['eto']},
+  mac:{c:'Philippe V',t:'ambitieux',w:[['chasse',['epidamnus','apollonia','oricum'],"l'Illyrie romaine"],['guerre','eto']],r:['eto','dar','ill'],a:['ach']},
+  thr:{c:'Cavaros, roi celte de Tylis',t:'cupide',w:[['or']],r:['mac']},
+  eto:{c:'Scopas, stratège étolien',t:'belliqueux',w:[['butin'],['guerre','mac']],r:['mac','ach','epi']},
+  ach:{c:'Aratos de Sicyone',t:'prudent',w:[['protect'],['guerre','eto']],r:['eto'],a:['mac']},
+  ath:{c:'Eurycleidès et Micion',t:'prudent',w:[['commerce']]},
+  cre:{c:'les cités crétoises',t:'cupide',w:[['or']]},
+  carp:{c:'les chefs carpétans',t:'fier',w:[['protect'],['or']],a:['olc','vac']},
+  olc:{c:'les chefs olcades',t:'fier',w:[['protect'],['or']],a:['carp','vac']},
+  vac:{c:'les chefs vaccéens',t:'belliqueux',w:[['butin'],['or']],a:['carp','olc']},
+  per:{c:'Attale Ier',t:'ambitieux',w:[['guerre','mac'],['commerce']],r:['mac']},
+  les:{c:'les cités de Lesbos',t:'prudent',w:[['commerce'],['protect']]},
+  ion:{c:'les cités grecques d’Asie',t:'prudent',w:[['commerce'],['protect']],r:['sel'],a:['rho']},
+  byz:{c:'le conseil de Byzance',t:'cupide',w:[['commerce'],['or']],r:['bit']},
+  bit:{c:'Prusias Ier, roi de Bithynie',t:'ambitieux',w:[['guerre','per'],['chasse',['byzantium'],'Byzance et ses détroits']],r:['per','byz'],a:['mac']},
+  sel:{c:'Antiochos III',t:'ambitieux',w:[['guerre','per'],['commerce']],r:['per','ion']},
+  rho:{c:'les prytanes de Rhodes',t:'prudent',w:[['commerce'],['guerre','mac']],r:['mac'],a:['per','ion']}
+};
+const dvP=f=>{const P=DV_P[f]||{c:'leurs chefs',t:'prudent',w:[['or']]};const c=f==='syr'&&S&&S.day>=1200?'Hiéronyme, petit-fils de Hiéron':P.c;return {c,t:P.t,w:P.w||[],r:(P.r||[]).filter(g=>S.fac[g]),a:(P.a||[]).filter(g=>S.fac[g])}};
+const dvTr=f=>DV_TR[dvP(f).t]||DV_TR.prudent;
+const DVS={f:null,view:'fiche',tab:'peu',offer:null};
+let DVMAP=false;
+const dvClamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const dvR=v=>Math.round(v);
+const dvSg=v=>(v>=0?'+':'−')+Math.abs(Math.round(v));
+const dvEnemy=()=>sideName('rom'),dvMe=()=>sideName('car'); // en mode Rome (miroir), FAC.car est Rome ; en Macédoine, FAC.car est la Macédoine
+const DV_SG={cyr:'Cyrène',mas:'Massalia',syr:'Syracuse',mac:'la Macédoine',ach:'la Ligue achéenne',ath:'Athènes',per:'Pergame',les:'Lesbos',byz:'Byzance',bit:'la Bithynie',sel:'l’Empire séleucide',rho:'Rhodes'};
+const dvC=t=>t.charAt(0).toUpperCase()+t.slice(1);
+const dvLes=f=>DV_SG[f]||'les '+FAC[f].n;
+const dvDes=f=>{const g=DV_SG[f];return g?(/^(la |l’)/.test(g)?'de '+g:deN(g)):'des '+FAC[f].n};
+const dvAux=f=>{const g=DV_SG[f];return g?'à '+g:'aux '+FAC[f].n};
+function dvInit(){if(!S)return;S.dv=S.dv||{};const D=S.dv;if(D.rep==null)D.rep=50;D.prom=D.prom||[];D.req=D.req||[];D.renv=D.renv||[];if(D.uid==null)D.uid=1}
+const dvTowns=f=>N.filter(n=>!n.col&&ownerN(n.i)===f);
+function dvNear(f,side,km,min){const T=dvTowns(f);let s=0;const seen=new Set();
+  for(const a of S.armies){if(a.side!==side||a.dead||a.ship||seen.has(a))continue;if(min&&a.units.length<min)continue;
+    if(T.some(n=>Math.hypot(a.x-n.x,a.y-n.y)<km)){seen.add(a);s+=strength(a)}}return s}
+const dvOk=st=>['allie_car','pacte_car','tribut_car'].includes(st);
+const dvDm=()=>{try{return typeof MP!=='undefined'&&MP.dv&&MP.dv.car||null}catch(e){return null}};
+const dvWith=(k,fn)=>typeof mpdWith==='function'&&k?mpdWith(k,fn):fn();
+const dvActive=f=>(S.dv&&S.dv.prom||[]).filter(p=>p.f===f&&!p.st);
+const dvRepTxt=r=>r>=75?'parole sûre':r>=58?'digne de confiance':r>=42?'on attend de voir':r>=25?'« foi punique »':'parjure notoire';
+
+/* ---- les trois jauges ---- */
+// Intérêt : ce que le peuple gagne (ou perd) à se tenir à vos côtés
+function dvWants(f){const F=S.fac[f],P=dvP(f),T=dvTr(f),L=[];
+  for(const w of P.w){const k=w[0];
+    if(k==='chasse'){const ids=w[1].filter(id=>NI[id]!=null);if(!ids.length)continue;let v=0,ok=0,mine=[];
+      for(const id of ids){const o=ownerN(NI[id]);if(o===f){v+=8;ok++}else if(o==='car'){v+=5;ok++;mine.push(N[NI[id]].n)}}
+      const pr=dvActive(f).some(p=>p.k==='cede');if(pr)v+=4*S.dv.rep/60;
+      L.push({k,t:`Reprendre ${w[2]}`,st:ok===ids.length?'ok':ok||pr?'part':'open',v:v*T.town,how:mine.length?`Vous tenez ${mine.join(', ')} : cédez-la dans une négociation pour les combler.`:pr?'Vous avez promis de la leur céder.':`Prenez ${ids.map(id=>N[NI[id]].n).join(' ou ')}, ou promettez de la leur céder.`})}
+    else if(k==='guerre'){const r=w[1],R=S.fac[r];if(!R)continue;const st=R.st;
+      if(st==='guerre_car')L.push({k,t:`Abattre leurs rivaux, ${dvLes(r)}`,st:'ok',v:12,how:'Vous êtes en guerre contre eux.'});
+      else if(dvOk(st))L.push({k,t:`Abattre leurs rivaux, ${dvLes(r)}`,st:'bad',v:-15,how:'Vous êtes l’ami de leurs ennemis !'});
+      else L.push({k,t:`Abattre leurs rivaux, ${dvLes(r)}`,st:dvActive(f).some(p=>p.k==='riv'&&p.r===r)?'part':'open',v:dvActive(f).some(p=>p.k==='riv'&&p.r===r)?5:0,how:'Promettez de prendre une de leurs villes, ou déclarez-leur la guerre.'})}
+    else if(k==='or'){const g=F.dvg||0;L.push({k,t:"De l'or",st:g>40?'ok':'open',v:dvClamp(g/15,0,10)*T.gold,how:T.gold>1?'Ils sont cupides : chaque pièce compte plus que chez les autres.':'Des présents ou un subside les contenteraient.'})}
+    else if(k==='butin'){const v=Math.min(12,(S.vict||0)*2)*T.vic;L.push({k,t:'Du butin et de la gloire',st:v>=6?'ok':v>0?'part':'open',v,how:`Vos victoires contre ${dvEnemy()} les attirent (${S.vict||0} jusqu'ici).`})}
+    else if(k==='protect'){const rn=dvNear(f,'rom',220),cn=dvNear(f,'car',220,3),pr=dvActive(f).some(p=>p.k==='def');
+      if(!rn)L.push({k,t:`Être protégés de ${dvEnemy()}`,st:pr?'part':'open',v:pr?4*S.dv.rep/60:0,how:'Aucune menace pour l’instant.'});
+      else if(cn>=rn*.6)L.push({k,t:`Être protégés de ${dvEnemy()}`,st:'ok',v:10,how:'Vos armées couvrent leurs terres.'});
+      else L.push({k,t:`Être protégés de ${dvEnemy()}`,st:'bad',v:pr?0:-6,how:pr?'Les légions approchent ; vous avez promis de les défendre.':'Les légions approchent et vous êtes loin. Une armée proche ou une promesse de défense les rassurerait.'})}
+    else if(k==='mariage'){if(!['num','mae'].includes(f))continue;
+      L.push(S.mar===f?{k,t:'Une alliance de sang',st:'ok',v:12,how:'Une fille de grande famille carthaginoise est reine chez eux.'}:S.mar?{k,t:'Une alliance de sang',st:'bad',v:-8,how:`Vous avez marié leur rival (${FAC[S.mar].n}).`}:{k,t:'Une alliance de sang',st:'open',v:0,how:'Offrez un mariage royal dans une négociation.'})}
+    else if(k==='ville'){const id=w[1];if(NI[id]==null)continue;const o=ownerN(NI[id]);
+      L.push({k,t:`Obtenir ${N[NI[id]].n}`,st:o===f?'ok':'open',v:o===f?10*T.town:0,how:o==='car'?'Vous la tenez : cédez-la dans une négociation.':'Elle n’est pas à vous.'})}
+    else if(k==='commerce'){const v=dvOk(F.st)?6:F.st==='neutre'?2:0;L.push({k,t:'Commercer en paix',st:v>=6?'ok':'part',v,how:dvOk(F.st)?'Vos marchands sont chez eux.':'Un traité ouvrirait leurs marchés.'})}}
+  return L}
+function dvInterest(f){const F=S.fac[f],P=dvP(f),L=[];
+  for(const w of dvWants(f))if(Math.abs(w.v)>=.5)L.push([w.t+(w.st==='ok'?' (satisfait)':w.st==='bad'?' (contrarié)':''),w.v]);
+  for(const r of P.r){const R=S.fac[r];if(dvOk(R.st))L.push([`Vous traitez avec ${dvLes(r)}, leurs ennemis`,-12]);else if(R.st==='allie_rom')L.push([`${dvEnemy()} soutient leurs ennemis (${FAC[r].n})`,6])}
+  for(const a of P.a){const A=S.fac[a];if(dvOk(A.st))L.push([`Leurs amis ${dvLes(a)} sont à vos côtés`,6]);else if(A.st==='guerre_car')L.push([`Vous faites la guerre à leurs amis (${FAC[a].n})`,-10])}
+  if(F.st==='pacte_car')L.push(["Le traité d'amitié leur profite",5]);
+  const v=dvClamp(L.reduce((s,x)=>s+x[1],0),-50,50);return {v,L}}
+// Crainte : votre force près de leurs terres contre celle de Rome
+function dvFear(f){const my=dvNear(f,'car',250),ro=dvNear(f,'rom',250),L=[];
+  let v=40*(my-ro)/(my+ro+300);if(my)L.push(['Vos armées près de leurs terres',40*my/(my+ro+300)]);if(ro)L.push([`Les armées de ${dvEnemy()} près de chez eux`,-40*ro/(my+ro+300)]);
+  const b=Math.min(10,(S.bigWin||0)*3);if(b){v+=b;L.push(['Le bruit de vos grandes victoires',b])}
+  const d=Math.min(8,(S.defeats||0)*2);if(d){v-=d;L.push(['Vos défaites',-d])}
+  return {v:dvClamp(v,-50,50),L}}
+function dvTrust(f){const F=S.fac[f],W=F.why||{},L=Object.entries(W).filter(x=>Math.abs(x[1])>=.5).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,6).map(([k,v])=>[k.charAt(0).toUpperCase()+k.slice(1),v]);
+  const base=FAC[f].a?FAC[f].a[0]:0;if(Math.abs(base)>=1)L.push(['Sentiment de départ',base]);
+  return {v:F.car,L}}
+function dvDisp(f){const F=S.fac[f],T=dvTr(f),C=dvTrust(f),I=dvInterest(f),K=dvFear(f),rep=S.dv.rep,L=[];
+  L.push(['Confiance',C.v*.6]);L.push(['Intérêt',I.v]);L.push([`Crainte (${T.n} : ×${T.fear})`,K.v*T.fear]);
+  if(F.rom>0)L.push([`Liens avec ${dvEnemy()}`,-F.rom*.35]);
+  if(Math.abs(rep-50)>=3)L.push(['Votre réputation',(rep-50)*.2]);
+  if(isTrib(f))L.push(['Fidélité de tributaire',(F.fid-50)*.5]);
+  return {v:L.reduce((s,x)=>s+x[1],0),L,C,I,K}}
+
+/* ---- négociation ---- */
+const DV_DEM={
+  pass:{n:'Droit de passage',d:'Vos armées traversent leurs terres sans les fâcher.',ok:F=>F.st==='neutre'&&!F.pass,v:(f,F)=>8+(dvNear(f,'rom',220)?10:0)},
+  neut:{n:'Neutralité (2 ans)',d:`Ils s'engagent à ne pas s'allier à ${dvEnemy()} pendant deux ans.`,ok:F=>F.st==='neutre'&&!(F.neu>S.day),v:(f,F)=>10+Math.max(0,F.rom)*.2},
+  pact:{n:"Traité d'amitié",d:'Ils gardent leurs villes, ouvrent leurs routes et peuvent vous prêter des troupes.',ok:F=>F.st==='neutre',v:(f,F)=>25+Math.max(0,F.rom)*.15},
+  troops:{n:'Des troupes',d:'2 ou 3 régiments de leur peuple rejoignent vos armées.',ok:F=>F.st==='pacte_car'||F.st==='tribut_car',v:()=>15},
+  hostD:{n:'Des otages',d:`Leurs fils de chefs chez vous : ils ne pourront plus s'allier à ${dvEnemy()}.`,ok:F=>['neutre','pacte_car','tribut_car'].includes(F.st)&&!F.otD,v:()=>18},
+  trib:{n:'Tribut',d:'Ils deviennent vos tributaires et paient la moitié du revenu de leurs villes. Seule la crainte les y décide.',ok:F=>F.st==='neutre',v:(f,F)=>45},
+  ally:{n:'Alliance',d:'Ils rejoignent votre camp avec leurs villes et leurs troupes.',ok:F=>['neutre','pacte_car','tribut_car'].includes(F.st),v:(f,F)=>F.st==='tribut_car'?35:55+Math.max(0,F.rom)*.3},
+  peace:{n:'La paix',d:'Fin de la guerre : ils redeviennent neutres.',ok:F=>F.st==='guerre_car',v:(f,F)=>20}
+};
+function dvTownsFor(f){const T=dvTowns(f);const want=new Set();for(const w of dvP(f).w){if(w[0]==='chasse')w[1].forEach(id=>want.add(id));if(w[0]==='ville')want.add(w[1])}
+  return N.filter(n=>!n.col&&ownerN(n.i)==='car'&&n.size<3&&(want.has(n.id)||T.some(m=>Math.hypot(m.x-n.x,m.y-n.y)<260))).map(n=>({n,want:want.has(n.id)})).sort((a,b)=>b.want-a.want||a.n.n.localeCompare(b.n.n))}
+function dvCovet(f){const ids=[];for(const w of dvP(f).w)if(w[0]==='chasse'||w[0]==='ville')(w[0]==='chasse'?w[1]:[w[1]]).forEach(id=>{if(NI[id]!=null){const o=ownerN(NI[id]);if(o!==f&&o!=='car')ids.push(id)}});return ids}
+function dvRivalsFor(f){const P=dvP(f),s=new Set(P.r);for(const w of P.w)if(w[0]==='guerre'&&S.fac[w[1]])s.add(w[1]);return [...s].filter(r=>!dvOk(S.fac[r].st)&&S.fac[r].st!=='soumis')}
+function dvNewOffer(){return {gold:0,town:'',host:0,marr:0,sub:0,def:0,riv:'',cede:'',dem:{}}}
+function dvGives(f,o){const F=S.fac[f],T=dvTr(f),rep=S.dv.rep,L=[];const pk=rep/60;
+  if(o.gold>0)L.push([`${o.gold} or`,o.gold/8*T.gold]);
+  if(o.town&&NI[o.town]!=null){const n=N[NI[o.town]],want=dvTownsFor(f).find(x=>x.n.id===o.town);L.push([`La ville de ${n.n}${want&&want.want?' (qu’ils convoitent)':''}`,(10+n.size*8)*(want&&want.want?2:1)*T.town])}
+  if(o.host&&!F.ot)L.push(['Vos otages, gage de votre parole',12]);
+  if(o.marr&&['num','mae'].includes(f)&&!S.mar){L.push(['Un mariage royal',dvP(f).w.some(w=>w[0]==='mariage')?28:18])}
+  if(o.sub>0)L.push([`Subside de ${o.sub} or par mois pendant un an (promesse)`,o.sub*12/8*T.gold*.7*pk]);
+  if(o.def){const thr=dvNear(f,'rom',260)>0,pw=dvP(f).w.some(w=>w[0]==='protect');L.push(['Promesse de les défendre deux ans',(thr?18:8)*(pw?1.3:1)*pk*T.prom])}
+  if(o.riv&&S.fac[o.riv]){const want=dvP(f).w.some(w=>w[0]==='guerre'&&w[1]===o.riv)||dvP(f).r.includes(o.riv);L.push([`Promesse de prendre une ville ${dvDes(o.riv)} d'ici un an`,(want?18:6)*pk*T.prom])}
+  if(o.cede&&NI[o.cede]!=null)L.push([`Promesse de leur céder ${N[NI[o.cede]].n} une fois prise`,12*pk*T.prom*T.town]);
+  return L}
+function dvDems(f,o){const F=S.fac[f],L=[];for(const k in o.dem)if(o.dem[k]&&DV_DEM[k]&&DV_DEM[k].ok(F))L.push([DV_DEM[k].n,-DV_DEM[k].v(f,F),k]);
+  if(o.dem.trib&&DV_DEM.trib.ok(F)){const K=dvFear(f).v;if(K<15)L.push(['Ils ne vous craignent pas assez pour payer tribut',-25])}
+  if(o.dem.ally&&o.dem.pact)L.push(['Demander à la fois traité et alliance n’a pas de sens',-5]);
+  return L}
+function dvEval(f,o){const D=dvDisp(f),G=dvGives(f,o),M=dvDems(f,o),gv=G.reduce((s,x)=>s+x[1],0),mv=M.reduce((s,x)=>s+x[1],0);
+  const score=D.v+gv+mv;return {D,G,M,gv,mv,score,pure:!M.length}}
+function dvVerdict(e){if(e.pure)return e.gv>0?['ok','Ils accepteront vos présents avec plaisir.']:['no','Rien à leur proposer.'];
+  const s=e.score;return s>=8?['ok','Ils accepteront.']:s>=0?['ok','Ils accepteront sans doute.']:s>=-8?['mid','Ils hésitent : la réponse se jouera à peu de chose.']:['no','Ils refuseront.']}
+function dvCounter(f,o,e){if(e.pure||e.score>=2)return null;const T=dvTr(f),m=-e.score+4;
+  const gold=Math.ceil(m*8/T.gold/25)*25;if(o.gold+gold<=S.gold.car)return {t:`Ils accepteraient avec ${gold} or de plus.`,b:`Ajouter ${gold} or`,f:()=>{o.gold+=gold}};
+  const tw=dvTownsFor(f).find(x=>x.want&&x.n.id!==o.town);if(tw)return {t:`Ils accepteraient contre ${tw.n.n}, qu’ils convoitent.`,b:`Offrir ${tw.n.n}`,f:()=>{o.town=tw.n.id}};
+  if(!o.def&&dvNear(f,'rom',260))return {t:'Ils veulent une promesse de défense.',b:'Promettre de les défendre',f:()=>{o.def=1}};
+  const big=e.M.filter(x=>x[2]).sort((a,b)=>a[1]-b[1])[0];if(big&&e.M.length>1)return {t:`Ils accepteraient sans « ${big[0]} ».`,b:'Retirer cette demande',f:()=>{delete o.dem[big[2]]}};
+  return {t:'Ils ne voient pas encore assez de raisons de s’engager. Gagnez leur confiance, satisfaites leurs désirs ou faites-vous craindre.',b:null}}
+function dvCost(o){return (o.gold||0)}
+function dvTarget(f){return dvTowns(f).sort((a,b)=>b.size-a.size)[0]}
+function dvSend(f){dvInit();const F=S.fac[f],o=DVS.offer;if(!o||F.cd>0)return;const e=dvEval(f,o);if(!e.G.length&&!e.M.length)return;
+  if((S.env||[]).some(x=>x.f===f&&x.kind!=='s'))return;
+  const cost=dvCost(o);if(S.gold.car<cost)return;const t=dvTarget(f);if(!t)return;const og=envOrigin(t);if(!og)return;
+  S.gold.car-=cost;F.cd=1;S.env=S.env||[];
+  const days=Math.max(1,Math.round(Math.hypot(t.x-og[0],t.y-og[1])/ENV_KMD));
+  S.env.push({kind:'n',key:'neg',f,x:og[0],y:og[1],tx:t.x,ty:t.y,tn:t.n,cost,o:JSON.parse(JSON.stringify(o)),dm:dvDm()});
+  log(`Ambassade partie vers ${t.n} (${FAC[f].n}) avec vos propositions : ≈ ${days} jour${days>1?'s':''}.`);
+  DVS.view='fiche';DVS.offer=null;renderAll();openDip(f)}
+if(typeof ENV_LAB!=='undefined')ENV_LAB.neg='négociation';
+function dvGiveTown(id,f){const i=NI[id],n=N[i];if(ownerN(i)!=='car')return false;S.own[id]=f;delete S.siege[id];delete S.q[id];
+  for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===i){a.side=f;a.name='Garnison de '+n.n}
+  territoryDirty=true;return true}
+function dvPromise(p){dvInit();p.id=S.dv.uid++;p.d0=Math.floor(S.day);S.dv.prom.push(p);return p}
+function dvArrive(e){dvInit();const f=e.f,F=S.fac[f];if(!F)return;F.cd=1;const o=e.o,nm=FAC[f].n;
+  const refund=()=>{if(e.cost)dvWith(e.dm,()=>{S.gold.car+=e.cost})};
+  if(o.town&&(NI[o.town]==null||ownerN(NI[o.town])!=='car')){refund();log(`Votre ambassade chez ${dvLes(f)} offrait ${NI[o.town]!=null?N[NI[o.town]].n:'une ville'}, qui n'est plus à vous : l'offre tombe.`);return}
+  const ev=dvEval(f,o),T=dvTr(f),pure=ev.pure,jit=(Math.random()-.5)*8,ok=pure?ev.gv>0:ev.score+jit>=0;
+  if(!ok){refund();let t=`${dvC(dvLes(f))} repoussent vos propositions.`;const why=[...ev.D.L,...ev.M].filter(x=>x[1]<-3).sort((a,b)=>a[1]-b[1]).slice(0,2).map(x=>x[0].toLowerCase());
+    if(why.length)t+=` Ce qui pèse : ${why.join(', ')}.`;
+    if(T.ins&&ev.score<-30){F.car-=6;t+=' Leur chef se dit insulté (confiance −6).'}
+    log(t+' Votre or vous est rendu.');dvCard(`Réponse ${dvDes(f)}`,t+' Votre or vous est rendu.');return}
+  // offre acceptée
+  const got=[],gave=[];
+  if(o.gold>0){F.dvg=(F.dvg||0)+o.gold;gave.push(o.gold+' or')}
+  if(o.town&&dvGiveTown(o.town,f))gave.push(N[NI[o.town]].n);
+  if(o.host&&!F.ot){F.ot=1;gave.push('des otages')}
+  if(o.marr&&!S.mar&&['num','mae'].includes(f)){S.mar=f;F.rom-=10;gave.push('un mariage royal')}
+  const P=[];
+  if(o.sub>0)P.push(dvPromise({f,k:'pay',amt:o.sub,left:12,dm:e.dm}));
+  if(o.def)P.push(dvPromise({f,k:'def',until:Math.floor(S.day)+720}));
+  if(o.riv&&S.fac[o.riv])P.push(dvPromise({f,k:'riv',r:o.riv,until:Math.floor(S.day)+360}));
+  if(o.cede&&NI[o.cede]!=null)P.push(dvPromise({f,k:'cede',t:o.cede,until:Math.floor(S.day)+1080}));
+  const d=o.dem;
+  if(d.peace&&F.st==='guerre_car'){F.st='neutre';F.car=Math.max(F.car,-20);territoryDirty=true;got.push('la paix')}
+  if(d.pass&&F.st==='neutre'){F.pass=1;got.push('le droit de passage')}
+  if(d.neut&&F.st==='neutre'){F.neu=Math.floor(S.day)+720;got.push('leur neutralité pour deux ans')}
+  if(d.hostD&&!F.otD){F.otD=1;got.push('des otages')}
+  if(d.trib&&F.st==='neutre'){F.st='tribut_car';F.fid=55;F.pass=1;territoryDirty=true;got.push('un tribut')}
+  if(d.pact&&F.st==='neutre'){F.st='pacte_car';F.pass=1;territoryDirty=true;got.push("un traité d'amitié")}
+  if(d.troops&&(F.st==='pacte_car'||F.st==='tribut_car')){const Tn=dvTowns(f).sort((a,b)=>b.size-a.size)[0];if(Tn){const t=poolOf(f),units=Array.from({length:t==='ncav'||t==='sling'?3:2},()=>({t,men:UT[t].men}));
+    S.armies.push({id:S.uid++,side:'car',name:'Alliés '+nm.toLowerCase(),x:Tn.x,y:Tn.y,at:Tn.i,legs:[],units,scout:0,cool:0,mor:65,food:12,dm:e.dm||undefined});got.push(`${units.length} régiments (à ${Tn.n})`)}}
+  if(d.ally&&['neutre','pacte_car','tribut_car'].includes(F.st)){joinAlliance(f,'car');got.push('leur alliance')}
+  // bonne volonté : un accord rapproche ; des présents seuls aussi, mais l'amitié ne s'achète pas au-delà de 60
+  const gain=pure?Math.min(ev.gv*.55/(1+(F.dvn||0)*.35),Math.max(0,60-F.car)):3+ev.gv*.15;
+  if(pure)F.dvn=(F.dvn||0)+1;
+  F.car=Math.min(100,F.car+Math.max(0,gain));
+  dvRivalsReact(f,got.some(x=>/traité|alliance|tribut/.test(x)));
+  const t=pure?`${dvC(dvLes(f))} acceptent ${gave.join(', ')||'vos promesses'} (confiance ${dvSg(gain)}).`:`Accord avec ${dvLes(f)} ! Vous obtenez ${got.join(', ')||'leur bienveillance'}${gave.length||P.length?` contre ${[...gave,...P.map(dvPromTxt)].join(', ')}`:''}.`;
+  log(t);dvCard(`Réponse ${dvDes(f)}`,t)}
+// vos amitiés fâchent leurs rivaux
+function dvRivalsReact(f,big){for(const g in DV_P){if(!S.fac[g]||g===f)continue;const P=dvP(g);
+  if(P.r.includes(f)){const v=big?10:3;S.fac[g].car-=v;S.fac[g].why=S.fac[g].why||{};S.fac[g].why['vos accords avec leurs rivaux']=(S.fac[g].why['vos accords avec leurs rivaux']||0)-v}
+  else if(P.a.includes(f)&&big){S.fac[g].car=Math.min(100,S.fac[g].car+4);S.fac[g].why=S.fac[g].why||{};S.fac[g].why['vos accords avec leurs amis']=(S.fac[g].why['vos accords avec leurs amis']||0)+4}}}
+{const _envArrDV=envArrive;envArrive=function(e){if(e&&e.kind==='n'){try{dvArrive(e)}catch(x){console.error(x)}return}return _envArrDV.apply(this,arguments)}}
+dvArrive=attWrap(dvArrive,'vos négociations');
+
+/* ---- parole donnée ---- */
+function dvPromTxt(p){const nm=p.r&&FAC[p.r]?FAC[p.r].n:'';return p.k==='pay'?`un subside de ${p.amt} or par mois`:p.k==='def'?'la promesse de les défendre':p.k==='riv'?`la promesse de frapper ${dvLes(p.r)}`:p.k==='cede'?`la promesse de leur céder ${NI[p.t]!=null?N[NI[p.t]].n:'une ville'}`:'une promesse'}
+function dvPromState(p){const D=Math.floor(S.day);
+  if(p.k==='pay')return `${p.amt} or par mois, encore ${p.left} mois`;
+  if(p.k==='def')return p.trig?`${N[NI[p.trig.id]]?N[NI[p.trig.id]].n:'Une ville'} est attaquée : envoyez une armée (3 régiments ou plus) à moins de 40 km, ${Math.max(0,p.trig.d+45-D)} jours restants`:`jusqu'à ${dvDate(p.until)} ; s'ils sont attaqués, vous aurez 45 jours pour venir`;
+  if(p.k==='riv')return `prendre une ville ${dvDes(p.r)} avant ${dvDate(p.until)} (${Math.max(0,p.until-D)} jours)`;
+  if(p.k==='cede')return p.due?`vous tenez ${N[NI[p.t]].n} : à céder avant ${Math.max(0,p.due-D)} jours`:`dès que vous prendrez ${N[NI[p.t]].n}`;
+  return ''}
+function dvDate(d){const c=cal(d);return `${c.season.toLowerCase()} ${c.year}`}
+function dvKeep(p,quiet){if(p.st)return;p.st='ok';const F=S.fac[p.f];if(!F)return;const T=dvTr(p.f),v=Math.round((quiet?5:12)*T.prom);
+  F.car=Math.min(100,F.car+v);S.dv.rep=dvClamp(S.dv.rep+(quiet?2:5),0,100);F.why=F.why||{};F.why['parole tenue']=(F.why['parole tenue']||0)+v;
+  log(`Parole tenue envers ${dvLes(p.f)} (${dvPromTxt(p)}) : confiance ${dvSg(v)}, votre réputation grandit.`)}
+function dvBreak(p,why){if(p.st)return;p.st='ko';const F=S.fac[p.f];if(!F)return;
+  F.car-=30;F.why=F.why||{};F.why['parole trahie']=(F.why['parole trahie']||0)-30;S.dv.rep=dvClamp(S.dv.rep-12,0,100);
+  for(const g in S.fac){if(g===p.f)continue;const G=S.fac[g],same=FAC[g].cul===FAC[p.f].cul,v=same?8:contact('car',g)?4:0;if(!v)continue;G.car-=v;G.why=G.why||{};G.why['votre parole trahie']=(G.why['votre parole trahie']||0)-v}
+  const t=`Parole trahie envers ${dvLes(p.f)} : ${why}. Confiance −30, et tous les peuples l'apprennent (réputation −12).`;log(t);dvCard('Parole trahie',t,true)}
+function dvVoid(p,why){if(p.st)return;p.st='void';log(`Promesse caduque envers ${dvLes(p.f)} : ${why}.`)}
+function dvPromDaily(){const D=Math.floor(S.day);
+  for(const p of S.dv.prom){if(p.st)continue;const F=S.fac[p.f];if(!F){p.st='void';continue}
+    if(F.st==='allie_rom'||F.st==='guerre_car'){dvVoid(p,F.st==='allie_rom'?`ils ont rejoint ${dvEnemy()}`:'la guerre a éclaté entre vous');continue}
+    if(p.k==='def'){
+      if(!p.trig){for(const n of dvTowns(p.f)){const sg=S.siege[n.id];if(sg&&sg.side==='rom'){p.trig={id:n.id,d:D};dvCard(`${dvC(dvLes(p.f))} appellent à l'aide`,`${dvEnemy()} assiège ${n.n}. Vous avez promis de les défendre : envoyez une armée (3 régiments ou plus) à moins de 40 km dans les 45 jours.`,true);break}}
+        if(!p.trig&&D>p.until)dvKeep(p,true)}
+      else{const n=N[NI[p.trig.id]];if(n&&S.armies.some(a=>a.side==='car'&&!a.dead&&!a.ship&&a.units.length>=3&&Math.hypot(a.x-n.x,a.y-n.y)<40))dvKeep(p);
+        else if(D>p.trig.d+45)dvBreak(p,`personne n'est venu défendre ${n?n.n:'leur ville'}`)}}
+    else if(p.k==='riv'){if(D>p.until)dvBreak(p,`aucune ville ${dvDes(p.r)} n'a été prise`)}
+    else if(p.k==='cede'){const i=NI[p.t];if(i==null){p.st='void';continue}const o=ownerN(i);
+      if(o===p.f)dvKeep(p);else if(o==='car'&&!p.due){p.due=D+60;dvCard('Une promesse à tenir',`Vous avez pris ${N[i].n}, que vous aviez promise ${dvAux(p.f)}. Cédez-la dans les 60 jours (fenêtre Diplomatie).`,false)}
+      else if(p.due&&o==='car'&&D>p.due)dvBreak(p,`${N[i].n} ne leur a pas été cédée`);
+      else if(p.due&&o!=='car'){p.due=0}
+      else if(!p.due&&D>p.until)dvVoid(p,`${N[i].n} n'a jamais été prise`)}}
+  S.dv.prom=S.dv.prom.filter(p=>!p.st||D-(p.d0||0)<720)}
+function dvPromMonthly(){for(const p of S.dv.prom){if(p.st||p.k!=='pay')continue;const ok=dvWith(p.dm,()=>{if(S.gold.car>=p.amt){S.gold.car-=p.amt;return true}return false});
+  if(ok){p.left--;S.fac[p.f].dvg=(S.fac[p.f].dvg||0)+p.amt;if(p.left<=0)dvKeep(p)}else dvBreak(p,'le subside promis n’a pas été versé')}}
+function dvCede(pid){const p=S.dv.prom.find(x=>x.id===pid);if(!p||p.st||p.k!=='cede')return;if(dvGiveTown(p.t,p.f)){log(`Vous cédez ${N[NI[p.t]].n} ${dvAux(p.f)}, comme promis.`);dvKeep(p)}renderAll();openDip(p.f)}
+// trahir un traité ou attaquer un ami ruine la réputation ; prendre une ville d'un rival tient une promesse
+{const _dwDV=declareWar;declareWar=function(side,f){const F=S&&S.fac[f],was=F&&F.st;const r=_dwDV.apply(this,arguments);
+  try{if(side==='car'&&F){dvInit();const had=dvActive(f).length;if(dvOk(was)||had||F.otD){S.dv.rep=dvClamp(S.dv.rep-15,0,100);log(`Vous attaquez ${dvLes(f)} malgré vos engagements : tous les peuples s'en souviendront (réputation −15).`)}
+    for(const p of S.dv.prom)if(!p.st&&p.f===f)p.st='void'}}catch(e){console.error(e)}return r}}
+{const _capDV=capture;capture=function(i,side){const prev=ownerN(i);const r=_capDV.apply(this,arguments);
+  try{if(S.dv&&side==='car'&&prev&&S.fac[prev])for(const p of S.dv.prom)if(!p.st&&p.k==='riv'&&p.r===prev)dvKeep(p);
+    if(S.dv&&side==='rom'&&prev&&S.fac[prev])for(const p of S.dv.prom)if(!p.st&&p.k==='def'&&p.f===prev&&!p.trig){p.trig={id:N[i].id,d:Math.floor(S.day)};dvCard(`${dvC(dvLes(prev))} appellent à l'aide`,`${dvEnemy()} a pris ${N[i].n}. Vous avez promis de les défendre : envoyez une armée (3 régiments ou plus) à moins de 40 km dans les 45 jours.`,true)}}catch(e){console.error(e)}return r}}
+// otages livrés ou neutralité promise : pas d'alliance avec Rome
+{const _jaDV=joinAlliance;joinAlliance=function(f,side){const F=S&&S.fac[f];
+  if(side==='rom'&&F&&(F.otD||F.neu>S.day)){log(`${dvC(dvLes(f))} refusent l'alliance que leur offre ${dvEnemy()} : ${F.otD?'leurs otages sont chez vous':'ils vous ont promis leur neutralité'}.`);return}
+  return _jaDV.apply(this,arguments)}}
+
+/* ---- monde vivant : demandes des peuples ---- */
+const dvAsk=f=>{const c=dvP(f).c;return dvC(c)+(/^(les|la) | et /.test(c)&&!/^la /.test(c)?' vous demandent':' vous demande')};
+const DV_REQ={
+  ble:{ok:f=>true,mk:f=>({amt:[40,60,80,100][Math.floor(Math.random()*4)]}),
+    t:(f,r)=>`Leurs récoltes ont brûlé. ${dvAsk(f)} ${r.amt} or pour acheter du blé.`,yes:r=>`Envoyer ${r.amt} or`,cost:r=>r.amt,
+    acc:(f,r)=>{const F=S.fac[f],v=8+Math.round(r.amt/12);F.car=Math.min(100,F.car+v);F.dvg=(F.dvg||0)+r.amt;return `confiance +${v}`},ref:f=>{S.fac[f].car-=5;return 'confiance −5'}},
+  aide:{ok:f=>dvNear(f,'rom',250)>0&&!dvActive(f).some(p=>p.k==='def'),mk:()=>({}),
+    t:(f)=>`Les légions approchent de leurs terres. ${dvAsk(f)} votre parole : défendre leurs villes pendant un an.`,yes:()=>'Promettre',cost:()=>0,
+    acc:(f)=>{dvPromise({f,k:'def',until:Math.floor(S.day)+360});S.fac[f].car=Math.min(100,S.fac[f].car+6);return 'confiance +6, promesse de défense'},ref:f=>{S.fac[f].car-=4;S.fac[f].rom=Math.min(100,S.fac[f].rom+6);return `confiance −4, ils se tournent vers ${dvEnemy()}`}},
+  riv:{ok:f=>dvRivalsFor(f).length>0&&!dvActive(f).some(p=>p.k==='riv'),mk:f=>({r:dvRivalsFor(f)[0]}),
+    t:(f,r)=>`${dvAsk(f)} de porter la guerre chez ${dvLes(r.r)}, leurs ennemis : promettez-vous de prendre une de leurs villes d'ici un an ?`,yes:()=>'Promettre',cost:()=>0,
+    acc:(f,r)=>{dvPromise({f,k:'riv',r:r.r,until:Math.floor(S.day)+360});S.fac[f].car=Math.min(100,S.fac[f].car+6);return 'confiance +6, promesse de guerre'},ref:f=>{S.fac[f].car-=3;return 'confiance −3'}},
+  rompass:{ok:f=>S.fac[f].st==='neutre'&&dvNear(f,'rom',300)>0,mk:()=>({amt:60}),
+    t:(f,r)=>`${dvEnemy()} exige le passage de ses légions par leurs terres. Pour oser refuser, ils vous demandent ${r.amt} or.`,yes:r=>`Payer ${r.amt} or`,cost:r=>r.amt,
+    acc:(f)=>{const F=S.fac[f];F.rom-=10;F.noR=Math.floor(S.day)+180;F.car=Math.min(100,F.car+4);return `confiance +4, ils ferment leur porte aux émissaires de ${dvEnemy()} pour six mois`},ref:f=>{S.fac[f].rom=Math.min(100,S.fac[f].rom+8);return `ils cèdent à ${dvEnemy()}`}}
+};
+function dvReqMonthly(){const D=Math.floor(S.day);if(S.dv.req.filter(r=>!r.st).length>=2)return;
+  const cand=Object.keys(S.fac).filter(f=>{const F=S.fac[f];return DV_P[f]&&['neutre','pacte_car','tribut_car'].includes(F.st)&&F.car>-10&&contact('car',f)&&!S.dv.req.some(r=>r.f===f&&!r.st)});
+  for(const f of cand){if(Math.random()>.06)continue;const ks=Object.keys(DV_REQ).filter(k=>DV_REQ[k].ok(f));if(!ks.length)continue;
+    const k=ks[Math.floor(Math.random()*ks.length)],R=DV_REQ[k],r=Object.assign({id:S.dv.uid++,f,k,until:D+30},R.mk(f));S.dv.req.push(r);
+    log(`Message ${dvDes(f)} : ${R.t(f,r)} (fenêtre Diplomatie, 30 jours pour répondre)`);dvReqCard(r);return}}
+function dvReqDaily(){const D=Math.floor(S.day);for(const r of S.dv.req){if(r.st)continue;if(!S.fac[r.f]||D>r.until){r.st='exp';if(S.fac[r.f]){const t=DV_REQ[r.k].ref(r.f,r);log(`${dvC(dvLes(r.f))} attendaient une réponse qui n'est jamais venue (${t}).`)}}}
+  S.dv.req=S.dv.req.filter(r=>!r.st||D-r.until<60)}
+function dvAnswer(id,yes){dvInit();const r=S.dv.req.find(x=>x.id===id);if(!r||r.st)return;const R=DV_REQ[r.k],c=R.cost(r);
+  if(yes){if(S.gold.car<c)return;S.gold.car-=c;r.st='ok';const t=R.acc(r.f,r);log(`Vous répondez favorablement ${dvAux(r.f)} (${t}).`)}
+  else{r.st='no';const t=R.ref(r.f,r);log(`Vous refusez la demande ${dvDes(r.f)} (${t}).`)}
+  renderAll()}
+dvAnswer=attWrap(dvAnswer,'vos réponses à leurs demandes');
+function dvReqCard(r){if(!$('modal').hidden||S.cur||S.over)return;const R=DV_REQ[r.k],c=R.cost(r);
+  modal(`<h2>Message ${esc(dvDes(r.f))}</h2><p>${R.t(r.f,r)}</p><p class="sub">Vous avez 30 jours pour répondre ; sans réponse, ils le prendront comme un refus. Le temps continue de passer.</p>
+   <div class="row" style="justify-content:flex-end"><button id="dvRqY" class="go" type="button" ${S.gold.car<c?'disabled':''}>${R.yes(r)}</button><button id="dvRqN" type="button">Refuser</button><button id="dvRqL" type="button">Plus tard</button><button id="mClose" type="button" hidden>Fermer</button></div>`);
+  $('dvRqY').onclick=()=>{dvAnswer(r.id,true);closeModal()};$('dvRqN').onclick=()=>{dvAnswer(r.id,false);closeModal()};$('dvRqL').onclick=closeModal;$('mClose').onclick=closeModal}
+function dvCard(title,txt,pause){if(pause)S.paused=true;if(!$('modal').hidden||S.cur||S.over)return;
+  modal(`<h2>${esc(title)}</h2><p>${txt}</p><div class="row" style="justify-content:flex-end"><button type="button" id="dvCdD">Diplomatie</button><button class="go" id="mClose" type="button">Continuer</button></div>`);$('mClose').onclick=closeModal;$('dvCdD').onclick=()=>openDip()}
+
+/* ---- ambassades romaines visibles et interceptables ---- */
+{const _aiDV=aiDiplomacy;aiDiplomacy=function(){if(!S||!S.fac)return _aiDV.apply(this,arguments);dvInit();const b={};for(const f in S.fac)b[f]=[S.fac[f].rom,S.fac[f].st];
+  const r=_aiDV.apply(this,arguments);
+  try{for(const f in S.fac){const F=S.fac[f],o=b[f];if(!o||F.st!==o[1])continue;const d=F.rom-o[0];if(d<=.5)continue;F.rom=o[0];
+    if(F.noR>S.day){log(`${dvC(dvLes(f))} renvoient les émissaires de ${dvEnemy()} sans les entendre.`);continue}
+    const t=dvTarget(f);if(!t){F.rom+=d;continue}let og=null,bd=1e9;
+    for(const n of N)if(!n.col&&ownerN(n.i)==='rom'){const k=Math.hypot(n.x-t.x,n.y-t.y);if(k<bd){bd=k;og=[n.x,n.y]}}
+    for(const a of S.armies)if(a.side==='rom'&&!a.dead&&!a.ship){const k=Math.hypot(a.x-t.x,a.y-t.y);if(k<bd){bd=k;og=[a.x,a.y]}}
+    if(!og||bd<=ENV_KMD){F.rom=Math.min(100,F.rom+d);continue}
+    S.dv.renv.push({id:S.dv.uid++,f,d,x:og[0],y:og[1],tx:t.x,ty:t.y,tn:t.n})}}catch(e){console.error(e)}
+  return r}}
+function dvRenvDaily(){if(!S.dv.renv.length)return;
+  S.dv.renv=S.dv.renv.filter(e=>{const F=S.fac[e.f];if(!F)return false;const d=Math.hypot(e.tx-e.x,e.ty-e.y);
+    const c=S.armies.find(a=>a.side==='car'&&!a.dead&&!a.ship&&!a.g&&Math.hypot(a.x-e.x,a.y-e.y)<8);
+    if(c){log(`Vos cavaliers interceptent une ambassade de ${dvEnemy()} en route vers ${e.tn} : elle venait gagner ${dvLes(e.f)} à sa cause.`);return false}
+    if(d<=ENV_KMD){F.rom=Math.min(100,F.rom+e.d);
+      if(F.st==='neutre'&&F.rom>=60&&F.rom>F.car+20&&Math.random()<.3)joinAlliance(e.f,'rom');return false}
+    e.x+=(e.tx-e.x)/d*ENV_KMD;e.y+=(e.ty-e.y)/d*ENV_KMD;return true})}
+
+/* ---- horloge ---- */
+{const _dDV=daily;daily=function(d){const r=_dDV.apply(this,arguments);try{if(S&&S.fac){dvInit();dvRenvDaily();dvPromDaily();dvReqDaily();
+  if(d%30===0){dvPromMonthly();dvReqMonthly();for(const f in S.fac){const F=S.fac[f];if(F.dvg)F.dvg=Math.round(F.dvg*.8);if(F.dvg<5)delete F.dvg;if(F.dvn){F.dvn*=.85;if(F.dvn<.1)delete F.dvn}}S.dv.rep+=(50-S.dv.rep)*.01}
+  dvBadge()}}catch(e){console.error(e)}return r}}
+function dvBadge(){const b=$('bDip');if(!b||!S||!S.dv)return;const n=S.dv.req.filter(r=>!r.st).length+S.dv.prom.filter(p=>!p.st&&(p.trig||p.due)).length;
+  let s=b.querySelector('.dv-badge');if(!n){if(s)s.remove();return}if(!s){s=document.createElement('span');s.className='dv-badge';b.appendChild(s)}if(s.textContent!==String(n))s.textContent=n}
+{const _rtDV=renderTop;renderTop=function(){const r=_rtDV.apply(this,arguments);try{dvBadge()}catch(e){}return r}}
+
+/* ---- carte diplomatique et ambassades romaines sur la carte ---- */
+const DV_COL={allie_car:'#5fbf6a',pacte_car:'#9ad07a',tribut_car:'#e0b84a',allie_rom:'#d0473c',guerre_car:'#8a1f1f',guerre_rom:'#b08f6a',soumis:'#777'};
+function dvStCol(f){const F=S.fac[f];if(DV_COL[F.st])return DV_COL[F.st];const v=dvClamp(F.car,-60,60)/60;return v>=0?`rgba(${dvR(200-90*v)},${dvR(190+20*v)},${dvR(120-20*v)},1)`:`rgba(${dvR(200+20*-v)},${dvR(190-90*-v)},${dvR(120-40*-v)},1)`}
+function dvStTxt(f){const F=S.fac[f];return F.st==='allie_car'?'allié':F.st==='pacte_car'?'traité d’amitié':F.st==='tribut_car'?'tributaire':F.st==='allie_rom'?`allié de ${dvEnemy()}`:F.st==='soumis'?'soumis':F.st.startsWith('guerre')?(F.st==='guerre_car'?'en guerre contre vous':`en guerre contre ${dvEnemy()}`):'neutre'}
+function dvCentroid(f){const T=dvTowns(f);if(!T.length)return null;let x=0,y=0,w=0;for(const n of T){const k=1+n.size;x+=n.x*k;y+=n.y*k;w+=k}return [x/w,y/w]}
+function dvDrawMap(s){ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);const P=f=>{const c=dvCentroid(f);return c?[c[0]*s+view.ox,c[1]*s+view.oy]:null};
+  // liens : rivalités (rouge) et amitiés (vert)
+  const done=new Set();ctx.lineWidth=1.6;
+  for(const f in DV_P){if(!S.fac[f])continue;const a=P(f);if(!a)continue;const D=dvP(f);
+    for(const [L,col] of [[D.r,'rgba(208,71,60,.7)'],[D.a,'rgba(110,190,110,.7)']])for(const g of L){const k=[f,g].sort().join();if(done.has(k))continue;done.add(k);const b=P(g);if(!b)continue;
+      ctx.setLineDash(col.startsWith('rgba(208')?[7,5]:[2,4]);ctx.strokeStyle=col;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.quadraticCurveTo((a[0]+b[0])/2,(a[1]+b[1])/2-30,b[0],b[1]);ctx.stroke()}}
+  ctx.setLineDash([]);
+  for(const f in S.fac){const col=dvStCol(f);ctx.fillStyle=col;ctx.globalAlpha=.42;for(const n of dvTowns(f)){const X=n.x*s+view.ox,Y=n.y*s+view.oy,R=Math.max(10,Math.min(60,(40+n.size*25)*s));ctx.beginPath();ctx.arc(X,Y,R,0,7);ctx.fill()}ctx.globalAlpha=1}
+  ctx.font='600 12px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const f in S.fac){const p=P(f);if(!p)continue;const t=FAC[f].n,u=dvStTxt(f);ctx.lineWidth=3.5;ctx.strokeStyle='rgba(20,14,8,.85)';ctx.strokeText(t,p[0],p[1]-7);ctx.fillStyle='#f3e6c4';ctx.fillText(t,p[0],p[1]-7);
+    ctx.font='11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.strokeText(u,p[0],p[1]+7);ctx.fillStyle=dvStCol(f);ctx.fillText(u,p[0],p[1]+7);ctx.font='600 12px Barlow Semi Condensed, Arial Narrow, sans-serif'}
+  ctx.restore()}
+function dvDrawRenv(s){if(!S.dv||!S.dv.renv||!S.dv.renv.length)return;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const e of S.dv.renv){if(typeof visAt==='function'&&visAt(e.x,e.y)<1)continue;const X=e.x*s+view.ox,Y=e.y*s+view.oy,TX=e.tx*s+view.ox,TY=e.ty*s+view.oy;
+    ctx.setLineDash([3,5]);ctx.strokeStyle='rgba(226,102,90,.75)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(TX,TY);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#8a2a22';ctx.strokeStyle='#f0c9a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(X,Y,8,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#efe6d2';ctx.fillRect(X-4.5,Y-3,9,6);
+    if(s>.6){ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='rgba(30,22,14,.7)';const t=`Ambassade de ${dvEnemy()} · ${FAC[e.f].n}`;ctx.strokeText(t,X+11,Y);ctx.fillStyle='#f0b8a8';ctx.fillText(t,X+11,Y)}}
+  ctx.restore()}
+{const _ddDV=drawDynamic;drawDynamic=function(w,h,s){const r=_ddDV.apply(this,arguments);try{if(S&&S.fac){if(DVMAP)dvDrawMap(s);dvDrawRenv(s)}}catch(e){}return r}}
+function dvMapToggle(on){DVMAP=on;let b=$('dvLeg');
+  if(on&&!b){b=document.createElement('div');b.id='dvLeg';b.innerHTML=`<b>Carte diplomatique</b><span><i style="background:${DV_COL.allie_car}"></i>allié</span><span><i style="background:${DV_COL.pacte_car}"></i>traité</span><span><i style="background:${DV_COL.tribut_car}"></i>tributaire</span><span><i style="background:linear-gradient(90deg,#dc6450,#c8be78,#6ed264)"></i>neutre (hostile → favorable)</span><span><i style="background:${DV_COL.allie_rom}"></i>allié de ${dvEnemy()}</span><span><i class="dv-l" style="border-color:#d0473c"></i>rivaux</span><span><i class="dv-l" style="border-top:2px dotted #6ebe6e"></i>amis</span><button type="button" id="dvLegX">Fermer</button>`;document.body.appendChild(b);$('dvLegX').onclick=()=>dvMapToggle(false)}
+  if(!on&&b)b.remove();try{if(typeof mirFix==='function'&&b&&on)mirFix(b)}catch(e){}
+  if(typeof requestDraw==='function')requestDraw();else if(typeof draw==='function')try{draw()}catch(e){}}
+
+/* ---- la fenêtre ---- */
+const dvSt=document.createElement('style');dvSt.textContent=`
+#mcard.dv-win{max-width:1060px!important;width:min(1060px,96vw)}
+.dv-top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:4px 0 10px}
+.dv-rep{display:flex;align-items:center;gap:8px;font-size:13px}.dv-rep .g{display:inline-block;width:120px;height:7px;background:rgba(255,255,255,.08);border-radius:4px;position:relative;overflow:hidden}.dv-rep .g i{position:absolute;left:0;top:0;bottom:0;background:var(--gold,#d8b25a)}
+.dv-nav{display:flex;gap:6px;flex-wrap:wrap}.dv-nav button.on{border-color:var(--gold,#d8b25a);color:var(--tx,#efe6d2)}
+.dv-wrap{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:12px;align-items:start}
+@media (max-width:760px){.dv-wrap{grid-template-columns:1fr}}
+.dv-list{position:relative;max-height:62vh;overflow:auto;padding-right:4px}
+.dv-grp{font-family:var(--display,serif);letter-spacing:.06em;font-size:11px;text-transform:uppercase;color:var(--mu2,#a99);margin:10px 0 4px}
+.dv-row{display:grid;grid-template-columns:1fr auto;gap:2px 6px;padding:6px 8px;border:1px solid transparent;border-radius:6px;cursor:pointer}
+.dv-row:hover{background:rgba(210,174,108,.08)}.dv-row.on{border-color:var(--gold,#d8b25a);background:rgba(210,174,108,.12)}
+.dv-row b{font-size:14px}.dv-row small{grid-column:1/-1;color:var(--mu2,#a99);font-size:11.5px}
+.dv-pill{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid currentColor;white-space:nowrap;align-self:center}
+.dv-mini{grid-column:1/-1;height:4px;border-radius:3px;background:rgba(255,255,255,.07);position:relative;overflow:hidden}.dv-mini i{position:absolute;top:0;bottom:0}
+.dv-fiche{min-height:300px}
+.dv-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px}.dv-h .dv-name{font-family:var(--display,serif);font-size:22px}
+.dv-say{margin:8px 0 10px;padding:8px 10px;border-left:3px solid var(--gold,#d8b25a);background:rgba(210,174,108,.07);font-style:italic}
+.dv-g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}@media (max-width:760px){.dv-g3{grid-template-columns:1fr}}
+.dv-g{border:1px solid rgba(210,174,108,.25);border-radius:8px;padding:8px}
+.dv-g .t{display:flex;justify-content:space-between;font-weight:600}.dv-g .bar{height:8px;margin:6px 0;border-radius:4px;background:rgba(255,255,255,.07);position:relative}
+.dv-g .bar i{position:absolute;top:0;bottom:0;border-radius:4px}.dv-g .bar:after{content:'';position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.35)}
+.dv-g ul,.dv-w{list-style:none;margin:0;padding:0;font-size:12.5px}.dv-g li,.dv-w li{display:flex;justify-content:space-between;gap:8px;padding:1px 0}
+.dv-g li span:last-child{white-space:nowrap}.dv-pos{color:var(--good,#7c6)}.dv-neg{color:var(--bad,#e66)}
+.dv-sec{margin-top:12px}.dv-sec>b{font-family:var(--display,serif);letter-spacing:.05em;font-size:12px;text-transform:uppercase;color:var(--mu2,#a99);display:block;margin-bottom:4px}
+.dv-w li{display:grid;grid-template-columns:18px 1fr;gap:2px 6px;padding:3px 0}.dv-w li small{grid-column:2;color:var(--mu2,#a99)}
+.dv-req{border:1px solid var(--gold,#d8b25a);border-radius:8px;padding:8px 10px;margin:6px 0;background:rgba(210,174,108,.06)}
+.dv-req .row{margin-top:6px}
+.dv-tab{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}@media (max-width:760px){.dv-tab{grid-template-columns:1fr}}
+.dv-tab label{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:13.5px}.dv-tab label small{color:var(--mu2,#a99);display:block}.dv-tab label>span:first-child:not(:last-child){min-width:150px}.dv-tab select{flex:1;min-width:0;width:100%}
+.dv-tab select,.dv-tab input[type=number]{background:#1d1712;color:inherit;border:1px solid rgba(210,174,108,.35);border-radius:4px;padding:2px 4px}
+.dv-bal{margin-top:12px;border:1px solid rgba(210,174,108,.3);border-radius:8px;padding:10px}
+.dv-bal ul{list-style:none;margin:0;padding:0;font-size:13px}.dv-bal li{display:flex;justify-content:space-between;padding:1px 0}
+.dv-bal .tot{border-top:1px solid rgba(210,174,108,.3);margin-top:4px;padding-top:4px;font-weight:700}
+.dv-v{font-size:15px;font-weight:600;margin:8px 0 4px}.dv-v.ok{color:var(--good,#7c6)}.dv-v.mid{color:var(--gold,#d8b25a)}.dv-v.no{color:var(--bad,#e66)}
+.dv-badge{display:inline-block;min-width:16px;height:16px;line-height:16px;border-radius:8px;background:#c0392b;color:#fff;font-size:10.5px;text-align:center;margin-left:4px;padding:0 3px;vertical-align:top}
+#dvLeg{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:30;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;max-width:94vw;background:rgba(28,21,15,.92);border:1px solid #8a6630;border-radius:8px;padding:6px 12px;color:#efe6d2;font-size:12px}
+#dvLeg i{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:4px;vertical-align:middle}#dvLeg i.dv-l{height:0;border:0;border-top:2px dashed;border-radius:0}
+`;document.head.appendChild(dvSt);
+const dvBar=(v,lo,hi,col)=>{const z=(0-lo)/(hi-lo)*100,p=(dvClamp(v,lo,hi)-lo)/(hi-lo)*100;return `<div class="bar"><i style="background:${col};left:${Math.min(z,p)}%;width:${Math.abs(p-z)}%"></i></div>`};
+const dvLi=L=>L.length?`<ul>${L.map(([t,v])=>`<li><span>${esc(t)}</span><span class="${v>=0?'dv-pos':'dv-neg'}">${dvSg(v)}</span></li>`).join('')}</ul>`:'<ul><li><span class="sub">rien de marquant</span></li></ul>';
+function dvSay(f,D){const F=S.fac[f],v=D.v,C=F.car,K=D.K.v;
+  if(F.st==='allie_car')return 'Ils combattent à vos côtés.';if(F.st==='allie_rom')return `Ils ont lié leur sort à ${dvEnemy()}.`;if(F.st==='guerre_car')return 'Ils sont en guerre contre vous.';
+  if(v>=25)return 'Ils vous font confiance et voient leur intérêt à votre cause : le moment de conclure.';
+  if(K>=20&&C<20)return 'Ils vous craignent sans vous aimer : ils céderont à la force, pas à l’amitié.';
+  if(C>=30&&D.I.v<0)return 'Ils vous apprécient, mais votre politique contrarie leurs intérêts.';
+  if(D.I.v>=10&&C<10)return 'Ils ont intérêt à s’entendre avec vous, mais se méfient de votre parole.';
+  if(F.rom>F.car+20)return `${dvEnemy()} a leur oreille ; il faudra beaucoup pour les détacher d’elle.`;
+  if(v>=5)return 'Ils sont bien disposés, sans plus.';if(v>=-10)return 'Ils hésitent et attendent de voir qui l’emportera.';
+  return 'Ils vous sont hostiles.'}
+function dvGroups(){const G=[['Vos alliés et vos traités',[]],['Neutres à portée de vos émissaires',[]],['Neutres hors de portée',[]],[`Alliés de ${dvEnemy()}, ennemis et soumis`,[]]];
+  for(const f in S.fac){const F=S.fac[f];if(dvOk(F.st))G[0][1].push(f);else if(F.st==='neutre')G[contact('car',f)?1:2][1].push(f);else G[3][1].push(f)}
+  for(const g of G)g[1].sort((a,b)=>S.fac[b].car-S.fac[a].car);return G.filter(g=>g[1].length)}
+function dvRow(f){const F=S.fac[f],c=dvStCol(f),env=(S.env||[]).some(e=>e.f===f&&e.kind!=='s'),req=S.dv.req.some(r=>r.f===f&&!r.st),urg=S.dv.prom.some(p=>p.f===f&&!p.st&&(p.trig||p.due)),v=dvClamp(F.car,-100,100);
+  return `<div class="dv-row${DVS.f===f?' on':''}" data-dvf="${f}"><b>${esc(FAC[f].n)}${env?' ✉':''}${req||urg?' <span style="color:#e0a040">●</span>':''}</b><span class="dv-pill" style="color:${c}">${dvStTxt(f)}</span>
+   <small>${esc(dvP(f).c)}</small><div class="dv-mini"><i style="background:${v>=0?'var(--good,#7c6)':'var(--bad,#e66)'};left:${v>=0?50:50+v/2}%;width:${Math.abs(v)/2}%"></i></div></div>`}
+function dvFiche(f){const F=S.fac[f],P=dvP(f),T=dvTr(f),D=dvDisp(f),c=contact('car',f),nm=FAC[f].n;
+  const towns=dvTowns(f).map(n=>n.n);
+  const W=dvWants(f).map(w=>`<li><span>${w.st==='ok'?'<span class="dv-pos">✓</span>':w.st==='bad'?'<span class="dv-neg">✗</span>':w.st==='part'?'<span style="color:var(--gold,#d8b25a)">◐</span>':'○'}</span><span>${esc(w.t)}</span><small>${esc(w.how)}</small></li>`).join('');
+  const rel=[P.r.length?`Rivaux : ${P.r.map(g=>FAC[g].n).join(', ')}`:'',P.a.length?`Amis : ${P.a.map(g=>FAC[g].n).join(', ')}`:''].filter(Boolean).join(' · ');
+  const prom=S.dv.prom.filter(p=>p.f===f&&!p.st).map(p=>`<li><span>⚖</span><span>${esc(dvPromTxt(p).replace(/^./,m=>m.toUpperCase()))}</span><small>${esc(dvPromState(p))}${p.k==='cede'&&p.due&&ownerN(NI[p.t])==='car'?` <button type="button" data-dvcede="${p.id}">Céder ${esc(N[NI[p.t]].n)}</button>`:''}</small></li>`).join('');
+  const reqs=S.dv.req.filter(r=>r.f===f&&!r.st).map(r=>{const R=DV_REQ[r.k],cst=R.cost(r);return `<div class="dv-req"><b>Leur demande</b> <span class="sub">(${Math.max(0,r.until-Math.floor(S.day))} jours pour répondre)</span><br>${R.t(f,r)}<div class="row"><button type="button" class="go" data-dvy="${r.id}" ${S.gold.car<cst?'disabled':''}>${R.yes(r)}</button><button type="button" data-dvn="${r.id}">Refuser</button></div></div>`}).join('');
+  const env=(S.env||[]).find(e=>e.f===f&&e.kind!=='s'),renv=S.dv.renv.filter(e=>e.f===f).length;
+  const canNeg=['neutre','pacte_car','tribut_car','guerre_car'].includes(F.st),why=!canNeg?'':env?`Une ambassade est en route (${ENV_LAB[env.key]||'négociation'}).`:F.cd>0?'Une démarche par mois : attendez le mois prochain.':!c?'Hors de portée : approchez une armée ou tenez une ville à moins de 180 km.':'';
+  const extra=[];if(F.pass&&F.st==='neutre')extra.push('passage accordé');if(F.neu>S.day)extra.push(`neutres jusqu'à ${dvDate(F.neu)}`);if(F.otD)extra.push('leurs otages sont chez vous');if(F.ot)extra.push('vos otages sont chez eux');if(isTrib(f))extra.push(`tribut ${tribute(f)} or/mois · fidélité ${Math.round(F.fid)} (${fidTxt(F.fid)})`);
+  return `<div class="dv-h"><span class="dv-name">${esc(nm)}</span><span class="dv-pill" style="color:${dvStCol(f)}">${dvStTxt(f)}</span></div>
+   <div class="sub">${esc(P.c)} · <span title="${esc(T.d)}" style="border-bottom:1px dotted">caractère ${T.n}</span> — ${esc(T.d)}</div>
+   <div class="sub">${towns.length?'Villes : '+esc(towns.slice(0,8).join(', '))+(towns.length>8?'…':''):'Aucune ville'}${extra.length?' · '+extra.join(' · '):''}</div>
+   <div class="dv-say">${dvSay(f,D)}</div>${reqs}
+   <div class="dv-g3">
+    <div class="dv-g"><div class="t"><span>Confiance</span><span>${dvR(D.C.v)}</span></div>${dvBar(D.C.v,-100,100,'var(--punic,#7d4fb8)')}${dvLi(D.C.L)}</div>
+    <div class="dv-g"><div class="t"><span>Intérêt</span><span>${dvSg(D.I.v)}</span></div>${dvBar(D.I.v,-50,50,'var(--gold,#d8b25a)')}${dvLi(D.I.L)}</div>
+    <div class="dv-g"><div class="t"><span>Crainte</span><span>${dvSg(D.K.v)}</span></div>${dvBar(D.K.v,-50,50,'#b0703a')}${dvLi(D.K.L)}</div>
+   </div>
+   <div class="sub" style="margin-top:6px">Leur confiance en ${dvEnemy()} : <b>${dvR(F.rom)}</b>${renv?` · <span class="dv-neg">${renv} ambassade${renv>1?'s':''} de ${dvEnemy()} en route vers eux</span>`:''} · Disposition d'ensemble envers vous : <b>${dvSg(D.v)}</b></div>
+   <div class="dv-sec"><b>Ce qu'ils veulent</b><ul class="dv-w">${W||'<li><span></span><span class="sub">Rien de particulier.</span></li>'}</ul>${rel?`<div class="sub" style="margin-top:4px">${rel}</div>`:''}</div>
+   ${prom?`<div class="dv-sec"><b>Votre parole envers eux</b><ul class="dv-w">${prom}</ul></div>`:''}
+   <div class="row" style="margin-top:12px">${canNeg?`<button type="button" class="go" id="dvNeg" ${why?'disabled':''}>Négocier…</button>`:''}${why?`<span class="sub">${why}</span>`:''}</div>`}
+function dvNegPane(f){const F=S.fac[f],o=DVS.offer||(DVS.offer=dvNewOffer()),nm=FAC[f].n,tw=dvTownsFor(f),cov=dvCovet(f),rv=dvRivalsFor(f);
+  const chk=(k,lab,d,dis,on)=>`<label><input type="checkbox" data-dvo="${k}" ${on?'checked':''} ${dis?'disabled':''}><span>${lab}${d?`<small>${d}</small>`:''}</span></label>`;
+  const gv=[`<label><span>Or</span><input type="number" min="0" step="25" max="${Math.floor(S.gold.car)}" value="${o.gold}" data-dvo="gold" style="width:80px"><span class="sub">trésor ${Math.floor(S.gold.car)}</span></label>`];
+  if(tw.length)gv.push(`<label><span>Une ville</span><select data-dvo="town"><option value="">—</option>${tw.map(x=>`<option value="${x.n.id}" ${o.town===x.n.id?'selected':''}>${esc(x.n.n)}${x.want?' ★ convoitée':''}</option>`).join('')}</select></label>`);
+  if(!F.ot)gv.push(chk('host','Vos otages','gage de votre parole',0,o.host));
+  if(['num','mae'].includes(f)&&!S.mar)gv.push(chk('marr','Un mariage royal','une fille de grande famille épouse leur roi',0,o.marr));
+  gv.push(`<label><span>Subside (promesse)</span><select data-dvo="sub">${[0,10,20,40].map(v=>`<option value="${v}" ${o.sub===v?'selected':''}>${v?v+' or par mois pendant un an':'—'}</option>`).join('')}</select></label>`);
+  gv.push(chk('def','Promettre de les défendre (2 ans)','s’ils sont attaqués, une armée doit venir dans les 45 jours',0,o.def));
+  if(rv.length)gv.push(`<label><span>Promettre de frapper</span><select data-dvo="riv"><option value="">—</option>${rv.map(r=>`<option value="${r}" ${o.riv===r?'selected':''}>${esc(dvLes(r))} (prendre une ville d'ici un an)</option>`).join('')}</select></label>`);
+  if(cov.length)gv.push(`<label><span>Promettre de leur céder</span><select data-dvo="cede"><option value="">—</option>${cov.map(id=>`<option value="${id}" ${o.cede===id?'selected':''}>${esc(N[NI[id]].n)} (une fois prise)</option>`).join('')}</select></label>`);
+  const dm=Object.keys(DV_DEM).filter(k=>DV_DEM[k].ok(F)).map(k=>chk('dem.'+k,DV_DEM[k].n,DV_DEM[k].d.replace(/Rome/g,dvEnemy()),0,o.dem[k]));
+  return `<div class="dv-h"><span class="dv-name">Négocier avec ${esc(dvLes(f))}</span></div><div class="sub">${esc(dvP(f).c)} · caractère ${dvTr(f).n}. Composez votre offre : leur avis se met à jour à chaque changement. L'ambassade part ensuite de votre ville ou armée la plus proche ; la réponse dépendra de la situation à son arrivée. Si l'offre est refusée, l'or vous revient.</div>
+   <div class="dv-tab" style="margin-top:10px"><div><b>Vous offrez</b>${gv.join('')}</div><div><b>Vous demandez</b>${dm.join('')||'<p class="sub">Rien à leur demander pour l’instant.</p>'}<p class="sub">Sans demande, l'offre est un simple présent : elle gagne leur confiance, mais l'amitié ne s'achète pas au-delà de 60.</p></div></div>
+   <div class="dv-bal" id="dvBal"></div>
+   <div class="row" style="margin-top:10px"><button type="button" id="dvBack">← Retour à la fiche</button><button type="button" class="go" id="dvSend">Envoyer l'ambassade</button></div>`}
+function dvBalFill(f){const el=$('dvBal');if(!el)return;const o=DVS.offer,e=dvEval(f,o),[k,t]=dvVerdict(e),c=dvCounter(f,o,e),t0=dvTarget(f),og=t0&&envOrigin(t0);
+  const days=og?Math.max(1,Math.round(Math.hypot(t0.x-og[0],t0.y-og[1])/ENV_KMD)):0;
+  const L=[...e.D.L.map(([a,v])=>[a,v]),...e.G,...e.M].filter(x=>Math.abs(x[1])>=.5);
+  el.innerHTML=`<b>Ce qu'ils en pensent</b><ul>${L.map(([a,v])=>`<li><span>${esc(a)}</span><span class="${v>=0?'dv-pos':'dv-neg'}">${dvSg(v)}</span></li>`).join('')}<li class="tot"><span>Bilan</span><span class="${e.score>=0?'dv-pos':'dv-neg'}">${e.pure?'présent':dvSg(e.score)}</span></li></ul>
+   <div class="dv-v ${k}">${t}</div>${c?`<div class="sub">${c.t} ${c.b?`<button type="button" id="dvCtr">${c.b}</button>`:''}</div>`:''}
+   <div class="sub" style="margin-top:4px">Coût : ${dvCost(o)} or · trajet ≈ ${days} jour${days>1?'s':''}${e.pure?'':' · une petite part de hasard joue à l’arrivée'}.</div>`;
+  const b=$('dvSend');if(b)b.disabled=(!e.G.length&&!e.M.length)||dvCost(o)>S.gold.car||!og;
+  if(c&&c.b&&$('dvCtr'))$('dvCtr').onclick=()=>{c.f();dvRender()};
+  try{if(typeof mirFix==='function')mirFix(el)}catch(x){}}
+function dvRender(){dvInit();const keys=Object.keys(S.fac);if(!keys.length){modal('<h2>Diplomatie</h2><p>Aucun peuple.</p><div class="row"><button class="go" id="mClose" type="button">Fermer</button></div>');$('mClose').onclick=closeModal;return}
+  if(!DVS.f||!S.fac[DVS.f]){const G=dvGroups(),g=G.find(x=>x[0].startsWith('Neutres à'))||G[0];DVS.f=(g&&g[1][0])||keys[0]}
+  const f=DVS.f,rep=S.dv.rep,ita=typeof SOCII!=='undefined'&&!(typeof isMac==='function'&&isMac());
+  const allReq=S.dv.req.filter(r=>!r.st).length;
+  const html=`<h2>Diplomatie</h2>
+   <div class="dv-top"><div class="dv-rep" title="Chaque parole tenue la renforce ; chaque parole trahie, chaque traité rompu la ruine auprès de tous les peuples. Elle donne leur valeur à vos promesses."><span>Réputation de ${dvMe()}</span><span class="g"><i style="width:${rep}%"></i></span><b>${dvR(rep)}</b><span class="sub">${dvRepTxt(rep)}</span></div>
+    <div class="dv-nav"><button type="button" class="on">Peuples${allReq?` (${allReq} demande${allReq>1?'s':''})`:''}</button>${ita?`<button type="button" id="dvIta">${S.mirror?'Vos alliés italiens':'Alliés italiens de '+dvEnemy()}</button>`:''}<button type="button" id="dvMap">Carte diplomatique</button></div></div>
+   <div class="dv-wrap"><div class="dv-list">${dvGroups().map(([t,L])=>`<div class="dv-grp">${t}</div>${L.map(dvRow).join('')}`).join('')}</div>
+    <div class="dv-fiche">${DVS.view==='neg'?dvNegPane(f):dvFiche(f)}</div></div>
+   <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`;
+  const keepList=$('mcard')&&$('mcard').querySelector('.dv-list'),st=keepList?keepList.scrollTop:0;
+  modal(html);const M=$('mcard');M.classList.add('wide','dv-win');
+  const L=M.querySelector('.dv-list');if(L){L.scrollTop=st;const on=L.querySelector('.dv-row.on');if(on&&(on.offsetTop<L.scrollTop||on.offsetTop+on.offsetHeight>L.scrollTop+L.clientHeight))L.scrollTop=on.offsetTop-L.clientHeight/2}
+  M.querySelectorAll('[data-dvf]').forEach(r=>r.onclick=()=>{DVS.f=r.dataset.dvf;DVS.view='fiche';DVS.offer=null;dvRender()});
+  M.querySelectorAll('[data-dvy]').forEach(b=>b.onclick=()=>{dvAnswer(+b.dataset.dvy,true);dvRender()});
+  M.querySelectorAll('[data-dvn]').forEach(b=>b.onclick=()=>{dvAnswer(+b.dataset.dvn,false);dvRender()});
+  M.querySelectorAll('[data-dvcede]').forEach(b=>b.onclick=()=>dvCede(+b.dataset.dvcede));
+  if($('dvNeg'))$('dvNeg').onclick=()=>{DVS.view='neg';DVS.offer=dvNewOffer();dvRender()};
+  if($('dvBack'))$('dvBack').onclick=()=>{DVS.view='fiche';dvRender()};
+  if($('dvSend'))$('dvSend').onclick=()=>dvSend(f);
+  if($('dvIta'))$('dvIta').onclick=()=>{DVS.tab='ita';openDip()};
+  $('dvMap').onclick=()=>{closeModal();dvMapToggle(true)};
+  $('mClose').onclick=closeModal;
+  if(DVS.view==='neg'){M.querySelectorAll('[data-dvo]').forEach(i=>{const h=()=>{const k=i.dataset.dvo,o=DVS.offer;
+      if(k.startsWith('dem.')){o.dem[k.slice(4)]=i.checked?1:0}else if(i.type==='checkbox')o[k]=i.checked?1:0;else if(k==='gold')o.gold=dvClamp(Math.round((+i.value||0)/25)*25,0,Math.floor(S.gold.car/25)*25);else if(k==='sub')o.sub=+i.value;else o[k]=i.value;
+      dvBalFill(f)};i.onchange=h;if(i.type==='number')i.oninput=h});dvBalFill(f)}
+  try{if(typeof mirFix==='function')mirFix(M)}catch(e){}}
+function dvIta(prev){DVS.tab='ita';prev();const M=$('mcard');if(!M)return;M.classList.add('wide');
+  const hs=[...M.querySelectorAll('h3')],h=hs.find(x=>/Peuples, tributaires/.test(x.textContent));
+  if(h){let n=h;while(n){const nx=n.nextElementSibling;if(n.querySelector&&n.querySelector('#mClose'))break;n.remove();n=nx}}
+  const nav=document.createElement('div');nav.className='dv-top';nav.innerHTML=`<span></span><div class="dv-nav"><button type="button" id="dvPeu">Peuples</button><button type="button" class="on">${S.mirror?'Vos alliés italiens':'Alliés italiens de '+dvEnemy()}</button><button type="button" id="dvMap2">Carte diplomatique</button></div>`;
+  const h2=M.querySelector('h2');if(h2)h2.after(nav);
+  $('dvPeu').onclick=()=>{DVS.tab='peu';openDip()};$('dvMap2').onclick=()=>{closeModal();dvMapToggle(true)};
+  try{if(typeof mirFix==='function')mirFix(M)}catch(e){}}
+{const _odDV=openDip;openDip=function(a){if(typeof NO_DIP!=='undefined'&&NO_DIP)return;if(!S||!S.fac)return _odDV.apply(this,arguments);
+  if(typeof a==='string'&&S.fac[a]){DVS.f=a;DVS.tab='peu';if(DVS.view==='neg'&&DVS.offer&&DVS._f!==a)DVS.view='fiche'}
+  else if(a&&typeof a==='object'&&a.type&&typeof sel!=='undefined'&&sel&&sel.n!=null){const o=ownerN(sel.n);if(o&&S.fac[o]){DVS.f=o;DVS.tab='peu';DVS.view='fiche'}}
+  DVS._f=DVS.f;if(DVS.tab==='ita'&&typeof SOCII!=='undefined'&&!(typeof isMac==='function'&&isMac()))return dvIta(()=>_odDV.call(this));DVS.tab='peu';return dvRender()}}
+// clic sur une région (fil des mécaniques) : la fiche du peuple, ou l'onglet des alliés italiens
+try{if(typeof dipOpenFac==='function'){const _dofDV=dipOpenFac;dipOpenFac=function(f,g){if(g&&!f){DVS.tab='ita';return _dofDV.apply(this,arguments)}if(f&&S&&S.fac[f]){try{closeModal()}catch(e){}DVS.view='fiche';return openDip(f)}return _dofDV.apply(this,arguments)}}}catch(e){}
+if(typeof TT!=='undefined'&&TT.bDip)TT.bDip=['Diplomatie','Fiches des peuples, négociations, promesses et demandes ; carte diplomatique.'];
+window.__dv={get S(){return S},DVS,dvEval,dvRender,dvSend,dvArrive,dvReqMonthly,dvReqCard,dvPromDaily,dvPromMonthly,dvAnswer,dvMapToggle,dvDisp,dvWants,dvNewOffer,daily:d=>daily(d),openDip:f=>openDip(f),aiDiplomacy:()=>aiDiplomacy(),capture:(i,s)=>capture(i,s),NI:()=>NI,N:()=>N,dipOpenFac:(f,g)=>dipOpenFac(f,g)};
+/* ================= FIN DIPLOMATIE VIVANTE ================= */

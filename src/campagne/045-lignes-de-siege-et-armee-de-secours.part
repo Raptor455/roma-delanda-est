@@ -1,0 +1,17 @@
+/* ================= LIGNES DE SIÈGE ET ARMÉE DE SECOURS ================= */
+// sg.cv / sg.cc : {t0, t} chantier (fin au jour t) ; prêtes quand S.day>=t.
+// Contrevallation (anneau intérieur) : sorties ×1,25 plus dures, siège 25 % plus rapide.
+// Circonvallation (anneau extérieur) : les assiégeants comptent ×1,3 face à une armée de secours.
+// Armée de secours : quand une armée amie attaque les assiégeants, la garnison enfermée sort et se joint à l'attaque.
+const CV_D=4,CC_D=8;
+const lineOk=w=>!!(w&&S.day>=w.t);
+const lineDays=(a,d)=>Math.max(1,Math.round(d*(hasTr(genOf(a),'polio')?.65:1)*(a.units.length<6?1.4:1)));
+const wallsOf=i=>WALLS[N[i].size]*(S.siege[N[i].id]&&S.siege[N[i].id].breach?.7:1);
+function siegeOfDefs(ids){for(const id in S.siege){const sg=S.siege[id];if(ids.includes(sg.a))return NI[id]}return null}
+function reliefize(b){if(!b||b.relief!=null||b.sortie!=null||b.assault!=null)return false;
+  const A=S.armies.find(x=>x.id===b.att[0]);if(!A||insideOf(A))return false;const i=siegeOfDefs(b.def);if(i==null)return false;
+  const sg=S.siege[N[i].id];if(sg.side===A.side)return false;b.relief=i;
+  const G=shutIn(i).filter(x=>x.side===A.side&&!b.att.includes(x.id));for(const x of G){b.att.push(x.id);x.inG=false}
+  if(A.side==='car'||sg.side==='car')log(`${A.side==='car'?'Votre armée de secours':'Une armée de secours'} attaque les assiégeants de ${N[i].n}${G.length?' : la garnison sort des murs et se joint à elle':''} !`);
+  return G.length>0}
+

@@ -1,0 +1,176 @@
+/* ================= LOGISTIQUE : dépôts, convois, lignes de ravitaillement, bagages ================= */
+// Rations = jours-régiment (comme a.food). Dépôts : S.dep[idVille] = {f, auto}. Convois : S.conv = [{id,side,x,y,at,legs,food,to,from}].
+const CONV_KMD=18,CONV_MAX=250,LINE_KM=260,BAG_K=1.75;
+const depCap=n=>200+200*n.size;
+const depProd=n=>{const se=season();return (2+n.size*2)*(se==='Été'?1.4:se==='Hiver'?.5:se==='Automne'?1.1:1)};
+const convsTo=a=>(S.conv||[]).filter(c=>c.to===a.id);
+function initLogi(){
+  S.dep=S.dep||{};S.conv=S.conv||[];
+  if(!S.logi){S.logi=1;for(const a of S.armies)if(!a.g&&a.reinf==null)a.bag=true}
+}
+// ligne de ravitaillement : chemin par les routes, sans ville ni armée ennemie, vers une ville amie à moins de 260 km
+function lineOf(a){
+  if(a.g||a.ship||a.inG||a.reinf!=null)return {k:'none'};
+  if(ownerAt(a.x,a.y)===a.side)return {k:'home'};
+  if(seaSupplied(a))return {k:'sea'};
+  const D=dijkstra(a,startsOf(a).map(x=>[x[0],x[1]]));
+  const foes=S.armies.filter(o=>!o.dead&&!o.ship&&hostile(o,a));
+  const cand=N.filter(n=>!n.col&&ownerN(n.i)===a.side&&D.dist[n.i]<1e8&&Math.hypot(n.x-a.x,n.y-a.y)<LINE_KM&&!(S.siege[n.id]&&S.siege[n.id].side!==a.side)).sort((p,q)=>D.dist[p.i]-D.dist[q.i]);
+  for(const n of cand.slice(0,6)){const path=[],eds=[];let u=n.i,ok=true,km=0;
+    while(u>=0){path.push(u);if(u!==n.i&&cityHostile(u,a.side)){ok=false;break}if(foes.some(o=>Math.hypot(o.x-N[u].x,o.y-N[u].y)<8)){ok=false;break}if(D.pe[u]>=0)km+=EDGES[D.pe[u]].km;eds.push(D.pe[u]);u=D.prev[u]}
+    if(ok&&km<=LINE_KM)return {k:'line',from:n.i,km:Math.round(km),path,eds}}
+  return {k:'cut'};
+}
+function sendConvoy(i,a,amt){
+  const n=N[i],d=S.dep[n.id];if(!d||d.f<10||!a||a.dead)return null;amt=Math.min(d.f,amt,CONV_MAX);
+  const c={id:S.uid++,side:ownerN(i),x:n.x,y:n.y,at:i,legs:[],units:[],cool:0,scout:0,conv:1,food:amt,to:a.id,from:i};
+  if(!order(c,a.x,a.y,!a.legs.length&&a.at!=null?a.at:null))return null;
+  d.f-=amt;c._tx=a.x;c._ty=a.y;S.conv.push(c);return c;
+}
+// le joueur peut acheter des rations au dépôt : 10 or les 100
+function depotsDaily(){
+  for(const id in S.dep){const i=NI[id],n=N[i],d=S.dep[id];
+    if(!ownerN(i)||ownerN(i)!=='car'&&ownerN(i)!=='rom'){delete S.dep[id];continue}
+    if(S.siege[id]&&S.siege[id].side!==ownerN(i))continue;
+    d.f=Math.min(depCap(n),d.f+depProd(n));
+    // ravitaillement automatique d'une armée
+    if(d.auto!=null){const a=S.armies.find(x=>x.id===d.auto&&!x.dead);if(!a){delete d.auto;continue}
+      if(a.ship||convsTo(a).some(c=>c.from===i))continue;const need=armyFoodMax(a)-aFood(a);
+      if(need>=Math.min(40,armyFoodMax(a)*.35)&&d.f>=30&&Math.hypot(a.x-n.x,a.y-n.y)>3.5){const c=sendConvoy(i,a,need);
+        if(!c&&!d._np){d._np=1;if(ownerN(i)==='car')log(`Le dépôt de ${n.n} ne trouve pas de route vers ${a.name}.`)}else if(c)d._np=0}}}
+}
+function moveConvoys(dd){
+  for(const c of S.conv.slice()){
+    let budget=dd;
+    while(budget>0&&c.legs.length){const L=c.legs[0];if(typeof brOnSeg==='function'&&brOnSeg(c.x,c.y,L.x,L.y)){c.legs=[];c.blk=true;break}const dist=Math.hypot(L.x-c.x,L.y-c.y),sp=legSpeed(c,L.type,L.tf,c.x,c.y),need=dist/sp;
+      if(need<=budget){c.x=L.x;c.y=L.y;budget-=need;c.legs.shift();c.at=L.n!=null?L.n:null}else{c.x+=(L.x-c.x)*budget/need;c.y+=(L.y-c.y)*budget/need;budget=0;c.at=null}}
+    if(c.blk){S.conv=S.conv.filter(x=>x!==c);if(c.side==='car')log(`Un convoi de ${Math.round(c.food)} rations est bloqué par un pont coupé et doit renoncer.`);continue}
+    // interception : une armée ennemie à moins de 5 km, sans escorte amie
+    const foe=S.armies.find(o=>!o.dead&&!o.ship&&o.side!==c.side&&hostile(o,{side:c.side})&&Math.hypot(o.x-c.x,o.y-c.y)<5);
+    if(foe&&!S.armies.some(o=>!o.dead&&!o.ship&&o.side===c.side&&Math.hypot(o.x-c.x,o.y-c.y)<5)){
+      aFood(foe);const got=Math.min(c.food,armyFoodMax(foe)-foe.food);foe.food+=got;S.conv=S.conv.filter(x=>x!==c);
+      if(c.side==='car'){log(`Un convoi de ${Math.round(c.food)} rations est intercepté par ${foe.name} !`);S.paused=true}
+      else if(foe.side==='car')log(`${foe.name} s'empare d'un convoi ennemi (${Math.round(got)} rations).`);continue}
+    const t=S.armies.find(x=>x.id===c.to&&!x.dead);
+    if(!t){if(!c.legs.length){S.conv=S.conv.filter(x=>x!==c)}continue}
+    if(Math.hypot(t.x-c.x,t.y-c.y)<3.5&&!t.ship){aFood(t);const got=Math.min(c.food,armyFoodMax(t)-t.food);t.food+=got;c.food-=got;
+      if(t.side==='car')log(`Un convoi livre ${Math.round(got)} rations à ${t.name}.`);
+      if(c.food>=10){const d=S.dep[N[c.from].id];if(d)d.f=Math.min(depCap(N[c.from]),d.f+c.food)}S.conv=S.conv.filter(x=>x!==c)}
+  }
+}
+function convoysDaily(){
+  for(const c of S.conv){const t=S.armies.find(x=>x.id===c.to&&!x.dead);
+    if(!t){if(!c._ret){c._ret=1;order(c,N[c.from].x,N[c.from].y,c.from)}continue}
+    if(t.ship)continue;
+    if(!c.legs.length||Math.hypot((c._tx||0)-t.x,(c._ty||0)-t.y)>4){order(c,t.x,t.y,!t.legs.length&&t.at!=null?t.at:null);c._tx=t.x;c._ty=t.y}}
+  // les Romains au repos foncent sur un convoi carthaginois proche qu'ils voient
+  for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship||a.inG||a.legs.length)continue;
+    const c=S.conv.find(c=>c.side==='car'&&Math.hypot(c.x-a.x,c.y-a.y)<35);if(c)order(a,c.x,c.y)}
+}
+// enveloppes : vitesse des convois et des armées chargées de bagages ; mouvement des convois
+const _legSpeed2=legSpeed;
+legSpeed=function(a,type){let v=_legSpeed2.apply(null,arguments);if(type==='mer')return v;
+  if(a.conv)return v/armySpeed(a)*CONV_KMD;
+  if(a.bag)v*=.85;if(a.pace==='force')v*=1.25;else if(a.pace==='prud')v*=.85;if((a.fat||0)>70)v*=.85;return v};
+const _tick=tick;
+tick=function(dd){_tick(dd);if(S&&S.conv&&!S.cur&&!S.over)moveConvoys(dd)};
+const _income2=income;
+income=function(side){const r=_income2(side);let up=r.up;if(S.dep)for(const id in S.dep)if(ownerN(NI[id])===side)up+=2;return {inc:r.inc,up:Math.round(up)}};
+// bagages perdus par le vaincu
+const _applyResult2=applyResult;
+applyResult=function(b,res){
+  const lose=(res.attWin?b.def:b.att).map(id=>S.armies.find(x=>x.id===id)).filter(Boolean),win=(res.attWin?b.att:b.def).map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);
+  const bags=lose.filter(a=>a.bag);
+  _applyResult2(b,res);
+  for(const a of bags){a.bag=false;aFood(a);a.food=Math.min(a.food,armyFoodMax(a)*.3);
+    const w=win.find(x=>!x.dead);const loot=10+2*a.units.length;if(w){S.gold[w.side]=(S.gold[w.side]||0)+loot;aFood(w);w.food=armyFoodMax(w)}
+    if(a.side==='car')log(`${a.name} perd ses bagages dans la défaite.`);else if(w&&w.side==='car')log(`Vous prenez les bagages de ${a.name} : ${loot} or de butin et des vivres.`)}
+};
+// lignes et dépôts dans la journée (appelé par l'enveloppe de daily ci-dessous)
+const _daily2=daily;
+daily=function(d){
+  initLogi();
+  const snap=new Map();for(const a of S.armies)snap.set(a,new Map(a.units.map(u=>[u,u.men])));
+  _daily2(d);
+  if(S.cur||S.over)return;
+  for(const a of S.armies){if(a.dead||a.g)continue;if(a.side==='rom'&&a.bag===undefined&&a.reinf==null)a.bag=true;
+    if(d%2===0||!a.line){const prev=a.line&&a.line.k;a.line=lineOf(a);
+      if(a.side==='car'&&prev==='line'&&a.line.k==='cut')log(`La ligne de ravitaillement de ${a.name} est coupée !`)}
+    if(a.line.k!=='line')continue;
+    // ravitaillé par la route : vivres moitié moins entamés (entièrement si la ville de départ a un dépôt), usure −40 %
+    aFood(a);const dep=S.dep[N[a.line.from].id],want=a.units.length;
+    if(dep&&dep.f>=want){dep.f-=want;a.food=Math.min(armyFoodMax(a),a.food+want)}else a.food=Math.min(armyFoodMax(a),a.food+want*.5);
+    const sn=snap.get(a);if(sn)for(const u of a.units){const m0=sn.get(u);if(m0!=null&&m0>u.men)u.men+=(m0-u.men)*.4}}
+  depotsDaily();convoysDaily();
+};
+// ---- interface ----
+function logiHtml(a){
+  initLogi();if(a.g)return '';
+  const L=a.line||lineOf(a),cs=convsTo(a);let h='<div class="sub" style="margin-top:4px">';
+  h+=L.k==='home'?'Ravitaillement : sur vos terres.':L.k==='sea'?'Ravitaillement : par la mer.':L.k==='line'?`Ravitaillement : <b style="color:var(--good)">ligne ouverte</b> depuis ${N[L.from].n} (${L.km} km)${S.dep[N[L.from].id]?', dépôt':''}.`:L.k==='cut'?'Ravitaillement : <b style="color:var(--bad)">aucune ligne</b>, l\'armée vit sur ses réserves.':'';
+  if(cs.length)h+=`<br>${cs.length} convoi${cs.length>1?'s':''} en route (${Math.round(cs.reduce((s,c)=>s+c.food,0))} rations).`;
+  const inCity=a.at!=null&&!a.legs.length&&!N[a.at].col&&ownerN(a.at)===a.side;
+  h+=`<br>Bagages : ${a.bag?`oui (vivres jusqu'à ${Math.round(FOOD_DAYS*BAG_K)} j, marche −15 %)`:`non (vivres jusqu'à ${FOOD_DAYS} j)`}</div>`;
+  if(a.reinf==null&&!a.ship)h+=`<div class="row" style="margin:6px 0 0">${a.bag?`<button id="aBag" type="button" title="L'armée marche plus vite mais porte moins de vivres">Laisser les bagages</button>`:inCity?`<button id="aBag" type="button" ${S.gold[a.side]<20?'disabled':''}>Former des bagages (20)</button>`:''}</div>`;
+  return h;
+}
+function bindLogi(a){const b=$('aBag');if(!b)return;b.onclick=()=>{aFood(a);
+  if(a.bag){const before=a.food;a.bag=false;a.food=Math.min(a.food,armyFoodMax(a));const extra=before-a.food;
+    if(extra>0&&a.at!=null&&ownerN(a.at)===a.side){const id=N[a.at].id;if(S.dep[id])S.dep[id].f=Math.min(depCap(N[a.at]),S.dep[id].f+extra)}
+    log(`${a.name} laisse ses bagages${a.at!=null&&!a.legs.length?' à '+N[a.at].n:''}.`)}
+  else if(S.gold[a.side]>=20){S.gold[a.side]-=20;a.bag=true;log(`${a.name} forme un train de bagages.`)}renderAll()}}
+const _renderSide2=renderSide;
+renderSide=function(){
+  _renderSide2();if(!S||!S.gens)return;const el=$('side');
+  if(sel&&sel.a&&!sel.a.dead&&isMine(sel.a)){const box=el.querySelector('.genbox');if(box){const r=box.querySelector('.row:last-child');(r||box).insertAdjacentHTML('beforebegin',logiHtml(sel.a));bindLogi(sel.a)}}
+  else if(!sel&&S.conv&&S.conv.some(c=>c.side==='car')){const box=el.querySelectorAll('h3')[1];const L=S.conv.filter(c=>c.side==='car');
+    if(box)box.insertAdjacentHTML('beforebegin',`<h3>Vos convois</h3>`+L.map(c=>{const t=S.armies.find(x=>x.id===c.to);return `<div class="rec"><span>${Math.round(c.food)} rations <span class="sub">· de ${N[c.from].n} vers ${t?esc(t.name):'le dépôt'}</span></span><button data-cvf="${c.id}" type="button">Voir</button></div>`}).join(''));
+    el.querySelectorAll('[data-cvf]').forEach(b=>b.onclick=()=>{const c=S.conv.find(x=>x.id==b.dataset.cvf);if(c)centerOn(c.x,c.y,Math.max(view.s,1.2))})}
+};
+const _townBlock2=townBlock;
+townBlock=function(i,main){
+  let h=_townBlock2(i,main);const n=N[i];
+  if(!S.gens||n.col||ownerN(i)!=='car'||n.size<1)return h;initLogi();
+  const d=S.dep[n.id],mine=S.armies.filter(a=>a.side==='car'&&!a.dead&&!a.g&&a.reinf==null);
+  h+=`<h3>Dépôt de vivres</h3>`;
+  if(!d)return h+`<p class="sub">Un dépôt amasse des rations (${Math.round(depProd(n))} par jour ici) et envoie des convois de chariots à vos armées. Une armée dont la ligne de ravitaillement part d'un dépôt ne puise plus dans ses réserves.</p><div class="row"><button data-depmk="${i}" type="button" ${S.gold.car<30?'disabled':''}>Établir un dépôt (30, puis 2 par mois)</button></div>`;
+  h+=`<p>${Math.round(d.f)} / ${depCap(n)} rations <span class="sub">· +${Math.round(depProd(n))} par jour</span></p><div class="bar" style="display:block;margin-bottom:6px"><i style="width:${Math.round(d.f/depCap(n)*100)}%"></i></div>`;
+  h+=`<div class="row"><button data-depbuy="${i}" type="button" ${S.gold.car<10||d.f>=depCap(n)?'disabled':''}>Acheter 100 rations (10)</button></div>`;
+  const opt=sel=>`<option value="">—</option>`+mine.map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${esc(a.name)} (${foodDays(a)} j de vivres)</option>`).join('');
+  const ss='font:inherit;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:4px;padding:3px;max-width:170px';
+  h+=`<div class="rec"><span class="sub">Ravitailler d'office :</span><select data-depauto="${n.id}" style="${ss}">${opt(d.auto)}</select></div>`;
+  h+=`<div class="rec"><select data-depto="${n.id}" style="${ss}">${opt(null)}</select><button data-depsend="${i}" type="button" ${d.f<10?'disabled':''}>Envoyer un convoi</button></div>`;
+  const out=S.conv.filter(c=>c.from===i);if(out.length)h+=`<p class="sub">${out.length} convoi${out.length>1?'s':''} parti${out.length>1?'s':''} d'ici.</p>`;
+  return h;
+};
+const _bindTown2=bindTown;
+bindTown=function(){_bindTown2();
+  document.querySelectorAll('[data-depmk]').forEach(b=>b.onclick=()=>{const i=+b.dataset.depmk;if(S.gold.car<30)return;S.gold.car-=30;S.dep[N[i].id]={f:50};log(`Dépôt de vivres établi à ${N[i].n}.`);renderAll()});
+  document.querySelectorAll('[data-depbuy]').forEach(b=>b.onclick=()=>{const i=+b.dataset.depbuy,d=S.dep[N[i].id];if(!d||S.gold.car<10)return;S.gold.car-=10;d.f=Math.min(depCap(N[i]),d.f+100);renderAll()});
+  document.querySelectorAll('[data-depauto]').forEach(s=>s.onchange=()=>{const d=S.dep[s.dataset.depauto];if(!d)return;if(s.value)d.auto=+s.value;else delete d.auto;save()});
+  document.querySelectorAll('[data-depsend]').forEach(b=>b.onclick=()=>{const i=+b.dataset.depsend,s=document.querySelector(`[data-depto="${N[i].id}"]`),a=s&&S.armies.find(x=>x.id===+s.value);if(!a)return;
+    const c=sendConvoy(i,a,armyFoodMax(a)-aFood(a)+a.units.length*5);log(c?`Un convoi de ${Math.round(c.food)} rations part de ${N[i].n} vers ${a.name}.`:`Aucune route de ${N[i].n} vers ${a.name}.`);renderAll()});
+};
+// ---- dessin : convois (chariots) et ligne de ravitaillement de l'armée choisie ----
+const _drawFleets=drawFleets;
+drawFleets=function(s,z,inV){
+  if(S&&S.conv){
+    const a=sel&&sel.a&&!sel.a.dead&&isMine(sel.a)?sel.a:null;
+    if(a&&a.line&&a.line.k==='line'){ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(view.ox+a.x*s,view.oy+a.y*s);
+      const P=a.line.path,E=a.line.eds||[];
+      for(let j=P.length-1;j>=0;j--){const u=P[j],k=E[j];const e=k!=null&&k>=0?EDGES[k]:null;
+        if(e&&e.cv){const pts=e.b===u?e.cv:e.cv.slice().reverse();for(const [x,y] of pts)ctx.lineTo(view.ox+x*s,view.oy+y*s)}
+        else ctx.lineTo(view.ox+N[u].x*s,view.oy+N[u].y*s)}
+      ctx.lineWidth=6;ctx.strokeStyle='rgba(20,30,15,.55)';ctx.stroke();ctx.setLineDash([9,6]);ctx.lineWidth=3.5;ctx.strokeStyle='#a8e08a';ctx.stroke();ctx.restore()}
+    for(const c of S.conv){if(c.side!=='car'&&visAt(c.x,c.y)<1)continue;const X=view.ox+c.x*s,Y=view.oy+c.y*s;if(!inV(c.x,c.y,30))continue;
+      const col=FAC[c.side].c,k=Math.max(.8,Math.min(1.6,s/1.5));ctx.save();ctx.translate(X,Y);ctx.scale(k,k);
+      for(const dx of [-9,4]){ctx.fillStyle='#7a5632';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.rect(dx-5,-6,10,6);ctx.fill();ctx.stroke();
+        ctx.fillStyle='#e9dcb8';ctx.beginPath();ctx.ellipse(dx,-6,5,3,0,Math.PI,0);ctx.fill();ctx.stroke();
+        ctx.fillStyle='#2b1c0e';for(const wx of [-3,3]){ctx.beginPath();ctx.arc(dx+wx,1,1.8,0,7);ctx.fill()}}
+      ctx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`;ctx.fillRect(8,-14,6,4);ctx.strokeStyle='#2b1c0e';ctx.beginPath();ctx.moveTo(8,-14);ctx.lineTo(8,-4);ctx.stroke();
+      if(s>1.2&&c.side==='car'){ctx.font='600 10px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.fillStyle='#f4e2b0';ctx.strokeStyle='rgba(30,20,10,.85)';ctx.lineWidth=2.5;const t=Math.round(c.food)+' rations';ctx.strokeText(t,0,13);ctx.fillText(t,0,13)}
+      ctx.restore()}
+  }
+  _drawFleets(s,z,inV);
+};
+

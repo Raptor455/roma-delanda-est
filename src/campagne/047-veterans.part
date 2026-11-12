@@ -1,0 +1,8 @@
+/* ================= VÉTÉRANS ================= */
+// u.xp : expérience du régiment ; chevrons à 2, 6 et 12. Chaque chevron : +5 % au combat. Les renforts la diluent.
+const chev=u=>!u||!u.xp?0:u.xp>=12?3:u.xp>=6?2:u.xp>=2?1:0;
+const CHEV_W=['','Aguerris','Vétérans','Vétérans d’élite'];
+function vetMul(ids){let w=0,s=0;for(const id of ids){const a=S.armies.find(x=>x.id===id);if(!a)continue;for(const u of a.units){w+=u.men;s+=u.men*(1+.05*chev(u))}}return w>0?s/w:1}
+function chevSVG(c){if(!c)return '';let p='';for(let j=0;j<c;j++)p+=`<polyline points="1,${9-j*3.2} 5,${5.5-j*3.2} 9,${9-j*3.2}"/>`;
+  return `<svg class="chev" width="10" height="11" viewBox="0 0 10 11" style="vertical-align:-1px;margin-left:3px;fill:none;stroke:#e8c46a;stroke-width:1.6;stroke-linecap:round"><title>${CHEV_W[c]}</title>${p}</svg>`}
+

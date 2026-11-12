@@ -1,0 +1,54 @@
+  /* ================= REPÈRES SUR LA CARTE ================= */
+  const MK={atk:{n:'Attaque ici',c:'#d8452c',g:'⚔'},aide:{n:'À l’aide',c:'#e8c46a',g:'!'},ral:{n:'Rassemblement',c:'#4f9be0',g:'⚑'},dgr:{n:'Danger',c:'#b04ad0',g:'☠'}};
+  const MK_DAYS=20,seenMk=new Set(),mkKey=m=>m.x+','+m.y+','+m.k,pingT=new Map();let mkMode=false,mkInit=false;
+  const marks=()=>{if(!S.marks)S.marks=[];return S.marks};
+  const myNick=()=>{try{return typeof MP!=='undefined'&&MP.role?(MP.nick||mpName(MP.me)||''):''}catch(e){return ''}};
+  function addMark(x,y,k,txt){const L=marks();while(L.length>=12)L.shift();const m={id:Math.random().toString(36).slice(2,9),x:+x.toFixed(2),y:+y.toFixed(2),k,side:'car',d:Math.floor(S.day)};
+    const t=String(txt||'').trim().slice(0,60);if(t)m.txt=t;const by=myNick();if(by)m.by=by;L.push(m);seenMk.add(mkKey(m));pingT.set(m.id,performance.now());
+    try{const W=window.__son;if(W&&W.ok())W.bell(W.now()+.02,880,.1)}catch(e){}save();renderAll()}
+  function delMark(id){S.marks=marks().filter(m=>m.id!==id);save();renderAll()}
+  const hitMark=(sx,sy)=>{const s=view.s;for(const m of marks().slice().reverse()){if(m.side!=='car')continue;const X=m.x*s+view.ox,Y=m.y*s+view.oy;if(Math.hypot(sx-X,sy-(Y-16))<14)return m}return null};
+  // fenêtre pour poser un repère
+  function askMark(sx,sy){const [x,y]=toWorld(sx,sy);const old=document.getElementById('mkPop');if(old)old.remove();
+    const pop=document.createElement('div');pop.id='mkPop';const r=cv.getBoundingClientRect();
+    pop.style.cssText=`position:fixed;left:${Math.min(innerWidth-250,r.left+sx+12)}px;top:${Math.min(innerHeight-170,r.top+sy-10)}px;z-index:60;background:rgba(28,22,16,.96);border:1px solid #a8823c;border-radius:8px;padding:8px;width:230px;color:#eadfc4;font-size:13px;box-shadow:0 4px 18px rgba(0,0,0,.5)`;
+    pop.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${Object.entries(MK).map(([k,o])=>`<button type="button" data-k="${k}" style="text-align:left"><span style="color:${o.c};font-weight:bold">${o.g}</span> ${o.n}</button>`).join('')}</div>
+      <input id="mkTxt" maxlength="60" placeholder="Message (facultatif)" style="width:100%;margin-top:6px;box-sizing:border-box"><div class="sub" style="margin-top:4px;font-size:11px;opacity:.75">Vu par vos alliés ${MK_DAYS} jours. Alt+clic sur un repère pour le retirer.</div>`;
+    document.body.appendChild(pop);const inp=pop.querySelector('#mkTxt');inp.onkeydown=e=>{e.stopPropagation();if(e.key==='Escape')pop.remove();if(e.key==='Enter'){addMark(x,y,'ral',inp.value);pop.remove()}};
+    pop.querySelectorAll('button[data-k]').forEach(b=>b.onclick=()=>{addMark(x,y,b.dataset.k,inp.value);pop.remove()});
+    setTimeout(()=>{const off=e=>{if(!pop.contains(e.target)){pop.remove();removeEventListener('pointerdown',off,true)}};addEventListener('pointerdown',off,true)},0);
+    setTimeout(()=>inp.focus(),0)}
+  LEGE.addMark=addMark;LEGE.askMark=askMark;
+  function setMode(on){mkMode=on;const b=$('bMark');if(b)b.classList.toggle('on',on);cv.style.cursor=on?'crosshair':''}
+  cv.addEventListener('pointerdown',e=>{if(e.button!==0||!S||S.over)return;const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+    if(e.altKey){const m=hitMark(sx,sy);e.stopImmediatePropagation();e.preventDefault();if(m)delMark(m.id);else askMark(sx,sy);return}
+    if(mkMode){e.stopImmediatePropagation();e.preventDefault();setMode(false);const m=hitMark(sx,sy);if(m)delMark(m.id);else askMark(sx,sy)}},true);
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&mkMode)setMode(false)});
+  // bouton dans la barre du haut
+  try{const ref=$('bMenu')||$('bHelp');if(ref&&!$('bMark')){const b=document.createElement('button');b.id='bMark';b.type='button';b.className=ref.className;b.setAttribute('aria-label','Poser un repère');
+      b.title='Poser un repère sur la carte (vu par vos alliés) — ou Alt+clic sur la carte';
+      b.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:-3px"><line x1="3" y1="1.5" x2="3" y2="15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M3.8 2 H13 L10.8 5.2 L13 8.4 H3.8 Z" fill="currentColor"/></svg>';
+      b.onclick=e=>{e.stopPropagation();setMode(!mkMode)};ref.parentNode.insertBefore(b,ref)}}catch(e){}
+  // nouveaux repères des alliés : message, son, onde
+  function checkNew(){const L=marks(),now=performance.now();
+    if(!mkInit){mkInit=true;for(const m of L)seenMk.add(mkKey(m));return}
+    for(const m of L){const K=mkKey(m);if(seenMk.has(K))continue;seenMk.add(K);if(m.side!=='car'||m.by&&m.by===myNick())continue;pingT.set(m.id,now);const o=MK[m.k]||MK.ral;
+      let where='';try{const n=nearestNode(m.x,m.y);where=Math.hypot(n.x-m.x,n.y-m.y)<6?' à '+n.n:' près de '+n.n}catch(e){}
+      log(`${m.by?esc(m.by):'Un allié'} pose un repère${where} : <b>${o.n}</b>${m.txt?` — « ${esc(m.txt)} »`:''}.`);
+      try{const W=window.__son;if(W&&W.ok()){const t=W.now()+.03;W.bell(t,660,.12);W.bell(t+.18,880,.1)}}catch(e){}}
+    // repères expirés
+    const d=Math.floor(S.day);if(L.some(m=>d-m.d>MK_DAYS))S.marks=L.filter(m=>d-m.d<=MK_DAYS)}
+  function drawMarks(s){if(!S)return;checkNew();const L=S.marks;if(!L||!L.length)return;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);const now=performance.now();
+    for(const m of L){if(m.side!=='car')continue;const o=MK[m.k]||MK.ral,X=m.x*s+view.ox,Y=m.y*s+view.oy;
+      const pt=pingT.get(m.id);if(pt!=null){const k=(now-pt)/1000;if(k>6)pingT.delete(m.id);else for(let j=0;j<2;j++){const q=((k+j*.5)%1.2)/1.2;ctx.strokeStyle=o.c;ctx.globalAlpha=(1-q)*.9;ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(X,Y,6+q*34,0,7);ctx.stroke()}ctx.globalAlpha=1}
+      // hampe et fanion
+      ctx.strokeStyle='rgba(20,14,8,.85)';ctx.lineWidth=3.4;ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(X,Y-28);ctx.stroke();ctx.strokeStyle='#eadfc4';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(X,Y-28);ctx.stroke();
+      ctx.fillStyle=o.c;ctx.strokeStyle='rgba(20,14,8,.9)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(X+1,Y-28);ctx.lineTo(X+22,Y-28);ctx.lineTo(X+17,Y-22);ctx.lineTo(X+22,Y-16);ctx.lineTo(X+1,Y-16);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.fillStyle='#1a120a';ctx.font='bold 10px Arial, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.g,X+9.5,Y-22);
+      ctx.fillStyle='rgba(20,14,8,.6)';ctx.beginPath();ctx.ellipse(X,Y,4,2,0,0,7);ctx.fill();
+      const t=(m.txt||o.n)+(m.by?' · '+m.by:'');ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='left';ctx.lineWidth=3;ctx.strokeStyle='rgba(30,22,14,.8)';ctx.strokeText(t,X+25,Y-22);ctx.fillStyle='#f0e6cc';ctx.fillText(t,X+25,Y-22)}
+    ctx.restore()}
+  const _dd=drawDynamic;drawDynamic=function(w,h,s){const r=_dd.apply(this,arguments);try{drawMarks(s)}catch(e){}return r};
+  window.__lege={LEGE,gloire,isLeg,banner,addMark,marks,checkNew};
+}
+/* ================= FIN RÉGIMENTS LÉGENDAIRES ET REPÈRES (campagne) ================= */

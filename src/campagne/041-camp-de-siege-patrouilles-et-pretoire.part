@@ -1,0 +1,52 @@
+/* ================= CAMP DE SIÈGE : patrouilles et prétoire ================= */
+// petits points = sentinelles des assiégeants qui font des rondes autour du camp ; quartier du général à l'arrière :
+// enclos, grande tente de commandement, étendard, le général qui va et vient, sa garde d'honneur en deux haies
+const _siegeFormation4=siegeFormation;
+siegeFormation=function(a,s,sg){
+  _siegeFormation4(a,s,sg);
+  const n=N[a.at],g=cityGeom(n),q=UNIT_KM*s;if(q<6)return;
+  const T=S.day*DAY_S,c=FAC[a.side].c,rgb=k=>`rgb(${k[0]},${k[1]},${k[2]})`,SX=x=>view.ox+x*s,SY=y=>view.oy+y*s,INK='rgba(26,18,10,.95)';
+  const R=g.wall.map(w=>({ang:Math.atan2(w[1]-g.cy,w[0]-g.cx),rr:Math.hypot(w[0]-g.cx,w[1]-g.cy)}));
+  const cand=R.map((r,k)=>k).filter(k=>landFast(g.cx+Math.cos(R[k].ang)*(R[k].rr+.6),g.cy+Math.sin(R[k].ang)*(R[k].rr+.6)));if(cand.length<3)return;
+  const at=(r,d)=>[SX(g.cx+Math.cos(r.ang)*(r.rr+d)),SY(g.cy+Math.sin(r.ang)*(r.rr+d))];
+  const dot=Math.max(1.7,q*.06);ctx.save();
+  // rondes : files de 4 sentinelles qui longent le camp d'un poste à l'autre, demi-tour au bout
+  const np=Math.min(6,Math.max(2,Math.floor(cand.length/5)));
+  for(let j=0;j<np;j++){const k0=Math.floor(j*cand.length/np),len=Math.min(4,cand.length-1),per=10+len*4,u=((T+j*7.3)/per)%2,t=u<1?u:2-u,fw=u<1?1:-1;
+    for(let m=0;m<4;m++){const tt=Math.max(0,Math.min(1,t-fw*m*.012)),pos=tt*len,i0=Math.floor(Math.min(pos,len-1e-6)),fr=pos-i0;
+      const [x1,y1]=at(R[cand[(k0+i0)%cand.length]],1.3),[x2,y2]=at(R[cand[(k0+i0+1)%cand.length]],1.3),bob=Math.sin(T*7+m*1.7)*dot*.3;
+      ctx.fillStyle=rgb(c);ctx.beginPath();ctx.arc(x1+(x2-x1)*fr,y1+(y2-y1)*fr+bob,dot,0,6.283);ctx.fill();ctx.strokeStyle=INK;ctx.lineWidth=.7;ctx.stroke()}}
+  // sentinelles immobiles aux angles du camp
+  cand.forEach((k,i)=>{if(i%3)return;const [x,y]=at(R[k],1.2);ctx.fillStyle=rgb(c);ctx.beginPath();ctx.arc(x,y,dot,0,6.283);ctx.fill();ctx.strokeStyle=INK;ctx.lineWidth=.7;ctx.stroke()});
+  // prétoire : à l'arrière, du côté le plus terrestre
+  let best=cand[Math.floor(cand.length/2)],bs=-1;cand.forEach(k=>{const r=R[k];let sc=0;for(let d=1;d<=4;d++)if(landFast(g.cx+Math.cos(r.ang)*(r.rr+d*.6),g.cy+Math.sin(r.ang)*(r.rr+d*.6)))sc++;if(sc>bs){bs=sc;best=k}});
+  const r=R[best],[px,py]=at(r,1.8);const _u=0,W=Math.max(34,q*2.6);
+  ctx.translate(px,py);ctx.rotate(r.ang+Math.PI); // x local : vers la ville
+  // enclos : terre battue, palissade, porte tournée vers la ville
+  ctx.fillStyle='rgba(196,174,128,.85)';ctx.fillRect(-W/2,-W*.42,W,W*.84);
+  ctx.strokeStyle='#5b3f22';ctx.lineWidth=Math.max(1.2,W*.025);ctx.setLineDash([W*.05,W*.025]);
+  ctx.beginPath();ctx.moveTo(W/2,-W*.1);ctx.lineTo(W/2,-W*.42);ctx.lineTo(-W/2,-W*.42);ctx.lineTo(-W/2,W*.42);ctx.lineTo(W/2,W*.42);ctx.lineTo(W/2,W*.1);ctx.stroke();ctx.setLineDash([]);
+  [[W/2,-W*.1],[W/2,W*.1]].forEach(([x,y])=>{ctx.fillStyle='#6b4a2a';ctx.fillRect(x-W*.03,y-W*.03,W*.06,W*.06)});
+  // allée et garde d'honneur : deux haies de soldats, boucliers aux couleurs
+  ctx.fillStyle='rgba(225,210,170,.9)';ctx.fillRect(-W*.12,-W*.06,W*.62,W*.12);
+  const gs=Math.max(2.4,W*.045);for(let m=0;m<6;m++){const x=W*.44-m*W*.09;[-1,1].forEach(sd=>{const y=sd*W*.11;
+    ctx.fillStyle=rgb(c);ctx.fillRect(x-gs/2,y-gs/2,gs,gs);ctx.strokeStyle=INK;ctx.lineWidth=.8;ctx.strokeRect(x-gs/2,y-gs/2,gs,gs);
+    ctx.strokeStyle='#d9d2c0';ctx.lineWidth=.7;ctx.beginPath();ctx.moveTo(x,y-sd*gs*.5);ctx.lineTo(x,y-sd*gs*1.3);ctx.stroke()})}
+  // tente de commandement, tentes des officiers, feu
+  const big=W*.36;tent(-W*.27,0,big,c,true);tent(-W*.3,-W*.3,big*.45,c,false);tent(-W*.3,W*.3,big*.45,c,false);fire(W*.12,-W*.3,Math.max(2,W*.04),T,7);
+  // le général : cercle doré, cape aux couleurs, va et vient devant sa tente
+  const gx=W*.02+Math.sin(T*.25)*W*.12,gy=Math.sin(T*.5)*W*.02,gr=Math.max(3,W*.05);
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.arc(gx+gr*.25,gy+gr*.3,gr,0,6.283);ctx.fill();
+  ctx.fillStyle=rgb(c);ctx.beginPath();ctx.arc(gx,gy,gr,0,6.283);ctx.fill();ctx.strokeStyle='#e0b84f';ctx.lineWidth=Math.max(1.2,gr*.35);ctx.stroke();
+  ctx.fillStyle='#e8d9b0';ctx.beginPath();ctx.arc(gx,gy,gr*.38,0,6.283);ctx.fill();
+  ctx.restore();
+  // étendard devant la tente, dressé (dessiné dans le repère de l'écran)
+  {const th=r.ang+Math.PI,lx=-W*.08,ly=W*.25,fx=px+lx*Math.cos(th)-ly*Math.sin(th),fy=py+lx*Math.sin(th)+ly*Math.cos(th),H=W*.32,FW=W*.18;
+   ctx.save();ctx.strokeStyle='#3a2a18';ctx.lineWidth=Math.max(1.2,W*.018);ctx.beginPath();ctx.moveTo(fx,fy);ctx.lineTo(fx,fy-H);ctx.stroke();
+   ctx.fillStyle='#e0b84f';ctx.beginPath();ctx.arc(fx,fy-H,Math.max(1.5,W*.02),0,6.283);ctx.fill();
+   ctx.fillStyle=rgb(c);ctx.beginPath();ctx.moveTo(fx,fy-H*.95);for(let k=0;k<=6;k++){const t=k/6;ctx.lineTo(fx+FW*t,fy-H*.95+Math.sin(T*3-t*4)*W*.025*t)}
+   for(let k=6;k>=0;k--){const t=k/6;ctx.lineTo(fx+FW*t,fy-H*.6+Math.sin(T*3-t*4)*W*.025*t)}ctx.closePath();ctx.fill();ctx.strokeStyle=INK;ctx.lineWidth=.8;ctx.stroke();ctx.restore()}
+  if(W>50){const ge=genOf(a),gn=ge?ge.name:(a.name||null);ctx.save();ctx.font=`600 ${Math.round(Math.min(13,W*.09))}px Georgia,serif`;ctx.textAlign='center';ctx.fillStyle='rgba(30,20,10,.85)';
+    ctx.fillText('Prétoire'+(gn?' · '+gn:''),px,py+W*.56);ctx.restore()}
+};
+

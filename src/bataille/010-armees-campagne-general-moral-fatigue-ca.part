@@ -1,0 +1,20 @@
+/* ================= ARMÉES-CAMPAGNE : général, moral, fatigue, camp et murs venus de la campagne ================= */
+// Injecté par armees/bataille-patch.py. Chaque régiment reçu de la campagne peut porter mod={a,d,m,s} :
+// multiplicateurs d'attaque, de défense, de moral et de vitesse calculés par le module ARMÉES de campagne.html.
+const _deployCampAC=deployCamp;
+deployCamp=function(){
+  _deployCampAC();if(!CAMP||!CAMP.b)return;
+  for(const u of units){if(u.ci===undefined)continue;const c=(u.side===0?CAMP.b.p:CAMP.b.e)[u.ci],m=c&&c.mod;if(!m)continue;
+    u.T=Object.assign({},u.T,{atk:u.T.atk*(m.a||1),def:u.T.def*(m.d||1),morale:u.T.morale*(m.m||1),speed:u.T.speed*(m.s||1)});
+    u.morale=u.T.morale;u.campMod=m}
+};
+window.__bcamp=()=>units.filter(u=>u.campMod).map(u=>({s:u.side,l:u.label,atk:+u.T.atk.toFixed(2),def:+u.T.def.toFixed(2),mor:Math.round(u.morale),sp:+u.T.speed.toFixed(1),m:u.campMod}));
+// sur la carte de départ : qui commande, moral, fatigue, murs
+if(CAMP&&CAMP.b&&(CAMP.b.cmd||CAMP.b.walls)){try{
+  const card=document.querySelector('#start .card'),ps=card&&card.querySelectorAll('p');
+  if(ps&&ps[0]){const p=document.createElement('p');p.className='campcmd';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45;opacity:.92';
+    const esc2=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+    p.innerHTML=(CAMP.b.cmd?`<b>Vous</b> : ${esc2(CAMP.b.cmd.p)}<br><b>${esc2(CAMP.b.enemy||'Ennemi')}</b> : ${esc2(CAMP.b.cmd.e)}`:'')+
+      (CAMP.b.walls?`<br><b>Murs de ${esc2(CAMP.b.walls.n)}</b> : ${CAMP.b.walls.side==='p'?'vos troupes défendent':'l\'ennemi défend'} derrière les remparts (défense ×${String(CAMP.b.walls.k.toFixed(2)).replace('.',',')}).`:'');
+    ps[0].after(p)}}catch(e){}}
+/* ================= FIN ARMÉES-CAMPAGNE ================= */

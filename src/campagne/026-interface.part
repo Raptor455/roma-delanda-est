@@ -1,0 +1,97 @@
+/* ================= INTERFACE ================= */
+function renderTop(){
+  const c=cal(Math.floor(S.day));
+  $('date').innerHTML=`${c.dm===1?'1<sup>er</sup>':c.dm} ${MONTHS[c.mo]} ${c.year} av. J.-C.<small>${c.season}</small>`;
+  const {inc,up}=income('car'),net=inc-up;
+  $('gold').innerHTML=`Trésor <b>${Math.round(S.gold.car)}</b> <span class="sub">(${net>=0?'+':''}${net} par mois)</span>`;
+  $('bPause').classList.toggle('on',S.paused);$('pauseTag').hidden=!S.paused||!!S.cur;
+  document.querySelectorAll('.spd').forEach(b=>b.classList.toggle('on',!S.paused&&+b.dataset.s===S.speed));
+}
+function renderLog(){const el=$('log');if(!el||!S)return;el.innerHTML=S.log.slice(0,5).map(l=>{const c=cal(l.d);return `<div><em>${c.dm} ${MONTHS[c.mo].slice(0,4)}.</em>${l.t}</div>`}).join('')}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c])}
+function unitLines(a,checks){return a.units.map((u,k)=>{const f=u.men/UT[u.t].men;return `<label class="unit">${checks?`<input type="checkbox" data-k="${k}">`:'<span></span>'}<span>${sqSVG(UT[u.t].k,f)} ${esc(uName(u))}</span><span class="sub">${Math.round(u.men).toLocaleString('fr-FR')}</span><span class="bar"><i style="width:${Math.round(f*100)}%"></i></span></label>`}).join('')}
+const SIZE=['Village','Bourg','Ville','Capitale'];
+const canGar=a=>!a.g&&!a.ship&&!a.inG&&!a.legs.length&&a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side;
+function where(a){if(a.at!=null&&!a.legs.length)return N[a.at].n;const t=townAt(a.x,a.y);return 'près de '+t.n}
+function renderSide(){
+  const el=$('side');
+  if(sel&&sel.f&&!S.fleets.includes(sel.f))sel=null;
+  if(sel&&sel.f){el.innerHTML=fleetPanel(sel.f);if(sel.f.side==='car')bindFleet(sel.f);return}
+  if(!sel){el.innerHTML=`<h2>Carthage</h2><p class="sub">Clic gauche sur un écu violet pour choisir une armée, puis <b>clic droit</b> sur la carte pour marcher (sur mobile : toucher). L'armée suit les routes ; hors route, elle avance deux fois moins vite. Molette pour zoomer jusqu'aux rues des villes.</p>
+    <h3>Vos armées</h3>${S.armies.filter(isMine).map(a=>`<div class="rec"><span>${esc(a.name)} <span class="sub">· ${a.units.length} rég. · ${a.ship?'à bord':a.inG?'garnison, '+N[a.at].n:a.legs.length?'en marche':where(a)}</span></span><button data-sel="${a.id}" type="button">Voir</button></div>`).join('')||'<p class="sub">Aucune armée.</p>'}
+    <h3>Vos flottes</h3>${S.fleets.filter(f=>f.side==='car').map(f=>`<div class="rec"><span>${esc(f.name)} <span class="sub">· ${shipsN(f)} navires · ${f.legs.length?'en mer':f.inG?'à l\'abri, '+N[f.at].n:f.at!=null?N[f.at].n:'au mouillage'}</span></span><button data-self="${f.id}" type="button">Voir</button></div>`).join('')||'<p class="sub">Aucune flotte.</p>'}
+    <h3>Légende</h3><p class="sub">Double trait clair : voie romaine. Trait brun épais : route. Trait brun fin : piste. Tirets clairs : chemin de terre vers un village. Tirets rouges et triangle : col de montagne. Pointillés blancs et croix : fermé par la neige. Pointillés clairs : détroit, franchissable à pied. Pour passer la mer, une armée doit embarquer sur une flotte (galères et transports) depuis un port.</p>`;
+    el.querySelectorAll('[data-self]').forEach(b=>b.onclick=()=>{const f=S.fleets.find(x=>x.id==b.dataset.self);sel={f};centerOn(f.x,f.y,Math.max(view.s,1));renderAll()});
+    el.querySelectorAll('[data-sel]').forEach(b=>b.onclick=()=>{const a=S.armies.find(x=>x.id==b.dataset.sel);sel={a};centerOn(a.x,a.y,Math.max(view.s,1.2));renderAll()});return}
+  if(sel.a&&!sel.a.dead){
+    const a=sel.a,v=visOfArmy(a);
+    if(!isMine(a)){el.innerHTML=`<h2>${esc(v===2?a.name:'Armée inconnue')}</h2><p><span class="tag" style="border-color:rgb(${FAC[a.side].c})">${sideName(a.side)}</span></p>`+
+      (v===2?`<p class="sub">Rapport des éclaireurs, force estimée ${Math.round(strength(a))}.</p>${unitLines(a,false)}`:`<p>Rapport des éclaireurs : ${approx(a.units.length)} régiments. Approchez une armée ou de la cavalerie pour en savoir plus.</p>`);return}
+    const last=a.legs.length?a.legs[a.legs.length-1]:null,sg=a.at!=null&&S.siege[N[a.at].id];
+    let eta=0;if(a.legs.length){let px=a.x,py=a.y;for(const L of a.legs){eta+=Math.hypot(L.x-px,L.y-py)/legSpeed(a,L.type,L.tf,px,py);px=L.x;py=L.y}}
+    const af=a.ship&&S.fleets.find(f=>f.id===a.ship);
+    const st=af?`À bord de <b>${esc(af.name)}</b>${af.legs.length?', en mer':af.at!=null?', au port de '+N[af.at].n:', au mouillage'}.`:a.inG?`En garnison à <b>${N[a.at].n}</b>, à l'abri des murs : les régiments se refont deux fois plus vite. Clic droit sur la carte pour sortir.`:a.legs.length?`En marche vers <b>${last.n!=null?N[last.n].n:'le point choisi'}</b>, arrivée dans ≈ ${Math.ceil(eta)} jours (${ROAD[a.legs[0].type]?ROAD[a.legs[0].type].n:'traversée'}).`
+      :sg&&sg.a===a.id?`Siège de <b>${N[a.at].n}</b> : ${Math.floor(sg.d)} / ${sg.need} jours.`:`Au repos ${a.at!=null?'à':''} <b>${where(a)}</b>${ownerAt(a.x,a.y)==='car'?' (renforts en cours)':''}.`;
+    const others=S.armies.filter(o=>o!==a&&o.side==='car'&&!o.legs.length&&!a.legs.length&&(o.ship||0)===(a.ship||0)&&Math.hypot(o.x-a.x,o.y-a.y)<3);
+    const boards=S.fleets.filter(f=>f.side==='car'&&canBoard(a,f)),full=!boards.length&&!a.ship&&!a.legs.length&&a.at!=null&&S.fleets.find(f=>f.side==='car'&&f.at===a.at&&!f.legs.length);
+    el.innerHTML=`<h2>${esc(a.name)}</h2><p>${st}</p><p class="sub">Vitesse ${armySpeed(a)} km/jour sur piste · terrain : ${TERR[terrainAt(a.x,a.y)].n.toLowerCase()} · force ${Math.round(strength(a))} · <b style="color:${foodDays(a)<=3?'#e8907a':'inherit'}">vivres ${foodDays(a)} j</b>${a.scout>0?' · éclaireurs en avant ('+a.scout+' j)':''}</p>
+      ${canGar(a)||a.inG?`<div class="row"><button id="aGar" type="button" class="${a.inG?'on':''}">${a.inG?'Quitter la garnison':'Entrer en garnison'}</button></div>`:''}
+      <div class="row"><button id="aHalt" type="button" ${a.legs.length?'':'disabled'}>Halte</button><button id="aScout" type="button" ${a.scout>0?'disabled':''} title="Porte la vue de l'armée à 40 km pendant 10 jours">Envoyer des éclaireurs</button>
+      <button id="aSplit" type="button" ${a.legs.length||a.ship?'disabled':''}>Détacher la sélection</button>${others.length?`<button id="aMerge" type="button">Fusionner (${others.length})</button>`:''}<button id="aFind" type="button">Centrer</button></div>
+      ${boards.length||af?`<div class="row">${boards.map(f=>`<button data-board="${f.id}" type="button" title="${armyPlaces(a)} places sur ${fCap(f)-fUsed(f)} libres">Embarquer sur ${esc(f.name)}</button>`).join('')}${af?`<button id="aShip" type="button">Voir la flotte</button>`:''}</div>`:''}
+      ${full?`<p class="sub">${esc(full.name)} est au port mais n'a pas assez de place : il faut ${armyPlaces(a)} places, elle en offre ${fCap(full)-fUsed(full)}.</p>`:''}
+      ${armyVillage(a)?villageBlock(armyVillage(a),a,false):''}
+      ${a.side==='car'&&armyBridge(a)?bridgeBlock(armyBridge(a),a):''}
+      <h3>Régiments (${a.units.length}/${MAXU})</h3>${unitLines(a,true)}
+      <p class="sub" style="margin-top:10px"><b>Clic droit</b> sur la carte : marcher (sur une ville ennemie : l'assiéger). <kbd>Échap</kbd> : désélectionner.</p>`+(a.at!=null&&!a.legs.length?townBlock(a.at):'');
+    $('aHalt').onclick=()=>{a.legs=[];renderAll()};if(armyVillage(a))bindVillage(armyVillage(a),a);if(armyBridge(a))bindBridge(armyBridge(a),a);
+    if($('aGar'))$('aGar').onclick=()=>{if(a.inG)a.inG=false;else if(canGar(a)){a.inG=true;a.x=N[a.at].x;a.y=N[a.at].y;log(`${a.name} entre en garnison à ${N[a.at].n}.`)}renderAll()};
+    $('aScout').onclick=()=>{a.scout=10;computeVis();renderAll()};
+    $('aFind').onclick=()=>centerOn(a.x,a.y,Math.max(view.s,1.5));
+    el.querySelectorAll('[data-board]').forEach(b=>b.onclick=()=>{const f=S.fleets.find(x=>x.id==b.dataset.board);if(f&&canBoard(a,f)){board(a,f);log(`${a.name} embarque sur ${f.name}.`);sel={f};renderAll()}});
+    if($('aShip'))$('aShip').onclick=()=>{sel={f:af};renderAll()};
+    $('aSplit').onclick=()=>{const ks=[...el.querySelectorAll('input[data-k]:checked')].map(c=>+c.dataset.k);if(!ks.length||ks.length===a.units.length)return;
+      const nu=ks.map(k=>a.units[k]);a.units=a.units.filter((u,k)=>!ks.includes(k));if(a.ship)return;const b={id:S.uid++,side:'car',name:nextGen('car'),x:a.x+1.5,y:a.y,at:a.at,legs:[],units:nu,scout:0,cool:0};S.armies.push(b);sel={a:b};log(`${b.name} prend la tête d'un détachement.`);renderAll()};
+    if($('aMerge'))$('aMerge').onclick=()=>{for(const o of others){if(a.units.length+o.units.length>MAXU)continue;a.units.push(...o.units);S.armies=S.armies.filter(x=>x!==o)}renderAll()};
+    bindTown();return;
+  }
+  if(sel.n!=null){el.innerHTML=townBlock(sel.n,true);bindTown();bindPatrol(sel.n)}
+  if(sel.v!=null){const v=VIL[sel.v],a=S.armies.find(x=>isMine(x)&&armyVillage(x)===v);el.innerHTML=villageBlock(v,a,true)+(a?`<p class="sub">Armée sur place : ${esc(a.name)}, ${foodDays(a)} jours de vivres.</p>`:'');if(a)bindVillage(v,a)}
+}
+function townBlock(i,main){
+  const n=N[i],o=ownerN(i),F=o&&S.fac[o];
+  let h=main?`<h2>${n.n}</h2>`:`<h3>${SIZE[n.size]} : ${n.n}</h3>`;
+  if(n.col){return h+`<p>Col de montagne. Passage lent, et meurtrier en hiver.</p>`}
+  h+=`<p>${o?`<span class="tag" style="border-color:rgb(${FAC[o].c})">${sideName(o)}</span>`:''}<span class="tag">${SIZE[n.size]}</span><span class="tag">${TERR[n.terr].n}</span>${n.port?'<span class="tag">Port</span>':''}</p><p class="sub">Revenu ${n.inc} par mois.</p>`;
+  const bk=S.block&&S.block[n.id];if(bk&&(bk.side==='car'||ownerN(i)==='car'||visAt(n.x,n.y)>=1))h+=`<p>Port bloqué par ${sideName(bk.side)} : revenu réduit, la ville ne reçoit plus rien par mer.</p>`;
+  if(S.raid&&S.raid[n.id]&&(ownerN(i)==='car'||visAt(n.x,n.y)>=1))h+=`<p class="sub">Côtes pillées : revenu réduit.</p>`;
+  const sg=S.siege[n.id];if(sg&&(sg.side==='car'||visAt(n.x,n.y)>=1))h+=`<p>Assiégée par ${sideName(sg.side)} : ${Math.floor(sg.d)} / ${sg.need} jours.</p>`;
+  if(o==='car'){const ga=S.armies.filter(a=>a.inG&&a.at===i&&a.side==='car'),gf=S.fleets.filter(f=>f.inG&&f.at===i&&f.side==='car');
+    if(ga.length||gf.length)h+=`<h3>À l'abri des murs</h3>`+ga.map(a=>`<div class="rec"><span>${esc(a.name)} <span class="sub">· ${a.units.length} rég.</span></span><button data-gsel="${a.id}" type="button">Voir</button></div>`).join('')+gf.map(f=>`<div class="rec"><span>${esc(f.name)} <span class="sub">· ${shipsN(f)} navires</span></span><button data-gself="${f.id}" type="button">Voir</button></div>`).join('')}
+  const gar=S.armies.filter(a=>a.g&&a.at===i);if(gar.length&&o!=='car')h+=`<p class="sub">${visAt(n.x,n.y)===2?'Garnison : '+gar.reduce((s,a)=>s+a.units.length,0)+' régiments.':'Garnison inconnue.'}</p>`;
+  if(F){h+=`<p class="sub">${F.st==='neutre'?'Peuple neutre ('+FAC[o].n+'). Attitude envers Carthage '+Math.round(F.car)+', envers Rome '+Math.round(F.rom)+'.':F.st.startsWith('guerre')?'En guerre contre '+sideName(F.st.split('_')[1])+'.':''}</p>`;if(main&&F.st==='neutre')h+=`<div class="row"><button id="rDip" type="button">Diplomatie</button></div>`}
+  if(o==='car'&&n.size>=1){
+    const pool=[...(POOL_CAR[n.cul]||['iber'])];if(n.id==='carthago')pool.push('eleph');
+    h+=`<h3>Recrutement à ${n.n}</h3>`;
+    const q=S.q[n.id];
+    if(q)h+=`<p>${esc(uName(q))} en formation : ${q.d} jours.</p>`;
+    else{h+=pool.map(t=>`<div class="rec">${sqSVG(UT[t].k)}<span>${UT[t].n} <span class="sub">· ${TRAIN[UT[t].k]} j</span></span><button data-rec="${t}" data-n="${i}" type="button" ${S.gold.car<UT[t].cost?'disabled':''}>${UT[t].cost}</button></div>`).join('');
+      const ds=(S.designs||[]).filter(x=>!x.del&&pool.includes(x.base));
+      if(ds.length)h+=`<p class="sub" style="margin-top:8px">Vos unités</p>`+ds.map(x=>{const st=dStats(x);return `<div class="rec">${dollSVG(x,1)}<span><b>${esc(x.name)}</b> ${sqSVG(CORPS[x.base].k)} <span class="sub">· ${st.days} j</span></span><button data-recd="${x.id}" data-n="${i}" type="button" ${S.gold.car<st.cost?'disabled':''}>${st.cost}</button></div>`}).join('');
+      h+=`<div class="row"><button type="button" data-work="1">Créer une unité…</button></div>`}
+  }
+  if(o==='car'&&main)h+=patrolBlock(i);
+  h+=shipyardBlock(n);
+  return h;
+}
+function bindTown(){
+  document.querySelectorAll('[data-gsel]').forEach(b=>b.onclick=()=>{const a=S.armies.find(x=>x.id==b.dataset.gsel);if(a){sel={a};renderAll()}});
+  document.querySelectorAll('[data-gself]').forEach(b=>b.onclick=()=>{const f=S.fleets.find(x=>x.id==b.dataset.gself);if(f){sel={f};renderAll()}});
+  document.querySelectorAll('[data-recd]').forEach(b=>b.onclick=()=>{const x=desOf(+b.dataset.recd),i=+b.dataset.n;if(!x)return;const st=dStats(x);if(S.gold.car<st.cost)return;S.gold.car-=st.cost;S.q[N[i].id]={t:x.base,ds:x.id,d:st.days,side:'car'};renderAll()});
+  document.querySelectorAll('[data-work]').forEach(b=>b.onclick=()=>openWorkshop());
+  document.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>{const t=b.dataset.rec,i=+b.dataset.n;if(S.gold.car<UT[t].cost)return;S.gold.car-=UT[t].cost;S.q[N[i].id]={t,d:TRAIN[UT[t].k],side:'car'};renderAll()});
+  if($('rDip'))$('rDip').onclick=openDip;
+  bindShipyard();
+}
+function renderAll(){renderTop();renderSide();renderLog()}
+

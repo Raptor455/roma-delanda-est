@@ -1,0 +1,163 @@
+/* ================= ÉTAT-MAJOR : conseil de guerre, carrière des seconds, colonne de marche, détachements ================= */
+// b.cons = [{g, f}] : l'avis de chaque second avant la bataille (formation conseillée) ; suivi → confiance, ignoré → rancœur.
+// g.jal (0-100) : jalousie d'un second qu'on ne promeut pas ; g.bat : batailles livrées comme second ; g.promo : déjà promu.
+// a.col = {av:k, ar:k} : corps en avant-garde et en arrière-garde (k = numéro du corps, 0 = celui du chef).
+// a.det = {p:id de l'armée mère} : corps détaché en mission, qui peut rejoindre son armée.
+const mpdW=(a,fn)=>{try{if(S.mpD&&typeof mpdWith==='function'&&typeof mpdArmy==='function')return mpdWith(mpdArmy(a),fn)}catch(e){}return fn()};
+{const w=f=>function(a){const args=arguments;return mpdW(a,()=>f.apply(this,args))};donativum=w(donativum);hireMerc=w(hireMerc);ruseTransfuges=w(ruseTransfuges)}
+const QUOTE={ligne:"Une ligne simple et solide : ne prenons aucun risque.",cannes:"Laissons le centre plier, et refermons la nasse sur eux.",ailes:"Massons la cavalerie aux ailes : je balaierai leurs cavaliers.",
+  prof:"Gardons des lignes en réserve ; on gagne par la profondeur.",tir:"Que les frondeurs ouvrent le bal et usent leurs rangs."};
+function adviceOf(g,a,b,role){const me=role==='att'?b.att:b.def,them=role==='att'?b.def:b.att,c=compOf(me),e=compOf(them),j=subsOf(a).indexOf(g),cu=j>=0?corpsOf(a)[j+1].u.map(i=>a.units[i]):[];
+  const n=cu.length||1,cav=cu.filter(u=>isCavK(UT[u.t].k)).length/n,lt=cu.filter(u=>['skirm','eleph'].includes(UT[u.t].k)).length/n,cOk=c.cav>=.12&&c.cav*c.p>=e.cav*e.p;
+  if(cav>=.5)return hasTr(g,'tact')&&cOk?'cannes':hasTr(g,'prud')?'ligne':'ailes';
+  if(lt>=.5)return 'tir';
+  if(hasTr(g,'tact'))return cOk?'cannes':'prof';
+  if(hasTr(g,'prud')||hasTr(g,'tem'))return 'prof';
+  if(hasTr(g,'fouge'))return 'ligne';
+  return e.el>.03&&c.sk>.1?'tir':aiFm(me,them,a.side)}
+function mainOf(ids,side){return sideArmies(ids).filter(a=>a.side===side).sort((p,q)=>strength(q)-strength(p))[0]}
+function councilOf(b){const attMine=sideOfIds(b.att)==='car',role=attMine?'att':'def',a=mainOf(attMine?b.att:b.def,'car');if(!a)return [];
+  return subsOf(a).map(g=>({g:g.id,f:adviceOf(g,a,b,role),a:a.id}))}
+const _deployUI11=deployUI;
+deployUI=function(){_deployUI11.apply(this,arguments);try{const b=S.cur,card=$('mcard'),dp=card&&card.querySelector('#depl');if(!b||!dp||card.querySelector('#cons'))return;
+  b.cons=councilOf(b);if(!b.cons.length)return;
+  const draw=()=>{const el=$('cons');if(!el)return;el.innerHTML=`<h3 style="margin:10px 0 4px">Conseil de guerre</h3>`+b.cons.map(c=>{const g=S.gens.find(x=>x.id===c.g);if(!g)return '';const ok=b.fm.car===c.f,src=typeof porGenURL==='function'?porGenURL(g):null;
+    return `<div style="display:flex;gap:8px;align-items:center;margin:4px 0">${src?`<img src="${src}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;background:#fff;flex:none">`:''}<div style="flex:1;font-size:13px;line-height:1.3"><b>${esc(g.name)}</b> ${'★'.repeat(stars(g))} <span class="sub">— ${FORM[c.f].n}</span><br><i>« ${QUOTE[c.f]} »</i></div><span style="font-size:12px;color:${ok?'#9fd08a':'#e0a060'};flex:none">${ok?'✓ suivi':'ignoré'}</span></div>`}).join('')+
+    `<p class="sub" style="font-size:12px;margin:2px 0">Suivre l'avis d'un second : +1,5 % et il vous en sait gré. L'ignorer froisse son orgueil (jalousie).</p>`};
+  dp.insertAdjacentHTML('afterend','<div id="cons"></div>');draw();
+  card.querySelectorAll('[data-fm]').forEach(x=>x.addEventListener('click',()=>setTimeout(draw,0)))}catch(e){console.warn(e)}};
+const consFollowed=b=>(b.cons||[]).filter(c=>b.fm&&b.fm.car===c.f).length;
+const _odds11=odds;
+odds=function(b){let p=_odds11(b);try{const n=consFollowed(b);if(n&&b.cons){const carAtt=sideOfIds(b.att)==='car';p=Math.min(.999,Math.max(.001,p));let r=p/(1-p);r*=carAtt?1+.015*n:1/(1+.015*n);p=r/(1+r)}}catch(e){}return p};
+// carrière : batailles, traits gagnés au feu, jalousie, promotion
+const jalTxt=g=>{const j=g.jal||0;return j>=70?'<span style="color:#e07050">jaloux</span>':j>=40?'<span style="color:#e0a060">impatient</span>':'<span style="color:#9fd08a">loyal</span>'};
+const _applyResult11=applyResult;
+applyResult=function(b,res){const cons=b.cons,fm=b.fm&&b.fm.car,attA=sideArmies(b.att),defA=sideArmies(b.def),win=res.attWin?attA:defA;
+  const subsBefore=[...attA,...defA].map(a=>({a,L:subsOf(a)}));
+  _applyResult11.apply(this,arguments);
+  try{for(const c of cons||[]){const g=S.gens.find(x=>x.id===c.g);if(!g||g.dead)continue;if(fm===c.f)g.jal=Math.max(0,(g.jal||0)-6);else{g.jal=Math.min(100,(g.jal||0)+(hasTr(g,'fouge')?12:8));if(g.side==='car'&&(g.jal||0)>=40)log(`${g.name} n'a pas digéré qu'on ignore son avis.`)}}
+    for(const {a,L} of subsBefore)for(const g of L){if(g.dead)continue;g.bat=(g.bat||0)+1;
+      if(win.includes(a)&&g.bat%3===0&&Math.random()<.6){const k=a.units.filter(u=>u.og===g.id&&isCavK(UT[u.t].k)).length*2>a.units.filter(u=>u.og===g.id).length&&!g.tr.includes('cav')?'cav':(()=>{const C=GOOD_TR.filter(t=>!g.tr.includes(t));return C[Math.floor(Math.random()*C.length)]})();
+        if(k&&!g.tr.includes(k)){g.tr.push(k);if(g.side==='car')log(`Au feu, ${g.name} s'est révélé : ${TRAITS[k].n.toLowerCase()}.`)}}}}catch(e){console.warn(e)}};
+function splitCorps(a,k,mode){const g=subsOf(a)[k-1];if(!g)return null;const U=a.units.filter(u=>(u.cp||0)===k);if(!U.length||U.length>=a.units.length)return null;
+  const b={id:S.uid++,side:a.side,name:g.name,x:a.x+1.2,y:a.y+.6,at:a.at,legs:[],units:[],scout:0,cool:0,mor:a.mor,food:0};if(a.dm)b.dm=a.dm;S.armies.push(b);
+  for(const u of U){moveUnit(a,b,u);u.cp=0;u.gd=0}cutSub(a,g);giveGen(b,g);
+  if(mode==='det'){b.det={p:a.id};if(a.side==='car')log(`${g.name} part en mission avec le ${corpsN(k)} (${U.length} rég.) ; il rejoindra ${armyLabel(a)} sur ordre.`)}
+  else{g.promo=1;g.jal=0;g.tr.includes('aime')||(a.mor=Math.min(100,(a.mor||MOR0)+2));if(a.side==='car')log(`${g.name} est promu : il commande désormais sa propre armée (${U.length} rég.).`)}
+  syncGens();return b}
+function rejoin(d){const p=d.det&&S.armies.find(x=>x.id===d.det.p&&!x.dead);const g=genOf(d);if(!p||!g)return false;if(Math.hypot(p.x-d.x,p.y-d.y)>6)return false;
+  if(p.units.length+d.units.length>MAXU||(p.sub||[]).length>=MAXSUB)return false;
+  for(const u of d.units.slice()){u.og=g.id;moveUnit(d,p,u)}g.army=null;d.gen=null;dropArmy(d);addSub(p,g,true);fixCorps(p);
+  if(p.side==='car')log(`${g.name} rejoint ${armyLabel(p)} et reprend le commandement du ${corpsN((p.sub||[]).indexOf(g.id)+1)}.`);syncGens();return true}
+// jalousie : un second de valeur, jamais promu, finit par réclamer son armée ; à bout, il rejoint le parti d'Hannon
+const _daily11=daily;
+daily=function(d){_daily11(d);if(S.cur||S.over)return;try{
+  for(const x of S.armies)if(x.det&&!S.armies.some(p=>p.id===x.det.p&&!p.dead))delete x.det;
+  if(d%10)return;
+  for(const a of S.armies){if(a.dead||a.side!=='car'||!(a.sub||[]).length)continue;const chief=genOf(a);
+    for(const g of subsOf(a)){if(g.promo)continue;let j=g.jal||0;const st=stars(g);if(st>=2)j+=1+(hasTr(g,'fouge')?1:0)+(chief&&st>=stars(chief)?2:0);if(chief&&hasTr(chief,'aime'))j-=.5;g.jal=Math.max(0,Math.min(100,j));
+      if(g.jal>=60&&!g.warn){g.warn=1;log(`${g.name} réclame un commandement à lui. Promouvez-le, ou sa jalousie grandira.`)}
+      if(g.jal>=85&&Math.random()<.35){const node=N.find(n=>n.id==='carthago')||nearestNode(a.x,a.y,n=>!n.col&&ownerN(n.i)==='car');cutSub(a,g);g.at=node?node.i:null;g.jal=50;g.warn=0;
+        a.mor=Math.max(0,(a.mor||MOR0)-5);if(typeof senAdj==='function')senAdj(-4);log(`${g.name}, ulcéré de n'avoir jamais été promu, quitte ${armyLabel(a)} et rentre à Carthage rejoindre le parti d'Hannon.`)}}}}catch(e){console.warn(e)}};
+// colonne de marche : une embuscade ne frappe que le corps exposé si l'armée marche en ordre (avant-garde et arrière-garde)
+const colOk=a=>a&&a.col&&a.col.av!=null&&a.col.ar!=null&&a.col.av!==a.col.ar&&corpsOf(a).length>1;
+const _ambushMul11=ambushMul;
+ambushMul=function(b){let m=_ambushMul11(b);try{const A=sideArmies(b.att);if(m<1&&A.some(x=>x.legs.length&&colOk(x))){const a=A.find(x=>x.legs.length&&colOk(x)),g=subsOf(a)[a.col.ar-1]||(a.col.ar===0?genOf(a):null),sh=g&&(hasTr(g,'prud')||hasTr(g,'tact'))?.45:.6;m=1/(1+(1/m-1)*sh)}}catch(e){}return m};
+function colOrder(a){const C=corpsOf(a).filter(c=>c.u.length);if(!colOk(a))return C.map(c=>c.k);const mid=C.map(c=>c.k).filter(k=>k!==a.col.av&&k!==a.col.ar);return [a.col.av,...mid,a.col.ar]}
+function colDraw(){} // remplacé : la colonne se dessine sur la grande colonne de régiments (formation), voir plus bas
+// colonne de marche dessinée sur la grande colonne de la carte : régiments rangés par corps (ordre de marche), fanion au flanc de chaque corps, train des bagages en queue
+const _formation11=formation;
+formation=function(a,s){const mv=a&&a.legs&&a.legs.length&&!a.ship&&TRAIL[a.id]&&TRAIL[a.id].length>1;if(!mv)return _formation11.apply(this,arguments);
+  const C=corpsOf(a),multi=C.filter(c=>c.u.length).length>=2;let heads=[],r;
+  if(multi){const O=colOrder(a),seq=[];for(const k of O){const c=C.find(x=>x.k===k);if(!c||!c.u.length)continue;heads.push({k,g:c.g||(k===0?genOf(a):null),i:seq.length,n:c.u.length,ex:colOk(a)&&(k===a.col.av||k===a.col.ar)});for(const i of c.u)if(a.units[i])seq.push(a.units[i])}
+    if(seq.length!==a.units.length)return _formation11.apply(this,arguments);
+    const keep=a.units,M={...MARCH};for(const k in MARCH)MARCH[k]=0;a.units=seq;
+    try{r=_formation11.apply(this,arguments)}finally{a.units=keep;Object.assign(MARCH,M)}}
+  else{r=_formation11.apply(this,arguments);const g=genOf(a);if(g)heads=[{k:0,g,i:0,n:a.units.length,ex:false}]}
+  try{const P=a._sq;if(P&&P.length===a.units.length&&P.length)colDeco(a,s,P,heads)}catch(e){}
+  return r};
+// chemin de l'armée à l'écran (tête puis trace en arrière) : point à la distance d, et direction de marche
+function trailAt(a,s,d){const T=TRAIL[a.id]||[],P=[[view.ox+a._p[0]*s,view.oy+a._p[1]*s]];for(let k=T.length-1;k>=0;k--)P.push([view.ox+T[k][0]*s,view.oy+T[k][1]*s]);
+  let acc=0;for(let i=0;i<P.length-1;i++){const dx=P[i+1][0]-P[i][0],dy=P[i+1][1]-P[i][1],l=Math.hypot(dx,dy);if(l<.01)continue;if(acc+l>=d){const f=(d-acc)/l;return {x:P[i][0]+dx*f,y:P[i][1]+dy*f,ux:-dx/l,uy:-dy/l}}acc+=l}
+  const n=P.length;let ux=0,uy=-1;for(let i=n-1;i>0;i--){const dx=P[i][0]-P[i-1][0],dy=P[i][1]-P[i-1][1],l=Math.hypot(dx,dy);if(l>1){ux=-dx/l;uy=-dy/l;break}}return {x:P[n-1][0]-ux*(d-acc),y:P[n-1][1]-uy*(d-acc),ux,uy}}
+// un chariot bâché tiré par deux bœufs (ou une file de mulets), orienté dans le sens de la marche
+function wagon(x,y,ux,uy,w,kind,load){const dark='rgba(26,18,10,.95)';ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(uy,ux));
+  if(kind==='mule'){for(let i=0;i<3;i++){const ox=-i*w*.62;ctx.fillStyle='#7b6248';ctx.beginPath();ctx.ellipse(ox,0,w*.26,w*.13,0,0,7);ctx.fill();ctx.strokeStyle=dark;ctx.lineWidth=Math.max(.8,w*.05);ctx.stroke();
+      ctx.fillStyle=load>.15?'#c9b48a':'#8a7a62';ctx.fillRect(ox-w*.14,-w*.2,w*.28,w*.4);ctx.strokeRect(ox-w*.14,-w*.2,w*.28,w*.4);ctx.fillStyle='#5e4836';ctx.beginPath();ctx.ellipse(ox+w*.3,0,w*.09,w*.06,0,0,7);ctx.fill()}
+    ctx.restore();return}
+  // bœufs, joug, timon
+  ctx.strokeStyle='#4a3424';ctx.lineWidth=Math.max(1,w*.07);ctx.beginPath();ctx.moveTo(w*.45,0);ctx.lineTo(w*.95,0);ctx.stroke();
+  for(const sy of [-1,1]){ctx.fillStyle='#9a7a56';ctx.beginPath();ctx.ellipse(w*1.12,sy*w*.17,w*.24,w*.12,0,0,7);ctx.fill();ctx.strokeStyle=dark;ctx.lineWidth=Math.max(.8,w*.05);ctx.stroke();
+    ctx.fillStyle='#6e5238';ctx.beginPath();ctx.ellipse(w*1.38,sy*w*.17,w*.08,w*.07,0,0,7);ctx.fill()}
+  ctx.strokeStyle='#3a2a18';ctx.lineWidth=Math.max(1,w*.08);ctx.beginPath();ctx.moveTo(w*.98,-w*.32);ctx.lineTo(w*.98,w*.32);ctx.stroke();
+  // roues, caisse, bâche (pleine, à moitié ou vide selon les vivres)
+  ctx.fillStyle=dark;for(const ox of [-w*.28,w*.28])for(const sy of [-1,1]){ctx.fillRect(ox-w*.12,sy*w*.36-w*.04,w*.24,w*.08)}
+  ctx.fillStyle='#8a6a3e';ctx.fillRect(-w*.5,-w*.32,w,w*.64);ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1,w*.07);ctx.strokeRect(-w*.5,-w*.32,w,w*.64);
+  if(load>.15){const L=Math.min(1,load);ctx.fillStyle='#e6d9b6';ctx.beginPath();ctx.moveTo(-w*.46,-w*.27);ctx.lineTo(-w*.46+w*.92*L,-w*.27);ctx.lineTo(-w*.46+w*.92*L,w*.27);ctx.lineTo(-w*.46,w*.27);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#b7a77f';ctx.lineWidth=Math.max(.6,w*.04);for(let i=1;i<4;i++){const xx=-w*.46+w*.92*L*i/4;ctx.beginPath();ctx.moveTo(xx,-w*.27);ctx.lineTo(xx,w*.27);ctx.stroke()}}
+  ctx.restore()}
+function colDeco(a,s,P,heads){const q=UNIT_KM*s,car=a.side==='car',fc=car?'#6b3f9f':'#9b2a22',dark='rgba(26,18,10,.95)';ctx.save();ctx.textBaseline='middle';
+  // liseré doré de l'avant-garde et de l'arrière-garde
+  for(const h of heads)if(h.ex){ctx.strokeStyle='#ffd77a';ctx.lineWidth=Math.max(1.5,q*.12);for(let j=h.i;j<h.i+h.n;j++){const [x,y]=P[j];ctx.strokeRect(x-q/2-1.5,y-q/2-1.5,q+3,q+3)}}
+  // train des bagages : un chariot pour 4 régiments (un de plus avec les bagages), mulets pour les petites armées ; la bâche montre les vivres restants
+  const n=a.units.length,need=Math.max(11,q*.9),sp=q*1.22,w=Math.max(9,q*.95),fd=typeof foodDays==='function'?foodDays(a):20,load=Math.max(0,Math.min(1,fd/20));
+  const nw=Math.min(6,Math.max(1,Math.ceil(n/4)+(a.bag?1:0))),kind=n<=3&&!a.bag?'mule':'char',gap=w*(kind==='mule'?2.2:1.8);
+  let d=need+(n-1)*sp+q*.8+w*1.2;for(let j=0;j<nw;j++){const p=trailAt(a,s,d);wagon(p.x,p.y,p.ux,p.uy,w,kind,load);d+=gap}
+  // fanion au flanc de chaque corps ; de près, bannière au nom du commandant
+  const big=s>1.4;
+  for(const h of heads){const [x,y]=P[h.i],px=x+q*.5+2,py=y+q*.5,top=y-q*.5-Math.max(5,q*.35),col=h.k===0?'#e0b84f':fc;
+    ctx.strokeStyle=dark;ctx.lineWidth=Math.max(1.2,q*.08);ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,top);ctx.stroke();
+    if(big&&h.g){const nm=h.g.name.split(' ').slice(-1)[0],fz=11;ctx.font=`600 ${fz}px "Barlow Semi Condensed",Arial,sans-serif`;const w2=ctx.measureText(nm).width+fz*.9,bh=fz*1.4,bx=px,by=top;
+      ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+w2,by);ctx.lineTo(bx+w2-fz*.35,by+bh/2);ctx.lineTo(bx+w2,by+bh);ctx.lineTo(bx,by+bh);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke();
+      ctx.fillStyle=h.k===0?'#1b1712':'#f4ead2';ctx.textAlign='left';ctx.fillText(nm,bx+fz*.3,by+bh/2+.5)}
+    else{const fw=Math.max(7,q*.6);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px+fw,top+fw*.3);ctx.lineTo(px,top+fw*.6);ctx.closePath();ctx.fill();ctx.lineWidth=1;ctx.stroke()}}
+  ctx.restore()}
+// emblème de l'armée : remplace le nombre de régiments dans le médaillon ; choisi dans le panneau de l'armée
+EMB_P.aigle='M0 -9 L1.6 -6.6 L1.2 -3.4 L9.5 -6.5 L7.6 -2.4 L10 -1.2 L5 1 L2.2 1.2 L3.2 6 L5.4 9 L0 7.2 L-5.4 9 L-3.2 6 L-2.2 1.2 L-5 1 L-10 -1.2 L-7.6 -2.4 L-9.5 -6.5 L-1.2 -3.4 L-1.6 -6.6Z';
+const ARMY_EMB={tanit:'Signe de Tanit',elephant:'Éléphant',cheval:'Tête de cheval',palmier:'Palmier',moon:'Disque et croissant',soleil:'Soleil',etoile:'Étoile',rings:'Rosace',
+  aigle:'Aigle',foudre:'Foudre ailé',loup:'Louve',sanglier:'Sanglier',triskel:'Triskèle'};
+const embOf=a=>a.emb&&ARMY_EMB[a.emb]?a.emb:a.side==='car'?'tanit':a.side==='rom'?'aigle':'soleil';
+const EMB_IMG={};
+function embImg(k,col){const key=k+col;if(EMB_IMG[key])return EMB_IMG[key];const im=new Image();EMB_IMG[key]=im;
+  im.onload=()=>{im._ok=1;try{renderAll()}catch(e){}};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-11 -11 22 22">${embSVG(k,0,0,10,col)}</svg>`);return im}
+const _token11=token;
+token=function(x,y,side,txt,selected,a){if(!(a&&!a.g&&a.units&&/^\d+$/.test(txt||'')))return _token11.apply(this,arguments);
+  _token11.call(this,x,y,side,'',selected,a);const im=embImg(embOf(a),'#fff');if(im._ok){const r=FAC[side].a?8.5:11;ctx.drawImage(im,x-r*.78,y-r*.82,r*1.56,r*1.56)}};
+// vers la bataille 3D : avis du conseil et ordre de marche
+const _addBattleMods11=addBattleMods;
+addBattleMods=function(payload){_addBattleMods11(payload);try{const b=S.cur;if(!b||!payload||!payload.b)return;
+  if(b.cons&&b.cons.length)payload.b.conseil=b.cons.map(c=>{const g=S.gens.find(x=>x.id===c.g);return {n:g?g.name:'?',f:c.f,suivi:b.fm&&b.fm.car===c.f?1:0,cp:c.a+':'+((S.armies.find(x=>x.id===c.a)||{sub:[]}).sub||[]).indexOf(c.g)+1}});
+  const col=[...sideArmies(b.att),...sideArmies(b.def)].filter(colOk).map(a=>({armee:a.id,av:a.id+':'+a.col.av,ar:a.id+':'+a.col.ar,embusque:ambushMul(b)<1&&sideArmies(b.att).includes(a)?1:0}));if(col.length)payload.b.colonne=col}catch(e){console.warn(e)}};
+// fenêtre « Organiser les corps » : humeur, promotion, mission, colonne de marche
+const _corpsWin11=corpsWin;
+corpsWin=function(a){_corpsWin11(a);try{const card=$('mcard');if(!card||!a||a.dead)return;const C=corpsOf(a),cols=card.querySelectorAll('[data-cmv]').length?[...card.querySelectorAll('div[style*="grid-template-columns:repeat"] > div')]:[];
+  C.forEach((c,j)=>{const el=cols[j];if(!el||!c.k||!c.g)return;const g=c.g,can=c.u.length&&c.u.length<a.units.length;
+    const sub=el.querySelector('.sub');if(sub)sub.insertAdjacentHTML('beforeend',`<br>Humeur : ${jalTxt(g)} · ${g.bat||0} bataille${(g.bat||0)>1?'s':''}`);
+    el.insertAdjacentHTML('beforeend',`<div class="row" style="margin:8px 0 0;justify-content:center"><button type="button" data-cdet="${c.k}" ${can?'':'disabled'} style="min-height:26px;font-size:12px;padding:0 8px" title="Le ${corpsN(c.k)} part en mission sous ${esc(g.name)} (flanc-garde, poursuite, fourrage, tenir un gué), puis rejoint l'armée">Détacher en mission</button><button type="button" data-cpro="${c.k}" ${can?'':'disabled'} style="min-height:26px;font-size:12px;padding:0 8px" title="${esc(g.name)} reçoit sa propre armée avec son corps ; sa jalousie s'éteint">Promouvoir</button></div>`)});
+  const opt=(w)=>C.filter(c=>c.u.length).map(c=>`<button type="button" data-col="${w}:${c.k}" class="${a.col&&a.col[w]===c.k?'on':''}" style="min-height:26px;font-size:12px;padding:0 8px">${c.k?ROM_N[c.k]:'Chef'}${c.g?' · '+esc(c.g.name):''}</button>`).join('');
+  const row=card.querySelector('[data-cwa]')?card.querySelector('[data-cwa]').parentElement:card.querySelector('#cwOk').parentElement;
+  if(C.length>1)row.insertAdjacentHTML('beforebegin',`<div style="border-top:1px solid rgba(214,184,120,.18);padding-top:8px;margin-top:6px"><div style="font-family:var(--display);font-size:16px">Colonne de marche</div>
+    <p class="sub" style="font-size:12px;margin:2px 0 6px">Qui ouvre et qui ferme la marche ? Avec une avant-garde et une arrière-garde désignées, une embuscade ne frappe que le corps exposé : pénalité réduite de 40 % (55 % si l'arrière-garde est menée par un général prudent ou tacticien). Les bagages suivent derrière.</p>
+    <div class="row" style="align-items:center;margin:4px 0"><span class="sub" style="width:90px">Avant-garde</span>${opt('av')}</div><div class="row" style="align-items:center;margin:4px 0"><span class="sub" style="width:90px">Arrière-garde</span>${opt('ar')}</div>
+    <p class="sub" style="font-size:12px;margin:2px 0">${colOk(a)?'Ordre de marche : '+colOrder(a).map(k=>k?ROM_N[k]:'Chef').join(' → ')+' → bagages':'Pas d\'ordre de marche : l\'armée avance en une seule masse.'}</p></div>`);
+  card.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{const [w,k]=b.dataset.col.split(':');a.col=a.col||{};a.col[w]=a.col[w]===+k?null:+k;corpsWin(a);renderAll()});
+  card.querySelectorAll('[data-cdet]').forEach(b=>b.onclick=()=>{const d=splitCorps(a,+b.dataset.cdet,'det');if(d){closeModal();sel={a:d};renderAll()}});
+  card.querySelectorAll('[data-cpro]').forEach(b=>b.onclick=()=>{const d=splitCorps(a,+b.dataset.cpro,'promo');if(d){closeModal();sel={a:d};renderAll()}})}catch(e){console.warn(e)}};
+// panneau d'un détachement : rejoindre l'armée mère
+const _renderSide11=renderSide;
+renderSide=function(){_renderSide11.apply(this,arguments);try{if(!(sel&&sel.a&&!sel.a.dead&&sel.a.det&&isMine(sel.a)))return;const d=sel.a,p=S.armies.find(x=>x.id===d.det.p&&!x.dead);if(!p)return;
+  const box=$('side').querySelector('.genbox');if(!box)return;const near=Math.hypot(p.x-d.x,p.y-d.y)<=6;
+  box.insertAdjacentHTML('beforeend',`<p class="sub" style="margin:8px 0 2px">Détachement de ${esc(armyLabel(p))}${near?' — à portée':''}</p><div class="row"><button type="button" id="cRej" ${near?'':'disabled'} title="${near?'Les régiments rentrent dans l\'armée et reforment leur corps':'Rapprochez le détachement de son armée'}">Rejoindre l'armée</button><button type="button" id="cGoP" title="Marcher jusqu'à l'armée">Marcher vers l'armée</button></div>`);
+  if($('cRej'))$('cRej').onclick=()=>{if(rejoin(d)){sel={a:p};renderAll()}};
+  if($('cGoP'))$('cGoP').onclick=()=>{try{order(d,p.x+.8,p.y+.4,null)}catch(e){}renderAll()}}catch(e){console.warn(e)}};
+// panneau d'une de vos armées : choix de l'emblème
+const _renderSide12=renderSide;
+renderSide=function(){_renderSide12.apply(this,arguments);try{const a=sel&&sel.a;if(!a||a.dead||a.g||!isMine(a))return;const h=$('side').querySelector('h2');if(!h||$('aEmb'))return;
+  const c=FAC[a.side].c,cur=embOf(a),src=k=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 24 24"><rect x="-12" y="-12" width="24" height="24" rx="4" fill="rgb(${c[0]},${c[1]},${c[2]})"/>${embSVG(k,0,0,10,'#fff')}</svg>`);
+  h.insertAdjacentHTML('afterend',`<div class="row" style="align-items:center;margin:4px 0 6px"><img id="aEmbI" src="${src(cur)}" alt="" style="width:26px;height:26px"><label class="sub" style="display:flex;gap:6px;align-items:center">Emblème <select id="aEmb" style="font:inherit;color:var(--ink);background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;padding:3px 6px">${Object.entries(ARMY_EMB).map(([k,n])=>`<option value="${k}"${k===cur?' selected':''}>${n}</option>`).join('')}</select></label></div>`);
+  $('aEmb').onchange=e=>{a.emb=e.target.value;$('aEmbI').src=src(a.emb);renderAll()}}catch(e){console.warn(e)}};
+
+function dark2(){return 'rgba(26,18,10,.95)'}
+window.__armees={lineOf,dijkstra,startsOf,sendConvoy,sendScouts,raidsDaily,get S(){return S},T:{get startBattle(){return startBattle},get odds(){return odds},get capture(){return capture},get applyResult(){return applyResult},get autoResolve(){return autoResolve},reliefize,negotiate,refuseTry,hireMerc,mercNode,chev,startMine,insideOf,shutIn,get arrive(){return arrive},canAmb,ambushMul,get openBattle(){return openBattle},fmOf,fmMul,ruseFeux,ruseBoeufs,ruseTransfuges,decimate,donativum,rewardBraves,woundOf,corpsOf,addSub,dropSub,autoCorps,pickGuard,corpsMul,subsOf,hannibalStaff,corpsWin,fallen3D,splitCorps,rejoin,councilOf,colOrder,get ambushMul(){return ambushMul},get daily(){return daily}}};
+/* ================= FIN ARMÉES ================= */
+

@@ -1,0 +1,24 @@
+/* ================= RUSES : feux trompeurs, bœufs aux torches, faux transfuges, déserteurs ================= */
+// a.feux = {t, x, y} : l'ennemi croit l'armée encore à son camp jusqu'au jour t.
+// S.lures : bœufs aux torches qui entraînent l'ennemi vers une fausse piste. e.dupe = {by, t} : ennemi abusé par de faux transfuges.
+const enemiesNear=(a,km)=>S.armies.filter(e=>!e.dead&&!e.ship&&e.side!==a.side&&hostile(a,e)&&Math.hypot(e.x-a.x,e.y-a.y)<km);
+const known=e=>visOfArmy(e)>0||(S.intel&&S.intel[e.id]);
+function ruseFeux(a){a.feux={t:Math.floor(S.day)+3,x:a.x,y:a.y};S.intelR=S.intelR||{};S.intelR[a.id]={x:a.x,y:a.y,d:Math.floor(S.day)};
+  log(`${a.name} laisse brûler ses feux de camp et quelques sonneurs : l'ennemi la croira là trois jours encore. Partez maintenant.`)}
+function ruseBoeufs(a){const E=enemiesNear(a,30);if(!E.length)return;a.oxT=Math.floor(S.day)+120;const g=genOf(a);
+  const p=.6+(hasTr(g,'tact')?.2:0)+(terrainAt(a.x,a.y)==='montagne'||terrainAt(a.x,a.y)==='foret'?.1:0);
+  a.food=Math.max(0,(a.food||0)-2);
+  const e0=E[0],dx=a.x-e0.x,dy=a.y-e0.y,dd=Math.hypot(dx,dy)||1,px=-dy/dd,py=dx/dd,lx=a.x+px*18,ly=a.y+py*18;
+  S.lures=S.lures||[];S.lures.push({x0:a.x,y0:a.y,x1:lx,y1:ly,t0:S.day,side:a.side});
+  if(Math.random()<p){for(const e of E){e.legs=[];e.at=null;try{order(e,lx,ly,null)}catch(_){}e.fat=Math.min(100,(e.fat||0)+10);e.cool=Math.max(e.cool||0,3)}a.cool=Math.max(a.cool||0,3);
+    log(`Nuit des bœufs : deux mille bœufs aux cornes enflammées gravissent les collines. ${E.length>1?'Les Romains se ruent':'L’ennemi se rue'} vers les torches, et ${a.name} s'échappe sans combat.`)}
+  else log(`Les bœufs aux torches s'égaillent sans tromper personne : l'ennemi ne bouge pas.`)}
+function ruseTransfuges(a){const E=enemiesNear(a,60).filter(known);if(!E.length||S.gold[a.side]<20)return;S.gold[a.side]-=20;a.dupT=Math.floor(S.day)+30;const e=E[0],g=genOf(a);
+  const p=.55+(hasTr(g,'tact')?.15:0)-(hasTr(genOf(e),'prud')?.2:0);
+  if(Math.random()<p){e.dupe={by:a.id,t:Math.floor(S.day)+12};if(e.side==='rom'&&!(typeof MPRH==='function'&&MPRH('rom'))){e.legs=[];try{order(e,a.x,a.y,null)}catch(_){}}
+    log(`De faux transfuges convainquent ${esc(e.name)} que vous êtes à bout de forces : il marche sur vous, persuadé de vaincre (vous combattez à +15 % contre lui pendant douze jours).`)}
+  else{S.intelR=S.intelR||{};S.intelR[a.id]={x:a.x,y:a.y,d:Math.floor(S.day)};a.mor=Math.max(0,(a.mor==null?MOR0:a.mor)-2);log(`Vos faux transfuges sont démasqués et mis à la question : l'ennemi sait désormais où vous êtes.`)}}
+function dupeMul(b){let m=1;const A=sideArmies(b.att),D=sideArmies(b.def);
+  for(const e of D)if(e.dupe&&S.day<e.dupe.t&&A.some(x=>x.side!==e.side))m*=1.15;
+  for(const e of A)if(e.dupe&&S.day<e.dupe.t&&D.some(x=>x.side!==e.side))m/=1.15;return m}
+

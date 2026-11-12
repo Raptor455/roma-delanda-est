@@ -1,0 +1,72 @@
+/* ===== MÉCA-LIEUX (fil « Mécaniques de campagne ») =====
+   Situation de départ de Carthage au printemps 218 av. J.-C. et régions historiques.
+   Injecté avant « RELIEF, FLEUVES » par mecaniques/patch.py. Les nouveaux lieux sont ajoutés EN FIN de PL (indices stables). */
+// Sagonte est tombée en 219 : elle est punique, et garde les otages des peuples ibères
+// Carpétans, Olcades, Vaccéens : peuples libres au départ (Baptiste, 11 nov. 2026 : plus de tributaires, tout le monde peut être envahi)
+{const own={saguntum:'car',toletum:'carp',segobriga:'olc',helmantica:'vac'};for(const p of PL)if(own[p[0]])p[4]=own[p[0]]}
+FAC.carp={n:'Carpétans',c:[184,120,78],a:[45,-25],cul:'ibe'};
+FAC.olc={n:'Olcades',c:[168,112,84],a:[40,-20],cul:'ibe'};
+FAC.vac={n:'Vaccéens',c:[160,124,90],a:[30,-15],cul:'ibe'};
+PL.push(
+ // Afrique punique : la chôra de Carthage (Zeugitane), le Sahel (Byzacène) et les Emporia
+ ['tunes','Tunès',10.18,36.80,'car',1],['neapolisafr','Néapolis',10.73,36.45,'car',1,'p'],['aspis','Aspis',11.10,36.85,'car',1,'p'],
+ ['vaga','Vaga',9.18,36.73,'car',1],['uthina','Uthina',10.03,36.60,'car',1],['thysdrus','Thysdrus',10.71,35.30,'car',1],
+ ['leptisminor','Leptis Minor',10.86,35.68,'car',1,'p'],['acholla','Acholla',11.03,35.24,'car',1,'p'],['gightis','Gightis',10.86,33.53,'car',1,'p'],
+ // Hispanie barcide : Turdétanie, Bastétanie, Orétanie, Contestanie
+ ['ilici','Ilici',-0.70,38.27,'car',1],['ilorci','Ilorci',-1.70,37.68,'car',1],['basti','Basti',-2.77,37.49,'car',1],['acci','Acci',-3.14,37.30,'car',1],
+ ['iliberri','Iliberri',-3.60,37.18,'car',1],['oretum','Orétum',-3.72,38.80,'car',1],['carteia','Carteia',-5.40,36.18,'car',1,'p'],['sexi','Sexi',-3.69,36.73,'car',1,'p'],
+ ['carmo','Carmo',-5.64,37.47,'car',1],['urso','Urso',-5.10,37.24,'car',1],['asido','Asido',-5.92,36.47,'car',1],
+ // tributaires de l'intérieur
+ ['consabura','Consabura',-3.61,39.46,'carp',1],['arbucala','Arbucala',-5.40,41.52,'vac',1],['pallantia','Pallantia',-4.53,42.01,'vac',1],
+ // Grèce centrale : l'Isthme (Mégare) et la route des Thermopyles (Lamia, Élatée), sans quoi l'Attique est coupée du reste
+ ['megara','Mégare',23.35,38.00,'ach',1,'p'],['lamia','Lamia',22.43,38.90,'eto',1],['elatea','Élatée',22.79,38.63,'mac',1],
+ // Pergame d'Attale Ier et l'Asie Mineure du bord de la carte (Éolide, Troade, Hellespont)
+ ['pergamum','Pergame',27.18,39.13,'per',3],['pitane','Pitané',26.90,38.95,'per',1,'p'],['assos','Assos',26.34,39.49,'per',1,'p'],
+ ['troas','Alexandrie de Troade',26.16,39.75,'per',1,'p'],['ilion','Ilion',26.24,39.96,'per',1],['lampsacus','Lampsaque',26.69,40.35,'per',1,'p'],
+ ['mytilene','Mytilène',26.55,39.10,'les',1,'p'],['methymna','Méthymna',26.18,39.37,'les',1,'p'],
+ ['sestos','Sestos',26.39,40.23,'thr',1,'p'],['lysimachia','Lysimacheia',26.73,40.58,'thr',1],['aegina','Égine',23.43,37.75,'ach',1,'p']
+);
+FAC.per={n:'Pergame',c:[74,86,168],a:[0,20],cul:'gre'};
+// ---- Asie Mineure (carte agrandie à 31,5° E, 9 nov.) : Pergame à sa vraie place, ses voisins jusqu'à Rhodes et au Bosphore ----
+PL.push(
+ ['elaia','Élaia',27.05,38.94,'per',1,'p'],['adramyttium','Adramyttion',26.94,39.57,'per',1,'p'],['cyme','Kymé',26.94,38.76,'per',1,'p'],['thyatira','Thyatire',27.84,38.92,'per',1],
+ ['phocaea','Phocée',26.75,38.67,'ion',1,'p'],['smyrna','Smyrne',27.14,38.42,'ion',1,'p'],['ephesus','Éphèse',27.34,37.94,'ion',2,'p'],['miletus','Milet',27.28,37.53,'ion',1,'p'],
+ ['halicarnassus','Halicarnasse',27.42,37.04,'ion',1,'p'],['chios','Chios',26.14,38.37,'ion',1,'p'],['samos','Samos',26.94,37.69,'ion',1,'p'],['cyzicus','Cyzique',27.89,40.38,'ion',1,'p'],['abydos','Abydos',26.41,40.19,'ion',1,'p'],
+ ['perinthus','Périnthe',27.96,40.98,'byz',1,'p'],['byzantium','Byzance',28.98,41.01,'byz',2,'p'],
+ ['chalcedon','Chalcédoine',29.03,40.99,'bit',1,'p'],['nicomedia','Nicomédie',29.92,40.77,'bit',2,'p'],['prusa','Pruse',29.06,40.19,'bit',1],['nicaea_bit','Nicée',29.72,40.43,'bit',1],
+ ['sardis','Sardes',28.04,38.49,'sel',2],['magnesia','Magnésie du Sipyle',27.43,38.61,'sel',1],['tralles','Tralles',27.84,37.86,'sel',1],['laodicea','Laodicée du Lycos',29.11,37.84,'sel',1],['apamea','Apamée',30.17,38.07,'sel',1],
+ ['rhodus','Rhodes',28.22,36.44,'rho',2,'p'],['caunus','Kaunos',28.62,36.83,'rho',1,'p'],['lindos','Lindos',28.08,36.09,'rho',1,'p']
+);
+FAC.ion={n:'Cités grecques d\'Asie',c:[176,168,120],a:[0,5],cul:'gre'};
+FAC.byz={n:'Byzance',c:[96,150,140],a:[0,5],cul:'gre'};
+FAC.bit={n:'Bithynie',c:[150,100,70],a:[10,-10],cul:'gre'};
+FAC.sel={n:'Empire séleucide',c:[150,96,150],a:[5,0],cul:'gre'};
+FAC.rho={n:'Rhodes',c:[204,120,60],a:[0,10],cul:'gre'};
+// l'Hellespont se passe entre Sestos et Lampsaque ou Abydos, le Bosphore entre Byzance et Chalcédoine
+STRAIT.push(['sestos','lampsacus'],['sestos','abydos'],['byzantium','chalcedon']);
+ROUTE.push(['elaia','pergamum','thyatira','sardis','magnesia','smyrna'],['smyrna','ephesus','miletus','halicarnassus'],['ephesus','tralles','laodicea','apamea'],
+ ['lampsacus','cyzicus','prusa','nicaea_bit','nicomedia','chalcedon'],['lysimachia','perinthus','byzantium'],['adramyttium','pergamum']);
+FAC.les={n:'Lesbos',c:[130,150,180],a:[0,0],cul:'gre'};
+// Régions historiques (nom, longitude, latitude du centre) : chaque ville appartient à la plus proche
+const REGIONS=[
+ ['Zeugitane',9.9,36.65],['Byzacène',10.55,35.25],['Emporia',12.3,32.9],['Îles maltaises',14.4,35.9],['Numidie massyle',7.2,36.1],['Masaesylie',2.4,35.9],['Maurétanie',-5.6,34.9],['Cyrénaïque',21,32.6],
+ ['Turdétanie',-5.8,37.15],['Bastétanie',-2.9,37.2],['Orétanie',-3.6,38.4],['Contestanie',-0.9,38.2],['Édétanie',-0.5,39.7],['Ilercavonie',0.7,41.0],['Ilergètes',0.6,41.9],
+ ['Carpétanie',-3.8,39.7],['Celtibérie',-2.4,41.4],['Vaccéens',-5.0,41.7],['Lusitanie',-7.9,39.4],['Callécie',-8.0,42.9],['Astures et Cantabres',-5.2,42.9],['Vasconie',-1.5,42.8],
+ ['Baléares',3.2,39.7],['Pityuses',1.4,38.95],
+ ['Volques',3.3,43.4],['Massalie',5.6,43.4],['Ligurie',8.3,44.2],['Allobroges',5.6,45.6],['Arvernes',3.0,45.6],['Aquitaine',-0.5,44.3],['Éduens',4.0,46.9],
+ ['Gaule cisalpine',9.8,45.2],['Vénétie',12.0,45.4],['Étrurie',11.3,43.3],['Ombrie',12.6,43.0],['Picénum',13.5,43.0],['Latium',12.7,41.8],['Samnium',14.4,41.5],
+ ['Campanie',14.4,40.9],['Apulie',16.0,41.2],['Lucanie',15.8,40.3],['Bruttium',16.3,39.0],['Sicile occidentale',13.0,37.8],['Sicile orientale',14.9,37.4],['Sardaigne',9.0,40.0],['Corse',9.1,42.1],
+ ['Liburnie',15.0,44.8],['Dalmatie',17.1,43.4],['Illyrie',19.5,42.0],['Pannonie',17.8,45.3],['Dardanie',21.6,42.6],['Épire',20.6,39.7],['Macédoine',22.6,40.7],
+ ['Thessalie',22.4,39.5],['Thrace',25.0,42.0],['Étolie',21.6,38.7],['Grèce centrale',23.4,38.2],['Péloponnèse',22.3,37.4],['Crète',24.8,35.2],
+ ['Calabre',17.5,40.5],['Indigètes',2.9,42.2],['Alpes',6.8,45.3]
+,['Troade',26.3,39.85],['Éolide',26.85,39.0],['Lesbos',26.35,39.2],['Chersonèse',26.55,40.45],
+ ['Mysie',28.2,39.7],['Lydie',28.1,38.5],['Ionie',27.3,38.0],['Carie',28.2,37.15],['Propontide',28.3,40.8],['Bithynie',29.7,40.5],['Phrygie',30.1,38.3],['Rhodes',28.1,36.3]];
+// Villes rangées à la main dans leur province historique (sinon : la province dont le centre est le plus proche,
+// ce qui mettait Siga en Hispanie, Rhegium en Sicile ou Élis en Étolie)
+const REG_FIX={siga:'Masaesylie',igilgili:'Masaesylie',saldae:'Masaesylie',sitifis:'Masaesylie',rusaddir:'Maurétanie',
+ rhegium:'Bruttium',thurii:'Lucanie',tarentum:'Calabre',brundisium:'Calabre',beneventum:'Samnium',
+ tarquinii:'Étrurie',clusium:'Étrurie',perusia:'Étrurie',felsina:'Gaule cisalpine',
+ segusio:'Alpes',augusta:'Alpes',darantasia:'Alpes',ebrodunum:'Alpes',emporion:'Indigètes',ruscino:'Volques',taurasia:'Ligurie',metapontum:'Lucanie',lapurdum:'Aquitaine',asturica:'Astures et Cantabres',
+ elis:'Péloponnèse',patrae:'Péloponnèse',corinthus:'Péloponnèse'};
+Object.assign(REG_FIX,{abydos:'Troade',adramyttium:'Éolide',elaia:'Éolide',cyme:'Éolide',phocaea:'Ionie',chios:'Ionie',samos:'Ionie',thyatira:'Lydie',perinthus:'Propontide',cyzicus:'Propontide'});
+/* ===== FIN MÉCA-LIEUX ===== */

@@ -1,0 +1,104 @@
+/* ================= SIMULATION ================= */
+function tick(dd){
+  if(S.over)return;
+  const before=Math.floor(S.day);S.day+=dd;const now=Math.floor(S.day),nd=now-before;
+  for(const a of S.armies.slice()){
+    if(!a.legs.length||a.dead||a.ship)continue;
+    let budget=dd;
+    while(budget>0&&a.legs.length){
+      const L=a.legs[0];
+      {const bb=brOnSeg(a.x,a.y,L.x,L.y);if(bb){a.legs=[];a._e=null;if(a.side==='car'){log(`${a.name} s'arrête : ${bridgeName(bb)} est coupé.`);S.paused=true}break}}
+      if(L.e!=null&&L.e!==a._e){const e=EDGES[L.e];if(edgeSnow(e)){a.legs=[];a._e=null;if(a.side==='car'){log(`${a.name} s'arrête : ${e.type==='col'?(N[e.a].col?N[e.a]:N[e.b]).n+' est fermé':'la '+ROAD[e.type].n+' est coupée'} par la neige.`);S.paused=true}break}}
+      a._e=L.e!=null?L.e:null;
+      const dist=Math.hypot(L.x-a.x,L.y-a.y),sp=legSpeed(a,L.type,L.tf,a.x,a.y),need=dist/sp;
+      if(need<=budget){a.x=L.x;a.y=L.y;budget-=need;a.legs.shift();a.at=L.n!=null?L.n:null;if(!a.legs.length){arrive(a);break}a.at=null}
+      else{a.x+=(L.x-a.x)*budget/need;a.y+=(L.y-a.y)*budget/need;budget=0;a.at=null}
+    }
+    if(S.cur)return;
+  }
+  tickFleets(dd);patrolsMove(dd);
+  // rencontres : deux armées hostiles à moins de 6 km
+  for(let i=0;i<S.armies.length;i++)for(let j=i+1;j<S.armies.length;j++){
+    const a=S.armies[i],b=S.armies[j];if(a.dead||b.dead||a.ship||b.ship||a.cool>0||b.cool>0||(typeof encNear==='function'?!encNear(a,b):Math.hypot(a.x-b.x,a.y-b.y)>=6)/*PERF-GA*//*ENC-COL*/||!hostile(a,b))continue;
+    {const att=typeof encAtt==='function'?encAtt(a,b):((a.legs.length>0)>=(b.legs.length>0)?a:b),def=att===a?b:a;
+      const defs=S.armies.filter(o=>o.side===def.side&&!o.dead&&Math.hypot(o.x-def.x,o.y-def.y)<6);startBattle(att,defs);if(S.cur)return}
+  }
+  for(let k=0;k<nd;k++){daily(before+k+1);if(S.cur||S.over)return}
+}
+function intercept(a){
+  const loss=.1+Math.random()*.15;a.units.forEach(u=>u.men=Math.round(u.men*(1-loss)));
+  log(`La flotte romaine attaque les navires de ${a.name} : ${Math.round(loss*100)} % des hommes perdus.`);S.paused=true;cleanArmy(a);
+}
+function storm(a){
+  const loss=.05+Math.random()*.15;a.units.forEach(u=>u.men=Math.round(u.men*(1-loss)));
+  if(a.side==='car'||visOfArmy(a)>=1)log(`Tempête en mer : l'armée de ${a.name} perd ${Math.round(loss*100)} % de ses hommes.`);
+  cleanArmy(a);
+}
+function arrive(a){
+  const i=a.at;if(i==null)return;
+  if(cityHostile(i,a.side)||(ownerN(i)&&ownerN(i)!==a.side&&a.target===i)){
+    const o=ownerN(i);
+    if(FAC[o].a&&S.fac[o].st!=='guerre_'+a.side)declareWar(a.side,o);
+    if(S.armies.some(x=>x.side===o&&!x.dead&&Math.hypot(x.x-a.x,x.y-a.y)<6))return; // une garnison : la bataille suivra
+    const sg=S.siege[N[i].id];if(sg&&sg.side===a.side&&S.armies.some(x=>x.id===sg.a&&!x.dead&&x.at===i&&!x.legs.length))return;
+    S.siege[N[i].id]={side:a.side,a:a.id,d:0,need:[5,15,30,60][N[i].size]};
+    if(a.side==='car')log(`${a.name} met le siège devant ${N[i].n}.`);
+    else if(o==='car'){log(`Les Romains assiègent ${N[i].n} !`);S.paused=true}
+  }
+}
+function daily(d){
+  bridgesDaily();visDaily(d);
+  for(const id in S.siege){const sg=S.siege[id],i=NI[id],a=S.armies.find(x=>x.id===sg.a);
+    if(!a||a.dead||a.at!==i||a.legs.length){delete S.siege[id];continue}
+    if(S.armies.some(x=>x.side===ownerN(i)&&!x.dead&&Math.hypot(x.x-a.x,x.y-a.y)<6))continue;
+    // un port ravitaillé par mer tient deux fois plus longtemps, sauf s'il est bloqué
+    sg.d+=N[i].port&&!(S.block[id]&&S.block[id].side===sg.side)?.5:1;if(sg.d>=sg.need)capture(i,a.side)}
+  const se=season();
+  for(const a of S.armies){
+    if(a.cool>0)a.cool--;if(a.scout>0)a.scout--;if(a.ship)continue;
+    if(a.inG&&(a.at==null||ownerN(a.at)!==a.side))a.inG=false;
+    const o=ownerAt(a.x,a.y),home=o===a.side,terr=terrainAt(a.x,a.y),onCol=a.legs.length&&a.legs[0].type==='col',sup=!home&&!a.g&&seaSupplied(a);
+    if(!a.g){armyFoodDaily(a,home,sup);aiForage(a)}const fed=a.g||a.food>0;
+    for(const u of a.units){const max=UT[u.t].men;
+      if(home&&!a.legs.length)u.men=Math.min(max,u.men+max*(a.inG?.012:.006));
+      else if(!home&&!a.g){let l=.0012*(se==='Hiver'?2.5:1)*(terr==='desert'?2:1);if(sup)l*=.4;l*=fed?.6:5;if(onCol)l+=se==='Hiver'?.012:.003;u.men-=u.men*l}
+      u.men=Math.max(0,u.men)}
+    // traverser les terres d'un peuple neutre l'agace
+    if(o&&FAC[o].a&&S.fac[o].st==='neutre'&&!FAC[a.side].a)S.fac[o][a.side]-=.3;
+    cleanArmy(a);
+  }
+  fleetsDaily(d);villagesDaily();
+  for(const id in S.q){const q=S.q[id];q.d--;if(q.d<=0){const i=NI[id];if(ownerN(i)===q.side)addRecruit(i,q.side,q.t,q.ds);delete S.q[id]}}
+  if(d%30===0){
+    for(const side of ['car','rom']){const {inc,up}=income(side);S.gold[side]=Math.max(0,S.gold[side]+inc-up);if(side==='car'&&S.gold.car===0&&up>inc)log("Le trésor est vide : vos mercenaires grognent.")}
+    for(const a of S.armies)if(FAC[a.side].a)a.units.forEach(u=>u.men=Math.min(UT[u.t].men,u.men+UT[u.t].men*.05));
+    for(const f in S.fac)if(S.fac[f].cd>0)S.fac[f].cd--;
+    aiDiplomacy();
+    const c=cal(d);if(c.mo===2)log(`Printemps ${c.year} av. J.-C. : la saison des campagnes s'ouvre.`);if(c.mo===11)log(`L'hiver arrive : marches plus lentes, cols des montagnes meurtriers.`);
+  }
+  if(d%5===0)aiTurn();
+  save();
+}
+function cleanArmy(a){
+  a.units=a.units.filter(u=>u.men>=UT[u.t].men*.1);
+  if(!a.units.length&&!a.dead){a.dead=true;S.armies=S.armies.filter(x=>x!==a);if(a.side==='car')log(`${armyLabel(a).replace(/^./,m=>m.toUpperCase())} s'est dissoute.`);if(sel&&sel.a===a)sel=null}
+}
+function addRecruit(i,side,t,ds){
+  const n=N[i];let a=S.armies.find(x=>x.side===side&&!x.g&&x.at===i&&!x.legs.length&&x.units.length<MAXU);
+  if(!a){a={id:S.uid++,side,name:nextGen(side),x:n.x,y:n.y,at:i,legs:[],units:[],scout:0,cool:0};S.armies.push(a);if(side==='car')log(`${a.name} prend le commandement d'une nouvelle armée à ${n.n}.`)}
+  const u={t,men:UT[t].men};if(ds!=null&&desOf(ds))u.d=ds;a.units.push(u);if(side==='car')log(`${esc(uName(u))} : régiment prêt à ${n.n}.`);
+}
+function capture(i,side){
+  const n=N[i],prev=ownerN(i);S.own[n.id]=side;delete S.siege[n.id];delete S.q[n.id];
+  if(side==='car'||prev==='car'||visAt(n.x,n.y)>=1)log(`${n.n} tombe aux mains de ${sideName(side)}.`);
+  if(prev&&FAC[prev].a&&!N.some(x=>ownerN(x.i)===prev))S.fac[prev].st='soumis';
+  if(n.id==='roma'&&side==='car')S.over='win';
+  if(n.id==='carthago'&&side==='rom')S.over='lose';
+  territoryDirty=true;if(S.over)endGame();
+}
+function declareWar(side,f){
+  const F=S.fac[f];if(!F)return;F[side]=-100;F.st='guerre_'+side;
+  for(const g in S.fac)if(g!==f&&FAC[g].cul===FAC[f].cul&&S.fac[g].st==='neutre')S.fac[g][side]-=15;
+  log(`${sideName(side)} entre en guerre : ${FAC[f].n}.`);
+}
+

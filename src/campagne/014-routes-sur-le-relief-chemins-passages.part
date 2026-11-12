@@ -1,0 +1,111 @@
+/* ================= ROUTES SUR LE RELIEF, CHEMINS, PASSAGES ================= */
+// Quatre classes de routes, plus les cols et la marche hors route. m = vitesse relative ; boue = facteur par saison ;
+// neige : une route se ferme quand son point le plus haut dépasse la limite des neiges de la saison (+ marge selon la classe).
+
+// limite des neiges (fermeture des cols et routes hautes) et altitude au-delà de laquelle on ne passe pas hors route
+const SNOW={Printemps:2000,'Été':3000,Automne:2300,Hiver:1500};
+const HLIM={Printemps:1800,'Été':2400,Automne:1900,Hiver:1150};
+const snowLine=se=>SNOW[se||season()];
+// altitude réelle des cols (le modèle de terrain lisse les passages)
+const COL_ALT={montgenevre:1850,petitbernard:2188,perthus:290,roncevaux:1057,mcenis:2083,gdbernard:2469,tende:1871,somport:1632};
+function edgeClosed(e,se){return edgeSnow(e,se)||edgeBroken(e)}
+function edgeSnow(e,se){if(e.type==='mer'||e.type==='detroit')return false;se=se||season();
+  if(e.type==='col'){const c=N[e.a].col?N[e.a]:N[e.b];return (COL_ALT[c.id]||e.top||0)>SNOW[se]}
+  return (e.top||0)>SNOW[se]+(ROAD[e.type]?ROAD[e.type].snow:0)}
+const isPassable=(x,y,se)=>demH(x,y)<HLIM[se||season()]&&demRug(x,y)<1250&&landFine(x,y);
+let LANDG=null;
+function landG(){if(LANDG)return LANDG;const L=DEM.lv[0],w=L.w,h=L.h,m=new Uint8Array(w*h);for(let j=0;j<h;j++)for(let i=0;i<w;i++)m[j*w+i]=landR((i+.5)*L.r,(j+.5)*L.r)?1:0;return LANDG=m}
+// A* sur la grille du relief (1,5 km) : o.margin (km), o.ks (pente), o.kh (altitude), o.sea (surcoût de l'eau), o.noise (méandres), o.block(h,rug)
+function gridPath(ax,ay,bx,by,o){
+  const L=DEM.lv[0],r=L.r,w=L.w,A=L.a,RG=DEM.rug,land=landG(),m=o.margin,RV=o.riv?rivGrid():null;
+  const i0=Math.max(1,Math.floor((Math.min(ax,bx)-m)/r)),i1=Math.min(w-2,Math.ceil((Math.max(ax,bx)+m)/r)),j0=Math.max(1,Math.floor((Math.min(ay,by)-m)/r)),j1=Math.min(L.h-2,Math.ceil((Math.max(ay,by)+m)/r));
+  const W=i1-i0+1,H=j1-j0+1,n=W*H;if(n>(o.maxCells||250000)||W<1||H<1)return null;
+  const ci=x=>Math.min(i1,Math.max(i0,Math.floor(x/r)))-i0,cj=y=>Math.min(j1,Math.max(j0,Math.floor(y/r)))-j0;
+  const s=cj(ay)*W+ci(ax),t=cj(by)*W+ci(bx),ti=t%W,tj=(t/W)|0;
+  const g=new Float32Array(n).fill(Infinity),from=new Int32Array(n).fill(-1),done=new Uint8Array(n);
+  const hp=[],hv=[];const push=(k,f)=>{hp.push(k);hv.push(f);let c=hp.length-1;while(c>0){const p=(c-1)>>1;if(hv[p]<=hv[c])break;[hp[p],hp[c]]=[hp[c],hp[p]];[hv[p],hv[c]]=[hv[c],hv[p]];c=p}};
+  const pop=()=>{const k=hp[0],lk=hp.pop(),lv=hv.pop();if(hp.length){hp[0]=lk;hv[0]=lv;let c=0;for(;;){const l=2*c+1,rr=l+1;let b=c;if(l<hp.length&&hv[l]<hv[b])b=l;if(rr<hp.length&&hv[rr]<hv[b])b=rr;if(b===c)break;[hp[b],hp[c]]=[hp[c],hp[b]];[hv[b],hv[c]]=[hv[c],hv[b]];c=b}}return k};
+  const NB=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+  g[s]=0;push(s,0);
+  while(hp.length){const k=pop();if(done[k])continue;done[k]=1;if(k===t)break;const ki=k%W,kj=(k/W)|0,G=(kj+j0)*w+ki+i0,h0=A[G];
+    for(const [di,dj,dl] of NB){const ni=ki+di,nj=kj+dj;if(ni<0||nj<0||ni>=W||nj>=H)continue;const nk=nj*W+ni;if(done[nk])continue;const NG=(nj+j0)*w+ni+i0,h1=A[NG];
+      if(o.block&&nk!==t&&k!==s&&o.block(h1,RG[NG],land[NG]))continue;if(RV&&RV[NG]&&nk!==t&&k!==s)continue;
+      const d=dl*r,sl=Math.abs(h1-h0)/(d*1000);let c=d*(1+o.ks*(sl*10)**2+o.kh*h1/1000+(o.noise?o.noise*hash(ni+i0,nj+j0):0));
+      if(!land[NG])c*=o.sea;if(h1>2500)c*=8;if(o.hp&&h1>1300)c*=1+o.hp*((h1-1300)/250)**2;
+      const ng=g[k]+c;if(ng<g[nk]){g[nk]=ng;from[nk]=k;push(nk,ng+Math.hypot(ni-ti,nj-tj)*r)}}}
+  if(from[t]<0&&t!==s)return null;
+  const P=[];for(let k=t;k>=0;k=from[k]){P.push([(k%W+i0+.5)*r,(((k/W)|0)+j0+.5)*r]);if(k===s)break}P.reverse();
+  P[0]=[ax,ay];P[P.length-1]=[bx,by];if(P.length===1)P.push([bx,by]);return P}
+function rdp(P,eps){if(P.length<3)return P;const [ax,ay]=P[0],[bx,by]=P[P.length-1],dx=bx-ax,dy=by-ay,l=Math.hypot(dx,dy)||1e-9;let mi=0,md=0;
+  for(let i=1;i<P.length-1;i++){const d=Math.abs((P[i][0]-ax)*dy-(P[i][1]-ay)*dx)/l;if(d>md){md=d;mi=i}}
+  if(md<=eps)return [P[0],P[P.length-1]];return [...rdp(P.slice(0,mi+1),eps).slice(0,-1),...rdp(P.slice(mi),eps)]}
+function chaikin(P,n){for(let it=0;it<n;it++){if(P.length<3)return P;const Q=[P[0]];for(let q=0;q<P.length-1;q++){const a=P[q],b=P[q+1];Q.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}Q.push(P[P.length-1]);P=Q}return P}
+const ROPT={via:{ks:.45,kh:.08,sea:600,noise:0,hp:1},route:{ks:1,kh:.15,sea:600,noise:.25,hp:1},piste:{ks:1.4,kh:.2,sea:600,noise:.45,hp:1},col:{ks:.7,kh:.05,sea:600,noise:.2,hp:0},chemin:{ks:1.6,kh:.2,sea:600,noise:.5,hp:1}};
+function shapeRoad(A,B,type){const L=Math.hypot(B[0]-A[0],B[1]-A[1]),o=ROPT[type]||ROPT.piste;
+  let P=gridPath(A[0],A[1],B[0],B[1],{...o,margin:Math.max(8,Math.min(60,L*.35))});
+  if(!P)P=[A,B];P=rdp(P,type==='via'?1.2:.6);P=chaikin(P,2);P[0]=A;P[P.length-1]=B;return P}
+function edgeStats(e){const P=e.cv;e.cl=[0];let top=0,tfs=0,ln=0;
+  for(let q=1;q<P.length;q++){const l=Math.hypot(P[q][0]-P[q-1][0],P[q][1]-P[q-1][1]);e.cl.push(e.cl[q-1]+l);const mx=(P[q][0]+P[q-1][0])/2,my=(P[q][1]+P[q-1][1])/2;
+    if(!N[e.a].col&&!N[e.b].col||e.type!=='col')top=Math.max(top,demH(mx,my));tfs+=(isMountain(mx,my)?.75:terrainAt(mx,my)==='marais'?.8:1)*l;ln+=l}
+  e.km=Math.max(.5,e.cl[e.cl.length-1]);e.tf=e.type==='col'?1:Math.max(.55,ln?tfs/ln:1);e.top=e.type==='col'?(COL_ALT[(N[e.a].col?N[e.a]:N[e.b]).id]||top):top}
+// tracé de toutes les routes de terre (appelé une fois le relief chargé)
+function routeEdges(){
+  // grandes routes entre villes importantes proches, si elles ne sont reliées que par une piste
+  for(const e of EDGES){if(e.type!=='piste')continue;const A=N[e.a],B=N[e.b];if(A.size>=2&&B.size>=2&&Math.hypot(A.x-B.x,A.y-B.y)<190)e.type='route'}
+  EDGES.forEach((e,k)=>{if(e.type==='mer'||e.type==='detroit')return;const A=N[e.a],B=N[e.b];e.cv=dryLine(shapeRoad([A.x,A.y],[B.x,B.y],e.type));edgeStats(e)});
+  // une piste qui passe au-dessus de 2 000 m est en fait un passage de haute montagne : on la retire, les cols font ce travail
+  const drop=new Set();EDGES.forEach((e,k)=>{if(e.type==='piste'&&e.top>2000){const deg=n=>ADJ[n].filter(j=>!drop.has(j)&&EDGES[j].type!=='mer').length;if(deg(e.a)>1&&deg(e.b)>1)drop.add(k)}});
+  // une route qui devrait franchir plus de 2 km d'eau n'existe pas : on passe par la mer
+  EDGES.forEach((e,k)=>{if(e.cv&&e.type!=='col'&&wetRuns(e.cv,.1).some(w=>w.len>2.1))drop.add(k)});
+  if(drop.size){const keep=EDGES.filter((e,k)=>!drop.has(k));EDGES.length=0;EDGES.push(...keep);ADJ=N.map(()=>[]);EDGES.forEach((e,k)=>{ADJ[e.a].push(k);ADJ[e.b].push(k)})}
+  buildBridges()}
+// ---- chemins de terre : chaque village rejoint la route la plus proche, ou un village voisin déjà relié ----
+let CHB=new Map();
+function buildChemins(){
+  CHB=new Map();const order=VIL.slice().sort((p,q)=>(p.k==='bourg'?0:1)-(q.k==='bourg'?0:1));const linked=[];
+  for(const v of order){const r=nearestRoad(v.x,v.y,30);let tgt=null,best=r?r.d:1e9;
+    for(const u of linked){const d=Math.hypot(u.x-v.x,u.y-v.y);if(d<best*.7&&d<14){best=d;tgt=u}}
+    if(r&&r.d<.12&&!tgt){v.up={road:r};v.ch=[[v.x,v.y],[r.x,r.y]];}
+    else if(tgt){v.up={v:tgt.id};v.ch=dryLine(shapeRoad([v.x,v.y],[tgt.x,tgt.y],'chemin'))}
+    else if(r){v.up={road:r};v.ch=dryLine(shapeRoad([v.x,v.y],[r.x,r.y],'chemin'))}
+    else continue;
+    // pas de chemin à travers un fleuve (sans pont) ni la mer
+    if(lineCrossesRiv(v.ch)||wetRuns(v.ch,.15).length){v.up=null;v.ch=null;continue}
+    linked.push(v);v.chL=0;for(let q=1;q<v.ch.length;q++)v.chL+=Math.hypot(v.ch[q][0]-v.ch[q-1][0],v.ch[q][1]-v.ch[q-1][1]);
+    let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of v.ch){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}v.chB=[a,b,c,d];
+    const key=vBucket(v.x,v.y);if(!CHB.has(key))CHB.set(key,[]);CHB.get(key).push(v)}}
+// étapes du village jusqu'à la route : [legs, point de route {k,j,t,x,y}]
+function villageToRoad(v){const legs=[];let u=v,guard=0;
+  while(u&&u.up&&guard++<40){for(let q=1;q<u.ch.length;q++)legs.push({x:u.ch[q][0],y:u.ch[q][1],n:null,type:'chemin',tf:1});if(u.up.road)return [legs,u.up.road];u=VIL[u.up.v]}
+  return null}
+const revLegs=(legs,x,y)=>{const pts=[[x,y],...legs.map(L=>[L.x,L.y])];pts.pop();return pts.reverse().map(([px,py])=>({x:px,y:py,n:null,type:'chemin',tf:1}))};
+// itinéraire jusqu'à un village : par la route jusqu'au départ du chemin, puis le chemin
+function planVillage(a,v){const vr=villageToRoad(v);if(!vr)return plan(a,v.x,v.y,null);const [legs,R]=vr;
+  const here=a.legs.length?null:villageAt(a);if(here===v)return {legs:[{x:v.x,y:v.y,n:null,type:'chemin',tf:1}],days:0};
+  const p=planToRoadPoint(a,R);if(!p)return null;const back=revLegs(legs,v.x,v.y);const all=[...p.legs,...back];return {legs:all,days:legsCost(a,a.x,a.y,all)}}
+function planToRoadPoint(a,R){const e=EDGES[R.k],tip={x:R.x,y:R.y,n:null,type:e.type,tf:e.tf,e:R.k};
+  const st=startsOf(a),D=dijkstra(a,st.map(x=>[x[0],x[1]]));let best=null;
+  const legsTo=v=>{const path=[];let u=v;while(D.prev[u]>=0){path.unshift(u);u=D.prev[u]}const first=u;const s0=st.filter(x=>x[0]===first).sort((p,q)=>p[1]-q[1])[0];const legs=s0?s0[2].map(L=>({...L})):[];
+    let prev=first;for(const w of path){legs.push(...edgeLegs(D.pe[w],prev,w));prev=w}return legs};
+  for(const end of [e.a,e.b]){if(D.dist[end]>=1e9||edgeSnow(e))continue;const back=end===e.a?cvLegs(R.k,1,R.j):cvLegs(R.k,e.cv.length-2,R.j+1);const legs=[...legsTo(end),...back,tip];if(!legsBlocked(a.x,a.y,legs)){const c=legsCost(a,a.x,a.y,legs);if(!best||c<best.days)best={days:c,legs}}}
+  const r=armyRoad(a);if(r&&r.k===R.k){const pa=r.j+r.t,pt=R.j+R.t;const legs=pt>=pa?[...(R.j>=r.j+1?cvLegs(r.k,r.j+1,R.j):[]),tip]:[...(r.j>=R.j+1?cvLegs(r.k,r.j,R.j+1):[]),tip];if(!legsBlocked(a.x,a.y,legs)){const c=legsCost(a,a.x,a.y,legs);if(!best||c<best.days)best={days:c,legs}}}
+  return best}
+// village où se tient l'armée (à moins de 300 m)
+function villageAt(a){const v=nearestVillage(a.x,a.y,.3);return v}
+// marche hors route : contourne ce qui est impraticable (hauteurs, neige) ; null si aucun passage
+function horsLegs(x0,y0,x1,y1){const d=Math.hypot(x1-x0,y1-y0);let ok=isPassable(x1,y1)||d<1;
+  if(ok){const n=Math.max(1,Math.ceil(d/.5));for(let k=1;k<n;k++){const t=k/n;if(!isPassable(x0+(x1-x0)*t,y0+(y1-y0)*t)){ok=false;break}}}
+  if(ok&&crossRiv(x0,y0,x1,y1))ok=false;
+  if(ok)return [{x:x1,y:y1,n:null,type:'hors',tf:1}];
+  if(!isPassable(x1,y1))return null;const se=season();
+  const P=gridPath(x0,y0,x1,y1,{ks:1.2,kh:.1,sea:1e6,noise:0,margin:Math.max(10,d*.6),maxCells:120000,riv:1,block:(h,rg,l)=>!l||h>=HLIM[se]||rg>=1250});
+  if(!P)return null;for(let q=1;q<P.length;q++){const [px,py]=P[q-1],[qx,qy]=P[q];if(!landFast((px+qx)/2,(py+qy)/2))return null}
+  let Q=rdp(P,.4);if(lineCrossesRiv(Q))Q=rdp(P,.1);if(lineCrossesRiv(Q))Q=P;return Q.slice(1).map(([x,y])=>({x,y,n:null,type:'hors',tf:1}))}
+// dessin des chemins (dans les tuiles)
+function drawChemins(x0,y0,x1,y1,s,z){if(s<2.2)return;const P=new Path2D();let any=false;
+  for(let i=Math.floor((x0-15)/VBK);i<=Math.floor((x1+15)/VBK);i++)for(let j=Math.floor((y0-15)/VBK);j<=Math.floor((y1+15)/VBK);j++){const L=CHB.get(i+','+j);if(!L)continue;
+    for(const v of L){const b=v.chB;if(b[2]<x0||b[0]>x1||b[3]<y0||b[1]>y1)continue;P.moveTo(v.ch[0][0],v.ch[0][1]);for(let q=1;q<v.ch.length;q++)P.lineTo(v.ch[q][0],v.ch[q][1]);any=true}}
+  if(!any)return;ctx.lineCap='round';ctx.lineJoin='round';ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(74,52,28,.45)';ctx.lineWidth=Math.max(2*z,.02);ctx.stroke(P);
+  ctx.strokeStyle='rgba(200,172,124,.95)';ctx.lineWidth=Math.max(.9*z,.012);if(s<FINE_S)ctx.setLineDash([3*z,2*z]);ctx.stroke(P);ctx.setLineDash([])}
+

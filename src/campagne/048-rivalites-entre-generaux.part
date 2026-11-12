@@ -1,0 +1,11 @@
+/* ================= RIVALITÉS ENTRE GÉNÉRAUX ================= */
+// Deux généraux côte à côte (même bataille ou à moins de 6 km) se disputent le commandement quand aucun ne domine
+// l'autre (moins de 2 étoiles d'écart) : −10 % au combat ; −15 % si un fougueux ou téméraire commande avec un prudent.
+const rivalTr=(g,h)=>(hasTr(g,'fouge')||hasTr(g,'tem'))&&hasTr(h,'prud')||(hasTr(h,'fouge')||hasTr(h,'tem'))&&hasTr(g,'prud');
+function rivalOf(A){const G=A.filter(a=>!a.g).map(genOf).filter(Boolean);if(G.length<2)return null;G.sort((p,q)=>stars(q)-stars(p));
+  const [g,h]=G;if(stars(g)-stars(h)>=2)return null;return {g,h,k:rivalTr(g,h)?.85:.9}}
+const sideArmies=ids=>ids.map(id=>S.armies.find(x=>x.id===id)).filter(Boolean);
+function rivalMul(ids){const r=rivalOf(sideArmies(ids));return r?r.k:1}
+function nearRival(a){const g=genOf(a);if(!g||a.g)return null;
+  for(const o of S.armies){if(o===a||o.dead||o.side!==a.side||o.g||Math.hypot(o.x-a.x,o.y-a.y)>=6)continue;const r=rivalOf([a,o]);if(r)return {o,r}}return null}
+

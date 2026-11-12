@@ -1,0 +1,99 @@
+/* ================= DÉPLOIEMENT ================= */
+// Armées venues de la campagne : infanterie en ligne (12 par rang), tirailleurs et éléphants devant, cavalerie aux ailes
+function deployCamp(){
+  [[CAMP.b.p,0,1470,-1],[CAMP.b.e,1,560,1]].forEach(([L,side,y0,fw])=>{
+    const g={inf:[],skirm:[],cav:[],eleph:[]};
+    L.forEach((c,ci)=>{if(!T[c.t])return;const k=T[c.t].kind;(k==='inf'?g.inf:k==='skirm'?g.skirm:k==='eleph'?g.eleph:g.cav).push([c,ci])});
+    const cx=1700,add=(c,ci,x,y)=>{const u=mk(side,c.t,x,y,c.label);
+      // unité créée dans l'atelier de la campagne : ses statistiques remplacent celles du type de base (vitesse et portée à l'échelle G)
+      if(c.x){const X=c.x,o=Object.assign({},u.T,{name:X.name,atk:X.atk,def:X.def,morale:X.morale,charge:X.charge,speed:X.speed*Math.sqrt(G),ranged:X.ranged?{range:X.ranged.range*G,dmg:X.ranged.dmg,cd:X.ranged.cd}:null});u.T=o;u.morale=o.morale;if(X.gear)u.gear=X.gear}
+      u.men=Math.max(1,Math.min(u.T.men,c.men));u.ci=ci;units.push(u)};
+    const perRow=12,nf=Math.min(perRow,g.inf.length),half=Math.max(2,nf)*95/2;
+    g.inf.forEach(([c,ci],i)=>{const row=Math.floor(i/perRow),col=i%perRow,n=Math.min(perRow,g.inf.length-row*perRow);add(c,ci,cx+(col-(n-1)/2)*95,y0-fw*row*75)});
+    g.skirm.forEach(([c,ci],i)=>{const n=g.skirm.length;add(c,ci,cx+(n>1?(i/(n-1)-.5)*half*1.8:0),y0+fw*85)});
+    g.eleph.forEach(([c,ci],i)=>{const n=g.eleph.length;add(c,ci,cx+(i-(n-1)/2)*260,y0+fw*65)});
+    g.cav.forEach(([c,ci],i)=>{const s=i%2?1:-1,k=Math.floor(i/2);add(c,ci,cx+s*(half+70+k*76),y0+10)});
+  });
+}
+// Revue des troupes : Carthage aligne ses unités classiques puis douze unités d'atelier qui montrent chaque pièce d'équipement ; Rome en face
+function deployRevue(){
+  const P=(t,x,y,l,gear)=>{const u=mk(0,t,x,y,l);if(gear){u.gear=gear;u.T=Object.assign({},u.T,{name:l})}units.push(u)};
+  const R=(t,x,y,l)=>units.push(mk(1,t,x,y,l));
+  [['hcav','Cavalerie ibère'],['lib','Infanterie libyenne'],['iber','Infanterie ibère'],['gaul','Infanterie gauloise'],['sling','Frondeurs baléares'],['ncav','Cavalerie numide'],['eleph','Éléphants de guerre']]
+    .forEach(([t,l],i)=>P(t,1180+i*125,1440,l));
+  const V=[
+    ['lib','Phalangites cuirassés',{helm:'fer',crest:'crin',armor:'bronze',shield:'pelte',arm:'sarisse',jet:'aucune'}],
+    ['lib','Hoplites libyens',{helm:'bronze',crest:'crin',armor:'lin',shield:'rond',arm:'lance',jet:'aucune'}],
+    ['iber','Scutaires ibères',{helm:'cuir',crest:'rien',armor:'pect',shield:'scutum',arm:'epee',jet:'javelots'}],
+    ['gaul','Nobles gaulois',{helm:'fer',crest:'plumes',armor:'maille',shield:'ovale',arm:'longue',jet:'aucune'}],
+    ['gaul','Gésates',{helm:'nu',crest:'rien',armor:'tunique',shield:'ovale',arm:'lance',jet:'javelots'}],
+    ['sling','Archers',{helm:'nu',crest:'rien',armor:'tunique',shield:'aucun',arm:'dague',jet:'arc'}],
+    ['sling','Javeliniers',{helm:'cuir',crest:'rien',armor:'lin',shield:'pelte',arm:'dague',jet:'javelots'}],
+    ['iber','Épéistes en mailles',{helm:'bronze',crest:'plumes',armor:'maille',shield:'rond',arm:'epee',jet:'aucune'}],
+    ['hcav','Cavalerie cuirassée',{helm:'bronze',crest:'plumes',armor:'bronze',shield:'rond',arm:'lance',jet:'aucune'}],
+    ['hcav','Cavaliers à l\'épée',{helm:'fer',crest:'crin',armor:'maille',shield:'ovale',arm:'longue',jet:'aucune'}],
+    ['ncav','Numides en lin',{helm:'cuir',crest:'rien',armor:'lin',shield:'rond',arm:'epee',jet:'javelots'}],
+    ['ncav','Numides légers',{helm:'nu',crest:'rien',armor:'tunique',shield:'pelte',arm:'lance',jet:'javelots'}],
+    ['iber','Guerriers au pilos',{helm:'pilos',crest:'aigrette',armor:'ecailles',shield:'rond',arm:'hache',jet:'soliferrum',teinte:'rouge'}],
+    ['lib','Hoplites attiques',{helm:'attique',crest:'crete',armor:'cuir',shield:'rond',arm:'lance',jet:'aucune',teinte:'blanc'}],
+    ['gaul','Chefs gaulois',{helm:'fer',crest:'cornes',armor:'maille',shield:'peau',arm:'hache',jet:'aucune'}],
+    ['hcav','Cavaliers thraces',{helm:'thrace',crest:'roue',armor:'ecailles',shield:'rond',arm:'lance',jet:'aucune',teinte:'bleu'}],
+    ['lib','Garde sacrée',{helm:'thrace',crest:'noire',armor:'bronze',shield:'rond',arm:'longue',jet:'aucune',teinte:'noir'}]
+  ];
+  V.forEach(([t,l,g],i)=>P(t,1180+(i%6)*125+62,1560+Math.floor(i/6)*110,l,g));
+  // casque, cimier, armure, bouclier, arme ou arme de jet inconnus : gearOf garde la valeur, partsOf retombe sur une pièce proche
+  [['rcav','Cavalerie romaine I'],['legion','Légionnaires I'],['velites','Vélites I'],['legion','Légionnaires II'],['velites','Vélites II'],['legion','Légionnaires III'],['acav','Cavalerie alliée I']]
+    .forEach(([t,l],i)=>R(t,1180+i*125,720,l));
+  Object.assign(cam,{tx:1560*G,ty:1560*G,yaw:Math.PI,dist:560*Math.sqrt(G),pitch:.62}); // caméra devant les lignes carthaginoises
+}
+function deployPeuples(){
+  let row=0;
+  for(const key of ['rome','mac','spa','ath']){const p=PEUPLES[key];let i=0;
+    for(const t in p.armee){units.push(mk(0,t,1000+i*120,1350+row*125,p.n+' : '+T[t].name));i++}row++}
+  [['hcav','Cavalerie ibère'],['lib','Infanterie libyenne'],['iber','Infanterie ibère'],['gaul','Infanterie gauloise'],['sling','Frondeurs baléares'],['eleph','Éléphants de guerre'],['ncav','Cavalerie numide']]
+    .forEach(([t,l],i)=>units.push(mk(1,t,1100+i*130,720,l)));
+  Object.assign(cam,{tx:1420*G,ty:1500*G,yaw:Math.PI,dist:640*Math.sqrt(G),pitch:.62});
+}
+// vue verticale qui recouvre exactement la carte de la campagne (même échelle, nord en haut)
+function topPose(){const f=CT.f;return {tx:1700*G,ty:1000*G,yaw:Math.atan2(f.ex[1],f.ey[1]),dist:INTRO.h*1000/INTRO.s/(2*Math.tan(21*Math.PI/180))*G,pitch:1.45}}
+function camAnim(from,to,dur,done){const T0=performance.now(),ez=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+  let dy=to.yaw-from.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+  (function st(now){const k=ez(Math.min(1,(now-T0)/dur)),lg=Math.log(from.dist)+(Math.log(to.dist)-Math.log(from.dist))*k;
+    cam.tx=from.tx+(to.tx-from.tx)*k;cam.ty=from.ty+(to.ty-from.ty)*k;cam.yaw=from.yaw+dy*k;cam.pitch=from.pitch+(to.pitch-from.pitch)*k;cam.dist=Math.exp(lg);updateCamera();
+    if(k<1)requestAnimationFrame(st);else if(done)done()})(T0)}
+function introStart(){
+  document.body.classList.add('intro');const home={tx:cam.tx,ty:cam.ty,yaw:cam.yaw,dist:cam.dist,pitch:cam.pitch},top=topPose();Object.assign(cam,top);updateCamera();
+  // les régiments arrivent en vue d'en haut ; quand la carte s'est effacée, la caméra descend
+  addEventListener('message',ev=>{if(ev.source!==window.parent||!ev.data||ev.data.bellum!=='go')return;
+    camAnim(top,home,2800,()=>document.body.classList.remove('intro'))});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>window.parent.postMessage({bellum:'vue'},'*')));
+}
+function campReturn(win){
+  const res={win,p:CAMP.b.p.map(c=>c.men),e:CAMP.b.e.map(c=>c.men)};/*ECH*/try{if(window.__echelleGF)Object.assign(res,window.__echelleGF())}catch(e){}
+  for(const u of units){if(u.ci===undefined)continue;const m=u.dead?0:Math.round(u.men*(u.fled?.7:u.routing?.85:1));(u.side===0?res.p:res.e)[u.ci]=m}
+  if(INTRO){document.body.classList.add('intro');$('end').hidden=true;camAnim({tx:cam.tx,ty:cam.ty,yaw:cam.yaw,dist:cam.dist,pitch:cam.pitch},topPose(),1600,()=>window.parent.postMessage({bellum:'retour',res},'*'));return}
+  if(window.parent!==window){try{window.parent.postMessage({bellum:'retour',res},'*');return}catch(e){}}
+  location.href=CAMP_URL+'#r='+encodeURIComponent(JSON.stringify({st:CAMP.st,res}));
+}
+function setup(){
+  uid=1;units=[];projs=[];parts=[];time=0;paused=true;started=false;selected=new Set();ended=false;aiClock=0;hover=null;
+  const P=(t,x,y,l)=>units.push(mk(0,t,x,y,l)),R=(t,x,y,l)=>units.push(mk(1,t,x,y,l));
+  if(REVUE_P)deployPeuples();else if(REVUE)deployRevue();else if(CAMP)deployCamp();else{
+  // Carthage : cavalerie lourde à gauche contre le fleuve, croissant d'infanterie, Numides à droite
+  for(let i=0;i<4;i++)P('hcav',380+i*76,1500,'Cavalerie ibère '+ROMAN[i]);
+  const line=['lib','lib','iber','iber','gaul','gaul','gaul','gaul','iber','iber','lib','lib'],cnt={lib:0,iber:0,gaul:0},nm={lib:'Libyens',iber:'Ibères',gaul:'Gaulois'};
+  line.forEach((t,i)=>{P(t,1078+i*95,1470+Math.abs(i-5.5)*14,nm[t]+' '+ROMAN[cnt[t]++])});
+  [1150,1450,1750,2050].forEach((x,i)=>P('sling',x,1390,'Frondeurs '+ROMAN[i]));
+  P('eleph',1350,1400,'Éléphants I');P('eleph',1850,1400,'Éléphants II');
+  for(let i=0;i<4;i++)P('ncav',2600+i*76,1500,'Numides '+ROMAN[i]);
+  // Rome : seize légions en ligne, vélites devant, cavalerie aux ailes
+  for(let i=0;i<4;i++)R('rcav',380+i*76,560,'Cavalerie romaine '+ROMAN[i]);
+  for(let i=0;i<16;i++)R('legion',900+i*92,560,'Légionnaires '+ROMAN[i]);
+  for(let i=0;i<8;i++)R('velites',950+i*185,640,'Vélites '+ROMAN[i]);
+  for(let i=0;i<4;i++)R('acav',2600+i*76,560,'Cavalerie alliée '+ROMAN[i]);
+  }
+  while(FX.children.length){const c=FX.children.pop();c.traverse(o=>{if(o.geometry)o.geometry.dispose()})}
+  units.forEach(makeFx);buildUnitMeshes();buildTags();
+  $('end').hidden=true;$('start').hidden=false;updatePauseBtn();renderSel();
+}
+

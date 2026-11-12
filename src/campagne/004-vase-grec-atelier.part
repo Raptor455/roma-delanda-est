@@ -1,0 +1,598 @@
+/* ==== VASE GREC (atelier) ==== */
+/* ---- aperçu façon vase grec : soldat de profil en figure noire sur terre cuite, médaillon à méandres ---- */
+// Les détails sont « incisés » (traits couleur d'argile dans le noir) ; rouge et blanc rapportés pour cimiers, tenue et bouclier.
+const VZ={clay:'#c8763d',clayD:'#a9592a',clayL:'#e2a066',blk:'#1d130c',red:'#8e2c1b',wht:'#ecdcbc'};
+function vaseSVG(d,small){
+  let L=DOLL_LOOK[d.base]||DOLL_LOOK.lib;const TN=TENUE[d.tenue];if(TN)L=Object.assign({},L,{tun:TN[0],tunS:TN[1]});
+  const k=CORPS[d.base].k,mounted=k==='cav'||k==='lcav',id='vz'+(++dollN);
+  const B=VZ.blk,C=VZ.clay,R=VZ.red,W=VZ.wht;
+  const inc=(w)=>`stroke="${C}" stroke-width="${w||1}" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+  const vet=d.train==='vet',lev=d.train==='levee',shieldOn=d.shield&&d.shield!=='aucun';
+  const bow=d.jet==='arc',sling=d.jet==='fronde';
+  let back='',legs='',body='',head='',arm='',weap='',shield='',front='';
+  // ---------- manteau (rapporté, couleur choisie) ou cape rouge des vétérans
+  const MT=TENUE[d.manteau];
+  if(MT||vet){const mc=MT?MT[1]:R;back+=`<path d="M100 64 Q86 74 82 100 Q80 114 74 122 Q88 120 98 112 L104 70Z" fill="${mc}" stroke="${B}" stroke-width="1.2"/><path d="M92 80 Q86 96 82 112 M98 84 Q94 98 90 112" ${inc(.8)} stroke="${B}" opacity=".5"/>`}
+  // carquois, javelots au dos
+  if(bow)back+=`<path d="M92 62 l8 -4 l10 34 l-8 4z" fill="${B}"/><path d="M95 64 l7 30" ${inc(.8)}/><path d="M91 60 l-4 -10 M94 58 l-2 -11 M97 57 l1 -11" stroke="${B}" stroke-width="1.2"/>`;
+  if(d.jet==='javelots'&&!mounted&&!bow)back+=`<path d="M86 132 L112 34 M90 134 L116 38" stroke="${B}" stroke-width="1.6"/><path d="M112 34 l-1 -8 l3 7z M116 38 l-1 -8 l3 7z" fill="${B}"/>`;
+  // ---------- jambes (pas de marche), pieds nus ou sandales
+  if(!mounted){
+    const leg=(hx,hy,kx,ky,ax,ay)=>`<path d="M${hx-5} ${hy} L${kx-4} ${ky} Q${(kx+ax)/2-5} ${(ky+ay)/2} ${ax-2.6} ${ay} L${ax+2.6} ${ay} Q${(kx+ax)/2+4.5} ${(ky+ay)/2-2} ${kx+4} ${ky} L${hx+5} ${hy}Z" fill="${B}"/>`;
+    legs+=leg(104,108,95,135,85,157)+leg(114,108,126,134,133,157);
+    legs+=`<path d="M80 156 L90 156 L92 162 L76 162 Q76 158 80 156Z M130 156 L138 156 L150 160 L150 163 L130 163Z" fill="${B}"/>`;
+    if(!lev)legs+=`<path d="M82 158 h8 M132 158 h8" ${inc(.9)}/>`;
+    // jambières incisées (spirale au genou), bandes molletières
+    const grv=(kx,ky,ax,ay)=>`<path d="M${kx-3.5} ${ky+2} Q${(kx+ax)/2-4.5} ${(ky+ay)/2} ${ax-2} ${ay-3} M${kx+3.5} ${ky} Q${(kx+ax)/2+4} ${(ky+ay)/2-1} ${ax+2} ${ay-3} M${ax-2} ${ay-3} h4" ${inc(1)}/><path d="M${kx-1.5} ${ky+5} q3 -3 4 1 q-1 3 -3 1" ${inc(.9)}/>`;
+    if(d.jamb==='cnemides')legs+=grv(95,135,85,157)+grv(126,134,133,157);
+    if(d.jamb==='une')legs+=grv(95,135,85,157);
+    if(d.jamb==='bandes')legs+=[[95,135,85,157],[126,134,133,157]].map(([kx,ky,ax,ay])=>[.3,.5,.7].map(t=>{const x=kx+(ax-kx)*t,y=ky+(ay-ky)*t;return `<path d="M${x-4} ${y-1} l8 2" ${inc(1)}/>`}).join('')).join('');
+    if(L.braies)legs+=`<path d="M100 110 L92 134 M110 110 L124 132" ${inc(.8)} stroke-dasharray="2 2"/>`;
+  }
+  // ---------- buste et jupe (la tenue en couleur rapportée)
+  const tun=L.tunS||R;
+  body+=`<path d="M99 96 L118 96 L124 118 Q112 122 96 118Z" fill="${tun}" stroke="${B}" stroke-width="1.2"/>`+[100,105,110,115,120].map((x,i)=>`<path d="M${x-1+i*.2} 99 L${x-2+i*1.1} 118" stroke="${B}" stroke-width=".8" opacity=".6"/>`).join('')+`<path d="M96 118 Q110 122 124 118" stroke="${B}" stroke-width="2.2" fill="none"/>`;
+  body+=`<path d="M96 70 Q95 61 104 61 L114 61 Q122 62 121 70 L118 99 L100 99Z" fill="${B}"/>`;
+  if(L.zig)body+=`<path d="M97 116 l3 -3 l3 3 l3 -3 l3 3 l3 -3 l3 3 l3 -3 l3 3" stroke="${B}" stroke-width="1" fill="none"/>`;
+  // armure : décor incisé sur le buste
+  const ptr=y=>[0,1,2,3,4].map(i=>`<path d="M${99+i*4} ${y} v9 h3.4 v-9" ${inc(.8)}/>`).join('');
+  if(d.armor==='lin')body+=`<path d="M98 66 h20 M98 78 h21 M99 90 h19 M106 62 v8" ${inc(.9)}/>`+`<path d="M98 99 h22 v10 h-22z" fill="${B}"/>`+ptr(99);
+  if(d.armor==='bronze')body+=`<path d="M99 72 Q104 78 109 72 Q113 78 118 72 M104 84 Q109 88 115 84 M108 76 v18" ${inc(.9)}/>`+`<path d="M98 99 h22 v10 h-22z" fill="${B}"/>`+ptr(99);
+  if(d.armor==='ecailles')body+=[66,72,78,84,90].map((y,r)=>[0,1,2,3].map(i=>`<path d="M${98+i*5+(r%2)*2.5} ${y} q2.5 4 5 0" ${inc(.7)}/>`).join('')).join('')+`<path d="M98 99 h22 v10 h-22z" fill="${B}"/>`+ptr(99);
+  if(d.armor==='maille')body+=`<g fill="${C}" opacity=".85">${[64,69,74,79,84,89,94].map((y,r)=>[0,1,2,3,4].map(i=>`<circle cx="${99+i*4.4+(r%2)*2}" cy="${y}" r=".75"/>`).join('')).join('')}</g><path d="M97 98 Q108 101 120 98" ${inc(1.2)}/>`;
+  if(d.armor==='pect')body+=`<rect x="102" y="70" width="12" height="12" rx="1.5" ${inc(1)}/><circle cx="108" cy="76" r="2.5" ${inc(.8)}/>`;
+  if(d.armor==='cuir')body+=`<path d="M98 68 h21 M98 82 h21 M98 96 h21" ${inc(.8)} stroke-dasharray="1.6 1.8"/>`;
+  if(d.armor==='tunique')body+=`<path d="M104 64 Q102 80 106 98 M112 64 Q114 82 112 98" ${inc(.7)}/>`;
+  body+=`<path d="M98 97 Q108 100 120 97" stroke="${C}" stroke-width="1.6" fill="none"/>`; // ceinture
+  if(L.sash)body+=`<path d="M99 64 L118 92" ${inc(1.4)}/>`;
+  // ---------- tête : profil, œil incisé, coiffure, barbe
+  head+=`<path d="M104 56 L112 56 L113 64 L103 64Z" fill="${B}"/>`;
+  if(L.torque)head+=`<path d="M103 61 Q108 64 113 61" stroke="${VZ.clayL}" stroke-width="1.6" fill="none"/>`;
+  if(L.hs==='long'||L.hs==='locks')head+=`<path d="M100 44 Q94 54 96 66 Q99 64 101 60 Q100 54 103 48Z" fill="${B}"/><path d="M98 50 q-2 6 -1 12 M101 50 q-1 5 0 9" ${inc(.7)}/>`;
+  head+=`<path d="M100 47 Q100 38 108 37.5 Q116 37.5 117 45 L118.6 50.5 L116.6 51.5 L117 55.5 Q114 59.5 108 59.5 Q102 59 100.5 54Z" fill="${B}"/>`;
+  head+=`<path d="M111.5 46.6 q2 -1.4 4 0 q-2 1.3 -4 0z" fill="${C}"/><path d="M110.5 44.2 q3 -1.6 5.6 -.2" ${inc(.6)}/><path d="M104 47 q-2 2 0 5" ${inc(.7)}/>`;
+  if(L.beard==='short')head+=`<path d="M106 54 Q110 61 117 55.5" ${inc(.7)}/><path d="M108 56.5 q1 1 2 0 M111 57 q1 1 2 0" ${inc(.6)}/>`;
+  else if(L.beard==='moust')head+=`<path d="M114 53.2 q2 1 3.4 -.4" ${inc(.8)}/>`;
+  else head+=`<path d="M114 54.4 h2.4" ${inc(.6)}/>`;
+  const H=d.helm||'nu';
+  if(H==='nu'){
+    if(L.hs==='curly'||L.hs==='locks')head+=[[102,40],[106,38.5],[110,38.4],[101,44],[104,42.5]].map(([x,y])=>`<path d="M${x} ${y} q1.4 -1.4 2.6 0 q-1.2 1.4 -2.6 0" ${inc(.6)}/>`).join('');
+    else head+=`<path d="M101 45 Q104 40 112 40" ${inc(.7)}/>`;
+  }
+  const hm={
+    cuir:`<path d="M99 47 Q98 35 108 35 Q117 35 117.5 44 Q108 41 99 47Z" fill="${B}"/><path d="M100 45 Q108 40 117 43" ${inc(.8)}/><path d="M108 36 v6" ${inc(.6)}/>`,
+    bronze:`<path d="M98.5 48 Q97 33 108 32.5 Q118.5 33 118.5 44 L115 44 Q108 42 101 46 L101 49Z" fill="${B}"/><path d="M96 49 l5 -1.5" stroke="${B}" stroke-width="2.4"/><path d="M107 32 l1 -4 l1 4z" fill="${B}"/><circle cx="108" cy="27" r="2" fill="${B}"/><path d="M106 45 L110 46 L111 56 L107 56Z" fill="${B}"/><path d="M100 44 Q108 39 118 43" ${inc(.8)}/><path d="M107.5 47 v7" ${inc(.6)}/>`,
+    fer:`<path d="M98.5 48 Q97 33 108 32.5 Q118.5 33 118.5 44 L115 44 Q108 42 101 46 L101 49Z" fill="${B}"/><path d="M94 50 Q96 46 101 47 L101 50Z" fill="${B}"/><path d="M105 45 L111 46 L112 57 L106 57Z" fill="${B}"/><path d="M100 40 Q108 36 117 40 M100 44 Q108 39 118 43" ${inc(.8)}/><circle cx="108.5" cy="51" r=".9" fill="${C}"/>`,
+    pilos:`<path d="M99 46 Q104 36 109 20 Q114 36 119 45 Z" fill="${B}"/><path d="M96 46 h25" stroke="${B}" stroke-width="2.6"/><path d="M101 42 Q109 39 117 42" ${inc(.8)}/>`,
+    attique:`<path d="M98.5 48 Q97 33 108 32.5 Q119 33 119 44 L117 45 Q113 41 109 43 L103 47Z" fill="${B}"/><path d="M106 44 L110 44.5 L112 55 Q108 57 106 54Z" fill="${B}"/><path d="M101 43.5 Q107 39 113 41 Q116 41 118.5 43.5" ${inc(.9)}/><path d="M111 37 q2 -2 4 0 q-1 2 -3 1" ${inc(.6)}/>`,
+    thrace:`<path d="M98.5 49 Q96 35 105 31 Q113 22 124 27 Q117 29 118 38 L120 44 L114 44 Q108 42 102 46 L102 50Z" fill="${B}"/><path d="M114 43 L121 45 L120 47 L114 46Z" fill="${B}"/><path d="M106 45 L111 46 L111 57 Q107 58 106 55Z" fill="${B}"/><path d="M101 42 Q109 37 119 41" ${inc(.8)}/><path d="M108 49 q2 1 3 0 M108 52 q2 1 3 0" ${inc(.6)}/>`,
+    beotien:`<path d="M100 44 Q99 32 108 31.5 Q117 32 117 43Z" fill="${B}"/><path d="M93 45 Q97 40 101 43 Q108 40 115 43 Q120 40 123 45 Q119 49 115 47 Q108 45 101 47 Q97 50 93 45Z" fill="${B}"/><path d="M96 45 Q99 43 101 45 M115 45 Q118 43 121 45" ${inc(.7)}/><path d="M102 38 Q108 35 114 38" ${inc(.6)}/>`,
+    corinthien:`<path d="M98 56 Q95.5 33 108 31 Q120 32 121 46 L121 53 Q119 55 117 54 L117 50 L113 48.5 L111.5 50.5 L113 60 Q104 62 98 56Z" fill="${B}"/><path d="M111 44.6 q2.6 -1.8 5.4 .2 q-2.8 1.6 -5.4 -.2z" fill="${C}"/><path d="M100 41 Q108 36 119 41" ${inc(.9)}/><path d="M99 53 Q104 54 107 58" ${inc(.7)}/><path d="M96 57 Q98 56 99 58" stroke="${B}" stroke-width="2"/>`,
+    petase:`<path d="M101 40 Q101 30 108 30 Q115 30 115 40Z" fill="${B}"/><path d="M89 41.5 Q108 36 127 41.5 Q108 45 89 41.5Z" fill="${B}"/><path d="M92 41.4 Q108 38.6 124 41.4" ${inc(.7)}/><path d="M106 44 Q104 54 108 58" stroke="${B}" stroke-width=".8" fill="none"/>`,
+    phrygien:`<path d="M99 49 Q96 33 106 30 Q116 26 123 33 Q120 36 116 33 Q119 39 118 46 L100 50Z" fill="${B}"/><path d="M99 48 L97 60 L102 59 L103 48Z" fill="${B}"/><path d="M101 45 Q109 41 117 44" ${inc(.8)}/><path d="M106 33 Q112 30 118 32" ${inc(.6)}/>`
+  };
+  if(hm[H])head+=hm[H];
+  // cimiers (crin et plumes en rouge ou blanc rapporté)
+  const top={pilos:[109,21],thrace:[112,25.5],corinthien:[108,31.5],beotien:[108,32],attique:[108,33],bronze:[108,33],fer:[108,33]}[H]||[108,33];
+  const [cx0,cy0]=top,metal=!['nu','cuir','petase','phrygien'].includes(H);
+  if(metal&&d.crest&&d.crest!=='rien'){
+    const tx=`transform="translate(${cx0-108} ${cy0-33})"`;let cr='';
+    const hold=`<path d="M103.5 34 Q108 30.5 112.5 34 L111 35.5 Q108 33.5 105 35.5Z" fill="${B}"/>`; // support plaqué sur la calotte
+    if(d.crest==='crete'||d.crest==='noire'){const cc=d.crest==='noire'?B:R;cr=`<path d="M117 36 Q119 18 106 16 Q93 17 90 32 Q88 46 92 60 Q95 47 98 40 Q101 33 108 32.5 Q114 32.5 117 36Z" fill="${cc}" stroke="${B}" stroke-width="1"/><path d="M114 30 Q112 21 104 20 M108 29 Q101 22 95 28 M100 34 Q94 40 93 52" ${inc(.6)} stroke="${d.crest==='noire'?C:B}" opacity=".7"/>${d.crest==='noire'?`<path d="M115 20 q8 -4 11 4 q-6 -2 -10 1z" fill="${R}"/>`:''}`}
+    if(d.crest==='crin')cr=hold+`<path d="M104.5 34 Q96 22 99 12 Q108 6 117 12 Q120 22 111.5 34Z" fill="${R}" stroke="${B}" stroke-width="1"/>${[-6,-3,0,3,6].map(o=>`<path d="M108 32 L${108+o*1.2} 12" stroke="${B}" stroke-width=".6" opacity=".6"/>`).join('')}`;
+    if(d.crest==='aigrette')cr=hold+`<path d="M106.5 33.5 Q99 20 103 7 Q111 19 110 33.5Z" fill="${W}" stroke="${B}" stroke-width=".8"/>`;
+    if(d.crest==='plumes')cr=hold+['M108 33.5 Q104 19 108 7 Q112 19 108 33.5Z','M105.5 34 Q96 25 94 13 Q102 21 107 33Z','M110.5 34 Q120 25 122 13 Q114 21 109 33Z'].map(p=>`<path d="${p}" fill="${W}" stroke="${B}" stroke-width=".8"/>`).join('');
+    if(d.crest==='cornes')cr=`<path d="M103 38 Q91 36 91 22 Q93 20 95.5 22 Q96 31 106 33.5Z M113 35.5 Q122 31 122 19 Q120 17 118 19 Q118 28 110 32.5Z" fill="${B}"/>`;
+    if(d.crest==='roue')cr=hold+`<path d="M108 33 v-8" stroke="${B}" stroke-width="2.2"/><circle cx="108" cy="18" r="7" fill="none" stroke="${B}" stroke-width="2.4"/><path d="M108 11 v14 M101 18 h14 M103 13 l10 10 M113 13 l-10 10" stroke="${B}" stroke-width="1.1"/>`;
+    head+=`<g ${tx}>${cr}</g>`;
+  }
+  if(L.pelt)head+=`<path d="M98 50 Q94 34 106 30 L104 25 L109 29 L114 25 L114 31 Q122 34 121 44 Q114 38 108 39 Q101 41 98 50Z" fill="${B}"/><path d="M98 50 Q92 62 94 74 L100 64Z" fill="${B}"/><path d="M106 33 q4 -2 8 0 M101 38 l2 2 M117 37 l-2 2" ${inc(.6)}/>`;
+  // ---------- bras et arme principale
+  const SH=shieldOn?{hoplon:31,rond:26,parma:19,peau:23,macedonien:24,pelte:22,ovale:18,scutum:18}[d.shield]:0;
+  const SXY={hoplon:[141,88],rond:[139,86],parma:[135,84],peau:[136,86],macedonien:[138,86],pelte:[133,82],ovale:[134,90],scutum:[134,92]},[sx,sy]=SXY[d.shield]||[134,86];
+  const SQ=.62; // bouclier tourné de trois quarts : aplati, tenu en avant, le buste reste visible
+  const shBack=shieldOn&&(bow||sling);
+  if(bow){ // archer : bras tendu vers l'avant, arc tenu droit, corde tirée
+    arm+=`<path d="M112 66 L140 70" stroke="${B}" stroke-width="5" stroke-linecap="round"/><path d="M104 66 Q112 74 121 69" stroke="${B}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+    weap+=`<path d="M141 36 Q156 70 141 104" fill="none" stroke="${B}" stroke-width="2.6"/><path d="M141 36 L121 69 L141 104" fill="none" stroke="${B}" stroke-width=".7"/><path d="M121 69 L150 69" stroke="${B}" stroke-width="1"/><path d="M150 69 l-4 -2 v4z" fill="${B}"/>`;
+  }else if(sling){
+    arm+=`<path d="M104 66 Q96 54 98 42" stroke="${B}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+    weap+=`<path d="M98 40 Q86 30 82 18 M98 40 Q90 28 88 16" stroke="${B}" stroke-width=".9" fill="none"/><ellipse cx="85" cy="16" rx="3" ry="2.2" fill="${B}"/>`;
+    if(!shieldOn)arm+=`<path d="M114 66 Q124 76 132 74" stroke="${B}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+  }else{
+    const hx=98,hy=98;
+    arm+=`<path d="M103 65 Q93 76 ${hx} ${hy}" stroke="${B}" stroke-width="5.4" fill="none" stroke-linecap="round"/><circle cx="${hx}" cy="${hy}" r="3.4" fill="${B}"/>`;
+    const A=d.arm;
+    if(A==='lance'||A==='xyston'||A==='sarisse'){
+      // la hampe passe par la main et tient entière dans le médaillon (rayon 90, moins la pointe)
+      const sc=mounted?.8:1,ox=mounted?17.6:0,oy=mounted?-3:0,cx=(100-ox)/sc,cy=(100-oy)/sc;
+      const ag=(A==='sarisse'?-27:A==='xyston'?-24.6:-24.2)*Math.PI/180,ux=Math.cos(ag),uy=Math.sin(ag);
+      const ch=r=>{const px=hx-cx,py=hy-cy,b=px*ux+py*uy,q=Math.sqrt(Math.max(0,b*b-(px*px+py*py)+r*r));return[-b-q,-b+q]};
+      const tf=ch(74/sc)[1],tb=ch(82/sc)[0],L=A==='sarisse'?1e9:A==='xyston'?150/sc:128/sc;
+      const f=Math.min(tf,L*.6),bk=Math.max(tb,f-L);
+      const [x1,y1,x2,y2]=[hx+ux*bk,hy+uy*bk,hx+ux*f,hy+uy*f];
+      weap+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${B}" stroke-width="${A==='sarisse'?2:1.8}"/>`;
+      const ang=Math.atan2(y2-y1,x2-x1)*180/Math.PI;
+      weap+=`<path d="M0 0 q-5 -3.4 -12 0 q7 3.4 12 0z" fill="${B}" transform="translate(${x2+ux*12} ${y2+uy*12}) rotate(${ang})"/>`;
+      if(A!=='lance')weap+=`<path d="M0 0 l-6 -1.6 v3.2z" fill="${B}" transform="translate(${x1} ${y1}) rotate(${ang})"/>`;
+    }
+    if(A==='epee'||A==='glaive'||A==='longue'||A==='dague'||A==='kopis'){
+      const len={epee:30,glaive:28,longue:42,dague:16,kopis:30}[A];
+      const blade=A==='kopis'?`<path d="M0 -2 Q${len*.6} -6 ${len} 1 Q${len*.55} 1 0 2Z" fill="${B}"/>`:A==='epee'?`<path d="M0 -2 Q${len*.55} -4.4 ${len} 0 Q${len*.55} 2.4 0 2Z" fill="${B}"/>`:`<path d="M0 -2 L${len-5} -2 L${len} 0 L${len-5} 2 L0 2Z" fill="${B}"/><path d="M2 0 H${len-6}" ${inc(.6)}/>`;
+      weap+=`<g transform="translate(${hx} ${hy}) rotate(128)"><path d="M-6 0 h5" stroke="${B}" stroke-width="3"/><path d="M-1 -4 v8" stroke="${B}" stroke-width="2"/>${blade}</g>`;
+    }
+    if(A==='hache')weap+=`<g transform="translate(${hx} ${hy}) rotate(-120)"><path d="M-6 0 H30" stroke="${B}" stroke-width="2.4"/><path d="M24 0 Q26 -10 34 -12 Q32 0 34 12 Q26 10 24 0Z" fill="${B}"/></g>`;
+    if(d.jet==='pilum'&&!mounted)weap+=`<line x1="58" y1="122" x2="128" y2="84" stroke="${B}" stroke-width="2.2"/><line x1="128" y1="84" x2="166" y2="64" stroke="${B}" stroke-width="1.1"/><path d="M166 64 l5 -3 l-2 4z" fill="${B}"/><path d="M124 85 l6 -3 l1 3 l-6 3z" fill="${B}"/>`;
+    if(d.jet==='soliferrum'&&!mounted)weap+=`<line x1="52" y1="120" x2="170" y2="64" stroke="${B}" stroke-width="1.3"/><path d="M170 64 l5 -3 l-2 4z" fill="${B}"/>`;
+    if(!shieldOn)arm+=`<path d="M115 66 Q128 76 136 74" stroke="${B}" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="137" cy="74" r="3" fill="${B}"/>`;
+  }
+  // ---------- bouclier vu de face, emblème en couleur rapportée
+  if(shieldOn){
+    const T=SH_TINT[d.teinte]||SH_TINT.pourpre,mot=!d.motif||d.motif==='peuple'?((L.embP&&L.embP[peoNow()])||L.emb):d.motif;
+    const face=d.teinte==='bronze'?C:d.teinte==='noir'?B:T[1],ec=d.teinte==='noir'?C:d.teinte==='bronze'?B:(d.teinte==='blanc'?B:W);
+    const emb=(x,y,r)=>embSVG(mot,x,y,r,ec);
+    if(d.shield==='hoplon')shield=`<circle cx="${sx}" cy="${sy}" r="31" fill="${B}"/><circle cx="${sx}" cy="${sy}" r="25" fill="${face}"/><circle cx="${sx}" cy="${sy}" r="28" ${inc(.8)} stroke-dasharray="2 2.4"/>${emb(sx,sy,16)}`;
+    if(d.shield==='rond')shield=`<circle cx="${sx}" cy="${sy}" r="26" fill="${B}"/><circle cx="${sx}" cy="${sy}" r="22" fill="${face}"/>${emb(sx,sy,14)}`;
+    if(d.shield==='parma')shield=`<circle cx="${sx}" cy="${sy}" r="19" fill="${B}"/><circle cx="${sx}" cy="${sy}" r="15.5" fill="${face}"/>${emb(sx,sy,10)}<circle cx="${sx}" cy="${sy}" r="3" fill="${B}"/>`;
+    if(d.shield==='peau')shield=`<circle cx="${sx}" cy="${sy}" r="23" fill="${B}"/><circle cx="${sx}" cy="${sy}" r="20" ${inc(1)} stroke-dasharray="3 2"/>${[[-8,-8],[9,-10],[-11,7],[9,9]].map(([a,b])=>`<ellipse cx="${sx+a}" cy="${sy+b}" rx="3" ry="2" fill="${C}" opacity=".5"/>`).join('')}${embSVG(mot,sx,sy,10,C)}`;
+    if(d.shield==='macedonien')shield=`<circle cx="${sx}" cy="${sy}" r="24" fill="${B}"/><circle cx="${sx}" cy="${sy}" r="20.5" fill="${face}"/>${[...Array(8)].map((_,i)=>{const a=i*Math.PI/4,x=sx+Math.cos(a)*14.5,y=sy+Math.sin(a)*14.5;return `<path d="M${x-3.4} ${y} a3.4 3.4 0 0 1 6.8 0" transform="rotate(${i*45+90} ${x} ${y})" fill="none" stroke="${ec}" stroke-width="1.2"/>`}).join('')}${emb(sx,sy,7)}`;
+    if(d.shield==='pelte')shield=`<path d="M${sx-20} ${sy-14} Q${sx} ${sy-2} ${sx+20} ${sy-14} Q${sx+24} ${sy+14} ${sx} ${sy+22} Q${sx-24} ${sy+14} ${sx-20} ${sy-14}Z" fill="${B}"/><path d="M${sx-15} ${sy-8} Q${sx} ${sy+1} ${sx+15} ${sy-8}" ${inc(.9)}/>${embSVG(mot,sx,sy+8,8,C)}`;
+    if(d.shield==='ovale')shield=`<ellipse cx="${sx}" cy="${sy+4}" rx="18" ry="34" fill="${B}"/><ellipse cx="${sx}" cy="${sy+4}" rx="14.5" ry="30.5" fill="${face}"/><path d="M${sx} ${sy-26} V${sy+34}" stroke="${B}" stroke-width="2.6"/><ellipse cx="${sx}" cy="${sy+4}" rx="5" ry="8" fill="${B}"/>${emb(sx,sy-14,7)}${emb(sx,sy+22,7)}`;
+    if(d.shield==='scutum')shield=`<path d="M${sx-18} ${sy-32} Q${sx} ${sy-37} ${sx+18} ${sy-32} V${sy+36} Q${sx} ${sy+41} ${sx-18} ${sy+36}Z" fill="${B}"/><path d="M${sx-14.5} ${sy-28.5} Q${sx} ${sy-33} ${sx+14.5} ${sy-28.5} V${sy+33} Q${sx} ${sy+37} ${sx-14.5} ${sy+33}Z" fill="${face}"/><circle cx="${sx}" cy="${sy+2}" r="6.5" fill="${B}"/>${emb(sx,sy-17,7.5)}${emb(sx,sy+21,7.5)}`;
+  }
+  if(shieldOn){
+    const rim=shield.replace(/<circle cx="(\d+)"/,(m,x)=>`<circle cx="${+x-5}"`).match(/^<[^>]+>/);
+    shield=`<g transform="translate(${sx} ${sy}) scale(${SQ} 1) translate(${-sx} ${-sy})">${rim&&rim[0].startsWith('<circle')?rim[0]:''}${shield}</g>`;
+    // bras gauche : de l'épaule à la poignée, derrière le bouclier
+    if(!shBack)front=`<path d="M114 65 Q122 78 ${sx-1} ${sy-2}" stroke="${B}" stroke-width="5.4" fill="none" stroke-linecap="round"/>`;
+  }
+  if(shBack)shield=`<g transform="translate(${100-sx} ${80-sy}) scale(1)">${shield}</g>`;
+  // ---------- assemblage : l'arme passe derrière le bouclier, plaqué contre le buste
+  const man=(shBack?shield:'')+back+legs+body+arm+head+weap+front+(shBack?'':shield);
+  let fig;
+  const auxD=typeof auxSVG==='function'?auxSVG(d,mounted):'';
+  if(!mounted)fig=`<path d="M60 164 H160" stroke="${B}" stroke-width="1.4"/>${auxD}${man}`;
+  else{
+    // cheval de profil au pas relevé (figure noire, crinière et harnais incisés)
+    const nu=k==='lcav';
+    // membre galbé : contour lissé autour d'une ligne médiane (largeur à chaque point), liseré d'argile côté visible
+    const lg=(pts,edge)=>{const Lp=[],Rp=[];pts.forEach(([x,y,w],n)=>{const a=pts[Math.max(0,n-1)],b=pts[Math.min(pts.length-1,n+1)];let dx=b[0]-a[0],dy=b[1]-a[1];const m=Math.hypot(dx,dy)||1;dx/=m;dy/=m;Lp.push([x-dy*w/2,y+dx*w/2]);Rp.push([x+dy*w/2,y-dx*w/2])});
+      const ring=Lp.concat(Rp.reverse());const f=v=>v.toFixed(1);let dd=`M${f((ring[0][0]+ring[1][0])/2)} ${f((ring[0][1]+ring[1][1])/2)}`;
+      for(let n=1;n<=ring.length;n++){const q=ring[n%ring.length],r=ring[(n+1)%ring.length];dd+=` Q${f(q[0])} ${f(q[1])} ${f((q[0]+r[0])/2)} ${f((q[1]+r[1])/2)}`}
+      return `<path d="${dd}Z" fill="${B}"${edge?` stroke="${C}" stroke-width=".9"`:''}/>`};
+    const hoof=(x,y,a)=>`<path d="M-3.4 -2.2 L3 -2.2 L4.8 2.8 L-4.2 2.8Z" fill="${B}" transform="translate(${x} ${y}) rotate(${a||0})"/>`;
+    // jambes du côté opposé (derrière le corps)
+    const far=lg([[134,100,16],[134,112,14],[134,126,8.5],[134,138,7],[135,150,4.4],[137,162,5.4],[138.5,167,4]])+hoof(139.5,169.5)
+      +lg([[84,100,20],[82,112,18],[78,127,9],[75,140,7],[79,152,4.4],[84,163,5.4],[86,167,4]])+hoof(87,169.5);
+    // corps : encolure arquée, petite tête baissée, croupe ronde (d'après les vases attiques)
+    const bodyH=`<path d="M124 80 Q130 62 144 53 Q148 50 151 51 Q158 55 165 66 L170 74 Q170 79 165 79 Q158 77 154 73 Q150 72 151 80 Q153 90 152 100 Q150 112 139 115 Q112 121 84 117 Q66 117 60 108 Q52 97 58 86 Q66 77 84 80 Q104 84 124 80Z" fill="${B}"/>
+      <path d="M145 52 L143.5 43 L149 50Z M149.5 51 L151.5 42.5 L153.5 52Z" fill="${B}"/>
+      <path d="M59 88 Q41 92 37 114 Q35 132 43 148 Q43 130 48 117 Q52 104 61 97Z" fill="${B}"/><path d="M52 98 Q44 112 43 136 M56 96 Q48 108 47 124" ${inc(.6)} opacity=".8"/>
+      <path d="M126 76 Q133 62 145 55 M128 72 Q134 63 141 58 M130 70 Q136 62 143 59" ${inc(.6)}/>
+      <circle cx="156" cy="60" r="1.2" fill="${C}"/><path d="M154.5 58.2 q2 -1.6 3.8 -.2" ${inc(.5)}/><path d="M166 74.5 q2 0 3 1.4" ${inc(.5)}/>
+      <path d="M144 108 Q146 98 150 92" ${inc(.6)} opacity=".7"/><path d="M62 104 Q70 100 76 104" ${inc(.6)} opacity=".7"/>`;
+    // jambes du côté visible : antérieur levé (genou plié), postérieur au jarret marqué
+    const near=lg([[140,100,18],[143,110,13],[149,118,9],[154,125,7],[151,132,4.6],[147,138,5.4],[148.5,142,4]],1)+hoof(149,144,-30)
+      +lg([[68,98,24],[66,110,20],[62,124,10],[58,137,7.4],[60,150,4.6],[63,162,5.6],[65,167,4]],1)+hoof(66,169.5);
+    const harn=nu?`<path d="M151 64 Q140 76 128 92" ${inc(.6)}/>`:`<path d="M152 57 L163 72 M151 63 L160 66 M160 70 Q140 84 126 92" ${inc(.7)}/><path d="M90 80 Q104 84 120 80 L121 100 Q105 104 89 100Z" fill="${L.tunS||R}" stroke="${B}" stroke-width="1"/><path d="M90 96 Q105 100 120.5 96" stroke="${B}" stroke-width="1" fill="none"/>${[0,1,2,3,4].map(i=>`<path d="M${92+i*6.5} ${100.5+(i===0||i===4?0:1)} v5" stroke="${B}" stroke-width="1.2"/>`).join('')}`;
+    const horse=far+bodyH+near+harn;
+    // jambe du cavalier : cuisse vers l'avant, genou, mollet qui descend le long du flanc, pied pendant
+    const rl=lg([[100,84,11],[110,91,10],[118,98,8],[118,106,6.6],[115,114,4.8],[113,119,4.2]],1)+`<path d="M110.5 117 L115.5 117 L119 125 L113.5 126Z" fill="${B}" stroke="${C}" stroke-width=".7"/>`+(d.jamb==='cnemides'||d.jamb==='une'?`<path d="M120 102 Q118 110 115.5 116" ${inc(.8)}/><path d="M115.5 99.5 q3 -1 3.4 2" ${inc(.7)}/>`:d.jamb==='bandes'?`<path d="M114.5 106 l5 2 M113.5 111 l5 2" ${inc(.9)}/>`:'');
+    fig=`<path d="M30 174 H176" stroke="${B}" stroke-width="1.4"/>${auxD}${horse}<g transform="translate(17.6 -3) scale(.8)">${(shBack?shield:'')+back+body.replace(/<path d="M99 96 L118 96[^>]*>/,'')+arm+head+weap+front+(shBack?'':shield)}</g>${rl}`;
+  }
+  const sz=small?'class="doll mini vase"':'class="doll vase"';
+  // médaillon : fond d'argile, frise de méandres (grecque) dans un anneau noir
+  const N=28,ring=small?`<circle cx="100" cy="100" r="96" fill="none" stroke="${B}" stroke-width="7"/>`:
+    `<circle cx="100" cy="100" r="95" fill="none" stroke="${B}" stroke-width="11"/>`+[...Array(N)].map((_,i)=>`<path d="M-9 3.4 h15 v-6.2 h-9.6 v3.2 h5.2" stroke="${C}" stroke-width="1.15" fill="none" transform="rotate(${i*360/N} 100 100) translate(100 5)"/>`).join('');
+  return `<svg viewBox="0 0 200 200" ${sz} role="img" aria-label="${esc(d.name||dAutoName(d))}"><defs><radialGradient id="${id}g" cx="45%" cy="40%" r="70%"><stop offset="0" stop-color="${VZ.clayL}"/><stop offset=".7" stop-color="${C}"/><stop offset="1" stop-color="${VZ.clayD}"/></radialGradient><clipPath id="${id}c"><circle cx="100" cy="100" r="90"/></clipPath></defs>
+    <circle cx="100" cy="100" r="98" fill="url(#${id}g)"/><g clip-path="url(#${id}c)">${fig}</g>${ring}</svg>`;
+}
+/* ---- ATELIER : poids de l'équipement, stats détaillées, auxiliaires (9 nov.) ----
+   Chaque pièce a un poids (kg) : le total règle la vitesse en bataille, la marche en campagne et l'endurance.
+   Cinq stats de plus : protection contre les tirs, perforation, tenue contre la cavalerie, cohésion, aisance en terrain difficile.
+   Auxiliaires : d.aux = liste (2 au plus) de clés d'AXL ; coût en or (donc entretien), effets en bataille et en campagne. */
+const GWT={helm:{nu:0,cuir:1,petase:.5,phrygien:1,bronze:2,pilos:2,attique:2.5,fer:3,thrace:3,beotien:2.5,corinthien:3.5},
+  armor:{tunique:0,cuir:3,lin:4,pect:2,maille:10,ecailles:9,bronze:8},
+  jamb:{aucune:0,bandes:.5,une:1.5,cnemides:3},
+  shield:{aucun:0,pelte:2,peau:2,parma:3,macedonien:4,rond:5,ovale:5,scutum:8,hoplon:8},
+  arm:{lance:2,sarisse:6,epee:1.5,glaive:1.5,kopis:1.5,xyston:3,longue:2,hache:2.5,dague:.5},
+  jet:{aucune:0,javelots:2,pilum:4,soliferrum:2,fronde:1,arc:2}};
+// contributions aux nouvelles stats (0 à 100)
+const GST2={
+  tir:{shield:{pelte:15,peau:12,parma:18,macedonien:20,rond:30,ovale:32,scutum:45,hoplon:45},armor:{cuir:5,lin:8,pect:4,maille:12,ecailles:12,bronze:12},
+    helm:{cuir:2,phrygien:2,bronze:4,pilos:4,attique:5,fer:6,thrace:6,beotien:5,corinthien:7}},
+  perf:{arm:{lance:20,sarisse:35,epee:15,glaive:25,kopis:20,xyston:35,longue:15,hache:40,dague:5},jet:{javelots:5,pilum:30,soliferrum:25,fronde:10,arc:5}},
+  anti:{arm:{lance:30,sarisse:60,xyston:25,epee:5,glaive:5,kopis:5,longue:5,hache:5},shield:{hoplon:15,scutum:10,rond:8,ovale:6,macedonien:5},jet:{pilum:5}},
+  coh:{train:{levee:-15,reg:0,vet:20},shield:{hoplon:5,scutum:5}}};
+const COH_CORPS={lib:10,legion:12,phalange:12,hypasp:15,athoplites:8,compagnons:10};
+const AXL={
+  enseigne:{n:'Porte-enseigne',c:6,m:{mor:6},coh:15,txt:'Moral +6 et cohésion +15 : la ligne se reforme autour de l\'enseigne.'},
+  trompettes:{n:'Trompettes',nP:{gaul:'Carnyx'},c:5,m:{chg:.15},coh:5,txt:'Charge +0,15 et ordres plus vite exécutés en bataille.'},
+  medecin:{n:'Médecin',c:8,txt:'Un quart des hommes perdus (blessés, malades) reviennent dans les jours qui suivent.'},
+  mules:{n:'Mules et valets',c:5,wt:-6,txt:'Ils portent le bagage : 6 kg de moins à porter (vitesse, marche, endurance).'},
+  eclaireurs:{n:'Éclaireurs montés',c:7,txt:'L\'armée qui emmène ce régiment voit jusqu\'à 40 km.'},
+  frondeurs:{n:'Frondeurs baléares',c:9,k:['inf'],perf:5,txt:'Une volée de pierres juste avant le choc.'},
+  chiens:{n:'Chiens de guerre',c:6,k:['inf'],corps:['iber','gaul'],m:{chg:.25},txt:'Lâchés à l\'impact : charge +0,25. Propres aux Ibères et aux Gaulois.'},
+  devin:{n:'Devin',c:5,m:{mor:5},txt:'Les présages rassurent les hommes : moral +5.'},
+  pionniers:{n:'Pionniers',c:6,txt:'Avec eux, l\'armée fortifie son camp en une demi-journée au lieu d\'une.'},
+  instructeurs:{n:'Instructeurs vétérans',c:8,txt:'Le régiment gagne de l\'expérience chaque jour (un chevron en deux mois environ).'}};
+const AXL_MAX=2;
+const auxOk=(key,d)=>{const x=AXL[key],k=CORPS[d.base].k;return !!x&&(!x.k||x.k.includes(k))&&(!x.corps||x.corps.includes(d.base))};
+const auxName=(key,d)=>{const x=AXL[key],a=(x.nP&&x.nP[d&&d.base]);return a||x.n};
+const auxOf=d=>(d&&Array.isArray(d.aux)?d.aux:[]).filter(k=>AXL[k]&&auxOk(k,d)).slice(0,AXL_MAX);
+const uAux=(u,k)=>{const d=desOf(u&&u.d);return !!d&&auxOf(d).includes(k)};
+const armyAux=(a,k)=>a.units.some(u=>uAux(u,k));
+{
+  const _ds=dStats;
+  dStats=function(d){
+    const s=_ds(d),c=CORPS[d.base],k=c.k,ax=auxOf(d);
+    // retire les anciens petits effets de vitesse et de marche des pièces : c'est le poids qui décide désormais
+    let ospd=0,okm=0;for(const sl of SLOTS){const o=GEAR[sl].o[d[sl]];if(!o)continue;const m=(o.mk&&o.mk[k])||o.m;ospd+=m.spd||0;okm+=m.km||0}
+    let wt=0;for(const sl in GWT)wt+=GWT[sl][d[sl]]||0;
+    for(const a of ax)if(AXL[a].wt)wt+=AXL[a].wt;
+    wt=Math.max(0,wt);s.wt=Math.round(wt*10)/10;
+    const kw={inf:.13,skirm:.16,cav:.09,lcav:.1}[k];
+    s.spd=Math.round((s.spd-ospd+1.5-wt*kw)*10)/10;
+    s.km=Math.round(s.km-okm+2-wt/6);
+    s.end=Math.max(15,Math.min(100,Math.round(100-wt*2.2+(d.train==='vet'?10:d.train==='levee'?-8:0)+(k==='cav'||k==='lcav'?8:0))));
+    const sum=t=>{let v=0;for(const sl in GST2[t])v+=GST2[t][sl][d[sl]]||0;return v};
+    s.tir=sum('tir');s.perf=sum('perf');s.anti=sum('anti')+(d.base==='phalange'?10:0)-(k==='cav'||k==='lcav'?10:0);
+    s.coh=50+sum('coh')+(COH_CORPS[d.base]||0);
+    s.ter=100-wt*3+(k==='skirm'?10:0)-(k==='cav'?20:k==='lcav'?10:0);
+    let ac=0;
+    for(const a of ax){const x=AXL[a];if(x.m)for(const f in x.m)s[f]+=x.m[f];if(x.coh)s.coh+=x.coh;if(x.perf)s.perf+=x.perf;ac+=x.c}
+    s.mor=Math.round(s.mor);s.chg=Math.round(s.chg*100)/100;
+    for(const f of ['tir','perf','anti','coh','ter'])s[f]=Math.max(0,Math.min(100,Math.round(s[f])));
+    s.auxCost=ac;s.cost+=ac;s.aux=ax;
+    return s};
+  const _u3=u3D;
+  u3D=function(u){const x=_u3(u);if(!x)return x;const d=desOf(u.d),s=dStats(d);
+    Object.assign(x,{weight:s.wt,endurance:s.end,missileDef:s.tir,pierce:s.perf,antiCav:s.anti,cohesion:s.coh,terrain:s.ter,aux:s.aux.slice()});
+    if(x.gear)x.gear.aux=s.aux.slice();return x};
+}
+// ---- dessin des auxiliaires dans le médaillon (derrière le soldat) ----
+function auxSVG(d,mounted){
+  const B=VZ.blk,C=VZ.clay,R=VZ.red,W=VZ.wht,ax=auxOf(d);let o='';
+  const inc=w=>`stroke="${C}" stroke-width="${w}" fill="none" stroke-linecap="round"`;
+  for(const a of ax){
+    if(a==='enseigne')o+=`<path d="M76 168 V40" stroke="${B}" stroke-width="2.2"/><path d="M76 42 h18 v14 h-18z" fill="${R}" stroke="${B}" stroke-width="1"/><path d="M78 56 v5 M83 56 v5 M88 56 v5 M93 56 v5" stroke="${B}" stroke-width="1.2"/><circle cx="76" cy="37" r="3.4" fill="${B}"/><path d="M71 64 h10" stroke="${B}" stroke-width="2"/>`;
+    if(a==='trompettes')o+=d.base==='gaul'?`<path d="M86 166 Q84 110 80 46" stroke="${B}" stroke-width="3" fill="none"/><path d="M80 46 q-8 -4 -10 -12 q8 2 12 -2 q2 8 -2 14z" fill="${B}"/><circle cx="76" cy="38" r="1" fill="${C}"/>`
+      :`<path d="M64 120 Q52 92 66 70 Q80 56 96 66" stroke="${B}" stroke-width="2.4" fill="none"/><path d="M60 126 l8 -6 l-2 10z" fill="${B}"/>`;
+    if(a==='chiens')o+=`<path d="M40 160 Q38 150 46 148 L64 147 Q70 140 74 141 L80 136 L80 142 Q84 144 82 148 L76 150 L74 160 L70 160 L70 152 L52 153 L50 161 L46 161 L46 154 Q42 152 40 160Z" fill="${B}"/><path d="M40 152 Q32 146 34 138" stroke="${B}" stroke-width="2" fill="none"/><circle cx="77" cy="143" r=".8" fill="${C}"/><path d="M66 147 h4" ${inc(.8)}/>`;
+    if(a==='mules')o+=`<g transform="translate(-8 0) scale(.55) translate(60 120)" opacity=".85"><path d="M10 40 Q8 20 30 18 L62 18 Q70 6 78 4 L80 -6 L84 4 Q92 8 90 14 L84 14 L80 24 L76 40 L70 40 L70 28 L36 30 L32 42 L26 42 L26 30 Q14 30 10 40Z" fill="${B}"/><path d="M28 6 h34 v12 h-34z" fill="${B}"/><path d="M30 8 h30 M30 14 h30" ${inc(1.2)}/></g>`;
+    if(a==='eclaireurs')o+=`<g transform="translate(150 132) scale(.22)" opacity=".75"><path d="M-40 10 Q-42 -6 -20 -8 L20 -8 Q30 -24 40 -26 L44 -20 Q38 -12 34 2 Q30 12 20 12 L-30 12 L-38 40 L-32 40 L-26 16 M10 12 L16 40 L22 40 L18 12" fill="${B}" stroke="${B}" stroke-width="5"/><path d="M-6 -8 L-2 -40 L8 -40 L8 -8Z" fill="${B}"/><circle cx="3" cy="-46" r="7" fill="${B}"/></g><path d="M142 170 H176" stroke="${B}" stroke-width=".8" opacity=".5"/>`;
+    if(a==='frondeurs')o+=`<g transform="translate(46 112) scale(.42)" opacity=".85"><path d="M-6 0 Q-8 -10 0 -12 Q8 -12 8 0 L10 30 L-8 30Z M-8 30 L-14 64 L-8 64 L0 38 L6 64 L12 64 L8 30Z" fill="${B}"/><circle cx="1" cy="-20" r="8" fill="${B}"/><path d="M6 -4 Q16 -24 10 -42" stroke="${B}" stroke-width="4" fill="none"/><path d="M10 -42 Q-6 -56 -16 -48" stroke="${B}" stroke-width="1.6" fill="none"/></g>`;
+    if(a==='medecin')o+=`<path d="M48 150 h18 v14 h-18z" fill="${B}"/><path d="M52 150 q5 -6 10 0" stroke="${B}" stroke-width="1.6" fill="none"/><path d="M57 152 v10 M54 155 q3 2 6 0 q-3 2 -6 4" ${inc(.9)}/>`;
+    if(a==='devin')o+=`<path d="M44 166 L50 146 M62 166 L56 146 M53 166 V146" stroke="${B}" stroke-width="1.8"/><path d="M45 144 h16 q-2 6 -8 6 q-6 0 -8 -6z" fill="${B}"/><path d="M53 142 q-4 -8 0 -14 q4 6 0 14" fill="${R}"/>`;
+    if(a==='pionniers')o+=`<path d="M58 168 L84 112" stroke="${B}" stroke-width="2.4"/><path d="M76 108 Q86 104 96 112 Q86 112 82 116Z" fill="${B}"/><path d="M48 168 h16 l-4 -6 h-8z" fill="${B}"/>`;
+    if(a==='instructeurs')o+=`<path d="M70 168 Q72 130 66 96" stroke="${B}" stroke-width="2.2" fill="none"/><path d="M66 96 q-2 -4 1 -7 M69 120 q3 -2 5 0 M70 140 q-3 -1 -5 1" stroke="${B}" stroke-width="1.4" fill="none"/>`;
+  }
+  return mounted?`<g transform="translate(-10 4)">${o}</g>`:o}
+// ---- fenêtre de l'atelier : poids sur les boutons, nouvelles barres, case « Accompagnement » ----
+{
+  const _rw=renderWorkshop;
+  const kg=v=>(Math.round(v*10)/10).toString().replace('.',',')+' kg';
+  renderWorkshop=function(){
+    const r=_rw.apply(this,arguments),d=wsD;if(!d)return r;
+    const s=dStats(d);
+    document.querySelectorAll('.ws [data-g][data-v]').forEach(b=>{const w=GWT[b.dataset.g]&&GWT[b.dataset.g][b.dataset.v];if(w)b.insertAdjacentHTML('beforeend',` <small class="wtk">${kg(w)}</small>`)});
+    const st=document.querySelector('.ws .stats');
+    if(st){
+      const bar=(lbl,v,max,txt,tip,cls)=>`<div class="st${cls?' '+cls:''}" title="${esc(tip)}"><span>${lbl}</span><span class="g"><i style="width:${Math.max(3,Math.min(100,v/max*100))}%"></i></span><b>${txt}</b></div>`;
+      const ref=d.id!=null?null:null;
+      const h=`<div class="st2">`+
+        bar('Poids',s.wt,35,kg(s.wt),'Tout ce que porte un homme : il règle la vitesse, la marche et l\'endurance.','wt')+
+        bar('Endurance',s.end,100,s.end,'Temps avant l\'épuisement en mêlée et en marche : plus elle est haute, moins l\'armée se fatigue.')+
+        bar('Contre tirs',s.tir,100,s.tir,'Protection contre flèches, pierres et javelots : surtout les grands boucliers.')+
+        bar('Perforation',s.perf,100,s.perf,'Capacité à percer les armures : pilum, sarisse, hache.')+
+        bar('Anti-cav.',s.anti,100,s.anti,'Tenue face à une charge de cavalerie : lances et sarisses.')+
+        bar('Cohésion',s.coh,100,s.coh,'La formation tient et se rallie : entraînement, corps d\'élite, enseigne.')+
+        bar('Terrain',s.ter,100,s.ter,'Aisance en forêt, en montagne et dans les marais : les troupes légères y gardent leur allure.')+
+        `</div>`;
+      const p=st.querySelector('p.sub');if(p)p.insertAdjacentHTML('beforebegin',h);else st.insertAdjacentHTML('beforeend',h);
+      if(s.auxCost&&p)p.insertAdjacentHTML('beforeend',`<br>dont auxiliaires ${s.auxCost} or`);
+    }
+    const R=document.querySelector('.ws .wsR'),gT=R&&R.querySelector('.grpT');
+    if(R){
+      const cur=auxOf(d),full=cur.length>=AXL_MAX;
+      const ch=Object.keys(AXL).filter(k=>auxOk(k,d)).map(k=>{const on=cur.includes(k),x=AXL[k];
+        return `<button type="button" data-aux="${k}" class="${on?'on':''}" ${!on&&full?'disabled':''} title="${esc(x.txt+' Coût +'+x.c+' or.')}">${esc(auxName(k,d))} <small class="wtk">+${x.c} or</small></button>`}).join('');
+      const txt=cur.map(k=>`<b>${esc(auxName(k,d))}</b> : ${esc(AXL[k].txt)}`).join('<br>');
+      const html=`<div class="slot auxS"><h4>Accompagnement <span class="sub">(${cur.length} / ${AXL_MAX})</span></h4><div class="chips">${ch}</div><p class="sub auxT">${txt||'Des hommes qui suivent le régiment et lui donnent un avantage, contre de l\'or et de l\'entretien.'}</p></div>`;
+      if(gT)gT.insertAdjacentHTML('beforebegin',html);else R.insertAdjacentHTML('beforeend',html);
+      R.querySelectorAll('[data-aux]').forEach(b=>b.onclick=()=>{const k=b.dataset.aux,L=auxOf(d);d.aux=L.includes(k)?L.filter(x=>x!==k):L.concat(k).slice(0,AXL_MAX);renderWorkshop()});
+    }
+    return r};
+}
+// ---- effets en campagne : endurance (fatigue), médecin, pionniers, instructeurs, éclaireurs ----
+setTimeout(()=>{
+  const _d=daily;
+  daily=function(){
+    const pre=new Map();for(const a of S.armies||[])if(!a.dead)pre.set(a,a.fat||0);
+    const r=_d.apply(this,arguments);
+    try{if(S.cur||S.over)return r;
+      for(const a of S.armies){if(a.dead)continue;
+        const des=a.units.map(u=>desOf(u.d)).filter(Boolean);
+        // endurance : la fatigue gagnée en marche est multipliée par 100 / endurance moyenne (régiments ordinaires : 1)
+        if(des.length&&pre.has(a)&&a.fat>pre.get(a)){let m=0;for(const u of a.units){const d=desOf(u.d);m+=d?Math.min(1.6,Math.max(.6,75/dStats(d).end)):1}m/=a.units.length;
+          a.fat=Math.max(0,Math.min(100,pre.get(a)+(a.fat-pre.get(a))*m))}
+        if(!des.length)continue;
+        if(a.camp&&!a.camp.ok&&armyAux(a,'pionniers'))a.camp.ok=true;
+        for(const u of a.units){const d=desOf(u.d);if(!d)continue;const ax=auxOf(d);
+          if(ax.includes('instructeurs'))u.xp=(u.xp||0)+1/30;
+          if(ax.includes('medecin')){u._top=Math.max(u._top||0,u.men);const mx=Math.max(UT[u.t].men,u._top);
+            if(u._md!=null&&u.men<u._md-.5)u._hl=(u._hl||0)+(u._md-u.men)*.25;
+            if(u._hl>0&&u.men>0){const g=Math.min(u._hl,Math.max(2,u._hl*.2),mx-u.men);if(g>0){u.men+=g;u._hl-=g}else u._hl=0}
+            u._md=u.men}}
+      }}catch(e){console.error(e)}
+    return r};
+  const _so=sourcesOf;
+  sourcesOf=function(side){const L=_so.apply(this,arguments);try{for(const a of S.armies)if(a.side===side&&!a.dead&&!a.g&&armyAux(a,'eclaireurs'))L.push([a.x,a.y,VIS.scout,a.ship?15:20])}catch(e){}return L};
+  window.__atelier={daily:(...x)=>daily(...x),dStats,u3D,AXL};
+},95);
+/* ==== FIN VASE GREC ==== */
+function dollSVG(d,small){if(!window.__flatDoll)return vaseSVG(d,small);
+  let L=DOLL_LOOK[d.base]||DOLL_LOOK.lib;const TN=TENUE[d.tenue];if(TN)L=Object.assign({},L,{tun:TN[0],tunS:TN[1],car:TN[0]});
+  const k=CORPS[d.base].k,mounted=k==='cav'||k==='lcav',id='dl'+(++dollN);
+  const INK='#24180f',BRZ='#c39a4e',BRZs='#8a6630',BRZh='#ecd08a',IRN='#9aa1a8',IRNs='#666d74',IRNh='#d3d8dc',WOOD='#8a6038',WOODs='#5c3d22',LIN='#ece3c9',LINs='#c4b693',GOLD='#e0b84f',CAR=L.car||'#6b3f9f';
+  const S=`stroke="${INK}" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"`;
+  const vet=d.train==='vet',lev=d.train==='levee';
+  let back='',legs='',body='',armL='',head='',front='',shield='';
+  // ---- au dos : cape des vétérans, arc et carquois, javelots
+  const MT=TENUE[d.manteau];
+  if(MT)back+=`<path d="M60 60 Q49 98 47 138 Q58 134 68 136 L80 66Z" fill="${MT[0]}" ${S}/><path d="M100 60 Q110 96 112 128 L100 124 L84 66Z" fill="${MT[1]}" ${S}/><path d="M55 100 Q52 120 50 134 M61 104 Q60 120 60 132" stroke="${MT[1]}" stroke-width="2" fill="none"/>`;
+  else if(vet)back+=`<path d="M60 60 Q52 96 50 134 L70 128 L80 66Z" fill="#8b2a33" ${S}/><path d="M56 100 Q54 118 52 130" stroke="#5e1820" stroke-width="2" fill="none"/>`;
+  if(d.jet==='pilum'&&!mounted)back+=`<line x1="100" y1="58" x2="114" y2="126" stroke="${WOODs}" stroke-width="3.6"/><line x1="100" y1="58" x2="114" y2="126" stroke="${WOOD}" stroke-width="2.2"/><line x1="100" y1="58" x2="91" y2="10" stroke="${INK}" stroke-width="2.4"/><line x1="100" y1="58" x2="91" y2="10" stroke="${IRN}" stroke-width="1.2"/><path d="M91 10 l-1.6 -7 l3 6z" fill="${IRN}" ${S} stroke-width=".7"/><path d="M98 54 l5 -1 l1 7 l-5 1z" fill="${IRN}" ${S} stroke-width=".8"/>
+    <line x1="104" y1="60" x2="118" y2="126" stroke="${WOODs}" stroke-width="3.6"/><line x1="104" y1="60" x2="118" y2="126" stroke="${WOOD}" stroke-width="2.2"/><line x1="104" y1="60" x2="97" y2="14" stroke="${INK}" stroke-width="2.4"/><line x1="104" y1="60" x2="97" y2="14" stroke="${IRN}" stroke-width="1.2"/><path d="M97 14 l-1.4 -7 l3 6z" fill="${IRN}" ${S} stroke-width=".7"/>`;
+  if(d.jet==='arc')back+=`<path d="M104 26 Q128 70 106 122" fill="none" stroke="${WOODs}" stroke-width="4.2" stroke-linecap="round"/><path d="M104 26 Q128 70 106 122" fill="none" stroke="${WOOD}" stroke-width="2.4" stroke-linecap="round"/><line x1="104" y1="26" x2="106" y2="122" stroke="#e9e1cc" stroke-width=".8"/>
+    <rect x="86" y="40" width="10" height="34" rx="2" transform="rotate(18 91 57)" fill="#7a4e2c" ${S}/><g stroke="${INK}" stroke-width=".8"><path d="M93 38 l2 -9 M96 39 l3 -8 M90 38 l0 -9" /></g><g fill="#d9cfb5"><path d="M95 29 l-2 -3 l4 0z"/><path d="M99 31 l-1 -3 l4 1z"/><path d="M90 29 l-2 -3 l4 0z"/></g>`;
+  if(d.jet==='soliferrum'&&!mounted)back+=`<line x1="99" y1="18" x2="116" y2="126" stroke="${INK}" stroke-width="2.8"/><line x1="99" y1="18" x2="116" y2="126" stroke="${IRN}" stroke-width="1.6"/><path d="M99 18 l-2.4 -12 l4.2 9 l-3 -1z" fill="${IRN}" ${S} stroke-width=".8"/><path d="M106 60 l2 8" stroke="#6a4426" stroke-width="3"/>`;
+  if(d.jet==='javelots'&&!mounted)back+=`<g><line x1="97" y1="22" x2="114" y2="124" stroke="${WOODs}" stroke-width="3.2"/><line x1="97" y1="22" x2="114" y2="124" stroke="${WOOD}" stroke-width="1.8"/><line x1="102" y1="20" x2="117" y2="120" stroke="${WOODs}" stroke-width="3.2"/><line x1="102" y1="20" x2="117" y2="120" stroke="${WOOD}" stroke-width="1.8"/>
+    <path d="M97 22 l-1.6 -10 l3.4 8z" fill="${IRN}" ${S}/><path d="M102 20 l-1.4 -10 l3.4 8z" fill="${IRN}" ${S}/></g>`;
+  // ---- jambes : braies à carreaux des Gaulois, sandales (pieds nus pour la levée)
+  if(!mounted){
+    const leg=x=>L.braies?`<path d="M${x} 116 h11 l-1 36 h-9z" fill="url(#${id}${L.braies==='zig'?'z':'b'})" ${S}/>`:`<path d="M${x+1} 116 h9 l-1 36 h-7z" fill="${L.skin}" ${S}/><path d="M${x+7} 118 l0 32" stroke="${L.sh}" stroke-width="2"/>`;
+    legs+=leg(67)+leg(82);
+    const foot=x=>lev?`<path d="M${x} 151 h11 q2 4 -1 5 h-11 q-1 -3 1 -5z" fill="${L.skin}" ${S}/>`:`<path d="M${x} 151 h11 q2 4 -1 5 h-11 q-1 -3 1 -5z" fill="#5a3b22" ${S}/><path d="M${x+1} 145 l9 3 M${x+1} 148 l9 -3" stroke="#5a3b22" stroke-width="1.4"/>`;
+    legs+=foot(66)+foot(82);
+    // jambières : cnémides de bronze, jambière unique à la romaine (jambe gauche), bandes molletières
+    const grv=x=>`<path d="M${x+.4} 125 q5 -3 10.2 0 l-.8 24 q-4.4 1.6 -8.6 0z" fill="${BRZ}" ${S}/><path d="M${x+3} 128 q-.6 9 0 18" stroke="${BRZh}" stroke-width="1.3" fill="none"/><path d="M${x+7.5} 128 q.6 9 0 18" stroke="${BRZs}" stroke-width="1.3" fill="none"/>`;
+    if(d.jamb==='cnemides')legs+=grv(67)+grv(82);
+    if(d.jamb==='une')legs+=grv(82);
+    if(d.jamb==='bandes')legs+=[67,82].map(x=>[128,133,138,143].map(y=>`<path d="M${x+.6} ${y} l9.6 2.4" stroke="#6a4426" stroke-width="2.4"/>`).join('')).join('');
+  }
+  // ---- tunique, ceinture, ceinture de fronde
+  body+=`<path d="M61 61 L99 61 L105 121 Q80 126 55 121Z" fill="${L.tun}" ${S}/><path d="M90 62 L99 61 L105 121 Q97 123 92 123Z" fill="${L.tunS}"/><path d="M56 116 Q80 121 104 116 L105 121 Q80 126 55 121Z" fill="${L.band}" ${S}/>`;
+  if(L.zig)body+=`<path d="M57 112 ${[...Array(8)].map((_,i)=>`l2.9 -4 l2.9 4`).join(' ')}" stroke="#2e2620" stroke-width="1.6" fill="none"/>`;
+  if(L.sash)body+=`<path d="M62 64 L97 104" stroke="#7a4e2c" stroke-width="4"/><path d="M93 98 q8 2 8 9 q-6 4 -11 -1z" fill="#8a5a32" ${S}/>`;
+  // ---- armure
+  const pter=(y,c,cs)=>[...Array(8)].map((_,i)=>`<path d="M${58.5+i*5.4} ${y} h4.8 v12 q-2.4 1.6 -4.8 0z" fill="${i>5?cs:c}" ${S} stroke-width=".8"/>`).join('');
+  if(d.armor==='lin')body+=pter(104,LIN,LINs)+`<path d="M62 61 L98 61 L100 106 L60 106Z" fill="${LIN}" ${S}/><path d="M91 61 L98 61 L100 106 L92 106Z" fill="${LINs}"/><path d="M60 84 h40 M60 88 h40" stroke="${CAR}" stroke-width="2"/><path d="M62 61 l8 12 h20 l8 -12" fill="none" ${S} stroke-width="1"/>`;
+  if(d.armor==='pect')body+=`<path d="M64 68 L72 63 M96 68 L88 63 M64 84 L96 84" stroke="#5a3b22" stroke-width="2.4"/><rect x="69" y="66" width="22" height="20" rx="3" fill="${BRZ}" ${S}/><circle cx="80" cy="76" r="5" fill="none" stroke="${BRZs}" stroke-width="1.4"/><circle cx="80" cy="76" r="1.6" fill="${BRZs}"/><path d="M71 68 h8" stroke="${BRZh}" stroke-width="1.4"/>`;
+  if(d.armor==='maille')body+=`<path d="M61 61 L99 61 L102 112 Q80 116 58 112Z" fill="url(#${id}m)" ${S}/><path d="M91 61 L99 61 L102 112 Q96 114 92 114Z" fill="${IRNs}" opacity=".45"/><path d="M58 111 Q80 115 102 111" stroke="${IRNs}" stroke-width="2.5" fill="none"/><path d="M57 60 h46 l-2 10 h-42z" fill="url(#${id}m)" ${S}/><path d="M57 60 h46" stroke="${IRNh}" stroke-width="1"/>`;
+  if(d.armor==='bronze')body+=pter(102,'#e9dcc0','#c4b693')+`<path d="M62 61 L98 61 L100 104 Q80 110 60 104Z" fill="${BRZ}" ${S}/><path d="M90 61 L98 61 L100 104 Q95 106 91 106Z" fill="${BRZs}"/><path d="M68 72 q6 6 12 0 q6 6 12 0" stroke="${BRZs}" stroke-width="1.6" fill="none"/><path d="M80 78 v22 M71 92 q9 5 18 0 M72 99 q8 3 16 0" stroke="${BRZs}" stroke-width="1.3" fill="none"/><path d="M65 66 q4 -3 9 -2" stroke="${BRZh}" stroke-width="1.8" fill="none"/>`;
+  if(d.armor==='ecailles')body+=pter(104,'#e9dcc0','#c4b693')+`<path d="M61 61 L99 61 L101 108 Q80 112 59 108Z" fill="url(#${id}s)" ${S}/><path d="M91 61 L99 61 L101 108 Q96 110 92 110Z" fill="${BRZs}" opacity=".45"/><path d="M57 60 h46 l-2 10 h-42z" fill="url(#${id}s)" ${S}/><path d="M57 60 h46" stroke="${BRZh}" stroke-width="1"/>`;
+  if(d.armor==='cuir')body+=pter(104,'#9a6a3e','#7a4e2c')+`<path d="M62 61 L98 61 L100 106 L60 106Z" fill="#8a5a32" ${S}/><path d="M91 61 L98 61 L100 106 L92 106Z" fill="#6e4526"/><path d="M64 66 L96 66 M63 86 L97 86 M80 66 V104" stroke="#d8b98a" stroke-width=".9" stroke-dasharray="2 2" fill="none"/><circle cx="68" cy="76" r="1.3" fill="${BRZ}"/><circle cx="92" cy="76" r="1.3" fill="${BRZ}"/><circle cx="68" cy="96" r="1.3" fill="${BRZ}"/><circle cx="92" cy="96" r="1.3" fill="${BRZ}"/>`;
+  // ceinture (plaque de bronze chez les Ibères)
+  body+=L.belt==='plate'?`<path d="M58 106 Q80 110 102 106 L102 112 Q80 116 58 112Z" fill="#6a4426" ${S}/><rect x="73" y="105" width="14" height="9" rx="1.5" fill="${BRZ}" ${S}/><path d="M76 108 h8 M76 111 h8" stroke="${BRZs}" stroke-width="1"/>`
+    :`<path d="M58 106 Q80 110 102 106 L102 110 Q80 114 58 110Z" fill="#6a4426" ${S}/><rect x="77" y="106" width="6" height="6" rx="1" fill="${BRZ}" ${S}/>`;
+  // fourreau de l'épée longue, à la hanche
+  if(d.arm==='longue'&&!mounted)body+=`<path d="M100 108 l9 40 l-4 1 l-9 -40z" fill="#4a3324" ${S}/><path d="M104 144 l2 5 l-3 1z" fill="${IRN}"/>`;
+  // ---- bras droit (côté gauche de l'image) et épaules
+  const sleeve=d.armor==='maille'?`url(#${id}m)`:d.armor==='ecailles'?`url(#${id}s)`:d.armor==='lin'?LIN:d.armor==='bronze'?'#e9dcc0':d.armor==='cuir'?'#8a5a32':L.tun;
+  armL+=`<path d="M60 63 Q50 66 49 80 L51 96 L59 96 L60 80Z" fill="${L.skin}" ${S}/><path d="M57 70 L59 95" stroke="${L.sh}" stroke-width="2"/><path d="M61 61 Q49 62 48 76 L59 77Z" fill="${sleeve}" ${S}/>`;
+  armL+=`<path d="M99 61 Q111 62 112 76 L101 77Z" fill="${sleeve}" ${S}/><path d="M101 76 L111 76 L110 92 L104 94Z" fill="${L.skin}" ${S}/>`;
+  if(MT)armL+=`<path d="M60 60 Q70 57 80 62 L74 74 Q64 72 57 68Z" fill="${MT[0]}" ${S}/><circle cx="76" cy="64" r="2.6" fill="${GOLD}" ${S} stroke-width=".8"/>`;
+  if(vet)armL+=`<circle cx="70" cy="66" r="2.6" fill="${GOLD}" ${S} stroke-width=".8"/><circle cx="90" cy="66" r="2.6" fill="${GOLD}" ${S} stroke-width=".8"/>`;
+  // ---- cou, visage, coiffure, barbe, torque
+  head+=`<path d="M74 50 h12 v12 h-12z" fill="${L.sh}" ${S}/>`;
+  if(L.torque)head+=`<path d="M72 59 Q80 66 88 59" stroke="${GOLD}" stroke-width="3" fill="none"/><circle cx="72" cy="59" r="2" fill="${GOLD}" ${S} stroke-width=".7"/><circle cx="88" cy="59" r="2" fill="${GOLD}" ${S} stroke-width=".7"/>`;
+  if(L.hs==='long'&&d.helm!=='fer')head+=`<path d="M67 40 Q64 56 68 62 L74 56 L72 44Z M93 40 Q96 56 92 62 L86 56 L88 44Z" fill="${L.hair}" ${S}/>`;
+  if(L.hs==='locks')head+=`<path d="M68 42 q-3 10 -1 18 M71 44 q-2 9 0 16 M92 42 q3 10 1 18 M89 44 q2 9 0 16" stroke="${L.hair}" stroke-width="2.6" fill="none"/>`;
+  head+=`<ellipse cx="68.5" cy="45" rx="2.4" ry="3.6" fill="${L.sh}" ${S} stroke-width=".9"/><ellipse cx="91.5" cy="45" rx="2.4" ry="3.6" fill="${L.sh}" ${S} stroke-width=".9"/>`;
+  head+=`<path d="M69 40 Q69 30 80 30 Q91 30 91 40 L91 48 Q90 57 80 58 Q70 57 69 48Z" fill="${L.skin}" ${S}/><path d="M86 33 Q91 36 91 44 L91 48 Q90 55 84 57 Q88 48 86 33Z" fill="${L.sh}" opacity=".55"/>`;
+  head+=`<path d="M73.5 43 h4 M82.5 43 h4" stroke="${INK}" stroke-width="1.1"/><circle cx="76" cy="45.2" r="1.15" fill="${INK}"/><circle cx="84.5" cy="45.2" r="1.15" fill="${INK}"/><path d="M80.5 45 l-1.4 5.2 h2.6" stroke="${L.sh}" stroke-width="1.1" fill="none"/>`;
+  if(L.beard==='short')head+=`<path d="M70 47 Q71 58 80 59 Q89 58 90 47 Q88 53 80 53.5 Q72 53 70 47Z" fill="${L.hair}" ${S} stroke-width=".8"/><path d="M77 54.5 h6" stroke="${L.skin}" stroke-width="1"/>`;
+  else if(L.beard==='moust')head+=`<path d="M74 54 Q77 51 80.2 52.6 Q83.4 51 86.4 54 Q86.6 58 85 59 Q83.5 55.5 80.2 55 Q77 55.5 75.4 59 Q73.8 58 74 54Z" fill="${L.hair}" ${S} stroke-width=".8"/>`;
+  else head+=`<path d="M77 54.5 q3 1.4 6 0" stroke="${L.sh}" stroke-width="1.1" fill="none"/>`;
+  // cheveux visibles sous le casque ou tête nue
+  if(d.helm==='nu'){
+    if(L.hs==='curly'||L.hs==='locks')head+=`<path d="M68 42 Q66 28 80 27 Q94 28 92 42 Q89 34 80 34 Q71 34 68 42Z" fill="${L.hair}" ${S}/>`+[72,76,80,84,88].map((x,i)=>`<circle cx="${x}" cy="${30+(i%2)}" r="3.2" fill="${L.hair}"/>`).join('');
+    else if(L.hs==='long')head+=`<path d="M67 44 Q64 27 80 26 Q96 27 93 44 Q90 34 82 33 Q76 36 70 35 Q68 38 67 44Z" fill="${L.hair}" ${S}/><path d="M74 30 q4 3 8 1 M84 29 q3 3 6 4" stroke="#8a5e24" stroke-width="1" fill="none"/>`;
+    else head+=`<path d="M68 41 Q67 29 80 28 Q93 29 92 41 Q89 33 80 33 Q71 33 68 41Z" fill="${L.hair}" ${S}/>`;
+  }
+  // ---- casques
+  if(d.helm==='cuir')head+=`<path d="M67 42 Q66 27 80 26 Q94 27 93 42 Q80 39 67 42Z" fill="#76512f" ${S}/><path d="M67 42 Q80 38.5 93 42" stroke="#4d321b" stroke-width="2" fill="none"/><path d="M80 26 v13 M73 28 l2 11 M87 28 l-2 11" stroke="#4d321b" stroke-width="1" fill="none"/>`;
+  if(d.helm==='bronze')head+=`<path d="M66 43 Q65 25 80 24 Q95 25 94 43Z" fill="${BRZ}" ${S}/><path d="M88 27 Q94 31 94 43 L89 43 Q90 33 86 27Z" fill="${BRZs}"/><path d="M64 43 h32 q0 3 -3 3 h-26 q-3 0 -3 -3z" fill="${BRZ}" ${S}/><path d="M69 31 q4 -4 9 -5" stroke="${BRZh}" stroke-width="1.8" fill="none"/>
+    <path d="M78 24 l1 -5 h2 l1 5z" fill="${BRZ}" ${S}/><circle cx="80" cy="18" r="2.6" fill="${BRZ}" ${S}/><path d="M68 45 q-1 6 2 9 l3 -1 q-1 -5 0 -8z M92 45 q1 6 -2 9 l-3 -1 q1 -5 0 -8z" fill="${BRZ}" ${S} stroke-width=".9"/>`;
+  if(d.helm==='fer')head+=`<path d="M66 43 Q65 25 80 24 Q95 25 94 43Z" fill="${IRN}" ${S}/><path d="M88 27 Q94 31 94 43 L89 43 Q90 33 86 27Z" fill="${IRNs}"/><path d="M93 40 l6 4 q-1 3 -4 3 l-4 -2z M67 40 l-6 4 q1 3 4 3 l4 -2z" fill="${IRN}" ${S}/>
+    <path d="M67 37 Q80 33 93 37" stroke="${BRZ}" stroke-width="2.2" fill="none"/><path d="M69 31 q4 -4 9 -5" stroke="${IRNh}" stroke-width="1.8" fill="none"/><circle cx="80" cy="24" r="2" fill="${BRZ}" ${S} stroke-width=".8"/>
+    <path d="M67 42 h7 l1 9 q-2 6 -6 5 q-2 -6 -2 -14z M93 42 h-7 l-1 9 q2 6 6 5 q2 -6 2 -14z" fill="${IRN}" ${S}/><circle cx="70" cy="47" r=".9" fill="${IRNs}"/><circle cx="90" cy="47" r=".9" fill="${IRNs}"/>`;
+  if(d.helm==='pilos')head+=`<path d="M66 43 Q72 38 80 12 Q88 38 94 43Z" fill="${BRZ}" ${S}/><path d="M84 22 Q88 36 94 43 L88 43 Q86 32 82 20Z" fill="${BRZs}"/><path d="M63 43 h34 q0 3 -3 3 h-28 q-3 0 -3 -3z" fill="${BRZ}" ${S}/><path d="M74 32 q3 -9 5 -16" stroke="${BRZh}" stroke-width="1.6" fill="none"/>`;
+  if(d.helm==='attique')head+=`<path d="M66 43 Q65 25 80 24 Q95 25 94 43Z" fill="${BRZ}" ${S}/><path d="M88 27 Q94 31 94 43 L89 43 Q90 33 86 27Z" fill="${BRZs}"/><path d="M65 41 Q72 34 80 38 Q88 34 95 41 L95 44 Q88 38 80 42 Q72 38 65 44Z" fill="${BRZh}" ${S} stroke-width=".9"/>
+    <path d="M67 43 h6 l1 7 q-3 4 -6 1z M93 43 h-6 l-1 7 q3 4 6 1z" fill="${BRZ}" ${S}/><path d="M70 33 q-2 -4 2 -5 q3 0 2 3" stroke="${BRZs}" stroke-width="1.1" fill="none"/><path d="M90 33 q2 -4 -2 -5 q-3 0 -2 3" stroke="${BRZs}" stroke-width="1.1" fill="none"/>`;
+  if(d.helm==='thrace')head+=`<path d="M66 44 Q63 26 78 21 Q86 18 91 24 Q95 30 94 44Z" fill="${BRZ}" ${S}/><path d="M78 21 Q84 10 94 13 Q92 19 88 23Z" fill="${BRZ}" ${S}/><path d="M89 24 Q95 30 94 44 L89 44 Q90 32 86 24Z" fill="${BRZs}"/>
+    <path d="M63 40 Q80 34 97 40 L97 43 Q80 37 63 43Z" fill="${BRZ}" ${S}/><path d="M66 43 h8 l1 8 q-1 6 -5 7 q-4 -5 -4 -15z M94 43 h-8 l-1 8 q1 6 5 7 q4 -5 4 -15z" fill="${BRZ}" ${S}/>
+    <path d="M68 47 q2 2 4 0 M68 51 q2 2 4 0 M88 47 q2 2 4 0 M88 51 q2 2 4 0" stroke="${BRZs}" stroke-width="1" fill="none"/><path d="M70 30 q4 -6 9 -7" stroke="${BRZh}" stroke-width="1.8" fill="none"/>`;
+  if(d.helm==='corinthien')head+=`<path d="M64 46 Q62 22 80 21 Q98 22 96 46 L95 59 Q90 62 85 59 L84 47 L90 46 L90 40 L70 40 L70 46 L76 47 L75 59 Q70 62 65 59Z" fill="${BRZ}" ${S}/><path d="M89 24 Q96 30 96 46 L95 59 Q92 61 89 60 Q92 44 87 25Z" fill="${BRZs}"/><path d="M79 40 h2 v8 h-2z" fill="${BRZ}" ${S} stroke-width=".8"/>
+    <path d="M66 38 Q73 34 79 38 M81 38 Q87 34 94 38" stroke="${BRZs}" stroke-width="1.3" fill="none"/><path d="M69 30 q4 -5 10 -6" stroke="${BRZh}" stroke-width="1.8" fill="none"/>`;
+  if(d.helm==='beotien')head+=`<path d="M68 42 Q67 24 80 23 Q93 24 92 42Z" fill="${BRZ}" ${S}/><path d="M87 26 Q93 30 92 42 L88 42 Q89 32 85 26Z" fill="${BRZs}"/>
+    <path d="M59 43 Q62 35 70 39 Q80 34 90 39 Q98 35 101 43 Q98 51 91 46 Q80 43 69 46 Q62 51 59 43Z" fill="${BRZ}" ${S}/><path d="M63 43 Q68 39 72 42 M88 42 Q92 39 97 43" stroke="${BRZh}" stroke-width="1.2" fill="none"/><path d="M71 29 q4 -4 9 -4" stroke="${BRZh}" stroke-width="1.6" fill="none"/>`;
+  if(d.helm==='petase')head+=`<path d="M68 41 Q67 31 80 30 Q93 31 92 41 Q89 34 80 34 Q71 34 68 41Z" fill="${L.hair}" ${S}/><path d="M72 36 Q71 23 80 23 Q89 23 88 36Z" fill="#b8975e" ${S}/><path d="M85 25 Q89 28 88 36 L85 36 Q86 30 83 25Z" fill="#94753f"/>
+    <ellipse cx="80" cy="37" rx="23" ry="4.6" fill="#b8975e" ${S}/><path d="M60 38 Q80 43 100 38" stroke="#94753f" stroke-width="1.4" fill="none"/><path d="M72 36 h16" stroke="#6a4426" stroke-width="2"/><path d="M70 42 Q72 56 80 58 M90 42 Q88 56 80 58" stroke="#6a4426" stroke-width=".9" fill="none"/>`;
+  if(d.helm==='phrygien'){const pc=L.braies==='zig'?'#9b2a22':'#a0683a';
+    head+=`<path d="M66 44 Q63 26 76 21 Q86 17 90 6 Q98 14 95 28 Q96 36 94 44Z" fill="${pc}" ${S}/><path d="M90 6 Q98 14 95 28 Q96 36 94 44 L89 44 Q92 30 90 22Z" fill="#000" opacity=".2"/><path d="M64 44 h32" stroke="${INK}" stroke-width="1.2"/>
+    <path d="M66 43 Q63 52 64 60 L71 58 Q70 50 71 44Z M94 43 Q97 52 96 60 L89 58 Q90 50 89 44Z" fill="${pc}" ${S}/><path d="M68 32 q6 -8 14 -9" stroke="#fff" stroke-width="1.2" opacity=".35" fill="none"/>${L.braies==='zig'?`<path d="M67 40 l3 -3 l3 3 l3 -3 l3 3 l3 -3 l3 3 l3 -3 l3 3 l3 -3" stroke="#e3c27a" stroke-width="1.1" fill="none"/>`:''}`}
+  // peau de loup des vélites, par-dessus le casque
+  if(L.pelt)head+=`<path d="M65 46 Q60 58 62 70 L70 62 L68 46Z M95 46 Q100 58 98 70 L90 62 L92 46Z" fill="#7d6b57" ${S}/><path d="M64 44 Q61 21 80 19 Q99 21 96 44 Q91 36 80 36 Q69 36 64 44Z" fill="#8a7862" ${S}/>
+    <path d="M68 24 l-1 -9 l7 5z M92 24 l1 -9 l-7 5z" fill="#8a7862" ${S}/><path d="M74 33 Q80 41 86 33 Q83 28 80 28 Q77 28 74 33Z" fill="#a8977e" ${S} stroke-width=".9"/><circle cx="80" cy="29.4" r="1.4" fill="${INK}"/><circle cx="74.5" cy="26" r=".9" fill="${INK}"/><circle cx="85.5" cy="26" r=".9" fill="${INK}"/>
+    <path d="M67 30 q3 -2 5 1 M93 30 q-3 -2 -5 1 M70 40 l-2 3 M90 40 l2 3" stroke="#5e4f3e" stroke-width=".9" fill="none"/>`;
+  // cimiers : posés au sommet du casque (plus haut sur le pilos)
+  const cy={pilos:-10,thrace:-6,corinthien:-2,beotien:1}[d.helm]||0,RED='#9b1f1a',REDs='#741612';
+  let cr='';
+  if(d.crest==='crin')cr=`<path d="M80 21 Q66 4 54 18 Q58 20 61 26 Q70 14 80 24Z" fill="${RED}" ${S}/><path d="M80 21 Q94 4 106 18 Q102 20 99 26 Q90 14 80 24Z" fill="${REDs}" ${S}/><path d="M62 18 q8 -8 16 0 M84 14 q8 -2 16 4" stroke="#c4392f" stroke-width="1" fill="none"/>`;
+  if(d.crest==='crete')cr=`<path d="M74 24 Q70 4 80 -4 Q90 4 86 24Z" fill="${RED}" ${S}/><path d="M80 -4 Q90 4 86 24 L82 24 Q85 8 80 -4Z" fill="${REDs}"/><path d="M76 20 q-2 -12 3 -20 M80 22 v-22 M84 20 q2 -12 -2 -20" stroke="#c4392f" stroke-width=".9" fill="none"/><path d="M75 24 h10 v-4 h-10z" fill="${BRZ}" ${S}/>`;
+  if(d.crest==='noire')cr=`<path d="M74 24 Q70 4 80 -4 Q90 4 86 24Z" fill="#231a14" ${S}/><path d="M76 20 q-2 -12 3 -20 M80 22 v-22 M84 20 q2 -12 -2 -20" stroke="#4a3a2e" stroke-width=".9" fill="none"/><path d="M75 24 h10 v-4 h-10z" fill="${BRZ}" ${S}/><path d="M86 6 q12 4 14 20 q-6 -8 -12 -10z" fill="${RED}" ${S}/>`;
+  if(d.crest==='aigrette')cr=`<path d="M79 22 q-6 -18 3 -34 q5 18 -3 34z" fill="#f4efe1" ${S} stroke-width=".9"/><path d="M79 20 q-1 -16 3 -30" stroke="#a89c80" stroke-width=".7" fill="none"/><path d="M77.5 24 h5 v-5 h-5z" fill="${BRZ}" ${S}/>`;
+  if(d.crest==='plumes')cr=['M80 22 q-5 -16 -1 -26 q5 10 1 26z','M74 25 q-10 -12 -10 -22 q8 6 10 22z','M86 25 q10 -12 10 -22 q-8 6 -10 22z'].map((p,i)=>`<path d="${p}" fill="${i?'#e9e2cf':'#f4efe1'}" ${S} stroke-width=".9"/>`).join('')+`<path d="M80 21 q-1 -12 -1 -22 M74 24 q-5 -8 -8 -18 M86 24 q5 -8 8 -18" stroke="#a89c80" stroke-width=".7" fill="none"/>`;
+  if(d.crest==='cornes')cr=`<path d="M69 32 Q56 30 53 12 Q55 10 57 12 Q60 24 71 27Z" fill="${BRZ}" ${S}/><path d="M91 32 Q104 30 107 12 Q105 10 103 12 Q100 24 89 27Z" fill="${BRZ}" ${S}/><path d="M57 14 q2 10 10 14" stroke="${BRZh}" stroke-width="1.2" fill="none"/><circle cx="54" cy="12" r="2" fill="${BRZh}" ${S} stroke-width=".7"/><circle cx="106" cy="12" r="2" fill="${BRZh}" ${S} stroke-width=".7"/>`;
+  if(d.crest==='roue')cr=`<path d="M78 24 v-8 h4 v8z" fill="${BRZ}" ${S}/><circle cx="80" cy="8" r="9" fill="none" stroke="${INK}" stroke-width="4"/><circle cx="80" cy="8" r="9" fill="none" stroke="${BRZ}" stroke-width="2.4"/><path d="M80 -1 v18 M71 8 h18 M74 2 l12 12 M86 2 l-12 12" stroke="${BRZ}" stroke-width="1.4"/><circle cx="80" cy="8" r="2" fill="${BRZ}" ${S} stroke-width=".7"/>`;
+  if(cr)head+=`<g transform="translate(0 ${cy})">${cr}</g>`;
+  // ---- arme principale (main droite)
+  const hx=54,hy=96;
+  if(d.arm==='lance')front+=`<line x1="${hx-3}" y1="4" x2="${hx+3}" y2="158" stroke="${WOODs}" stroke-width="3.6"/><line x1="${hx-3}" y1="4" x2="${hx+3}" y2="158" stroke="${WOOD}" stroke-width="2"/><path d="M${hx-3} 6 q-4 -6 0 -18 q4 12 0 18z" fill="${IRN}" ${S}/><path d="M${hx-3} -10 v14" stroke="${IRNh}" stroke-width=".8"/>`;
+  if(d.arm==='sarisse')front+=`<line x1="${hx-7}" y1="-24" x2="${hx+3}" y2="158" stroke="${WOODs}" stroke-width="3.4"/><line x1="${hx-7}" y1="-24" x2="${hx+3}" y2="158" stroke="${WOOD}" stroke-width="1.8"/><path d="M${hx-7} -22 q-3 -4 0 -12 q3 8 0 12z" fill="${IRN}" ${S}/><rect x="${hx-6}" y="70" width="4" height="6" fill="${BRZ}" ${S} stroke-width=".7"/>`;
+  if(d.arm==='epee')front+=`<path d="M${hx+1} ${hy-3} Q${hx-6} ${hy-22} ${hx-1} ${hy-40} Q${hx+8} ${hy-30} ${hx+4} ${hy-3}Z" fill="#cfd4d8" ${S}/><path d="M${hx+1} ${hy-8} Q${hx-2} ${hy-24} ${hx} ${hy-36}" stroke="${IRNs}" stroke-width=".8" fill="none"/><path d="M${hx-5} ${hy-3} h14" stroke="${INK}" stroke-width="3.4"/><path d="M${hx-5} ${hy-3} h14" stroke="${BRZ}" stroke-width="2"/><path d="M${hx+2} ${hy-1} q6 4 2 8" stroke="${BRZ}" stroke-width="2" fill="none"/>`;
+  if(d.arm==='longue')front+=`<path d="M${hx} ${hy-4} L${hx-1} ${hy-56} L${hx+2.5} ${hy-61} L${hx+6} ${hy-56} L${hx+5} ${hy-4}Z" fill="#cfd4d8" ${S}/><path d="M${hx+2.5} ${hy-8} V${hy-56}" stroke="${IRNs}" stroke-width=".8"/><path d="M${hx-4} ${hy-4} h13" stroke="${INK}" stroke-width="3.4"/><path d="M${hx-4} ${hy-4} h13" stroke="${IRN}" stroke-width="2"/><circle cx="${hx+2.5}" cy="${hy+7}" r="2.4" fill="${IRN}" ${S}/>`;
+  if(d.arm==='dague')front+=`<path d="M${hx+1} ${hy-3} L${hx} ${hy-20} L${hx+2.5} ${hy-24} L${hx+5} ${hy-20} L${hx+4} ${hy-3}Z" fill="#cfd4d8" ${S}/><path d="M${hx-3} ${hy-3} h11" stroke="${INK}" stroke-width="3"/><path d="M${hx-3} ${hy-3} h11" stroke="${BRZ}" stroke-width="1.6"/>`;
+  if(d.arm==='hache')front+=`<path d="M${hx+1} ${hy+10} L${hx-1} ${hy-44}" stroke="${WOODs}" stroke-width="4" stroke-linecap="round"/><path d="M${hx+1} ${hy+10} L${hx-1} ${hy-44}" stroke="${WOOD}" stroke-width="2.4" stroke-linecap="round"/><path d="M${hx} ${hy-42} Q${hx-12} ${hy-50} ${hx-17} ${hy-40} Q${hx-15} ${hy-30} ${hx} ${hy-32}Z" fill="${IRN}" ${S}/><path d="M${hx-16} ${hy-41} Q${hx-15} ${hy-34} ${hx-11} ${hy-32}" stroke="${IRNh}" stroke-width="1.2" fill="none"/><path d="M${hx} ${hy-44} l4 2 v8 l-4 2z" fill="${IRN}" ${S} stroke-width=".8"/>`;
+  if(d.arm==='glaive')front+=`<path d="M${hx} ${hy-4} L${hx-.6} ${hy-36} L${hx+2.5} ${hy-43} L${hx+5.6} ${hy-36} L${hx+5} ${hy-4}Z" fill="#cfd4d8" ${S}/><path d="M${hx+2.5} ${hy-8} V${hy-37}" stroke="${IRNs}" stroke-width=".8"/><path d="M${hx-3} ${hy-4} h11 q1 -3 -1 -4 h-9 q-2 1 -1 4z" fill="#e9dcc0" ${S} stroke-width=".9"/><circle cx="${hx+2.5}" cy="${hy+7}" r="3" fill="#e9dcc0" ${S} stroke-width=".9"/>`;
+  if(d.arm==='kopis')front+=`<path d="M${hx+1} ${hy-4} Q${hx-3} ${hy-22} ${hx+4} ${hy-42} Q${hx+12} ${hy-38} ${hx+10} ${hy-28} Q${hx+6} ${hy-16} ${hx+5} ${hy-4}Z" fill="#cfd4d8" ${S}/><path d="M${hx+1.5} ${hy-10} Q${hx} ${hy-24} ${hx+5} ${hy-38}" stroke="${IRNs}" stroke-width=".8" fill="none"/><path d="M${hx-3} ${hy-4} h11" stroke="${INK}" stroke-width="3.2"/><path d="M${hx-3} ${hy-4} h11" stroke="${BRZ}" stroke-width="1.8"/><path d="M${hx+1} ${hy+4} q-6 4 -2 9" stroke="${BRZ}" stroke-width="2.2" fill="none"/>`;
+  if(d.arm==='xyston')front+=`<line x1="${hx-8}" y1="-16" x2="${hx+4}" y2="160" stroke="${WOODs}" stroke-width="3.4"/><line x1="${hx-8}" y1="-16" x2="${hx+4}" y2="160" stroke="${WOOD}" stroke-width="1.8"/><path d="M${hx-8} -14 q-4 -6 0 -18 q4 12 0 18z" fill="${IRN}" ${S}/><path d="M${hx+4} 156 l1 8 l-3 -1z" fill="${IRN}" ${S} stroke-width=".8"/>`;
+  if(d.jet==='fronde')front+=`<path d="M${hx+2} ${hy+2} q-8 14 -5 28 M${hx+4} ${hy+2} q2 14 -1 28" stroke="#ddd2b6" stroke-width="1.3" fill="none"/><ellipse cx="${hx}" cy="${hy+31}" rx="3.6" ry="2.6" fill="#8a7458" ${S} stroke-width=".8"/>`;
+  if((d.jet==='javelots'||d.jet==='soliferrum')&&mounted)front+=`<line x1="${hx-4}" y1="14" x2="${hx+4}" y2="150" stroke="${WOOD}" stroke-width="2"/><line x1="${hx}" y1="12" x2="${hx+7}" y2="148" stroke="${WOOD}" stroke-width="2"/><path d="M${hx-4} 14 l-1.4 -9 l3 7z M${hx} 12 l-1.4 -9 l3 7z" fill="${IRN}" ${S} stroke-width=".7"/>`;
+  front+=`<ellipse cx="${hx+1}" cy="${hy}" rx="5" ry="4.4" fill="${L.skin}" ${S}/><path d="M${hx-2} ${hy-1} h6 M${hx-2} ${hy+1.6} h6" stroke="${L.sh}" stroke-width=".9"/>`;
+  // ---- bouclier (bras gauche) : teinte et motif au choix (« peuple » = emblème traditionnel)
+  const sx=110,sy=88,T=SH_TINT[d.teinte]||SH_TINT.pourpre,SC=T[0],SCs=T[1],EC=T[2];
+  const mot=!d.motif||d.motif==='peuple'?((L.embP&&L.embP[peoNow()])||L.emb):d.motif;
+  const emb=(cx,cy,r,col)=>embSVG(mot,cx,cy,r,col);
+  if(d.shield==='pelte')shield=`<path d="M${sx-19} ${sy-15} Q${sx} ${sy-3} ${sx+19} ${sy-15} Q${sx+22} ${sy+14} ${sx} ${sy+20} Q${sx-22} ${sy+14} ${sx-19} ${sy-15}Z" fill="#a07a4a" ${S}/>`+[-12,-6,0,6,12].map(o=>`<path d="M${sx+o} ${sy-8+Math.abs(o)*.25} Q${sx+o*1.15} ${sy+6} ${sx+o*.8} ${sy+17-Math.abs(o)*.2}" stroke="#7a5a34" stroke-width="1" fill="none"/>`).join('')+`<path d="M${sx-19} ${sy-15} Q${sx} ${sy-3} ${sx+19} ${sy-15}" stroke="#5a3d22" stroke-width="2.4" fill="none"/>${emb(sx,sy+7,8,'#4a2f1a')}`;
+  if(d.shield==='peau')shield=`<circle cx="${sx}" cy="${sy}" r="21" fill="#c9a87a" ${S}/><path d="M${sx+5} ${sy-20.4} A21 21 0 0 1 ${sx+5} ${sy+20.4} A24 24 0 0 0 ${sx+5} ${sy-20.4}Z" fill="#a8885c"/><circle cx="${sx}" cy="${sy}" r="19" fill="none" stroke="#6a4426" stroke-width="1.2" stroke-dasharray="2.5 2"/>${[[-9,-8],[8,-11],[-12,6],[10,9],[1,13]].map(([a,b])=>`<ellipse cx="${sx+a}" cy="${sy+b}" rx="2.6" ry="1.8" fill="#7a5634" opacity=".7"/>`).join('')}${emb(sx,sy,12,'#4a2f1a')}`;
+  if(d.shield==='rond')shield=`<circle cx="${sx}" cy="${sy}" r="26" fill="${BRZ}" ${S}/><circle cx="${sx}" cy="${sy}" r="21.5" fill="${SC}" ${S} stroke-width=".9"/><path d="M${sx+6} ${sy-20.5} A21.5 21.5 0 0 1 ${sx+6} ${sy+20.5} A26 26 0 0 0 ${sx+6} ${sy-20.5}Z" fill="${SCs}" opacity=".55"/>${emb(sx,sy,15,EC)}<path d="M${sx-18} ${sy-12} A22 22 0 0 1 ${sx-6} ${sy-22}" stroke="${BRZh}" stroke-width="1.6" fill="none"/>`;
+  if(d.shield==='ovale')shield=`<ellipse cx="${sx}" cy="${sy+4}" rx="19" ry="36" fill="${SC}" ${S}/><path d="M${sx+6} ${sy-30} Q${sx+20} ${sy+4} ${sx+6} ${sy+38} Q${sx+19} ${sy+4} ${sx+6} ${sy-30}Z" fill="${SCs}"/><ellipse cx="${sx}" cy="${sy+4}" rx="17" ry="34" fill="none" stroke="#e3d6b3" stroke-width="1.6"/>${emb(sx,sy-14,10,EC)}${emb(sx,sy+22,10,EC)}<path d="M${sx} ${sy-30} V${sy+38}" stroke="#5a3d22" stroke-width="3.2"/><path d="M${sx-5} ${sy-5} h10 v18 h-10z" fill="${IRN}" ${S}/><path d="M${sx-3} ${sy-3} v12" stroke="${IRNh}" stroke-width="1"/>`;
+  if(d.shield==='scutum')shield=`<path d="M${sx-20} ${sy-34} Q${sx} ${sy-40} ${sx+20} ${sy-34} L${sx+20} ${sy+36} Q${sx} ${sy+42} ${sx-20} ${sy+36}Z" fill="${SC}" ${S}/><path d="M${sx+11} ${sy-37} Q${sx+18} ${sy-36} ${sx+20} ${sy-34} L${sx+20} ${sy+36} Q${sx+16} ${sy+38} ${sx+11} ${sy+39}Z" fill="${SCs}"/><path d="M${sx-20} ${sy-34} Q${sx} ${sy-40} ${sx+20} ${sy-34} M${sx-20} ${sy+36} Q${sx} ${sy+42} ${sx+20} ${sy+36}" stroke="${BRZ}" stroke-width="2.6" fill="none"/>
+    ${emb(sx,sy-18,9,EC)}${emb(sx,sy+22,9,EC)}<circle cx="${sx}" cy="${sy+2}" r="7.5" fill="${BRZ}" ${S}/><circle cx="${sx-2}" cy="${sy}" r="2.4" fill="${BRZh}"/><path d="M${sx-16} ${sy+2} h8 M${sx+8} ${sy+2} h8" stroke="${EC}" stroke-width="2"/>`;
+  if(d.shield==='parma')shield=`<circle cx="${sx}" cy="${sy}" r="19" fill="${IRN}" ${S}/><circle cx="${sx}" cy="${sy}" r="16" fill="${SC}" ${S} stroke-width=".9"/><path d="M${sx+5} ${sy-15.2} A16 16 0 0 1 ${sx+5} ${sy+15.2} A19 19 0 0 0 ${sx+5} ${sy-15.2}Z" fill="${SCs}" opacity=".55"/>${emb(sx,sy,10.5,EC)}<circle cx="${sx}" cy="${sy}" r="3.6" fill="${IRN}" ${S} stroke-width=".9"/><path d="M${sx-13} ${sy-9} A16 16 0 0 1 ${sx-5} ${sy-16}" stroke="${IRNh}" stroke-width="1.4" fill="none"/>`;
+  if(d.shield==='hoplon')shield=`<circle cx="${sx}" cy="${sy+3}" r="31" fill="${BRZ}" ${S}/><circle cx="${sx}" cy="${sy+3}" r="25" fill="${SC}" ${S} stroke-width=".9"/><path d="M${sx+7} ${sy-21} A25 25 0 0 1 ${sx+7} ${sy+27} A30 30 0 0 0 ${sx+7} ${sy-21}Z" fill="${SCs}" opacity=".55"/>${emb(sx,sy+3,18,EC)}<circle cx="${sx}" cy="${sy+3}" r="28" fill="none" stroke="${BRZs}" stroke-width="1" stroke-dasharray="1.2 2.6"/><path d="M${sx-24} ${sy-12} A30 30 0 0 1 ${sx-8} ${sy-26}" stroke="${BRZh}" stroke-width="2" fill="none"/>`;
+  if(d.shield==='macedonien')shield=`<circle cx="${sx}" cy="${sy}" r="23" fill="${BRZ}" ${S}/><circle cx="${sx}" cy="${sy}" r="19.5" fill="${SC}" ${S} stroke-width=".9"/>${[...Array(8)].map((_,i)=>{const a=i*Math.PI/4,x=sx+Math.cos(a)*14,y=sy+Math.sin(a)*14;return `<path d="M${x-3.4} ${y} a3.4 3.4 0 0 1 6.8 0" transform="rotate(${i*45+90} ${x} ${y})" fill="none" stroke="${EC}" stroke-width="1.3"/>`}).join('')}${emb(sx,sy,7.5,EC)}<path d="M${sx-17} ${sy-10} A20 20 0 0 1 ${sx-6} ${sy-19}" stroke="${BRZh}" stroke-width="1.6" fill="none"/>`;
+  if(d.shield==='aucun')shield=`<ellipse cx="106" cy="94" rx="4.6" ry="4.2" fill="${L.skin}" ${S}/>`;
+  // ---- assemblage
+  const defs=`<defs><pattern id="${id}m" width="3.6" height="3.2" patternUnits="userSpaceOnUse"><rect width="3.6" height="3.2" fill="${IRN}"/><path d="M0 1.6 q.9 -1.4 1.8 0 q.9 1.4 1.8 0" stroke="${IRNs}" stroke-width=".6" fill="none"/></pattern>
+    <pattern id="${id}s" width="5" height="4.4" patternUnits="userSpaceOnUse"><rect width="5" height="4.4" fill="${BRZ}"/><path d="M0 0 q2.5 4.6 5 0" stroke="${BRZs}" stroke-width=".8" fill="${BRZ}"/><path d="M1 1 q1.5 2 3 0" stroke="${BRZh}" stroke-width=".5" fill="none"/></pattern>
+ <pattern id="${id}z" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#c08a3e"/><path d="M0 4 l1.5 -2 l1.5 2 l1.5 -2 l1.5 2" stroke="#4a2a18" stroke-width="1" fill="none"/><path d="M0 0.5h6" stroke="#9b2a22" stroke-width="1"/></pattern>
+    <pattern id="${id}b" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#7a5a2e"/><path d="M0 3h6M3 0v6" stroke="#b08a44" stroke-width="1.4"/><path d="M0 0h6" stroke="#4e3a1e" stroke-width=".8"/></pattern>
+    <radialGradient id="${id}g" cx="50%" cy="78%" r="60%"><stop offset="0" stop-color="#d6b878" stop-opacity=".22"/><stop offset="1" stop-color="#d6b878" stop-opacity="0"/></radialGradient></defs>`;
+  const man=back+legs+body+armL+head+front+shield;
+  const sz=small?'class="doll mini"':'class="doll"';
+  if(!mounted)return `<svg viewBox="0 -24 160 186" ${sz} role="img" aria-label="${esc(d.name||dAutoName(d))}">${defs}<ellipse cx="80" cy="157" rx="40" ry="5" fill="#000" opacity=".25"/>${man}</svg>`;
+  // ---- monture : cheval de profil (tapis de selle pour les cavaliers, monté à cru avec une simple corde pour les Numides)
+  const nu=k==='lcav',coat=nu?'#a87444':'#5a3a24',coatS=nu?'#7e5530':'#3c2616',coatH=nu?'#c89462':'#7a5236',mane=nu?'#3a2414':'#1c120b';
+  // jambe : épaule/cuisse, genou ou jarret, canon fin, sabot ; dx décale le pied (pas)
+  const leg=(x,top,dx,c,hind)=>{const kx=hind?x-4:x,ky=top+(hind?24:20);
+    return `<path d="M${x-7} ${top} Q${x-8} ${top+12} ${kx-3} ${ky} L${x-2+dx} 149 L${x+3+dx} 149 L${kx+3} ${ky} Q${x+7} ${top+10} ${x+7} ${top}Z" fill="${c}" ${S}/><path d="M${x-3+dx} 149 h7 l1 6 h-9z" fill="#2a1d14" ${S} stroke-width=".9"/><path d="M${x-2+dx} 146 h5" stroke="${coatH}" stroke-width="1.2" opacity=".6"/>`};
+  const horse=`<ellipse cx="82" cy="157" rx="58" ry="4.5" fill="#000" opacity=".25"/>
+    <path d="M42 98 Q28 100 26 118 Q25 134 32 146 Q33 130 37 120 Q40 110 47 104Z" fill="${mane}" ${S}/><path d="M30 120 q2 12 2 20 M34 112 q0 14 1 26" stroke="#4a3624" stroke-width=".9" fill="none"/>
+    ${leg(52,112,6,coatS,1)}${leg(118,108,-6,coatS,0)}
+    <path d="M44 100 Q46 86 64 86 L100 86 Q112 84 122 92 Q130 100 128 112 Q126 124 112 125 L62 127 Q46 126 42 116 Q40 106 44 100Z" fill="${coat}" ${S}/>
+    <path d="M62 122 Q86 128 112 122 Q120 120 124 114 Q120 126 108 127 L64 128 Q52 127 46 120 Q54 124 62 122Z" fill="${coatS}"/><path d="M60 89 Q80 86 100 88" stroke="${coatH}" stroke-width="1.6" fill="none"/>
+    ${leg(60,114,-4,coat,1)}${leg(110,110,6,coat,0)}
+    <path d="M106 90 Q110 70 126 56 L134 50 Q142 52 142 60 Q136 70 132 80 Q128 94 126 104 Q118 98 106 90Z" fill="${coat}" ${S}/>
+    <path d="M128 50 Q134 44 141 47 L156 66 Q159 74 152 76 Q146 77 141 71 L131 60Z" fill="${coat}" ${S}/>
+    <path d="M150 74 Q156 74 156 68 L157 70 Q158 76 152 77Z" fill="${coatS}"/><circle cx="153.5" cy="70" r="1" fill="${INK}"/><path d="M147 74 q3 2 7 1" stroke="${INK}" stroke-width=".9" fill="none"/>
+    <path d="M139 55.5 q2 -1.6 3.6 .6" stroke="${INK}" stroke-width="1.1" fill="none"/><circle cx="140.6" cy="57" r="1.1" fill="${INK}"/>
+    <path d="M131 51 l0 -10 l5 8z M135 49 l2 -9 l3 8z" fill="${coat}" ${S} stroke-width=".9"/>
+    <path d="M131 50 Q120 58 112 72 Q106 82 104 92 L110 92 Q111 82 117 72 Q124 62 134 54Z" fill="${mane}" ${S} stroke-width=".9"/><path d="M114 70 l-4 6 M120 62 l-4 6 M126 56 l-4 5 M110 80 l-4 6" stroke="#4a3624" stroke-width=".8"/>
+    ${nu?`<path d="M136 58 Q138 66 144 72 M136 58 Q120 74 104 86" stroke="#c9b48a" stroke-width="1.2" fill="none"/>`
+       :`<path d="M131 58 L150 70 M136 50 L141 63 L131 58" stroke="#5a3b22" stroke-width="1.6" fill="none"/><circle cx="141" cy="63" r="1.6" fill="${BRZ}"/><path d="M141 63 Q120 78 100 84" stroke="#5a3b22" stroke-width="1.3" fill="none"/>
+         <path d="M66 84 h40 l3 26 q-25 6 -49 0z" fill="${CAR}" ${S}/><path d="M60 110 q25 6 49 0" stroke="${GOLD}" stroke-width="2.4" fill="none"/>${[0,1,2,3,4,5,6,7].map(i=>`<path d="M${62+i*6.4} 112.6 v5" stroke="${GOLD}" stroke-width="1.2"/>`).join('')}<path d="M70 84 q16 -6 32 0" stroke="#3a2414" stroke-width="3" fill="none"/>`}`;
+  // cavalier : buste jusqu'aux hanches posé sur le dos, cuisse vers l'avant, jambe pendante le long du flanc, pied vers l'avant
+  const legC=L.braies?`url(#${id}${L.braies==='zig'?'z':'b'})`:L.skin,thigh=d.armor==='tunique'||d.armor==='pect'?L.tun:L.tun;
+  const rlegs=`<path d="M78 86 Q90 86 98 92 L102 100 Q96 104 90 100 Q84 96 76 96Z" fill="${thigh}" ${S}/>
+    <path d="M94 96 Q102 98 102 104 L98 128 L91 128 L92 106 Q90 101 94 96Z" fill="${legC}" ${S}/><path d="M99 104 L96 127" stroke="${L.sh}" stroke-width="1.6" opacity="${L.braies?0:1}"/>
+    ${d.jamb==='cnemides'||d.jamb==='une'?`<path d="M92.5 107 Q97 104 101.6 105 L98.4 126 L91.4 126Z" fill="${BRZ}" ${S}/><path d="M96 109 L94.4 124" stroke="${BRZh}" stroke-width="1.2"/>`:d.jamb==='bandes'?[110,115,120].map(y=>`<path d="M91.6 ${y} l9 2" stroke="#6a4426" stroke-width="2.2"/>`).join(''):''}
+    <path d="M90 127 h9 q5 1 6 4 h-15z" fill="${lev?L.skin:'#5a3b22'}" ${S}/>${lev?'':`<path d="M91 122 l7 2 M91 125 l7 -2" stroke="#5a3b22" stroke-width="1.2"/>`}`;
+  const rider=`<g transform="translate(22.5 6) scale(.74)">${back+body+armL+head+front+shield}</g>`;
+  return `<svg viewBox="0 -24 162 186" ${sz} role="img" aria-label="${esc(d.name||dAutoName(d))}">${defs}${horse}${rlegs}${rider}</svg>`;
+}
+
+/* ---- régiment en 5 petits carrés, comme sur le champ de bataille (pertes : carrés fissurés puis brisés) ---- */
+function sqSVG(k,f,big){
+  f=f==null?1:Math.max(0,Math.min(1,f));
+  const c=(FAC.car&&FAC.car.c)||[125,79,184],col=`rgb(${c.join(',')})`,dk=`rgb(${c.map(v=>Math.round(v*.62)).join(',')})`,lt=`rgb(${c.map(v=>Math.min(255,Math.round(v*1.25+20))).join(',')})`;
+  const INK='#1d150c',z=10,gap=3,sk=k==='skirm',H=sk?18:13,W=5*z+4*gap+2,nA=Math.ceil(f*5-1e-6),part=nA-f*5; // part : entame du dernier carré
+  let h='';
+  for(let i=0;i<5;i++){const x=1+i*(z+gap),y=1.5+(sk?(i%2?5:0):0);
+    if(i>=nA){h+=`<rect x="${x+1}" y="${y+1}" width="${z-2}" height="${z-2}" fill="none" stroke="${dk}" stroke-width=".8" stroke-dasharray="1.5 1.5" opacity=".6"/>`;continue}
+    const cr=i===nA-1&&part>.15;
+    h+=`<rect x="${x}" y="${y}" width="${z}" height="${z}" fill="${cr?dk:col}" stroke="${INK}" stroke-width="1"/>`;
+    if(k==='cav'||k==='lcav')h+=`<path d="M${x} ${y}h${z}L${x} ${y+z}Z" fill="#fff" opacity="${k==='lcav'?.45:.25}"/><path d="M${x+z} ${y}L${x} ${y+z}" stroke="${INK}" stroke-width="1"/>`+(k==='lcav'?`<circle cx="${x+7}" cy="${y+7}" r="1" fill="${INK}"/>`:'');
+    else if(k==='skirm')h+=[[3.2,3.6],[6.8,3.6],[5,6.8]].map(([a,b])=>`<circle cx="${x+a}" cy="${y+b}" r="1" fill="${INK}"/>`).join('');
+    else h+=`<path d="M${x+2} ${y+2}l6 6M${x+8} ${y+2}l-6 6" stroke="${INK}" stroke-width="1"/>`+(k==='eleph'?`<circle cx="${x+5}" cy="${y+5}" r="2" fill="${lt}" stroke="${INK}" stroke-width=".8"/>`:'');
+    h+=`<rect x="${x}" y="${y}" width="${z}" height="1.6" fill="${lt}"/>`; // liseré du front
+    if(cr)h+=`<path d="M${x+1} ${y+3}l3 2l1 3M${x+9} ${y+2}l-3 3l1 4" stroke="#1a1008" stroke-width=".8" fill="none"/>`;
+  }
+  return `<svg class="sq5${big?' big':''}" viewBox="0 0 ${W} ${H}" width="${W*(big?1.6:1)}" height="${H*(big?1.6:1)}" role="img" aria-label="${nA} carré${nA>1?'s':''} sur 5">${h}</svg>`;
+}
+
+/* ---- fenêtre de l'atelier ---- */
+let wsD=null;
+function newDesign(base){const P=wsPool();if(!base||!CORPS[base]||P.length&&!P.includes(base))base=P[0]||'lib';
+  return dFix(Object.assign({id:null,base,name:'',helm:'bronze',crest:'rien',armor:'lin',jamb:'aucune',shield:'rond',motif:'peuple',teinte:'pourpre',tenue:'peuple',manteau:'aucun',arm:'lance',jet:'aucune',train:'reg'},
+    (typeof S!=='undefined'&&S&&PEO_LOOK[S.peo])||{},BDEF[base]||{}))}
+function openWorkshop(id){
+  if(!S.designs)S.designs=[];
+  const src=id!=null&&desOf(id);wsD=src?dFix(Object.assign({},src)):newDesign();
+  renderWorkshop();
+}
+function renderWorkshop(){
+  const d=wsD,s=dStats(d),k=CORPS[d.base].k,mine=S.designs.filter(x=>!x.del);
+  const std=UT[d.base],cmp=(v,ref,fmt)=>{const dv=v-ref;return Math.abs(dv)<1e-6?'':`<i class="${dv>0?'up':'dn'}">${dv>0?'+':''}${fmt(dv)}</i>`};
+  const ref=STD3D[d.base]||{atk:s.atk,def:s.def,mor:s.mor}; // comparaison avec le régiment ordinaire du même corps
+  const bar=(lbl,v,max,txt,sub)=>`<div class="st"><span>${lbl}</span><span class="g"><i style="width:${Math.max(3,Math.min(100,v/max*100))}%"></i></span><b>${txt}</b>${sub?`<small>${sub}</small>`:''}</div>`;
+  const chips=sl=>`<div class="slot"><h4>${GEAR[sl].n}</h4><div class="chips">${Object.entries(GEAR[sl].o).filter(([key])=>{const o=GEAR[sl].o[key];return !o.k||o.k.includes(k)}).map(([key,o])=>{const ok=gearOk(sl,key,d);
+      return `<button type="button" data-g="${sl}" data-v="${key}" class="${d[sl]===key?'on':''}" ${ok?'':'disabled title="Incompatible avec le reste de l\'équipement"'}>${o.n}</button>`}).join('')}</div></div>`;
+  modal(`<h2>Atelier des unités</h2>
+    <p class="sub">Choisissez le corps de troupe puis chaque pièce d'équipement : elles changent le coût, la marche et la conduite au combat. Le modèle enregistré se recrute ensuite dans toute ville qui lève ce corps de troupe.</p>
+    <div class="ws">
+      <div class="wsL">
+        <h4>Vos modèles</h4>
+        ${mine.length?mine.map(x=>`<button type="button" data-wd="${x.id}" class="${x.id===d.id?'on':''}">${dollSVG(x,1)}<span>${esc(x.name)}<small>${CORPS[x.base].n} · ${dStats(x).cost} or</small></span></button>`).join(''):'<p class="sub">Aucun pour l\'instant.</p>'}
+        <button type="button" id="wNew">+ Nouveau modèle</button>
+      </div>
+      <div class="wsM">
+        ${dollSVG(d)}
+        <p class="sub sqRow">En bataille ${sqSVG(k,1,1)}</p>
+        <div class="stats">
+          ${bar('Attaque',s.atk,12,s.atk.toFixed(1),cmp(s.atk,ref.atk,v=>v.toFixed(1)))}
+          ${bar('Défense',s.def,1.6,s.def.toFixed(2),cmp(s.def,ref.def,v=>v.toFixed(2)))}
+          ${bar('Moral',s.mor,130,Math.round(s.mor),cmp(s.mor,ref.mor,v=>Math.round(v)))}
+          ${bar('Charge',s.chg,2.8,'×'+s.chg.toFixed(2),'')}
+          ${bar('Vitesse',s.spd,50,s.spd.toFixed(1)+' m/s','')}
+          ${s.ranged?bar('Tir',s.ranged.range,240,s.ranged.range+' m','dégâts '+s.ranged.dmg):''}
+          <p class="sub">${s.men} hommes · marche ${s.km} km/jour · formation ${s.days} jours<br>Coût <b class="gold">${s.cost}</b> or · entretien ${(s.cost/12).toFixed(1)} par mois${std?` <span class="sub">(${esc(std.n)} : ${std.cost})</span>`:''}</p>
+        </div>
+      </div>
+      <div class="wsR">
+        <label class="nm"><span>Nom de l'unité</span><input id="wName" type="text" maxlength="32" value="${esc(d.name)}" placeholder="${esc(dAutoName(d))}" autocomplete="off"></label>
+        <div class="slot"><h4>Corps de troupe</h4><div class="chips">${Object.entries(CORPS).filter(([key])=>wsPool().includes(key)||key===d.base).map(([key,c])=>`<button type="button" data-base="${key}" class="${d.base===key?'on':''}" title="${esc(c.txt)}">${c.n}</button>`).join('')}</div><p class="sub">${esc(CORPS[d.base].txt)}</p></div>
+        ${SLOTS.filter(sl=>!GEAR[sl].look).map(chips).join('')}
+        <h4 class="grpT">Apparence (sans effet au combat)</h4>${SLOTS.filter(sl=>GEAR[sl].look&&(d.shield!=='aucun'||!GEAR[sl].sh)).map(chips).join('')}
+      </div>
+    </div>
+    <p class="sub" id="wMsg"></p>
+    <div class="row" style="justify-content:flex-end">
+      ${d.id!=null?`<button type="button" class="warn" id="wDel">Supprimer le modèle</button>`:''}
+      <button type="button" id="wClose">Fermer</button>
+      <button type="button" class="go" id="wSave">${d.id!=null?'Enregistrer les changements':'Enregistrer le modèle'}</button>
+    </div>`);
+  $('mcard').classList.add('wide');
+  const nm=$('wName');nm.oninput=()=>{d.name=nm.value};
+  document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{d[b.dataset.g]=b.dataset.v;dFix(d);renderWorkshop()});
+  document.querySelectorAll('[data-base]').forEach(b=>b.onclick=()=>{if(d.id==null){const nm=d.name;wsD=newDesign(b.dataset.base);wsD.name=nm}else{d.base=b.dataset.base;dFix(d)}renderWorkshop()});
+  document.querySelectorAll('[data-wd]').forEach(b=>b.onclick=()=>openWorkshop(+b.dataset.wd));
+  $('wNew').onclick=()=>{wsD=newDesign(d.base);renderWorkshop()};
+  $('wClose').onclick=closeModal;
+  $('wSave').onclick=()=>{
+    const name=(d.name||'').trim().slice(0,32)||dAutoName(d);
+    if(S.designs.some(x=>!x.del&&x.id!==d.id&&x.name.toLowerCase()===name.toLowerCase())){$('wMsg').textContent='Un autre modèle porte déjà ce nom.';return}
+    const rec=Object.assign({},d,{name});let msg='';
+    if(d.id!=null&&dInUse(d.id)){ // les régiments déjà levés gardent leur équipement : l'ancien modèle est mis à la retraite
+      const old=desOf(d.id);old.del=true;rec.id=S.duid=(S.duid||0)+1;S.designs.push(rec);msg=' Les régiments déjà levés gardent leur ancien équipement.'}
+    else if(d.id!=null){Object.assign(desOf(d.id),rec)}
+    else{rec.id=S.duid=(S.duid||0)+1;S.designs.push(rec)}
+    wsD=Object.assign({},rec);save();renderWorkshop();renderSide();$('wMsg').textContent=`« ${name} » enregistré.`+msg;
+  };
+  if($('wDel'))$('wDel').onclick=()=>{const x=desOf(d.id);if(!x)return;if(dInUse(x.id))x.del=true;else S.designs=S.designs.filter(y=>y!==x);
+    wsD=newDesign(d.base);save();renderWorkshop();renderSide();$('wMsg').textContent=`Modèle « ${x.name} » supprimé.`};
+}
+

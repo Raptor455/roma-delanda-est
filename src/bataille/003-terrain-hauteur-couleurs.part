@@ -1,0 +1,85 @@
+/* ================= TERRAIN : hauteur, couleurs ================= */
+function hash(x,y){let h=(Math.imul(x,374761393)+Math.imul(y,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967295}
+function vnoise(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash(xi,yi),b=hash(xi+1,yi),c=hash(xi,yi+1),d=hash(xi+1,yi+1);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v}
+function fbm(x,y){let s=0,a=.5,f=1;for(let i=0;i<4;i++){s+=vnoise(x*f,y*f)*a;f*=2.03;a*=.5}return s/.9375}
+const riverX=sy=>RIVER0-36+Math.sin(sy/180)*20+Math.sin(sy/47)*4;
+// part de montagne (0..1) à cet endroit, d'après la grille de la campagne
+function mtn(sx,sy){const g=CT&&CT.grid;if(!g)return 0;const fx=Math.max(0,Math.min(g.nx-1.001,(sx-g.x0)/g.st)),fy=Math.max(0,Math.min(g.ny-1.001,(sy-g.y0)/g.st)),i=fx|0,j=fy|0,u=fx-i,v=fy-j,m=(a,b)=>g.m.charCodeAt(b*g.nx+a)===49?1:0;
+  return m(i,j)*(1-u)*(1-v)+m(i+1,j)*u*(1-v)+m(i,j+1)*(1-u)*v+m(i+1,j+1)*u*v}
+function heightRaw(sx,sy){
+  const base=(fbm(sx*.00175,sy*.00175)-.5)*22*(CT?1+CT.rough*1.5:1)+(fbm(sx*.01+50,sy*.01)-.5)*2.6*(CT?1+CT.rough*3:1);
+  let h=base;
+  if(CT){const mt=mtn(sx,sy);if(mt>0){const rg=1-Math.abs(fbm(sx*.0011+3,sy*.0011-7)*2-1);h+=mt*(18+rg*rg*95+(fbm(sx*.004,sy*.004)-.5)*30)}
+    for(const q of HILLS){const dx=sx-q.x,dy=sy-q.y,r2=q.r*q.r;if(dx*dx+dy*dy<9*r2)h+=q.h*Math.exp(-(dx*dx+dy*dy)/(2*r2*.45))}
+    if(CT.town){const dx=sx-CT.town.x,dy=sy-CT.town.y;h+=10*Math.exp(-(dx*dx+dy*dy)/(2*200*200))}
+    const ex=Math.max(0,sx-W0-240)+Math.max(0,-sy-280)+Math.max(0,sy-H0-320)+(RIVER0<0?Math.max(0,-sx-240):0);h+=ex*ex*.0009;
+    if(RIVER0<0)return h;
+    const rx=riverX(sy);if(sx<rx+90){const t=Math.min(1,(rx+90-sx)/110);h=h*(1-t)-10*t}
+    if(!SEA&&sx<rx-240){const t=Math.min(1,(rx-240-sx)/140);h=-10*(1-t)+(base+6)*t}
+    return h}
+  const dx=sx-HILL.x,dy=(sy-HILL.y)/.82;h+=44*Math.exp(-(dx*dx+dy*dy)/(2*170*170));
+  const rx2=sx-900,ry2=(sy-250)/.6;h+=12*Math.exp(-(rx2*rx2+ry2*ry2)/(2*260*260));
+  const ex=Math.max(0,sx-W0-240)+Math.max(0,-sy-280)+Math.max(0,sy-H0-320);h+=ex*ex*.0009;
+  const vd=Math.hypot(sx-3300,sy+300);h+=30*Math.exp(-vd*vd/(2*220*220));
+  const rx=riverX(sy);
+  if(sx<rx+90){const t=Math.min(1,(rx+90-sx)/110);h=h*(1-t)-10*t}
+  if(sx<rx-240){const t=Math.min(1,(rx-240-sx)/140);h=-10*(1-t)+(base+6)*t}
+  return h;
+}
+const GX0=-1300,GY0=-1300,GS=8,GNX=740,GNY=590,HG=new Float32Array(GNX*GNY);
+for(let j=0;j<GNY;j++)for(let i=0;i<GNX;i++)HG[j*GNX+i]=heightRaw(GX0+i*GS,GY0+j*GS);
+const height=(sx,sy)=>heightM(sx/G,sy/G);
+function heightM(sx,sy){
+  let fx=(sx-GX0)/GS,fy=(sy-GY0)/GS;
+  if(fx<0)fx=0;else if(fx>GNX-1.001)fx=GNX-1.001;if(fy<0)fy=0;else if(fy>GNY-1.001)fy=GNY-1.001;
+  const i=fx|0,j=fy|0,u=fx-i,v=fy-j,o=j*GNX+i;
+  const a=HG[o],b=HG[o+1],c=HG[o+GNX],d=HG[o+GNX+1];
+  return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;
+}
+const ROAD=[];
+for(let i=0;i<=50;i++){const t=i/50;ROAD.push([(1-t)**3*RIVER0+3*(1-t)**2*t*1200+3*(1-t)*t*t*2000+t**3*(W0+600),(1-t)**3*1890+3*(1-t)**2*t*1760+3*(1-t)*t*t*1970+t**3*1800])}
+ROAD.push([3400,1400],[3300,800],[3300,-160]);
+let ROAD2=[[1600,330],[1600,-100],[1900,-500],[2300,-900]];
+const ROADS=CT?CT.roads.map(r=>r.p):[ROAD,ROAD2];if(CT){ROAD.length=0;if(ROADS[0])ROAD.push(...ROADS[0])}
+function segDist(x,y,P){let b=1e9;for(let i=0;i<P.length-1;i++){const [ax,ay]=P[i],[bx,by]=P[i+1];const vx=bx-ax,vy=by-ay,l=vx*vx+vy*vy;let t=((x-ax)*vx+(y-ay)*vy)/l;t=t<0?0:t>1?1:t;const d=Math.hypot(x-ax-vx*t,y-ay-vy*t);if(d<b)b=d}return b}
+const roadDist=(x,y)=>{let b=1e9;for(const P of ROADS)if(P.length>1)b=Math.min(b,segDist(x,y,P));return b};
+const FIELDS=CT?CT.fields:[{x:840,y:-300,w:600,h:320,a:-.08,c:[0xc2ab5e,0xb09a50]},{x:1800,y:-340,w:520,h:300,a:.1,c:[0x8f9a4a,0x7f8b42]},
+  {x:2500,y:2320,w:640,h:340,a:.06,c:[0xc8b064,0xb59d55]},{x:1040,y:2340,w:560,h:300,a:-.12,c:[0x9aa152,0x889246]},{x:3700,y:840,w:400,h:640,a:.05,c:[0xc2ab5e,0xad9850]},
+  {x:700,y:1800,w:380,h:200,a:.04,c:[0xc9b268,0xb8a058]},{x:2650,y:230,w:420,h:220,a:-.06,c:[0xc2ab5e,0xb09a50]},{x:-500,y:1500,w:500,h:400,a:.2,c:[0x9aa152,0x889246]}];
+const VINE=CT?{x:-1e5,y:-1e5,w:0,h:0,a:0}:{x:2500,y:1780,w:360,h:200,a:.03};
+function fieldColor(x,y){
+  for(const f of FIELDS){const c=Math.cos(-f.a),s=Math.sin(-f.a),lx=(x-f.x)*c-(y-f.y)*s,ly=(x-f.x)*s+(y-f.y)*c;
+    if(Math.abs(lx)<f.w/2&&Math.abs(ly)<f.h/2)return f.c[(Math.floor((lx+f.w/2)/14))%2]}
+  const c=Math.cos(-VINE.a),s=Math.sin(-VINE.a),lx=(x-VINE.x)*c-(y-VINE.y)*s,ly=(x-VINE.x)*s+(y-VINE.y)*c;
+  if(Math.abs(lx)<VINE.w/2&&Math.abs(ly)<VINE.h/2)return 0x8c7a4e;
+  return null;
+}
+const cTmp=new THREE.Color();
+function terrainColor(sx,sy,h,ny,c){
+  const P=hx=>cTmp.setHex(hx);
+  const n1=fbm(sx*.0025,sy*.0025),n2=fbm(sx*.0055+90,sy*.0055+40),n3=fbm(sx*.0225+7,sy*.0225+3),n4=vnoise(sx*.21,sy*.21);
+  c.setHex(0x6f7a3c).lerp(P(0x9c9550),n1);
+  if(n2>.55)c.lerp(P(0xbcab6a),Math.min(1,(n2-.55)*3));
+  if(n2<.4)c.lerp(P(0x5d7236),Math.min(1,(.4-n2)*3)*.8);
+  if(n3>.62)c.lerp(P(0x8a7a52),Math.min(1,(n3-.62)*4)*.55);
+  c.multiplyScalar(.9+n4*.2);
+  const rd0=sx-riverX(sy);if(rd0<440&&rd0>0)c.lerp(P(SEA?0xb8a878:0x5a7a3a),(1-rd0/440)*.45);
+  if(CT&&CT.dry)c.lerp(P(0xc9b07a),CT.dry*.55);
+  if(CT){const mt=mtn(sx,sy);if(mt>0)c.lerp(P(0x7d7660),mt*(.35+n3*.3))}
+  if(ny<.97)c.lerp(P(0x8d7a56),Math.min(1,(.97-ny)*9)*.7);
+  if(ny<.9)c.lerp(P(0x9a9282),Math.min(1,(.9-ny)*6));
+  const fc=fieldColor(sx,sy);if(fc!=null)c.lerp(P(fc),.9).multiplyScalar(.94+n4*.12);
+  const rd=roadDist(sx,sy);
+  if(rd<11){c.lerp(P(0xb39f76),Math.min(1,(11-rd)/4)*.92);if(rd>2.5&&rd<5)c.lerp(P(0x8c7957),.5)}
+  if(h<-1.5)c.lerp(P(0xb5a37a),Math.min(1,(-1.5-h)/2));
+  if(h<-4.5)c.lerp(P(0x6a6046),Math.min(1,(-4.5-h)/2));
+  const hd=Math.hypot(sx-HILL.x,(sy-HILL.y)/.82);if(hd<320)c.lerp(P(0xa69c5e),(1-hd/320)*.3);
+  if(CT&&CT.town){const td=Math.hypot(sx-CT.town.x,sy-CT.town.y)/(160+CT.town.size*70);if(td<1)c.lerp(P(0xa89878),(1-td)*.5)}
+  // camps : sol piétiné
+  const dc1=Math.hypot((sx-1600)/300,(sy-150)/130),dc2=Math.hypot((sx-1600)/260,(sy-1880)/120);
+  if(dc1<1)c.lerp(P(0xa08c62),(1-dc1)*.6);if(dc2<1)c.lerp(P(0xa08c62),(1-dc2)*.5);
+  c.multiplyScalar(.9+Math.min(1,Math.max(0,(h+6)/48))*.12);
+  return c;
+}
+

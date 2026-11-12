@@ -1,0 +1,113 @@
+/* ================= EAU : côtes précises, fleuves et ponts ================= */
+// Terre ou mer au sens de la côte dessinée (lissée) : grille de 500 m, et tracé exact sur les cases du bord.
+let LFR=null,LFW=0,LFH=0;const LF_R=2;
+function buildLandFine(){LFW=Math.ceil(MW*LF_R);LFH=Math.ceil(MH*LF_R);LFR=new Uint8Array(LFW*LFH);const SH=1024;
+  const c=document.createElement('canvas');c.width=LFW;c.height=SH;const g=c.getContext('2d',{willReadFrequently:true});
+  for(let y0=0;y0<LFH;y0+=SH){const h=Math.min(SH,LFH-y0);g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,LFW,SH);g.setTransform(LF_R,0,0,LF_R,0,-y0);g.fillStyle='#fff';g.fill(landSmooth);
+    const d=g.getImageData(0,0,LFW,h).data,o0=y0*LFW;for(let k=0,n=LFW*h;k<n;k++)LFR[o0+k]=d[k*4+3]>127?1:0}
+  for(let y=1;y<LFH-1;y++)for(let x=1;x<LFW-1;x++){const o=y*LFW+x,v=LFR[o]&1;if((LFR[o-1]&1)!==v||(LFR[o+1]&1)!==v||(LFR[o-LFW]&1)!==v||(LFR[o+LFW]&1)!==v)LFR[o]|=2}}
+// grille seule (rapide, pour les grilles de calcul)
+function landR(x,y){const X=Math.floor(x*LF_R),Y=Math.floor(y*LF_R);return X>=0&&Y>=0&&X<LFW&&Y<LFH&&(LFR[Y*LFW+X]&1)===1}
+// prudent : les cases du bord comptent comme terre
+function landC(x,y){const X=Math.floor(x*LF_R),Y=Math.floor(y*LF_R);return !(X>=0&&Y>=0&&X<LFW&&Y<LFH)||LFR[Y*LFW+X]!==0}
+function landFine(x,y){const X=Math.floor(x*LF_R),Y=Math.floor(y*LF_R);if(X<0||Y<0||X>=LFW||Y>=LFH)return false;const v=LFR[Y*LFW+X];if(v<2)return v===1;return landCtx.isPointInPath(landSmooth,x,y)}
+// point de terre le plus proche (à moins de maxR km), poussé un peu vers l'intérieur
+function nearestLand(x,y,maxR,inset){for(let r=.1;r<=maxR+1e-6;r+=.1){const n=Math.max(10,Math.round(r*30));for(let k=0;k<n;k++){const an=k/n*6.2832,c=Math.cos(an),s=Math.sin(an),px=x+c*r,py=y+s*r;
+  if(landFine(px,py)){const ix=px+c*(inset||0),iy=py+s*(inset||0);return landFine(ix,iy)?[ix,iy]:[px,py]}}}return null}
+function nearestWater(x,y,maxR,inset){for(let r=.1;r<=maxR+1e-6;r+=.1){const n=Math.max(10,Math.round(r*30));for(let k=0;k<n;k++){const an=k/n*6.2832,c=Math.cos(an),s=Math.sin(an),px=x+c*r,py=y+s*r;
+  if(!landFine(px,py)){const ix=px+c*(inset||0),iy=py+s*(inset||0);return !landFine(ix,iy)?[ix,iy]:[px,py]}}}return null}
+// longueur mouillée d'une ligne, et ses passages d'eau [{x,y,len,i}] (i : segment du milieu)
+function wetRuns(P,st){const runs=[];let cur=null;
+  for(let q=1;q<P.length;q++){const [ax,ay]=P[q-1],[bx,by]=P[q],l=Math.hypot(bx-ax,by-ay),m=Math.max(1,Math.ceil(l/(st||.15)));
+    for(let i=0;i<m;i++){const t=(i+.5)/m,x=ax+(bx-ax)*t,y=ay+(by-ay)*t;if(!landFine(x,y)){if(!cur){cur={x0:x,y0:y,len:0,q};runs.push(cur)}cur.len+=l/m;cur.x1=x;cur.y1=y}else cur=null}}
+  return runs.map(r=>({x:(r.x0+r.x1)/2,y:(r.y0+r.y1)/2,len:r.len,ang:Math.atan2(r.y1-r.y0,r.x1-r.x0)}))}
+// ramène sur la terre une route tracée sur la grille de 1,5 km (caps et anses coupés)
+function dryLine(P){const out=[P[0]],last=P.length-1;let moved=false;
+  for(let q=1;q<=last;q++){const [ax,ay]=P[q-1],[bx,by]=P[q],l=Math.hypot(bx-ax,by-ay),m=Math.max(1,Math.ceil(l/.2));
+    let bad=q<last&&!landFine(bx,by);for(let i=1;i<m&&!bad;i++)if(!landFine(ax+(bx-ax)*i/m,ay+(by-ay)*i/m))bad=true;
+    if(!bad){out.push(P[q]);continue}moved=true;
+    for(let i=1;i<=m;i++){let x=ax+(bx-ax)*i/m,y=ay+(by-ay)*i/m;if(!(q===last&&i===m)&&!landFine(x,y)){const p=nearestLand(x,y,1.6,.06);if(p){x=p[0];y=p[1]}}out.push([x,y])}}
+  return moved?rdp(out,.03):out}
+// ---- fleuves tels qu'ils sont dessinés (courbes) ----
+const RIVN=['l\'Èbre','le Rhône','la Garonne','le Pô','la Trébie','le Tessin','le Tibre','l\'Arno','le Volturne','l\'Aufide','le Métaure','le Bagradas','le Bétis','le Tage','le Douro','la Save','le Danube','l\'Axios','le Strymon','l\'Hèbre','la Charente'];
+const RIVD=RIV.map(r=>{const P=[[r[0][0],r[0][1]]];let cx=r[0][0],cy=r[0][1];
+  for(let k=1;k<r.length-1;k++){const mx=(r[k][0]+r[k+1][0])/2,my=(r[k][1]+r[k+1][1])/2,qx=r[k][0],qy=r[k][1];for(let s=1;s<=10;s++){const t=s/10,u=1-t;P.push([u*u*cx+2*u*t*qx+t*t*mx,u*u*cy+2*u*t*qy+t*t*my])}cx=mx;cy=my}
+  P.push([r[r.length-1][0],r[r.length-1][1]]);let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const [x,y] of P){a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y)}return {P,b:[a,b,c,d]}});
+function segX(ax,ay,bx,by,cx,cy,dx,dy){const rx=bx-ax,ry=by-ay,sx=dx-cx,sy=dy-cy,den=rx*sy-ry*sx;if(Math.abs(den)<1e-12)return null;
+  const t=((cx-ax)*sy-(cy-ay)*sx)/den,u=((cx-ax)*ry-(cy-ay)*rx)/den;return t>=0&&t<=1&&u>=0&&u<=1?t:null}
+// le segment traverse-t-il un fleuve ? renvoie l'indice du fleuve et t
+function crossRiv(ax,ay,bx,by){const x0=Math.min(ax,bx),x1=Math.max(ax,bx),y0=Math.min(ay,by),y1=Math.max(ay,by);
+  for(let r=0;r<RIVD.length;r++){const R=RIVD[r];if(R.b[0]>x1||R.b[2]<x0||R.b[1]>y1||R.b[3]<y0)continue;const P=R.P;
+    for(let q=1;q<P.length;q++){const [cx,cy]=P[q-1],[dx,dy]=P[q];if(Math.max(cx,dx)<x0||Math.min(cx,dx)>x1||Math.max(cy,dy)<y0||Math.min(cy,dy)>y1)continue;const t=segX(ax,ay,bx,by,cx,cy,dx,dy);if(t!=null)return {r,t,ang:Math.atan2(dy-cy,dx-cx)}}}
+  return null}
+const lineCrossesRiv=P=>{for(let q=1;q<P.length;q++)if(crossRiv(P[q-1][0],P[q-1][1],P[q][0],P[q][1]))return true;return false};
+// fleuves sur la grille de 1,5 km : la marche hors route ne les traverse pas
+let RIVG=null;
+function rivGrid(){if(RIVG)return RIVG;const L=DEM.lv[0],r=L.r,w=L.w;RIVG=new Uint8Array(w*L.h);
+  for(const R of RIVD){let pi=-1,pj=-1;const P=R.P;for(let q=1;q<P.length;q++){const [ax,ay]=P[q-1],[bx,by]=P[q],m=Math.max(1,Math.ceil(Math.hypot(bx-ax,by-ay)/.25));
+    for(let s=0;s<=m;s++){const x=ax+(bx-ax)*s/m,y=ay+(by-ay)*s/m,i=Math.floor(x/r),j=Math.floor(y/r);if(i<0||j<0||i>=w||j>=L.h)continue;RIVG[j*w+i]=1;
+      if(pi>=0&&pi!==i&&pj!==j){RIVG[pj*w+i]=1;RIVG[j*w+pi]=1}pi=i;pj=j}}}
+  return RIVG}
+// ---- ponts : là où une route franchit un fleuve ou un bras de mer étroit ----
+let BR=[];const BRI={};
+function buildBridges(){BR=[];
+  EDGES.forEach((e,k)=>{e.br=[];if(!e.cv)return;const P=e.cv,base=N[e.a].id+'-'+N[e.b].id;let n=0;const add=b=>{if(BR.some(o=>o.k===k&&Math.hypot(o.x-b.x,o.y-b.y)<1.2))return;b.k=k;b.id=base+'-'+(n++);b.road=e.type;e.br.push(BR.length);BRI[b.id]=BR.length;BR.push(b)};
+    for(let q=1;q<P.length;q++){const [ax,ay]=P[q-1],[bx,by]=P[q];const c=crossRiv(ax,ay,bx,by);if(c){const x=ax+(bx-ax)*c.t,y=ay+(by-ay)*c.t;add({x,y,j:q-1,t:c.t,riv:RIVN[c.r]||'le fleuve',ang:Math.atan2(by-ay,bx-ax),len:.35})}}
+    for(const w of wetRuns(P,.1))if(w.len>.05)add({x:w.x,y:w.y,riv:'le bras de mer',ang:w.ang,len:w.len+.2,sea:true})})}
+const brDown=b=>!!(S&&S.pont&&S.pont[b.id]);
+const edgeBroken=e=>!!(e.br&&e.br.some(i=>brDown(BR[i])));
+// pont détruit sur le segment (x0,y0)-(x1,y1) ?
+function brOnSeg(x0,y0,x1,y1){if(!S||!S.pont)return null;for(const id in S.pont){const b=BR[BRI[id]];if(!b)continue;const dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy;
+  let t=l2?((b.x-x0)*dx+(b.y-y0)*dy)/l2:0;t=Math.max(0,Math.min(1,t));if(Math.hypot(x0+dx*t-b.x,y0+dy*t-b.y)<.2&&!(t===0&&Math.hypot(x0-b.x,y0-b.y)<.05))return b}return null}
+function legsBlocked(x,y,legs){if(!S||!S.pont||!Object.keys(S.pont).length)return false;let px=x,py=y;for(const L of legs){if(brOnSeg(px,py,L.x,L.y))return true;px=L.x;py=L.y}return false}
+const bridgeName=b=>b.sea?`le pont du bras de mer près ${deN(N[EDGES[b.k].a].n)}`:`le pont sur ${b.riv}`;
+const brWork=b=>b.sea?14:b.road==='via'||b.road==='route'?10:5;
+const BR_COST=20;
+function nearestBridge(x,y,maxd){let best=null,bd=maxd;for(const b of BR){const d=Math.hypot(b.x-x,b.y-y);if(d<bd){bd=d;best=b}}return best}
+const armyBridge=a=>a.legs.length||a.ship||a.inG?null:nearestBridge(a.x,a.y,2);
+// côté du territoire : le maître de la ville la plus proche du pont
+const brOwner=b=>{const e=EDGES[b.k],A=N[e.a],B=N[e.b];return Math.hypot(A.x-b.x,A.y-b.y)<Math.hypot(B.x-b.x,B.y-b.y)?ownerN(A.i):ownerN(B.i)};
+function cutBridge(b,side){S.pont[b.id]={day:S.day,by:side};TGEN++;
+  // les armées qui comptaient passer par là s'arrêtent avant le pont (dans tick)
+}
+function startRebuild(b,a){const p=S.pont[b.id];if(!p)return false;if(!p.rb){if(S.gold[a.side]<BR_COST)return false;S.gold[a.side]-=BR_COST;p.rb={left:brWork(b),tot:brWork(b)}}p.rb.a=a.id;return true}
+// chaque jour : chantiers des ponts, réparation par les habitants, ponts coupés par les Romains devant l'ennemi
+function bridgesDaily(){if(!S.pont)S.pont={};
+  for(const id in S.pont){const p=S.pont[id],b=BR[BRI[id]];if(!b){delete S.pont[id];continue}
+    if(p.rb&&p.rb.a!=null){const a=S.armies.find(x=>x.id===p.rb.a);if(a&&!a.dead&&!a.legs.length&&!a.ship&&Math.hypot(a.x-b.x,a.y-b.y)<2){if(--p.rb.left<=0){delete S.pont[id];TGEN++;if(a.side==='car'||visAt(b.x,b.y)>=1)log(`${a.name} a rebâti ${bridgeName(b)}.`);continue}}else p.rb.a=null}
+    // au bout de 4 mois, les gens du pays rebâtissent eux-mêmes s'il n'y a pas d'armée ennemie autour
+    const o=brOwner(b);if(S.day-p.day>120&&!S.armies.some(x=>!x.dead&&o&&x.side!==o&&Math.hypot(x.x-b.x,x.y-b.y)<25)){delete S.pont[id];TGEN++;if(visAt(b.x,b.y)>=1)log(`Les gens du pays ont rebâti ${bridgeName(b)}.`)}}
+  // IA : une armée romaine arrêtée près d'un pont coupé sur ses terres le rebâtit
+  for(const a of S.armies){if(a.side!=='rom'||a.dead||a.legs.length||a.ship)continue;const b=nearestBridge(a.x,a.y,2);if(b&&brDown(b)&&!S.pont[b.id].rb&&brOwner(b)==='rom'&&!S.armies.some(x=>x.side==='car'&&!x.dead&&Math.hypot(x.x-b.x,x.y-b.y)<20))startRebuild(b,a)}
+  // IA : dans une ville romaine voisine, on coupe le pont quand une armée carthaginoise s'apprête à le franchir
+  for(const a of S.armies){if(a.side!=='car'||a.dead||a.ship||!a.legs.length)continue;let px=a.x,py=a.y,km=0;
+    for(const L of a.legs){km+=Math.hypot(L.x-px,L.y-py);if(km>60)break;for(const bi of (L.e!=null?EDGES[L.e].br:[])){const b=BR[bi];if(brDown(b)||brOwner(b)!=='rom')continue;
+      const dx=L.x-px,dy=L.y-py,l2=dx*dx+dy*dy;let t=l2?((b.x-px)*dx+(b.y-py)*dy)/l2:0;if(t<0||t>1||Math.hypot(px+dx*t-b.x,py+dy*t-b.y)>.2)continue;
+      const town=N.find(n=>!n.col&&ownerN(n.i)==='rom'&&Math.hypot(n.x-b.x,n.y-b.y)<15);if(!town||Math.hypot(a.x-b.x,a.y-b.y)<3)continue;
+      if(Math.random()<.35){cutBridge(b,'rom');log(`Les Romains coupent ${bridgeName(b)} devant ${a.name}.`)}}
+      px=L.x;py=L.y}}}
+// ---- panneau ----
+function bridgeBlock(b,a){const p=S.pont[b.id],own=brOwner(b);
+  let h=`<h3>${b.sea?'Pont du bras de mer':'Pont sur '+esc(b.riv)}</h3><p class="sub">Tronçon : ${ROAD[b.road].n} ${deN(N[EDGES[b.k].a].n)} à ${N[EDGES[b.k].b].n}. `;
+  if(!p)h+=`Intact. Le couper bloque la route : l'ennemi devra faire le tour par un autre pont.</p><div class="row"><button id="bCut" type="button" class="warn">Couper le pont</button></div>`;
+  else if(p.rb&&p.rb.a===a.id)h+=`Coupé. Vos hommes le rebâtissent : encore ${p.rb.left} jour${p.rb.left>1?'s':''} (l'armée doit rester sur place).</p>`;
+  else h+=`Coupé${p.by?' par '+sideName(p.by):''}. Personne ne passe tant qu'il n'est pas rebâti.</p><div class="row"><button id="bFix" type="button" ${p.rb||S.gold.car>=BR_COST?'':'disabled'}>${p.rb?`Reprendre le chantier (${p.rb.left} j)`:`Rebâtir (${brWork(b)} jours, ${BR_COST} or)`}</button></div>`;
+  return h}
+function bindBridge(b,a){const B=(id,f)=>{const e=$(id);if(e)e.onclick=f};
+  B('bCut',()=>{cutBridge(b,a.side);log(`${a.name} coupe ${bridgeName(b)}.`);renderAll()});
+  B('bFix',()=>{if(startRebuild(b,a))log(`${a.name} commence à rebâtir ${bridgeName(b)}.`);renderAll()})}
+// ---- dessin (calque animé : l'état change sans redessiner les tuiles) ----
+function drawBridges(s,z,x0,y0,x1,y1){
+  for(const b of BR){if(b.x<x0-2||b.x>x1+2||b.y<y0-2||b.y>y1+2)continue;const down=brDown(b);
+    if(s<1.4){if(down){const r=Math.max(4*z,.12);ctx.strokeStyle='rgba(150,30,20,.95)';ctx.lineWidth=Math.max(2*z,.03);ctx.beginPath();ctx.moveTo(b.x-r,b.y-r);ctx.lineTo(b.x+r,b.y+r);ctx.moveTo(b.x+r,b.y-r);ctx.lineTo(b.x-r,b.y+r);ctx.stroke()}continue}
+    const stone=b.road==='via'||b.road==='route',rw=Math.max(1.4*z,.25),L=Math.max(b.len/2+.08,rw*.9+.08,9*z),W=Math.max((stone?5:4.4)*z,stone?.1:.08),c=0,sn=0;
+    ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.ang);
+    const deck=(a0,a1)=>{ctx.fillStyle='rgba(30,22,14,.45)';ctx.fillRect(a0+W*.15,-W/2+W*.2,a1-a0,W);ctx.fillStyle=stone?'#d8ccad':'#8d6a43';ctx.fillRect(a0,-W/2,a1-a0,W);
+      ctx.strokeStyle=stone?'rgba(90,76,56,.9)':'rgba(60,40,22,.9)';ctx.lineWidth=W*.18;ctx.beginPath();ctx.moveTo(a0,-W/2);ctx.lineTo(a1,-W/2);ctx.moveTo(a0,W/2);ctx.lineTo(a1,W/2);ctx.stroke();
+      if(s>8){ctx.lineWidth=W*.08;ctx.beginPath();const st=stone?W*1.1:W*.45;for(let u=a0+st;u<a1;u+=st){ctx.moveTo(u,-W/2);ctx.lineTo(u,W/2)}ctx.stroke()}};
+    if(!down)deck(-L,L);
+    else{deck(-L,-L*.3);deck(L*.3,L);ctx.fillStyle='rgba(60,45,30,.85)';for(let k=0;k<5;k++){const u=(hash(k,b.x|0)-.5)*L*.5,v=(hash(b.y|0,k)-.5)*W*1.6;ctx.beginPath();ctx.arc(u,v,W*.18,0,7);ctx.fill()}
+      {const r=Math.max(6*z,W*.9);ctx.strokeStyle='rgba(150,30,20,.95)';ctx.lineWidth=W*.35;ctx.beginPath();ctx.moveTo(-r,-r);ctx.lineTo(r,r);ctx.moveTo(r,-r);ctx.lineTo(-r,r);ctx.stroke()}}
+    ctx.restore();void c;void sn}}
+function pickBridge(mx,my){const s=view.s;if(s<1.4)return null;const [wx,wy]=toWorld(mx,my);return nearestBridge(wx,wy,Math.max(8/s,.3))}
+

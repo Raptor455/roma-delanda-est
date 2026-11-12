@@ -1,0 +1,480 @@
+/* ================= NAVAL VIVANT (fil « Rendre le naval de campagne vivant ») =================
+   Pirates en chair et en os : bandes de liburnes qui sortent de repaires cachés, chassent les marchands, pillent les côtes,
+   fuient les escadres plus fortes et rentrent l'hiver. On les trouve (vigies, rapports des marchands, prisonniers),
+   on les poursuit sur la carte, on brûle leur repaire (assaut naval ou débarquement).
+   Navires marchands visibles sur les routes : guerre de course et escortes réelles.
+   Poursuites et batailles navales sur la carte (éperon, abordage, combat prudent, se dérober).
+   Tempêtes visibles qui traversent la mer (remplacent les tirages au sort du bloc FLOTTES, retouches marquées NAV). */
+window.__navStorm=true;
+// coop : l'or gagné ou dépensé par une flotte ou une armée va au trésor de son général (multijoueur/mp.js, mpdWith)
+function flG(o,fn){try{if(o&&S.mpD&&typeof mpdWith==='function'&&typeof mpdArmy==='function')return mpdWith(mpdArmy(o),fn)}catch(e){}return fn()}
+const NV={psp:92,mersp:55,ppow:2.2,pow:{quin:5,tri:3,trans:.4},contact:5,range:320,esc:18};
+window.NAVTK={hunt:' · chasse aux pirates',course:' · guerre de course',escort:' · escorte'};
+const PIRD={
+  ill:{n:'pirates illyriens',chefs:['Démétrios de Pharos','Scerdilaïdas','Pinnès le Jeune','Agron le Borgne','Gentios'],
+    sites:[[16.65,43.16,'Pharos'],[16.18,43.06,'Issa'],[18.7,42.43,'Rhizon'],[19.6,41.8,'Lissos'],[16.9,42.95,'Corcyre Noire']]},
+  lig:{n:'pirates ligures',chefs:['Caturix','Comboïomaros','Vectimaros','Albucios','Ségovax'],
+    sites:[[9.2,44.31,'Portus Delphini'],[8.22,44.05,'Albingaunum'],[9.4,42.98,'cap Corse'],[7.1,43.58,'Antipolis'],[8.6,44.33,'Vada Sabatia']]},
+  bal:{n:'pirates baléares',chefs:['Tirso le Frondeur','Moros','Sarug','Bocchar','Iscra'],
+    sites:[[3.1,39.88,'Pollentia'],[4.26,39.89,'Mago'],[1.45,38.7,'Ophiusa'],[2.93,39.15,'Cabrera'],[3.3,39.35,'cap Salinas']]}};
+const NAVT=new Map();let NAVQ=[],NAVRES=null;
+const nvR=()=>Math.random();
+const nvV=()=>S.nav;
+const nvJ=t=>{const V=nvV();V.j.unshift({d:Math.floor(S.day),t});V.j.length=Math.min(V.j.length,30)};
+const nvLog=(t,pause)=>{log(t);nvJ(t);if(pause)S.paused=true};
+const nvMP=()=>typeof MPH==='function'&&MPH();
+
+/* ---- repaires ---- */
+function siteXY(s){const p=prj(s[0],s[1]);let L=landFine(p[0],p[1])?p:nearestLand(p[0],p[1],15,.3);if(!L)return null;
+  const c=seaCell(L[0],L[1],25);if(c<0)return null;const [ax,ay]=sgXY(c);return {x:L[0],y:L[1],ax,ay}}
+function newLair(k,exclude){const D=PIRD[k],V=nvV(),sites=D.sites.filter(s=>s[2]!==exclude).sort(()=>nvR()-.5);
+  for(const s of sites){const p=siteXY(s);if(!p)continue;V.lairs[k]={k,site:s[2],...p,known:0,loot:30,gar:6,dead:0,chef:D.chefs[Math.floor(nvR()*D.chefs.length)],born:Math.floor(S.day)};V.cd[k]=S.day+(S.day>5?40:0);return V.lairs[k]}
+  return null}
+function navInit(){if(!S)return;const V=S.nav=S.nav||{};V.bands=V.bands||[];V.lairs=V.lairs||{};V.storms=V.storms||[];V.seen=V.seen||{};V.j=V.j||[];V.fx=V.fx||[];V.cd=V.cd||{};
+  S.pir=S.pir||{};for(const k in PIRD)if(!V.lairs[k])newLair(k)}
+const bandsOf=k=>nvV().bands.filter(b=>b.k===k);
+const bandPow=b=>b.n*NV.ppow*1.1;
+const bandName=b=>PIRD[b.k].n.replace(/^./,c=>c.toUpperCase());
+function spawnBand(k){const V=nvV(),L=V.lairs[k];if(!L||L.dead)return null;
+  const b={id:S.uid++,k,chef:L.chef,x:L.ax,y:L.ay,legs:[],n:6+Math.floor(nvR()*5)+Math.min(6,Math.floor(S.day/360)*2),mode:'home',tgt:null,loot:0,wait:2,rt:0};V.bands.push(b);return b}
+const atLair=b=>{const L=nvV().lairs[b.k];return L&&Math.hypot(b.x-L.ax,b.y-L.ay)<4};
+
+/* ---- puissance, vitesse ---- */
+function fleetPow(f){let p=0;for(const k in NV.pow)p+=(f.ships[k]||0)*NV.pow[k];
+  const reg=f.cargo.reduce((s,id)=>{const a=S.armies.find(x=>x.id===id);return s+(a?a.units.length:0)},0);return p+Math.min(warN(f)*1.5,reg*1.2)}
+const nvP=(t,o)=>({t,o});
+const pPow=p=>p.t==='f'?fleetPow(p.o):bandPow(p.o);
+const pSide=p=>p.t==='f'?p.o.side:'pir';
+const pSpeed=p=>p.t==='f'?fSpeed(p.o):NV.psp*(season()==='Hiver'?.8:1);
+const pName=p=>p.t==='f'?p.o.name:`les ${PIRD[p.o.k].n} ${deN(p.o.chef)}`;
+const cap1=t=>t.charAt(0).toUpperCase()+t.slice(1);
+const vb=(p,s,pl)=>p.t==='p'?pl:s;
+const pAlive=p=>p.t==='f'?S.fleets.includes(p.o):nvV().bands.includes(p.o);
+const pMine=p=>p.t==='f'&&p.o.side==='car';
+function pDesc(p){if(p.t==='p')return `${p.o.n} liburnes`;const s=p.o.ships;return [s.quin&&s.quin+' quinquérèmes',s.tri&&s.tri+' trières',s.trans&&s.trans+' transports'].filter(Boolean).join(', ')+(p.o.cargo.length?' · troupes à bord':'')}
+
+/* ---- trajets en mer ---- */
+function navPath(x0,y0,x1,y1){if(seaLine(x0,y0,x1,y1))return [{x:x1,y:y1}];const p=seaPath(x0,y0,x1,y1,'large');return p&&p.length?p:null}
+function moveBand(b,dd){let bud=dd*NV.psp*(season()==='Hiver'?.8:1);
+  while(bud>1e-6&&b.legs.length){const L=b.legs[0],d=Math.hypot(L.x-b.x,L.y-b.y);if(d<=bud){b.x=L.x;b.y=L.y;bud-=d;b.legs.shift()}else{b.x+=(L.x-b.x)*bud/d;b.y+=(L.y-b.y)*bud/d;bud=0}}}
+function bandGo(b,x,y){const L=navPath(b.x,b.y,x,y);if(L)b.legs=L;return !!L}
+function bandHome(b,mode){const L=nvV().lairs[b.k];b.mode=mode||'home';b.tgt=null;if(L)bandGo(b,L.ax,L.ay)}
+
+/* ---- navires marchands sur les routes ---- */
+const MCUM=new WeakMap();
+const mCount=r=>Math.max(1,Math.min(3,1+Math.floor(r.km/450)));
+function merchPos(r,i){let c=MCUM.get(r);if(!c||c.P!==r.P){const cum=[0];for(let k=1;k<r.P.length;k++)cum.push(cum[k-1]+Math.hypot(r.P[k][0]-r.P[k-1][0],r.P[k][1]-r.P[k-1][1]));c={P:r.P,cum};MCUM.set(r,c)}
+  const tot=c.cum[c.cum.length-1]||1,T=2*tot/NV.mersp;let u=(S.day/T+i/mCount(r)+(r.id%7)/7)%1;const back=u>=.5;u=back?2-u*2:u*2;const d=u*tot;
+  let k=1;while(k<c.cum.length-1&&c.cum[k]<d)k++;const A=r.P[k-1],B=r.P[k],l=(c.cum[k]-c.cum[k-1])||1,t=Math.max(0,Math.min(1,(d-c.cum[k-1])/l));
+  const ang=Math.atan2(B[1]-A[1],B[0]-A[0])+(back?Math.PI:0);return {x:A[0]+(B[0]-A[0])*t,y:A[1]+(B[1]-A[1])*t,ang}}
+function merchants(){const out=[];if(!S.trade)return out;for(const r of S.trade){if(!isFinite(r.km)||!r.P||r.P.length<2)continue;const [k]=routeState(r);if(!k)continue;for(let i=0;i<mCount(r);i++){const p=merchPos(r,i);out.push({r,i,x:p.x,y:p.y,ang:p.ang})}}return out}
+const mById=(rid,i)=>{const r=S.trade&&S.trade.find(x=>x.id===rid);if(!r||!routeState(r)[0])return null;const p=merchPos(r,i);return {r,i,...p}};
+const escortsOf=(side,x,y)=>S.fleets.filter(f=>f.side===side&&f.at==null&&!f.inG&&warN(f)>=3&&Math.hypot(f.x-x,f.y-y)<NV.esc).sort((a,b)=>fleetPow(b)-fleetPow(a));
+const rName=r=>`${N[NI[r.a]].n} – ${N[NI[r.b]].n}`;
+
+/* ---- poursuite ---- */
+function chaseTgt(c){if(!c)return null;
+  if(c.k==='p'){const b=nvV().bands.find(x=>x.id===c.id);return b?{x:b.x,y:b.y,o:b}:null}
+  if(c.k==='f'){const f=S.fleets.find(x=>x.id===c.id);return f&&f.at==null&&!f.inG?{x:f.x,y:f.y,o:f}:null}
+  if(c.k==='m'){const m=mById(c.r,c.i);return m?{x:m.x,y:m.y,o:m}:null}return null}
+function chaseLabel(c){const t=chaseTgt(c);if(!t)return '';return c.k==='p'?`${bandName(t.o)} de ${t.o.chef}`:c.k==='f'?(t.o.side==='car'||visAt(t.x,t.y)===2?t.o.name:'une flotte ennemie'):`un marchand (${rName(t.o.r)})`}
+function chaseTick(f){const c=f.chase,t=chaseTgt(c);if(!t){f.chase=null;return}
+  const v=f.side==='car'?visAt(t.x,t.y):visAtR(t.x,t.y);
+  if(v<1){if(!c.lost){c.lost=S.day;if(f.side==='car')nvLog(`${f.name} perd de vue ${chaseLabel(c)}.`)}if(S.day-c.lost>2){f.chase=null;if(f.side==='car')nvLog(`${f.name} abandonne la poursuite.`)}return}
+  c.lost=0;if(f.side!=='car'&&S.day-(c.d0||0)>8){f.chase=null;return}
+  const key='r'+f.id;if((NAVT.get(key)||-1)>S.day)return;NAVT.set(key,S.day+.12);
+  if(f.inG)leavePort(f);const L=fleetLegsTo(f,t.x,t.y);if(L){f.legs=L;f.at=null;f.dest=null}}
+function setChase(f,c){f.chase={...c,d0:S.day,lost:0};NAVT.delete('r'+f.id);chaseTick(f)}
+
+/* ---- contacts et batailles ---- */
+function wants(p,q){
+  if(p.t==='p'){const b=p.o;return !!(b.tgt&&q.t==='f'&&b.tgt.k==='f'&&b.tgt.id===q.o.id)||(b.mode!=='flee'&&pPow(q)<bandPow(b)*.7)}
+  const f=p.o,c=f.chase;if(c&&((q.t==='p'&&c.k==='p'&&c.id===q.o.id)||(q.t==='f'&&c.k==='f'&&c.id===q.o.id)))return true;
+  if(f.cargo.length||warN(f)<3)return false;
+  if(f.side==='car')return !!(f.task&&['hunt','patrol','escort','course'].includes(f.task.k)&&(q.t==='p'||f.task.k!=='hunt'));
+  return pPow(p)>=pPow(q)*.9}
+function evadeChance(ev,pu){const st=nvV().storms.some(s=>Math.hypot(s.x-ev.o.x,s.y-ev.o.y)<s.r+20);
+  return Math.max(.05,Math.min(.85,.35+(pSpeed(ev)-pSpeed(pu))/40+(st?.2:0)))}
+function interpose(p){if(p.t!=='f'||warN(p.o)>=3)return p;const e=escortsOf(p.o.side,p.o.x,p.o.y).filter(e=>e!==p.o)[0];return e?nvP('f',e):p}
+function nvContact(A,B){A=interpose(A);B=interpose(B);
+  const key='c:'+[A.t+A.o.id,B.t+B.o.id].sort().join(':');if((NAVT.get(key)||-1)>S.day)return;
+  const wa=wants(A,B),wb=wants(B,A);if(!wa&&!wb)return;NAVT.set(key,S.day+.4);
+  const init=wa?A:B,other=init===A?B:A,otherWants=init===A?wb:wa;
+  if(pMine(A)||pMine(B)){if(nvMP()){autoFight(init,other,otherWants);return}NAVQ.push({init,other,otherWants});S.paused=true;navShowQ();return}
+  autoFight(init,other,otherWants)}
+function autoFight(init,other,otherWants){
+  if(!otherWants&&nvR()<evadeChance(other,init)){evaded(other,init);return}
+  nvFight(init,other,aiTac(init),aiTac(other))}
+function evaded(ev,pu){const seen=pMine(ev)||pMine(pu)||visAt(ev.o.x,ev.o.y)===2;
+  if(seen)nvLog(`${cap1(pName(ev))} ${vb(ev,'se dérobe','se dérobent')} devant ${pName(pu)} ${ZONES[zoneOf(ev.o.x,ev.o.y)].loc}.`);
+  if(ev.t==='p')bandHome(ev.o,'flee');else if(ev.o.side!=='car'){ev.o.chase=null;goHome(ev.o)}}
+const aiTac=p=>p.t==='p'?'abord':(p.o.ships.tri>p.o.ships.quin?'eperon':'abord');
+function tacMul(p,t){if(p.t==='p')return t==='abord'?1.15:t==='prudent'?.85:1;const s=p.o.ships,w=Math.max(1,s.quin+s.tri);
+  if(t==='eperon')return 1+.25*s.tri/w-.05*s.quin/w;if(t==='abord')return 1+.2*s.quin/w+(p.o.cargo.length?.15:0);return .85}
+function losses(p,frac,capF){
+  if(p.t==='p'){const l=Math.min(p.o.n,Math.round(p.o.n*frac+(nvR()<p.o.n*frac%1?1:0))),c=Math.round(l*capF);p.o.n-=l;return {sunk:l-c,capt:c,lib:c}}
+  const f=p.o,b4={...f.ships};sink(f,frac);const out={sunk:0,capt:0,ships:{}};
+  for(const k in b4){const d=b4[k]-f.ships[k],c=Math.round(d*capF);out.sunk+=d-c;out.capt+=c;out.ships[k]=c}return out}
+function nvFight(A,B,tA,tB){
+  const pa=pPow(A)*tacMul(A,tA)*(.8+nvR()*.4),pb=pPow(B)*tacMul(B,tB)*(.8+nvR()*.4),r=pa/(pa+pb||1),aWin=r>=.5,m=Math.abs(r-.5);
+  const prud=(tA==='prudent'||tB==='prudent')?.55:1,W=aWin?A:B,Lo=aWin?B:A,tW=aWin?tA:tB;
+  const lf=Math.min(.85,(.22+m*1.5)*prud),wf=Math.max(.03,(.3-m*.8)*prud*.8),capF=tW==='abord'?.5:tW==='eperon'?.15:.2;
+  const LL=losses(Lo,lf,capF),LW=losses(W,wf,.1);
+  return nvAfter(A,B,tA,tB,aWin,LL,LW)}
+// suites d'une bataille (carte ou 3D) : prises, butin, poursuites, journal. o.noPrize : les prises sont déjà comptées (bataille 3D)
+function nvAfter(A,B,tA,tB,aWin,LL,LW,o){o=o||{};const W=aWin?A:B,Lo=aWin?B:A;
+  const x=(A.o.x+B.o.x)/2,y=(A.o.y+B.o.y)/2,z=ZONES[zoneOf(x,y)].loc;
+  // les prises rejoignent le vainqueur
+  const addTo=(p,cap)=>{if(p.t==='p'){p.o.n+=cap.capt;if(cap.ships)p.o.loot+=(cap.ships.trans||0)*6+(cap.ships.quin||0)*3}else{if(cap.ships)for(const k in cap.ships)p.o.ships[k]+=cap.ships[k];if(cap.lib)p.o.ships.tri+=cap.lib}};
+  if(!o.noPrize){addTo(W,LL);addTo(Lo,LW)}
+  let gold=0,extra='';
+  if(Lo.t==='p'){const b=Lo.o;if(!o.draw||b.n<3){gold=Math.round(b.loot*.6)+LL.capt*3;b.loot-=Math.round(b.loot*.6)}
+    if(b.n<3){gold+=b.loot+25;nvV().bands=nvV().bands.filter(x=>x!==b);extra=` La bande ${deN(b.chef)} est anéantie.`;bounty(b.k,pSide(W));
+      if(pSide(W)==='car'&&nvR()<.6&&nvV().lairs[b.k]&&!nvV().lairs[b.k].known){nvV().lairs[b.k].known=1;extra+=` Des prisonniers avouent où est leur repaire : ${nvV().lairs[b.k].site}.`}}
+    else bandHome(b,'flee');
+    if(W.t==='f'){flG(W.o,()=>{S.gold[W.o.side]=(S.gold[W.o.side]||0)+gold})}}
+  if(W.t==='p'){W.o.loot+=LL.capt*4+10;W.o.tgt=null}
+  if(Lo.t==='f'){const f=Lo.o;f.chase=null;if(S.fleets.includes(f)){if(f.side!=='car')goHome(f);else{f.legs=[];f.task=null}}}
+  if(W.t==='f')W.o.chase=null;
+  for(const p of [A,B])if(p.t==='f'&&S.fleets.includes(p.o))cleanFleet(p.o);
+  nvV().fx.push({x,y,d:S.day});if(nvV().fx.length>12)nvV().fx.shift();
+  const res={A,B,tA,tB,aWin,W,Lo,LL,LW,gold,extra,z,names:[pName(A),pName(B)],d3:!!o.d3,draw:!!o.draw};
+  const seen=pMine(A)||pMine(B)||visAt(x,y)>=1;
+  if(seen)nvLog(`Bataille navale ${z} : ${o.draw?`${pName(A)} et ${pName(B)} se séparent sans vainqueur (${(aWin?LW:LL).sunk+(aWin?LW:LL).capt} et ${(aWin?LL:LW).sunk+(aWin?LL:LW).capt} navires perdus).`:`${pName(W)} ${vb(W,"l'emporte","l'emportent")} sur ${pName(Lo)} (${LL.sunk} navires coulés, ${LL.capt} pris ; le vainqueur perd ${LW.sunk+LW.capt}).`}${gold&&pSide(W)==='car'?' Butin : '+gold+' or.':''}${extra}`);
+  return res}
+function bounty(k,side){if(side!=='car'&&side!=='rom')return;const L=nvV().lairs[k];if(!L)return;const done={};
+  for(const n of N){const o=ownerN(n.i);if(!o||done[o]||!FAC[o]||!FAC[o].a||!S.fac[o]||S.fac[o].st!=='neutre')continue;if(Math.hypot(n.x-L.x,n.y-L.y)>350)continue;done[o]=1;S.fac[o][side]=Math.min(100,S.fac[o][side]+5)}
+  const names=Object.keys(done).map(o=>FAC[o].n);if(side==='car'&&names.length)nvLog(`Les côtes respirent : ${names.slice(0,3).join(', ')} vous en savent gré (estime +5).`)}
+
+/* ---- prises de marchands ---- */
+function takeMerchant(taker,m){const r=m.r;
+  const esc_=escortsOf(r.side,m.x,m.y).filter(e=>taker.t==='p'||e.id!==taker.o.id);
+  if(esc_.length){const E=nvP('f',esc_[0]);const k2='c:'+[taker.t+taker.o.id,'f'+E.o.id].sort().join(':');if((NAVT.get(k2)||-1)>S.day)return;
+    // l'escorte s'interpose : bataille
+    NAVT.set(k2,S.day+.4);if(pMine(E)||pMine(taker)){if(nvMP()){nvFight(taker,E,aiTac(taker),aiTac(E));return}NAVQ.push({init:taker,other:E,otherWants:true,escort:rName(r)});S.paused=true;navShowQ();return}
+    nvFight(taker,E,aiTac(taker),aiTac(E));return}
+  const z=ZONES[zoneOf(m.x,m.y)].loc;
+  if(taker.t==='p'){const b=taker.o;b.loot+=r.v*2;b.tgt=null;r.sus=S.day+30;S.gold[r.side]=Math.max(0,(S.gold[r.side]||0)-r.v);
+    if(r.side==='car'){nvV().seen[b.id]={x:b.x,y:b.y,d:Math.floor(S.day),n:b.n,rep:1};nvLog(`Les ${PIRD[b.k].n} ${deN(b.chef)} ont pris un de vos marchands ${z} (route ${rName(r)}, −${r.v} or, un mois sans commerce). Les survivants signalent ${b.n>10?'une dizaine de':'quelques'} liburnes.`,true)}
+    else if(visAt(m.x,m.y)>=1)nvJ(`Des pirates prennent un marchand ${sideName(r.side)} ${z}.`);return}
+  const f=taker.o,prize=r.v*3;S.gold[f.side]=(S.gold[f.side]||0)+prize;S.gold[r.side]=Math.max(0,(S.gold[r.side]||0)-r.v);r.sus=S.day+45;if(f.chase&&f.chase.k==='m')f.chase=null;
+  if(f.side==='car')nvLog(`${f.name} arraisonne un marchand ennemi ${z} : ${prize} or de prises ; la route ${rName(r)} est coupée six semaines.`);
+  else if(r.side==='car')nvLog(`Des galères ${sideName(f.side).toLowerCase()==='rome'?'romaines':'ennemies'} ont pris un de vos marchands ${z} (route ${rName(r)}, −${r.v} or). Une escadre en escorte l'aurait défendu.`,true)}
+
+/* ---- tempêtes ---- */
+function stormsDaily(){const V=nvV(),se=season(),p={Hiver:.16,Automne:.08,Printemps:.04,'Été':.015}[se]||.04;
+  if(V.storms.length<4&&nvR()<p){for(let tr=0;tr<6;tr++){const z=ZONES[Math.floor(nvR()*ZONES.length)],x=z.x+(nvR()-.5)*220,y=z.y+(nvR()-.5)*140;if(landFine(x,y))continue;
+    const s={id:S.uid++,x,y,r:35+nvR()*45,vx:15+nvR()*40,vy:(nvR()-.5)*30,t:3+Math.floor(nvR()*5),a:nvR()*6};V.storms.push(s);
+    if(S.fleets.some(f=>f.side==='car'&&f.at==null&&!f.inG&&Math.hypot(f.x-x,f.y-y)<350))nvLog(`Le ciel se charge ${ZONES[zoneOf(x,y)].loc} : une tempête se lève et dérive vers l'est.`);break}}
+  for(const s of V.storms){s.t--;
+    for(const f of S.fleets.slice()){if(f.at!=null||f.inG||Math.hypot(f.x-s.x,f.y-s.y)>s.r)continue;if(nvR()>(onCoast(f.x,f.y)?.25:.45))continue;
+      const l=sink(f,.06+nvR()*.16);if(l&&(f.side==='car'||visAt(f.x,f.y)>=1))nvLog(`Tempête ${ZONES[zoneOf(f.x,f.y)].loc} : ${f.name} perd ${l} navires.`,f.side==='car');cleanFleet(f)}
+    for(const b of V.bands.slice()){if(atLair(b)||Math.hypot(b.x-s.x,b.y-s.y)>s.r||nvR()>.4)continue;b.n-=Math.max(1,Math.round(b.n*(.05+nvR()*.15)));if(b.n<3)V.bands=V.bands.filter(x=>x!==b)}}
+  V.storms=V.storms.filter(s=>s.t>0)}
+function stormsTick(dd){for(const s of nvV().storms){s.x+=s.vx*dd;s.y+=s.vy*dd;s.a+=dd*3}}
+
+/* ---- vie des pirates (chaque jour) ---- */
+function bandDaily(b){const V=nvV(),L=V.lairs[b.k],w=season()==='Hiver';if(!L){V.bands=V.bands.filter(x=>x!==b);return}
+  const home=atLair(b);
+  if(home){if(b.loot){L.loot+=b.loot;b.loot=0}if(b.n<18&&nvR()<.06)b.n++;if(b.mode!=='home')b.mode='home';if(w)return;if(b.wait>0){b.wait--;return}}
+  const thr=S.fleets.filter(f=>f.at==null&&!f.inG&&warN(f)>=3&&Math.hypot(f.x-b.x,f.y-b.y)<40&&fleetPow(f)>bandPow(b)*.8);
+  if(thr.length){if(home){b.wait=2;return}if(b.mode!=='flee'){bandHome(b,'flee');return}}
+  if(b.mode==='flee'){if(!b.legs.length)b.mode='rove';else return}
+  if(w){bandHome(b);return}
+  if(b.loot>=45||b.n<5){if(b.mode!=='home')bandHome(b);return}
+  if(b.mode==='home'&&b.legs.length)return;
+  if(b.mode==='raid'&&b.tgt&&b.tgt.k==='n'){const n=N[b.tgt.n],p=n.anch||[n.x,n.y];
+    if(Math.hypot(p[0]-b.x,p[1]-b.y)<7){b.tgt.t=(b.tgt.t||0)+1;const g=4+n.size*3;b.loot+=g;S.raid[n.id]=Math.max(S.raid[n.id]||0,30);const o=ownerN(n.i);
+      if(o==='car'&&b.tgt.t===1){V.seen[b.id]={x:b.x,y:b.y,d:Math.floor(S.day),n:b.n,rep:1};nvLog(`Les ${PIRD[b.k].n} ${deN(b.chef)} pillent les côtes autour ${deN(n.n)} : le revenu de la ville baisse.`,true)}
+      if(b.tgt.t>=3){b.mode='rove';b.tgt=null}return}
+    if(!b.legs.length)b.mode='rove';else return}
+  if(b.mode==='hunt'&&b.tgt&&nvR()<.8){const ok=b.tgt.k==='m'?mById(b.tgt.r,b.tgt.i):S.fleets.find(f=>f.id===b.tgt.id&&f.at==null);if(ok)return}
+  // choisir une proie : un marchand, puis un convoi mal escorté, sinon piller une côte, sinon rôder
+  let best=null,bd=1e9;
+  for(const m of merchants()){const d=Math.hypot(m.x-b.x,m.y-b.y);if(d>220||Math.hypot(m.x-L.ax,m.y-L.ay)>NV.range)continue;if(d<bd){bd=d;best={k:'m',r:m.r.id,i:m.i}}}
+  for(const f of S.fleets){if(f.at!=null||f.inG||!f.ships.trans)continue;const d=Math.hypot(f.x-b.x,f.y-b.y);if(d>120||fleetPow(f)>bandPow(b)*.7)continue;if(d*.8<bd){bd=d*.8;best={k:'f',id:f.id}}}
+  if(best){b.mode='hunt';b.tgt=best;b.rt=0;return}
+  if(nvR()<.35){const T=N.filter(n=>n.port&&n.anch&&!n.col&&ownerN(n.i)&&Math.hypot(n.anch[0]-L.ax,n.anch[1]-L.ay)<NV.range&&Math.hypot(n.anch[0]-L.ax,n.anch[1]-L.ay)>25);
+    if(T.length){const n=T[Math.floor(nvR()*T.length)];if(bandGo(b,n.anch[0],n.anch[1])){b.mode='raid';b.tgt={k:'n',n:n.i,t:0};return}}}
+  if(!b.legs.length){for(let tr=0;tr<8;tr++){const a=nvR()*6.283,r=40+nvR()*160,x=L.ax+Math.cos(a)*r,y=L.ay+Math.sin(a)*r;if(landFine(x,y))continue;const k=sgIdx(x,y);if(k<0||!SG.sea[k])continue;if(bandGo(b,x,y)){b.mode='rove';break}}}}
+function bandTick(b,dd){
+  if(b.mode==='hunt'&&b.tgt){const t=b.tgt.k==='m'?mById(b.tgt.r,b.tgt.i):S.fleets.find(f=>f.id===b.tgt.id&&f.at==null&&!f.inG);
+    if(!t){b.tgt=null;b.mode='rove'}else if(b.rt<=S.day){b.rt=S.day+.15;const L=navPath(b.x,b.y,t.x,t.y);if(L)b.legs=L}}
+  moveBand(b,dd)}
+
+/* ---- jour : pirates, tempêtes, missions des flottes, IA ---- */
+function navDaily(d){navInit();const V=nvV();
+  stormsDaily();
+  for(const k in PIRD){const L=V.lairs[k];
+    if(L&&L.dead&&(!S.pir[k]||S.pir[k]<=S.day)){delete S.pir[k];const nl=newLair(k,L.site);if(nl&&S.trade&&S.trade.some(r=>r.side==='car'))nvLog(`On parle de nouveaux ${PIRD[k].n} : un certain ${nl.chef} a rassemblé des liburnes.`)}
+    const L2=V.lairs[k];if(!L2||L2.dead)continue;
+    if(nvR()<.03)L2.gar=Math.min(20,L2.gar+1);
+    const cap=S.day>300?2:1;if(bandsOf(k).length<cap&&(V.cd[k]||0)<=S.day&&season()!=='Hiver'){spawnBand(k);V.cd[k]=S.day+90}
+    if(!L2.known&&visAt(L2.x,L2.y)>=1){L2.known=1;nvLog(`Vos vigies repèrent un repaire de ${PIRD[k].n} à ${L2.site} : palissade, cales sèches, liburnes tirées sur la grève.`)}
+    // une armée débarquée tout près brûle le repaire
+    const a=S.armies.find(a=>!a.dead&&!a.ship&&!a.g&&(a.side==='car'||a.side==='rom')&&Math.hypot(a.x-L2.x,a.y-L2.y)<5&&a.units.length>=2);if(a)flG(a,()=>burnLair(k,a.side,`${a.name} débarque et donne l'assaut`))}
+  for(const b of V.bands.slice())bandDaily(b);
+  // ce que voient vos vigies ; pirates suivis jusqu'à leur repaire
+  for(const b of V.bands){if(visAt(b.x,b.y)<2)continue;V.seen[b.id]={x:b.x,y:b.y,d:Math.floor(S.day),n:b.n};const L=V.lairs[b.k];
+    if(L&&!L.known&&(b.mode==='home'||b.mode==='flee')&&Math.hypot(b.x-L.ax,b.y-L.ay)<90){L.known=1;nvLog(`Vos navires suivent de loin les ${PIRD[b.k].n} jusqu'à leur repaire : ${L.site}.`)}}
+  for(const id in V.seen)if(d-V.seen[id].d>40||!V.bands.some(b=>b.id==id))delete V.seen[id];
+  V.fx=V.fx.filter(e=>S.day-e.d<5);
+  // missions des flottes du joueur
+  for(const f of S.fleets){if(f.side!=='car'||f.inG||f.cargo.length)continue;const t=f.task;if(!t||f.chase)continue;
+    if(t.k==='hunt'){const vb=V.bands.filter(b=>visAt(b.x,b.y)>=1&&Math.hypot(b.x-f.x,b.y-f.y)<220).sort((p,q)=>Math.hypot(p.x-f.x,p.y-f.y)-Math.hypot(q.x-f.x,q.y-f.y))[0];
+      if(vb){setChase(f,{k:'p',id:vb.id});nvLog(`${f.name} a repéré ${PIRD[vb.k].n} : elle leur donne la chasse.`);continue}
+      if(f.legs.length)continue;
+      const sg=Object.values(V.seen).filter(s=>d-s.d<25&&Math.hypot(s.x-f.x,s.y-f.y)>15).sort((p,q)=>q.d-p.d)[0];
+      const kl=Object.values(V.lairs).filter(L=>L.known&&!L.dead).sort((p,q)=>Math.hypot(p.ax-f.x,p.ay-f.y)-Math.hypot(q.ax-f.x,q.ay-f.y))[0];
+      let goal=sg?[sg.x,sg.y]:kl?[kl.ax+(nvR()-.5)*30,kl.ay+(nvR()-.5)*30]:null;
+      if(!goal){const a=nvR()*6.283;goal=[f.x+Math.cos(a)*80,f.y+Math.sin(a)*80]}
+      if(!landFine(goal[0],goal[1])){const L=fleetLegsTo(f,goal[0],goal[1]);if(L){f.legs=L;f.at=null;f.dest=null}}}
+    if(t.k==='course'){const m=merchants().filter(m=>hostileSides('car',m.r.side)&&visAt(m.x,m.y)===2&&Math.hypot(m.x-f.x,m.y-f.y)<150).sort((p,q)=>Math.hypot(p.x-f.x,p.y-f.y)-Math.hypot(q.x-f.x,q.y-f.y))[0];
+      if(m)setChase(f,{k:'m',r:m.r.id,i:m.i})}}
+  // IA : les escadres ennemies en mer chassent pirates, flottes plus faibles et marchands qu'elles voient
+  for(const f of S.fleets){if(f.side==='car'||f.inG||f.at!=null||f.cargo.length||f.ai||f.chase||warN(f)<8)continue;const fp=fleetPow(f);
+    const b=V.bands.find(b=>!atLair(b)&&Math.hypot(b.x-f.x,b.y-f.y)<60&&bandPow(b)<fp);if(b){setChase(f,{k:'p',id:b.id});continue}
+    const e=S.fleets.find(o=>o.side==='car'&&o.at==null&&!o.inG&&Math.hypot(o.x-f.x,o.y-f.y)<120&&visAtR(o.x,o.y)===2&&fleetPow(o)<fp*.9);if(e){setChase(f,{k:'f',id:e.id});continue}
+    const m=merchants().find(m=>m.r.side==='car'&&Math.hypot(m.x-f.x,m.y-f.y)<100&&visAtR(m.x,m.y)===2);if(m)setChase(f,{k:'m',r:m.r.id,i:m.i})}}
+
+/* ---- en continu : mouvements, poursuites, escortes, rencontres ---- */
+function navTick(dd){if(!S.nav)navInit();if(S.cur||S.over||NAVQ.length)return;const V=nvV();
+  stormsTick(dd);for(const b of V.bands)bandTick(b,dd);
+  for(const f of S.fleets){if(f.chase)chaseTick(f);
+    else if(f.task&&f.task.k==='escort'&&!f.inG){const m=mById(f.task.r,0);if(m&&(NAVT.get('r'+f.id)||-1)<=S.day&&Math.hypot(m.x-f.x,m.y-f.y)>3){NAVT.set('r'+f.id,S.day+.2);const L=fleetLegsTo(f,m.x,m.y);if(L){f.legs=L;f.at=null;f.dest=null}}}}
+  const sea=S.fleets.filter(f=>f.at==null&&!f.inG);
+  // flottes contre flottes
+  for(let i=0;i<sea.length;i++)for(let j=i+1;j<sea.length;j++){const a=sea[i],b=sea[j];if(a.side===b.side||!hostileSides(a.side,b.side))continue;
+    if(Math.hypot(a.x-b.x,a.y-b.y)<NV.contact){nvContact(nvP('f',a),nvP('f',b));if(NAVQ.length)return}}
+  // pirates contre flottes
+  for(const b of V.bands.slice()){if(atLair(b))continue;for(const f of sea){if(!S.fleets.includes(f)||!V.bands.includes(b))continue;if(Math.hypot(f.x-b.x,f.y-b.y)<NV.contact){nvContact(nvP('f',f),nvP('p',b));if(NAVQ.length)return}}}
+  // prises de marchands
+  const M=merchants();if(!M.length)return;
+  for(const b of V.bands.slice()){if(b.mode==='flee'||atLair(b))continue;for(const m of M){if(m.r.sus&&m.r.sus>S.day)continue;if(Math.hypot(m.x-b.x,m.y-b.y)<NV.contact){takeMerchant(nvP('p',b),m);if(NAVQ.length)return;break}}}
+  for(const f of sea){if(warN(f)<3||f.cargo.length||!S.fleets.includes(f))continue;for(const m of M){if(m.r.sus&&m.r.sus>S.day||!hostileSides(f.side,m.r.side))continue;if(Math.hypot(m.x-f.x,m.y-f.y)<NV.contact){takeMerchant(nvP('f',f),m);if(NAVQ.length)return;break}}}}
+
+/* ---- repaire : assaut ---- */
+function lairDef(k){const L=nvV().lairs[k];return {t:'p',o:{id:-1,k,chef:L.chef,n:L.gar+bandsOf(k).filter(atLair).reduce((s,b)=>s+b.n,0),loot:0,x:L.ax,y:L.ay,mode:'home'}}}
+function burnLair(k,side,how){const V=nvV(),L=V.lairs[k];if(!L||L.dead)return;L.dead=1;L.known=1;L.burnt=Math.floor(S.day);S.pir[k]=S.day+720;
+  const g=L.loot+40;S.gold[side]=(S.gold[side]||0)+g;const n=V.bands.filter(b=>b.k===k).length;V.bands=V.bands.filter(b=>b.k!==k);bounty(k,side);
+  V.fx.push({x:L.x,y:L.y,d:S.day,fire:1});
+  if(side==='car'){nvLog(`${how||'Vos galères donnent l\'assaut'} : le repaire de ${L.site} brûle. ${L.chef} est pris, ${n?'ses bandes se dispersent, ':''}${g} or de butin. La mer est sûre pour deux ans.`);
+    if(typeof evCard==='function')evCard('Repaire incendié',`Le repaire des ${PIRD[k].n} à ${L.site} n'est plus que cendres. Butin : ${g} or ; vos routes marchandes ne craignent plus rien dans ces eaux pendant deux ans.`,true)}
+  else if(visAt(L.x,L.y)>=1||S.trade&&S.trade.some(r=>r.side==='car'))nvLog(`${sideName(side)} a brûlé le repaire des ${PIRD[k].n} à ${L.site}.`)}
+function lairNear(f){return Object.values(nvV().lairs).find(L=>L.known&&!L.dead&&Math.hypot(L.ax-f.x,L.ay-f.y)<14)}
+function assaultLair(f,tac){const L=lairNear(f);if(!L)return null;const D=lairDef(L.k),A=nvP('f',f);D.o.n=Math.round(D.o.n*1.3);
+  const res=nvFight(A,D,tac||aiTac(A),'abord');if(res.aWin)flG(f,()=>burnLair(L.k,f.side,`${f.name} force l'entrée de la crique`));else{L.gar=Math.max(4,D.o.n);if(f.side==='car')nvLog(`L'assaut sur ${L.site} échoue : les pirates tiennent la crique.`)}
+  res.lair=L;return res}
+
+/* ---- fenêtres : rencontre, résultat ---- */
+function navShowQ(){if(!NAVQ.length||!$('modal').hidden&&!NAVRES)return;const e=NAVQ[0];
+  const me=pMine(e.init)?e.init:e.other,foe=me===e.init?e.other:e.init,mineInit=me===e.init;
+  const pm=pPow(me),pf=pPow(foe),rr=pm/(pm+pf||1),ev=Math.round(evadeChance(me,foe)*100),z=ZONES[zoneOf(me.o.x,me.o.y)].loc;
+  const odds=rr>.62?'nettement favorable':rr>.53?'favorable':rr>.47?'équilibré':rr>.38?'défavorable':'très défavorable';
+  const st=nvV().storms.some(s=>Math.hypot(s.x-me.o.x,s.y-me.o.y)<s.r+20);
+  const intro=e.escort?`${cap1(pName(foe))} ${vb(foe,'fond','fondent')} sur les marchands de la route ${e.escort} ; ${me.o.name} s'interpose.`:mineInit?`${me.o.name} rattrape ${pName(foe)} ${z}.`:`${cap1(pName(foe))} ${vb(foe,'fond','fondent')} sur ${me.o.name} ${z} !`;
+  const foeTxt=foe.t==='p'||visAt(foe.o.x,foe.o.y)===2?pDesc(foe):'des voiles en nombre';
+  modal(`<h2>Rencontre en mer</h2><p>${intro}${st?' La mer est grosse : on peut se perdre dans les grains.':''}</p>
+    <div class="vs"><div><h4 style="color:#b48ae6">${esc(me.o.name)}</h4><ul><li>${pDesc(me)}</li><li>${Math.round(fSpeed(me.o))} km/jour</li></ul></div>
+    <div><h4 style="color:${foe.t==='p'?'#d9d0c0':'#e2665a'}">${esc(cap1(pName(foe)))}</h4><ul><li>${foeTxt}</li><li>${Math.round(pSpeed(foe))} km/jour</li>${foe.t==='p'?'<li>Abordeurs redoutables</li>':''}</ul></div></div>
+    <p class="odds">Rapport de forces : <b>${odds}</b>.${mineInit&&!e.otherWants?` Ils chercheront à fuir (${Math.round(evadeChance(foe,me)*100)} % de chances) : des trières plus rapides les en empêchent.`:''}</p>
+    <div class="row"><button class="go" id="nv3" type="button" title="Commander vous-même vos escadres dans la bataille navale en 3D ; les pertes reviennent dans la campagne">Livrer bataille en 3D</button></div>
+    <p class="sub" style="margin-top:0">Ou laisser vos capitaines la livrer, avec la manœuvre de votre choix :</p>
+    <div class="row"><button class="go" id="nvE" type="button" title="Les trières frappent de l'éperon : beaucoup de navires coulés, peu de prises">Éperonner</button>
+      <button class="go" id="nvA" type="button" title="Les quinquérèmes et leurs soldats montent à l'abordage : on prend des navires">Aborder</button>
+      <button id="nvP" type="button" title="Garder ses distances, traits et javelots : pertes réduites des deux côtés, rien de décisif">Combat prudent</button>
+      <button class="warn" id="nvX" type="button" title="Fuir à force de rames : dépend de la vitesse des deux flottes">${mineInit?'Laisser filer':'Se dérober ('+ev+' %)'}</button></div>
+    <p class="sub">Éperon : avantage aux trières. Abordage : avantage aux quinquérèmes et aux troupes embarquées, davantage de prises. Une tempête proche aide à se dérober.</p>`);
+  const go=t=>{NAVQ.shift();let r=null;if(!pAlive(me)||!pAlive(foe)){closeModal();navShowQ();return}
+    if(t==='x'){if(mineInit){closeModal();navNext();return}if(nvR()<evadeChance(me,foe)){evaded(me,foe);me.o.legs=[];closeModal();navNext();return}nvLog(`${me.o.name} n'a pas pu se dérober.`);r=nvFight(foe,me,aiTac(foe),'prudent')}
+    else{const tc={e:'eperon',a:'abord',p:'prudent'}[t];if(!e.otherWants&&mineInit&&nvR()<evadeChance(foe,me)){evaded(foe,me);closeModal();navNext();return}
+      if(t==='3'){nv3Open(me,foe);return}r=mineInit?nvFight(me,foe,tc,aiTac(foe)):nvFight(foe,me,aiTac(foe),tc)}
+    navResult(r)};
+  $('nv3').onclick=()=>go('3');$('nvE').onclick=()=>go('e');$('nvA').onclick=()=>go('a');$('nvP').onclick=()=>go('p');$('nvX').onclick=()=>go('x')}
+function navNext(){NAVRES=null;renderAll();if(NAVQ.length)navShowQ()}
+function navResult(r){NAVRES=r;const mine=pMine(r.A)?r.A:r.B,won=r.W===mine,L=won?r.LW:r.LL,F=won?r.LL:r.LW;
+  modal(`<h2>${r.draw?'Les flottes se séparent':won?'Victoire navale':'Défaite navale'}</h2><p>${cap1(r.z)}, ${esc(r.names[0])} contre ${esc(r.names[1])}${r.d3?' (bataille livrée en 3D)':''}.</p>
+    <div class="vs"><div><h4 style="color:#b48ae6">Vos pertes</h4><ul><li>${L.sunk} navires coulés</li><li>${L.capt} pris par l'ennemi</li></ul></div>
+    <div><h4>Pertes ennemies</h4><ul><li>${F.sunk} navires coulés</li><li>${F.capt} capturés${F.capt&&(won||r.d3)?' : ils rejoignent votre flotte':''}</li></ul></div></div>
+    ${r.gold&&won?`<p>Butin : <b>${r.gold} or</b>.</p>`:''}${r.extra?`<p>${esc(r.extra.trim())}</p>`:''}${r.lair?`<p>${r.aWin?'Le repaire brûle.':'Le repaire tient.'}</p>`:''}
+    <div class="row" style="justify-content:flex-end"><button class="go" id="nvOk" type="button">Continuer</button></div>`);
+  $('nvOk').onclick=()=>{closeModal();navNext()}}
+
+/* ---- bataille navale en 3D (naval.html, fil « Créer les batailles navales ») ----
+   Entrée : naval.html#n=<base64 du JSON> ; camp 0 = le joueur. Sortie : message {bellum:'fermer-naval',res}. */
+let NV3=null;
+const NV3URL='naval.html';
+const NV3NAT={pir:{name:'Pirates',adj:'pirate',css:'#4a4038',light:'#e6dccb',row:1.08,turn:1.15,stam:.9,mar:1,bq:1.15,oarSkill:.6,mode:'abordage'}};
+const hex2=c=>'#'+c.map(v=>Math.max(0,Math.min(255,v|0)).toString(16).padStart(2,'0')).join('');
+function nv3Side(p){
+  if(p.t==='p'){const b=p.o,sq=[],n=b.n,k=Math.ceil(n/8);for(let i=0;i<k;i++){const m=Math.round(n*(i+1)/k)-Math.round(n*i/k);if(m>0)sq.push({n:'Liburnes '+deN(b.chef)+(k>1?' '+ROMAN[i]:''),t:'tri',k:m})}
+    return {nat:'pir',name:cap1(pName(p)),natDef:NV3NAT.pir,sq}}
+  const f=p.o,sq=[];
+  let men=0;for(const id of f.cargo){const a=S.armies.find(x=>x.id===id);if(a)for(const u of a.units)men+=u.men}
+  for(const k of ['quin','tri','trans']){const n=Math.round(f.ships[k]||0);if(!n)continue;const c=Math.ceil(n/10);
+    for(let i=0;i<c;i++){const m=Math.round(n*(i+1)/c)-Math.round(n*i/c);if(m<=0)continue;const q={n:SHIP[k].n+(c>1?' '+ROMAN[i]:''),t:k,k:m};if(k==='trans'&&men)q.troops=Math.min(250,Math.round(men/n));sq.push(q)}}
+  const side=f.side,o={nat:side,name:f.name,sq};
+  if(side!=='car'&&side!=='rom'){const F=FAC[side]||{n:sideName(side),c:[120,120,120]},c=F.c||[120,120,120];
+    o.natDef={name:F.n,adj:deN(F.n),css:hex2(c),light:hex2(c.map(v=>v+(255-v)*.55)),base:'rom'}}
+  return o}
+function nv3Cfg(me,foe){const x=(me.o.x+foe.o.x)/2,y=(me.o.y+foe.o.y)/2,z=ZONES[zoneOf(x,y)].loc,c=cal(S.day),yr=`${c.season.toLowerCase()} ${c.year} av. J.-C.`;
+  return {place:cap1(z),year:yr,sides:[nv3Side(me),nv3Side(foe)],land:null}}
+function nv3Open(me,foe){
+  const cfg=nv3Cfg(me,foe),b64=btoa(unescape(encodeURIComponent(JSON.stringify(cfg)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  modal(`<h2>Bataille navale</h2><p>${esc(cfg.place)} : ${esc(me.o.name)} contre ${esc(cap1(pName(foe)))}. La bataille se livre en 3D ; la campagne reste en pause.</p>`);
+  const fr=document.createElement('iframe');fr.id='naval3d';fr.title='Bataille navale';
+  fr.style.cssText='position:fixed;inset:0;width:100%;height:100%;border:0;z-index:50;background:#2c5a68;opacity:0;transition:opacity .6s';
+  fr.src=NV3URL+'#n='+b64;document.body.appendChild(fr);fr.onload=()=>{fr.style.opacity='1';try{fr.focus()}catch(e){}};
+  NV3={fr,me,foe,res:null};S.paused=true}
+function nv3Close(res){const D=NV3;if(!D)return;NV3=null;D.fr.style.opacity='0';setTimeout(()=>D.fr.remove(),650);
+  if(!res){nvLog(`La bataille navale est interrompue : les flottes se séparent.`);closeModal();navNext();return}
+  if(!pAlive(D.me)||!pAlive(D.foe)){closeModal();navNext();return}
+  navResult(nv3Apply(D.me,D.foe,res))}
+// applique les pertes de la bataille 3D (camp 0 = me) puis les suites habituelles
+function nv3Apply(me,foe,res){
+  const K=['quin','tri','trans'],lost=s=>{const o={};for(const k of K)o[k]=((s.sunk||{})[k]||0)+((s.capt||{})[k]||0)+((s.ground||{})[k]||0);return o};
+  const tot=o=>K.reduce((a,k)=>a+(o&&o[k]||0),0),start=[pTot(me),pTot(foe)];
+  const L=[lost(res.sides[0]),lost(res.sides[1])];
+  [me,foe].forEach((p,i)=>{const s=res.sides[i],pr=s.prize||{};
+    if(p.t==='p'){p.o.n=Math.max(0,p.o.n-tot(L[i]))+tot(pr);if(pr.trans||pr.quin)p.o.loot+=(pr.trans||0)*6+(pr.quin||0)*3;return}
+    const f=p.o,t0=f.ships.trans||0;
+    for(const k of K)f.ships[k]=Math.max(0,(f.ships[k]||0)-L[i][k])+(pr[k]||0);
+    if(L[i].trans&&t0&&f.cargo.length){const fr=Math.min(1,L[i].trans/t0);for(const id of f.cargo){const a=S.armies.find(x=>x.id===id);if(a){a.units.forEach(u=>u.men*=1-fr);cleanArmy(a)}}}});
+  let w=res.winner,draw=false;
+  if(w!==0&&w!==1){draw=true;w=tot(L[0])/Math.max(1,start[0])<=tot(L[1])/Math.max(1,start[1])?0:1}
+  const sum=s=>({sunk:tot(s.sunk)+tot(s.ground),capt:tot(s.capt),ships:{}});
+  const LM=sum(res.sides[0]),LF=sum(res.sides[1]);
+  const r=nvAfter(me,foe,'3d','3d',w===0,w===0?LF:LM,w===0?LM:LF,{noPrize:true,d3:true,draw});
+  return r}
+const pTot=p=>p.t==='p'?p.o.n:Math.round((p.o.ships.quin||0)+(p.o.ships.tri||0)+(p.o.ships.trans||0));
+window.addEventListener('message',ev=>{const d=ev.data,D=NV3;if(!d||!D||ev.source!==D.fr.contentWindow)return;
+  if(d.bellum==='retour-naval')D.res=d.res;
+  else if(d.bellum==='fermer-naval')nv3Close(d.res||D.res)});
+
+/* ---- dessin ---- */
+function nvShip(x,y,q,ang,hull,sail){ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(1,1.5,q*.8,q*.3,0,0,7);ctx.fill();
+  ctx.fillStyle=hull;ctx.strokeStyle='rgba(15,10,6,.9)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(q*.85,0);ctx.quadraticCurveTo(q*.2,-q*.32,-q*.7,-q*.22);ctx.lineTo(-q*.7,q*.22);ctx.quadraticCurveTo(q*.2,q*.32,q*.85,0);ctx.fill();ctx.stroke();
+  if(sail){ctx.fillStyle=sail;ctx.beginPath();ctx.moveTo(-q*.05,-q*.55);ctx.lineTo(q*.12,-q*.55);ctx.lineTo(q*.12,q*.55);ctx.lineTo(-q*.05,q*.55);ctx.closePath();ctx.fill();ctx.stroke()}ctx.restore()}
+function nvLabel(X,Y,t,bg,fg){ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';const tw=ctx.measureText(t).width;
+  ctx.fillStyle=bg;ctx.fillRect(X,Y-7,tw+10,14);ctx.strokeStyle='rgba(20,14,8,.85)';ctx.lineWidth=1;ctx.strokeRect(X+.5,Y-6.5,tw+9,13);ctx.fillStyle=fg;ctx.fillText(t,X+5,Y)}
+function skull(X,Y,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.arc(X,Y-r*.15,r*.55,0,7);ctx.fill();ctx.fillRect(X-r*.3,Y+r*.2,r*.6,r*.3);ctx.fillStyle='#16110c';ctx.beginPath();ctx.arc(X-r*.2,Y-r*.2,r*.14,0,7);ctx.arc(X+r*.2,Y-r*.2,r*.14,0,7);ctx.fill()}
+function drawNav(s,w,h){if(!S||!S.nav)return;const V=nvV(),now=performance.now()/1000;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
+  const inS=(x,y,m)=>{const X=view.ox+x*s,Y=view.oy+y*s;return X>-m&&Y>-m&&X<w+m&&Y<h+m};
+  // tempêtes
+  for(const st of V.storms){if(!inS(st.x,st.y,st.r*s+40))continue;const X=view.ox+st.x*s,Y=view.oy+st.y*s,R=Math.max(14,st.r*s);
+    const g=ctx.createRadialGradient(X,Y,R*.1,X,Y,R);g.addColorStop(0,'rgba(40,46,56,.55)');g.addColorStop(.7,'rgba(50,58,70,.35)');g.addColorStop(1,'rgba(60,70,80,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(X,Y,R,0,7);ctx.fill();
+    ctx.strokeStyle='rgba(220,230,240,.35)';ctx.lineWidth=Math.max(1,R*.03);for(let k=0;k<4;k++){const a0=st.a+now*.4+k*1.57;ctx.beginPath();ctx.arc(X,Y,R*(.35+k*.12),a0,a0+1.6);ctx.stroke()}
+    if(Math.sin(now*7+st.id)>.97){ctx.strokeStyle='rgba(255,250,200,.9)';ctx.lineWidth=1.5;const lx=X+(Math.sin(st.id*3+Math.floor(now))*R*.4);ctx.beginPath();ctx.moveTo(lx,Y-R*.3);ctx.lineTo(lx+4,Y-R*.1);ctx.lineTo(lx-3,Y);ctx.lineTo(lx+3,Y+R*.2);ctx.stroke()}
+    if(R>40){ctx.font='italic 12px Marcellus, Georgia, serif';ctx.textAlign='center';ctx.fillStyle='rgba(230,236,240,.85)';ctx.fillText('Tempête',X,Y+4)}}
+  // routes : marchands
+  if(s>=.35)for(const m of merchants()){const mine=m.r.side==='car';if(!inS(m.x,m.y,20))continue;if(!mine&&visAt(m.x,m.y)<2)continue;const c=FAC[m.r.side]?FAC[m.r.side].c:[200,200,200];
+    nvShip(view.ox+m.x*s,view.oy+m.y*s,Math.max(5,Math.min(10,s*1.4)),m.ang,'#8a6a44',`rgb(${c.map(v=>Math.round(v+(255-v)*.55)).join(',')})`)}
+  // repaires connus
+  for(const L of Object.values(V.lairs)){if(!L.known||!inS(L.x,L.y,30))continue;const X=view.ox+L.x*s,Y=view.oy+L.y*s;
+    if(L.dead){ctx.fillStyle='rgba(60,50,40,.7)';ctx.beginPath();ctx.arc(X,Y,6,0,7);ctx.fill();ctx.fillStyle='rgba(200,190,170,.6)';for(let k=0;k<3;k++){ctx.beginPath();ctx.arc(X+k*3-3,Y-8-k*5-Math.sin(now+k)*2,3+k,0,7);ctx.fill()}if(s>.6)nvLabel(X+10,Y,`Ruines du repaire de ${L.site}`,'rgba(200,190,170,.85)','#2b2115');continue}
+    ctx.strokeStyle='#2a1c10';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X,Y+6);ctx.lineTo(X,Y-14);ctx.stroke();ctx.fillStyle='#16110c';ctx.fillRect(X,Y-14,12,8);skull(X+6,Y-10,4,'#efe6d2');
+    ctx.fillStyle='#6b4a2c';for(let k=-2;k<=2;k++)ctx.fillRect(X+k*4-1,Y+2,2,6);
+    if(sel&&sel.L===L.k){ctx.strokeStyle='#fff3c4';ctx.lineWidth=2;ctx.beginPath();ctx.arc(X,Y-2,14,0,7);ctx.stroke()}
+    L._p=[X,Y];nvLabel(X+14,Y-2,`Repaire ${deN(PIRD[L.k].n)} · ${L.site}`,'rgba(30,24,18,.88)','#efe6d2')}
+  // bandes de pirates
+  for(const b of V.bands){b._p=null;const v=visAt(b.x,b.y);if(!v||!inS(b.x,b.y,40)||atLair(b)&&v<2)continue;const X=view.ox+b.x*s,Y=view.oy+b.y*s;b._p=[X,Y];
+    if(v===1){ctx.fillStyle='rgba(20,16,12,.75)';ctx.beginPath();ctx.arc(X,Y,8,0,7);ctx.fill();ctx.fillStyle='#efe6d2';ctx.font='600 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('?',X,Y+.5);nvLabel(X+12,Y-12,'Voiles suspectes','rgba(30,24,18,.8)','#d8cdb8');continue}
+    const L0=b.legs[0],ang=L0?Math.atan2(L0.y-b.y,L0.x-b.x):0,k=Math.min(5,1+Math.floor(b.n/4)),q=Math.max(6,Math.min(12,s*2));
+    for(let i=0;i<k;i++){const o=(i-(k-1)/2)*q*1.1,bx=X-Math.cos(ang)*Math.abs(o)*.8-Math.sin(ang)*o,by=Y-Math.sin(ang)*Math.abs(o)*.8+Math.cos(ang)*o;nvShip(bx,by,q,ang,'#1e1914','#2e2620')}
+    if(sel&&sel.p===b.id){ctx.strokeStyle='#fff3c4';ctx.lineWidth=2;ctx.beginPath();ctx.arc(X,Y,q*2.2,0,7);ctx.stroke()}
+    skull(X-14,Y-18,6,'#efe6d2');nvLabel(X-6,Y-18,`${bandName(b)} · ${b.chef} · ${b.n}`,'rgba(26,20,14,.9)','#efe6d2')}
+  // pirates vus récemment
+  for(const id in V.seen){const sg=V.seen[id],b=V.bands.find(x=>x.id==id);if(!b||b._p||!inS(sg.x,sg.y,30))continue;const X=view.ox+sg.x*s,Y=view.oy+sg.y*s,k=Math.floor(S.day)-sg.d;ctx.globalAlpha=.55;skull(X,Y,7,'#efe6d2');ctx.globalAlpha=1;
+    ctx.font='600 10px Georgia,serif';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(20,16,12,.8)';const t=`pirates ${sg.rep?'signalés':'vus'} ${k<1?'à l\'instant':'il y a '+k+' j'}`;ctx.strokeText(t,X,Y+16);ctx.fillStyle='#efe6d2';ctx.fillText(t,X,Y+16)}
+  // poursuites
+  for(const f of S.fleets){if(f.side!=='car'||!f.chase)continue;const t=chaseTgt(f.chase);if(!t||visAt(t.x,t.y)<1)continue;ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(220,70,50,.85)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(view.ox+f.x*s,view.oy+f.y*s);ctx.lineTo(view.ox+t.x*s,view.oy+t.y*s);ctx.stroke();ctx.setLineDash([])}
+  // traces de combat
+  for(const e of V.fx){if(!inS(e.x,e.y,20))continue;const X=view.ox+e.x*s,Y=view.oy+e.y*s,a=Math.max(0,1-(S.day-e.d)/5);ctx.globalAlpha=a;
+    ctx.fillStyle=e.fire?'rgba(230,120,40,.8)':'rgba(90,60,30,.8)';for(let k=0;k<6;k++){ctx.fillRect(X+Math.cos(k*1.7)*7-2,Y+Math.sin(k*2.3)*5-1,4,2)}
+    ctx.strokeStyle='rgba(255,240,200,.9)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X-5,Y-5);ctx.lineTo(X+5,Y+5);ctx.moveTo(X+5,Y-5);ctx.lineTo(X-5,Y+5);ctx.stroke();ctx.globalAlpha=1}
+  ctx.restore()}
+function pickBand(mx,my){let best=null,bd=20;for(const b of (S.nav?S.nav.bands:[])){if(!b._p)continue;const d=Math.hypot(b._p[0]-mx,b._p[1]-my);if(d<bd){bd=d;best=b}}return best}
+function pickLair(mx,my){let best=null,bd=16;for(const L of Object.values(S.nav?S.nav.lairs:{})){if(!L.known||!L._p)continue;const d=Math.hypot(L._p[0]-mx,L._p[1]-my+4);if(d<bd){bd=d;best=L}}return best}
+
+/* ---- panneaux ---- */
+const NVMODE={home:'à l\'abri dans leur repaire',rove:'rôdent le long des côtes',hunt:'en chasse',raid:'pillent les côtes',flee:'fuient vers leur repaire'};
+function bandPanel(b){const v=visAt(b.x,b.y),L=nvV().lairs[b.k],sg=nvV().seen[b.id];
+  if(v<1)return `<h2>${bandName(b)}</h2><p>${sg?`Vus il y a ${Math.floor(S.day)-sg.d} jours, ${sg.n>10?'une dizaine de liburnes ou plus':'quelques liburnes'}.`:'On ne sait où ils sont.'}</p><p class="sub">Envoyez une flotte en « Chasse aux pirates » : elle va où ils ont été vus et fouille les parages.</p>`;
+  return `<h2>${bandName(b)}</h2><p><span class="tag">${esc(b.chef)}</span>${v===2?`${b.n} liburnes, ${NVMODE[b.mode]||''}${b.loot?' · butin à bord ≈ '+Math.round(b.loot)+' or':''}.`:'Des voiles noires au loin.'}</p>
+    <p>Repaire : ${L&&L.known?'<b>'+esc(L.site)+'</b>':'inconnu'}.</p>
+    <p class="sub">Liburnes rapides (${NV.psp} km/jour) : seules des trières en haute mer (${SHIP.tri.sp} km/jour) les rattrapent. Sinon, coincez-les quand ils rentrent, attendez-les devant leur repaire ou brûlez-le. Sélectionnez une flotte, puis <b>clic droit sur eux</b> pour leur donner la chasse.</p>`}
+function lairPanel(L){const nb=bandsOf(L.k).length;
+  if(L.dead)return `<h2>Ruines du repaire de ${esc(L.site)}</h2><p>Brûlé en ${cal(L.burnt||0).year} av. J.-C. Mer sûre jusqu'en ${cal(Math.floor(S.pir[L.k]||S.day)).year} av. J.-C.</p>`;
+  return `<h2>Repaire de ${esc(L.site)}</h2><p><span class="tag">${esc(PIRD[L.k].n)}</span><span class="tag">${esc(L.chef)}</span></p><p>${nb} bande${nb>1?'s':''} en activité · défenses ≈ ${L.gar} liburnes et une palissade · butin entassé ≈ ${Math.round(L.loot)} or.</p>
+    <p class="sub">Amenez une flotte (6 galères au moins) au mouillage et donnez l'assaut depuis son panneau ; des troupes embarquées aident beaucoup. Ou débarquez une armée tout près : elle brûle le repaire.</p>`}
+const _fleetPanelN=fleetPanel;
+fleetPanel=function(f){let h=_fleetPanelN.apply(this,arguments);if(f.side!=='car'||!S.nav)return h;
+  const c=f.chase,lab=c&&chaseLabel(c),L=lairNear(f),mine=S.trade?S.trade.filter(r=>r.side==='car'):[];const t=f.task&&f.task.k;
+  h+=`<h3>Missions</h3>${c&&lab?`<p>Poursuit <b>${esc(lab)}</b>${c.lost?' (perdu de vue)':''}. <button id="nvStop" type="button">Cesser</button></p>`:''}
+    <div class="row"><button id="nvHunt" type="button" class="${t==='hunt'?'on':''}" ${warN(f)?'':'disabled'} title="Va où les pirates ont été vus, fouille les parages, les poursuit dès qu'elle les voit">Chasse aux pirates</button>
+    <button id="nvCourse" type="button" class="${t==='course'?'on':''}" ${warN(f)>=3?'':'disabled'} title="Guette les marchands ennemis et les arraisonne (3 galères au moins)">Guerre de course</button></div>
+    ${mine.length?`<div class="row"><select id="nvR">${mine.map(r=>`<option value="${r.id}" ${t==='escort'&&f.task.r===r.id?'selected':''}>${esc(rName(r))}</option>`).join('')}</select><button id="nvEsc" type="button" class="${t==='escort'?'on':''}" ${warN(f)>=3?'':'disabled'} title="Accompagne les marchands de la route ; s'interpose si pirates ou corsaires attaquent">Escorter</button></div>`:''}
+    ${L?`<div class="row"><button class="warn" id="nvLair" type="button" ${warN(f)>=6?'':'disabled'} title="Défenses ≈ ${L.gar} liburnes et une palissade, plus les bandes au repaire">Assaut du repaire de ${esc(L.site)}</button></div>`:''}
+    <p class="sub">Vitesse ${Math.round(fSpeed(f))} km/jour (pirates ${NV.psp}). <b>Clic droit</b> sur des pirates, une flotte ennemie ou un marchand ennemi : poursuite.</p>`;
+  return h};
+const _bindFleetN=bindFleet;
+bindFleet=function(f){_bindFleetN.apply(this,arguments);if(f.side!=='car'||!S.nav)return;const R=()=>renderAll();
+  if($('nvStop'))$('nvStop').onclick=()=>{f.chase=null;f.legs=[];R()};
+  if($('nvHunt'))$('nvHunt').onclick=()=>{if(f.inG)leavePort(f);f.task=f.task&&f.task.k==='hunt'?null:{k:'hunt'};f.chase=null;if(f.task)nvLog(`${f.name} part en chasse contre les pirates.`);navDaily_hunt(f);R()};
+  if($('nvCourse'))$('nvCourse').onclick=()=>{if(f.inG)leavePort(f);f.task=f.task&&f.task.k==='course'?null:{k:'course'};f.chase=null;R()};
+  if($('nvEsc'))$('nvEsc').onclick=()=>{if(f.inG)leavePort(f);const id=+$('nvR').value;f.task=f.task&&f.task.k==='escort'&&f.task.r===id?null:{k:'escort',r:id};f.chase=null;NAVT.delete('r'+f.id);R()};
+  if($('nvLair'))$('nvLair').onclick=()=>{const r=assaultLair(f,f.ships.quin>=f.ships.tri?'abord':'eperon');if(r)navResult(r);else R()}};
+function navDaily_hunt(f){if(!f.task||f.task.k!=='hunt')return;const V=nvV();const vb=V.bands.find(b=>visAt(b.x,b.y)>=1&&Math.hypot(b.x-f.x,b.y-f.y)<220);if(vb){setChase(f,{k:'p',id:vb.id});return}
+  const sg=Object.values(V.seen).sort((p,q)=>q.d-p.d)[0];if(sg){const L=fleetLegsTo(f,sg.x,sg.y);if(L){f.legs=L;f.at=null;f.dest=null}}}
+const _orderFleetN=orderFleet;
+orderFleet=function(f,mx,my){if(S.nav&&f.side==='car'){
+    const b=pickBand(mx,my);if(b&&visAt(b.x,b.y)>=1){setChase(f,{k:'p',id:b.id});f.task=f.task&&f.task.k==='hunt'?f.task:null;nvLog(`${f.name} donne la chasse aux ${PIRD[b.k].n}.`);return true}
+    const o=pickFleet(mx,my,14);if(o&&o.side!=='car'&&hostileSides('car',o.side)&&visAt(o.x,o.y)>=1&&o.at==null&&!o.inG){setChase(f,{k:'f',id:o.id});f.task=null;return true}
+    const m=merchants().find(m=>m.r.side!=='car'&&hostileSides('car',m.r.side)&&visAt(m.x,m.y)===2&&Math.hypot(view.ox+m.x*view.s-mx,view.oy+m.y*view.s-my)<12);if(m){setChase(f,{k:'m',r:m.r.id,i:m.i});f.task=null;return true}}
+  if(f)f.chase=null;return _orderFleetN.apply(this,arguments)};
+const _renderSideN=renderSide;
+renderSide=function(){if(S&&S.nav&&sel&&(sel.p!=null||sel.L!=null)){const el=$('side');
+    if(sel.p!=null){const b=S.nav.bands.find(x=>x.id===sel.p);if(b){el.innerHTML=bandPanel(b);return}sel=null}
+    else{const L=S.nav.lairs[sel.L];if(L){el.innerHTML=lairPanel(L);return}sel=null}}
+  return _renderSideN.apply(this,arguments)};
+
+/* ---- fenêtre « Mer et commerce » : la partie pirates devient une vraie chasse ---- */
+const _openTradeN=openTrade;
+openTrade=function(){const r=_openTradeN.apply(this,arguments);try{navInit();const V=nvV();
+  const h3=[...document.querySelectorAll('#mcard h3')].find(x=>/^Pirates/.test(x.textContent));if(!h3)return r;const row=h3.nextElementSibling;
+  const rows=Object.keys(PIRD).map(k=>{const L=V.lairs[k],B=bandsOf(k),sg=B.map(b=>V.seen[b.id]).filter(Boolean).sort((p,q)=>q.d-p.d)[0];
+    const st=!L||L.dead?`<b style="color:var(--good)">mer sûre</b> jusqu'en ${cal(Math.floor(S.pir[k]||S.day)).year} av. J.-C.`:`${B.length} bande${B.length>1?'s':''} · chef : ${esc(L.chef)} · repaire ${L.known?'<b>'+esc(L.site)+'</b>':'inconnu'}${sg?` · vus il y a ${Math.floor(S.day)-sg.d} j`:''}`;
+    const tgt=L&&!L.dead&&L.known?[L.x,L.y]:sg?[sg.x,sg.y]:L&&L.dead?[L.x,L.y]:null;
+    return `<tr><td>${PIRD[k].n.replace(/^./,c=>c.toUpperCase())}</td><td>${st}</td><td>${tgt?`<button type="button" data-nvgo="${tgt[0]},${tgt[1]}">Voir</button>`:''}</td></tr>`}).join('');
+  h3.textContent='Pirates : à vous de les chasser';
+  if(row)row.outerHTML=`<p class="sub">Les pirates sortent de repaires cachés et prennent les marchands sans escorte. Trouvez-les (vigies, patrouilles, rapports de marchands), poursuivez-les avec des trières, attendez-les devant leur repaire ou brûlez-le : la mer reste sûre deux ans.</p><table class="dip">${rows}</table>
+    <h3>Journal de la mer</h3><p class="sub">${V.j.slice(0,6).map(e=>{const c=cal(e.d);return `${c.dm} ${MONTHS[c.mo].slice(0,4)}. ${e.t}`}).join('<br>')||'—'}</p>`;
+  document.querySelectorAll('[data-nvgo]').forEach(b=>b.onclick=()=>{const [x,y]=b.dataset.nvgo.split(',').map(Number);closeModal();centerOn(x,y,Math.max(view.s,1.2))})}catch(e){console.error(e)}return r};
+pirHunt=function(){openTrade()};
+// les tirages au sort de pirates sur les routes et la course « à la zone » sont remplacés par des navires sur la carte
+corsairDaily=function(){};
+const _tradeMonthlyN=tradeMonthly;
+tradeMonthly=function(){if(!S.pir)S.pir={};const keep=S.pir,fake={};for(const k in PIRD)fake[k]=S.day+1;S.pir=fake;try{return _tradeMonthlyN.apply(this,arguments)}finally{S.pir=keep}};
+
+/* ---- branchements ---- */
+const _tickFleetsN=tickFleets;
+tickFleets=function(dd){const r=_tickFleetsN.apply(this,arguments);try{navTick(dd)}catch(e){console.error(e)}return r};
+const _dailyN=daily;
+daily=function(d){const r=_dailyN.apply(this,arguments);if(S.cur||S.over)return r;try{navDaily(d)}catch(e){console.error(e)}return r};
+const _afterLoadN=afterLoad;afterLoad=function(){const r=_afterLoadN.apply(this,arguments);try{navInit()}catch(e){console.error(e)}return r};
+const _drawDynamicN=drawDynamic;
+drawDynamic=function(w,h,s){const r=_drawDynamicN.apply(this,arguments);try{drawNav(s,w,h)}catch(e){console.error(e)}return r};
+{let dn=null;
+  cv.addEventListener('pointerdown',e=>{dn={x:e.clientX,y:e.clientY,b:e.button}});
+  cv.addEventListener('pointerup',e=>{const d=dn;dn=null;if(!d||d.b!==0||!S||!S.nav||Math.hypot(e.clientX-d.x,e.clientY-d.y)>6||e.shiftKey)return;
+    const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
+    if(sel&&(sel.a||sel.f)&&(pickFleet(mx,my,10)||pickArmy(mx,my)))return;
+    const b=pickBand(mx,my);if(b){sel={p:b.id};preview=null;renderAll();return}
+    const L=pickLair(mx,my);if(L&&(!sel||sel.n!=null||sel.v!=null)){sel={L:L.k};preview=null;renderAll()}});
+  cv.addEventListener('pointermove',e=>{if(!S||!S.nav)return;const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top,b=pickBand(mx,my),tip=$('tip');
+    if(b){tip.hidden=false;tip.textContent=sel&&sel.f&&sel.f.side==='car'?`Clic droit : donner la chasse aux ${PIRD[b.k].n}`:(visAt(b.x,b.y)===2?`${bandName(b)} · ${b.chef} · ${b.n} liburnes`:'Voiles suspectes');tip.style.left=(mx+14)+'px';tip.style.top=(my+12)+'px';return}
+    const L=pickLair(mx,my);if(L){tip.hidden=false;tip.textContent=`Repaire ${deN(PIRD[L.k].n)} · ${L.site}`;tip.style.left=(mx+14)+'px';tip.style.top=(my+12)+'px'}})}
+window.__naval={navInit,navDaily,navTick,spawnBand,newLair,merchants,merchPos,nvFight,nvContact,assaultLair,burnLair,fleetPow,bandPow,setChase,stormsDaily,nvP,
+  cfg3D:e=>nv3Cfg(e.A,e.B),nv3Open,nv3Apply,nv3Close,get NV3(){return NV3},
+  get Q(){return NAVQ},get V(){return S&&S.nav}};
+/* ================= FIN NAVAL VIVANT ================= */

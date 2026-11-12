@@ -1,0 +1,49 @@
+# Contrôle automatique du jeu : à chaque envoi qui touche les pages ou les blocs de src/.
+# Vérifie que src/ et les pages concordent, puis joue le jeu dans un navigateur
+# (neuf peuples, un an de campagne, une bataille, sauvegarde, partie à deux).
+# Le rapport et les captures sont joints au passage (onglet Actions → « controle-rapport »).
+name: Contrôle du jeu
+
+on:
+  push:
+    branches: [main]
+    paths: [index.html, bataille.html, 'src/**', 'outils/**', .github/workflows/controle.yml]
+  pull_request:
+    paths: [index.html, bataille.html, 'src/**', 'outils/**', .github/workflows/controle.yml]
+  workflow_dispatch:
+
+concurrency:
+  group: controle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: src/ et pages concordent
+        run: python3 outils/assembler.py --verifier
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Navigateur de test
+        run: |
+          npm install --no-save --no-package-lock --prefix outils/controle playwright@1.63.0
+          npx --prefix outils/controle playwright install --with-deps chromium
+
+      - name: Jouer le jeu
+        env:
+          NODE_PATH: outils/controle/node_modules
+        run: node outils/controle/controle.js
+
+      - name: Rapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: controle-rapport
+          path: outils/controle/rapport/
+          if-no-files-found: ignore

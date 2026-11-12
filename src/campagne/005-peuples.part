@@ -1,0 +1,31 @@
+/* ================= PEUPLES ================= */
+const FAC={
+  car:{n:'Carthage',c:[125,79,184]},
+  rom:{n:'Rome',c:[191,59,49]},
+  num:{n:'Numides massyles',c:[196,150,82],a:[40,0],cul:'num'},
+  mae:{n:'Masaesyles',c:[176,132,90],a:[0,10],cul:'num'},
+  mau:{n:'Maures',c:[160,120,96],a:[10,0],cul:'num'},
+  cyr:{n:'Cyrène',c:[150,150,120],a:[0,0],cul:'gre'},
+  ibe:{n:'Ibères du nord',c:[170,110,70],a:[-10,30],cul:'ibe'},
+  cel:{n:'Celtibères',c:[150,100,70],a:[10,0],cul:'ibe'},
+  lus:{n:'Lusitaniens',c:[130,110,80],a:[0,0],cul:'ibe'},
+  bal:{n:'Baléares',c:[190,140,110],a:[50,-10],cul:'bal'},
+  mas:{n:'Massalia',c:[120,150,170],a:[-40,70],cul:'gre'},
+  gau:{n:'Gaulois',c:[110,140,80],a:[20,-20],cul:'gau'},
+  lig:{n:'Ligures',c:[120,130,90],a:[20,-10],cul:'gau'},
+  ins:{n:'Gaulois cisalpins',c:[100,150,90],a:[50,-50],cul:'gau'},
+  ven:{n:'Vénètes',c:[150,140,110],a:[-20,50],cul:'ita'},
+  syr:{n:'Syracuse',c:[110,140,180],a:[-30,60],cul:'gre'},
+  ill:{n:'Illyriens',c:[140,120,150],a:[0,-20],cul:'ill'},
+  dar:{n:'Dardaniens',c:[130,110,130],a:[0,0],cul:'ill'},
+  epi:{n:'Épirotes',c:[120,140,160],a:[0,10],cul:'gre'},
+  mac:{n:'Macédoine',c:[200,170,80],a:[30,-20],cul:'mac'},
+  thr:{n:'Thraces',c:[150,110,90],a:[0,0],cul:'thr'},
+  eto:{n:'Étoliens',c:[110,130,150],a:[-10,20],cul:'gre'},
+  ach:{n:'Ligue achéenne',c:[100,130,170],a:[0,10],cul:'gre'},
+  ath:{n:'Athènes',c:[140,160,190],a:[0,20],cul:'gre'},
+  cre:{n:'Crétois',c:[150,150,170],a:[10,0],cul:'cre'}
+};
+const POOL_CAR={afr:['lib','ncav'],num:['ncav','lib'],ibe:['iber','hcav'],bal:['sling'],gau:['gaul','hcav'],gre:['lib','sling'],mac:['lib','hcav'],thr:['hcav','sling'],ill:['iber','sling'],cre:['sling'],ita:['iber','hcav']};
+const POOL_ROM={ita:['legion','velites','rcav','acav'],other:['velites','acav']};
+

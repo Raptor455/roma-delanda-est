@@ -1,0 +1,29 @@
+/* ================= ÉTAT ================= */
+let S=null;
+const SAVE='bellum.campagne.v2';
+const GEN={car:['Hannibal','Hasdrubal','Magon','Giscon','Hannon','Bomilcar','Himilcon','Maharbal','Carthalon','Hamilcar','Adherbal','Bostar','Mutines','Hasdrubal le Chauve'],
+  rom:['P. Cornelius Scipio','Ti. Sempronius Longus','C. Flaminius','Cn. Cornelius Scipio','Q. Fabius Maximus','M. Claudius Marcellus','L. Aemilius Paullus','C. Terentius Varro','M. Minucius Rufus','Ti. Sempronius Gracchus','Q. Fulvius Flaccus','M. Livius Salinator','C. Claudius Nero','T. Manlius Torquatus']};
+function newGame(){
+  S={day:0,speed:1,paused:true,gold:{car:450,rom:600},own:{},q:{},siege:{},armies:[],fac:{},intel:{},log:[],uid:1,gi:{car:0,rom:0},over:null,cur:null,started:false,fleets:[],fq:{},raid:{},block:{},vil:{},pont:{}};
+  N.forEach(n=>{if(n.o0)S.own[n.id]=n.o0});
+  for(const f in FAC)if(FAC[f].a)S.fac[f]={car:FAC[f].a[0],rom:FAC[f].a[1],st:'neutre',cd:0};
+  const U=(t,n)=>Array.from({length:n},()=>({t,men:UT[t].men}));
+  const army=(side,at,units,name)=>{const n=N[NI[at]];const a={id:S.uid++,side,name:name||nextGen(side),x:n.x,y:n.y,at:n.i,legs:[],units,scout:0,cool:0};S.armies.push(a);return a};
+  army('car','cnova',[...U('lib',3),...U('iber',4),...U('sling',2),...U('hcav',2),...U('ncav',2),...U('eleph',1)],'Hannibal');
+  army('car','castulo',[...U('iber',2),...U('sling',1),...U('hcav',1),...U('eleph',1)],'Hasdrubal');
+  army('car','carthago',[...U('lib',2),...U('ncav',1),...U('sling',1)],'Giscon');S.gi.car=4;
+  army('car','carthago',[...U('lib',3),...U('sling',1)],'Garnison de Carthage').g=true;
+  army('rom','roma',[...U('legion',4),...U('velites',2),...U('rcav',1),...U('acav',1)],'P. Cornelius Scipio');
+  army('rom','lilybaeum',[...U('legion',3),...U('velites',2),...U('rcav',1)],'Ti. Sempronius Longus');
+  army('rom','placentia',[...U('legion',2),...U('velites',1),...U('acav',1)],'C. Flaminius');S.gi.rom=3;
+  army('rom','roma',[...U('legion',3),...U('velites',1)],'Garnison de Rome').g=true;
+  const GAR={num:['ncav','ncav','lib'],mae:['ncav','lib'],mau:['ncav','iber'],cyr:['lib','sling'],ibe:['iber','iber','sling'],cel:['iber','iber','hcav'],lus:['iber','sling'],bal:['sling','sling'],mas:['lib','lib','sling'],gau:['gaul','gaul','hcav'],lig:['gaul','gaul'],ins:['gaul','gaul','gaul','hcav'],ven:['iber','sling'],syr:['lib','lib','lib','sling'],ill:['iber','sling'],dar:['iber','hcav'],epi:['lib','sling'],mac:['lib','lib','lib','hcav','hcav'],thr:['hcav','sling','iber'],eto:['lib','sling'],ach:['lib','lib'],ath:['lib','lib'],cre:['sling','sling']};
+  N.forEach(n=>{if(!n.o0||!FAC[n.o0].a||n.size<1)return;const g=GAR[n.o0]||['iber'];const k=n.size>=3?5:n.size===2?3:1;
+    army(n.o0,n.id,Array.from({length:k},(_,j)=>({t:g[j%g.length],men:UT[g[j%g.length]].men})),'Garnison de '+n.n).g=true});
+  initFleets();
+  log("Printemps 218 : Sagonte est tombée, Rome déclare la guerre. Hannibal attend vos ordres à Nova Carthago.");
+}
+function nextGen(side){const L=GEN[side];const n=L[S.gi[side]%L.length]+(S.gi[side]>=L.length?' II':'');S.gi[side]++;return n}
+function save(){try{localStorage.setItem(SAVE,JSON.stringify(S))}catch(e){}}
+function load(){try{const t=localStorage.getItem(SAVE);if(t)return JSON.parse(t)}catch(e){}return null}
+

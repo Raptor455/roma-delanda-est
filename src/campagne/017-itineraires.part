@@ -1,0 +1,72 @@
+/* ================= ITINÉRAIRES ================= */
+// Dijkstra sur le réseau ; on peut contourner les villes ennemies, seules les armées barrent la route
+function dijkstra(a,starts){
+  const n=N.length,dist=new Float64Array(n).fill(1e9),prev=new Int32Array(n).fill(-1),pe=new Int32Array(n).fill(-1),done=new Uint8Array(n);
+  for(const [i,c] of starts)if(c<dist[i])dist[i]=c;
+  for(;;){
+    let u=-1,bd=1e9;for(let i=0;i<n;i++)if(!done[i]&&dist[i]<bd){bd=dist[i];u=i}
+    if(u<0)break;done[u]=true;
+    for(const k of ADJ[u]){const e=EDGES[k],v=e.a===u?e.b:e.a;if(e.type==='mer'||edgeClosed(e))continue;
+      const sp=e.type==='mer'?SEA_KMD:legSpeed(a,e.type,e.tf,0,0);
+      const c=dist[u]+e.km/sp+(e.type==='mer'?2:0);if(c<dist[v]){dist[v]=c;prev[v]=u;pe[v]=k}}
+  }
+  return {dist,prev,pe};
+}
+// étapes le long du tracé d'une route, des indices i0 à i1 (inclus) de sa polyligne
+function cvLegs(k,i0,i1){const e=EDGES[k],P=e.cv,last=P.length-1,out=[],st=i1>=i0?1:-1;
+  for(let i=i0;st>0?i<=i1:i>=i1;i+=st)out.push({x:P[i][0],y:P[i][1],n:i===0?e.a:i===last?e.b:null,type:e.type,tf:e.tf,e:k,i});return out}
+const legsCost=(a,x,y,legs)=>{let c=0,px=x,py=y;for(const L of legs){c+=Math.hypot(L.x-px,L.y-py)/legSpeed(a,L.type,L.tf,px,py)+(L.type==='mer'?2:0);px=L.x;py=L.y}return c};
+// point de route le plus proche (hors mer) : {k, j, t, x, y, d}
+function nearestRoad(x,y,maxd,only){let best=null;
+  for(let k=0;k<EDGES.length;k++){if(only!=null&&k!==only)continue;const e=EDGES[k];if(!e.cv)continue;const A=N[e.a],B=N[e.b];
+    if(x<Math.min(A.x,B.x)-maxd-10||x>Math.max(A.x,B.x)+maxd+10||y<Math.min(A.y,B.y)-maxd-10||y>Math.max(A.y,B.y)+maxd+10)continue;
+    const P=e.cv;for(let j=0;j<P.length-1;j++){const ax=P[j][0],ay=P[j][1],dx=P[j+1][0]-ax,dy=P[j+1][1]-ay,l2=dx*dx+dy*dy||1e-9;let t=((x-ax)*dx+(y-ay)*dy)/l2;t=Math.max(0,Math.min(1,t));
+      const px=ax+dx*t,py=ay+dy*t,d=Math.hypot(px-x,py-y);if(d<=maxd&&(!best||d<best.d))best={k,j,t,x:px,y:py,d}}}
+  return best}
+// depuis un point (k,j,t) d'une route, étapes jusqu'à l'une de ses extrémités
+const toEnd=(r,end)=>{const e=EDGES[r.k],last=e.cv.length-1;return end===e.b?cvLegs(r.k,r.j+1,last):cvLegs(r.k,r.j,0)};
+// où se trouve l'armée sur le réseau : sur une route (k,j,t), ou null
+function armyRoad(a){const L=a.legs[0];if(L&&L.e!=null)return nearestRoad(a.x,a.y,.6,L.e);if(a.at!=null&&!a.legs.length)return null;return nearestRoad(a.x,a.y,1.5)}
+// points de départ : [lieu, jours, étapes pour l'atteindre]
+function startsOf(a){return startsOf0(a).filter(s=>!legsBlocked(a.x,a.y,s[2]))}
+function startsOf0(a){
+  if(a.at!=null&&!a.legs.length)return [[a.at,0,[]]];
+  if(!a.legs.length){const v=villageAt(a),vr=v&&villageToRoad(v);if(vr){const [legs,R]=vr,e=EDGES[R.k];if(!edgeSnow(e))return [e.a,e.b].map(end=>{const L2=[...legs,...toEnd(R,end)];return [end,legsCost(a,a.x,a.y,L2),L2]})}}
+  const L=a.legs[0];
+  if(L&&L.e==null&&L.n!=null&&L.type!=='hors')return [[L.n,legsCost(a,a.x,a.y,[L]),[L]]];
+  const r=armyRoad(a);
+  if(r){const e=EDGES[r.k];return [e.a,e.b].map(end=>{const legs=toEnd(r,end);return [end,legsCost(a,a.x,a.y,legs),legs]})}
+  const near=N.map(n=>[n,Math.hypot(n.x-a.x,n.y-a.y)]).sort((p,q)=>p[1]-q[1]).slice(0,5);
+  return near.map(([n,d])=>{const h=horsLegs(a.x,a.y,n.x,n.y);if(!h)return null;h[h.length-1].n=n.i;return [n.i,legsCost(a,a.x,a.y,h),h]}).filter(Boolean);
+}
+// renvoie {legs, days} vers un lieu (node) ou un point libre ; sur une route, l'armée suit son tracé exact
+function plan(a,tx,ty,node){
+  const st=startsOf(a),D=dijkstra(a,st.map(x=>[x[0],x[1]]));
+  const legsTo=v=>{const path=[];let u=v;while(D.prev[u]>=0){path.unshift(u);u=D.prev[u]}const first=u;
+    const s0=st.filter(x=>x[0]===first).sort((p,q)=>p[1]-q[1])[0];const legs=s0?s0[2].map(L=>({...L})):[];
+    let prev=first;for(const w of path){legs.push(...edgeLegs(D.pe[w],prev,w));prev=w}
+    return legs};
+  if(node!=null){if(D.dist[node]>=1e9)return null;return {legs:legsTo(node),days:D.dist[node]}}
+  let best=null;const cand=legs=>{if(!legs)return;if(!legsBlocked(a.x,a.y,legs)){const c=legsCost(a,a.x,a.y,legs);if(!best||c<best.days)best={days:c,legs}}};
+  // clic sur (ou tout près d') une route : on y va par la route, jusqu'au point exact
+  const snap=nearestRoad(tx,ty,Math.max(1.2,Math.min(25,16/view.s)));
+  if(snap&&!edgeSnow(EDGES[snap.k])){const e=EDGES[snap.k],tip={x:snap.x,y:snap.y,n:null,type:e.type,tf:e.tf,e:snap.k};
+    for(const end of [e.a,e.b]){if(D.dist[end]>=1e9)continue;const back=end===e.a?cvLegs(snap.k,1,snap.j):cvLegs(snap.k,e.cv.length-2,snap.j+1);cand([...legsTo(end),...back,tip])}
+    const r=armyRoad(a);
+    if(r&&r.k===snap.k){const pa=r.j+r.t,pt=snap.j+snap.t;cand(pt>=pa?[...(snap.j>=r.j+1?cvLegs(r.k,r.j+1,snap.j):[]),tip]:[...(r.j>=snap.j+1?cvLegs(r.k,r.j,snap.j+1):[]),tip])}
+    if(best)return best}
+  // en pleine campagne : par le lieu le plus proche puis hors route, ou directement si c'est tout près
+  const near=N.map(n=>[n,Math.hypot(n.x-tx,n.y-ty)]).sort((p,q)=>p[1]-q[1]).slice(0,4);
+  for(const [n] of near){if(D.dist[n.i]>=1e9)continue;const h=horsLegs(n.x,n.y,tx,ty);if(h)cand([...legsTo(n.i),...h])}
+  if(Math.hypot(a.x-tx,a.y-ty)<40){const h=horsLegs(a.x,a.y,tx,ty);if(h)cand(h)}
+  return best;
+}
+function order(a,tx,ty,node,vil){
+  const p=vil?planVillage(a,vil):plan(a,tx,ty,node);if(!p)return false;
+  a.gate=a.inG&&a.at!=null?a.at:null;a.inG=false;
+  a.legs=p.legs.filter((L,k)=>!(Math.hypot(L.x-a.x,L.y-a.y)<.01&&k===0&&p.legs.length>1));
+  if(a.at!=null&&a.legs.length)a.at=null;
+  a.target=node!=null?node:null;
+  return true;
+}
+

@@ -1,0 +1,205 @@
+/* ================= ANIMATIONS ================= */
+function flAnim(a){const V=S&&S.nav;if(!V)return;V.anim=V.anim||[];a.d=S.day;a.id=Math.random();V.anim.push(a);if(V.anim.length>40)V.anim.shift()}
+let FLCUR=null;const FLSH=[];
+const _fleetFormationF=fleetFormation;fleetFormation=function(f,s){FLCUR=f;try{return _fleetFormationF.apply(this,arguments)}finally{FLCUR=null}};
+const _shipSqF=shipSq;
+shipSq=function(x,y,q,sq,c,dark,ang,tile){const f=FLCUR;
+  if(f&&q>=5){const sd=tile?q*.5:q*.17,ol=tile?q*.22:q*.3;const t=performance.now()/1000,moving=f.legs.length>0,ux=Math.cos(ang),uy=Math.sin(ang),L=q*.55,ph=t*(moving?5:1)+f.id*1.7+x*.01;
+    ctx.save();
+    if(moving){// écume d'étrave et sillage qui ondule
+      ctx.strokeStyle='rgba(240,248,252,.55)';ctx.lineWidth=Math.max(1,q*.06);ctx.lineCap='round';
+      for(const sg of [-1,1]){ctx.beginPath();ctx.moveTo(x+ux*L,y+uy*L);ctx.quadraticCurveTo(x+ux*L*.6-uy*sg*q*.32,y+uy*L*.6+ux*sg*q*.32,x-ux*L*.2-uy*sg*q*(.45+.05*Math.sin(ph*2)),y-uy*L*.2+ux*sg*q*(.45+.05*Math.sin(ph*2)));ctx.stroke()}
+      // rames qui battent
+      if(sq.k!=='trans'){ctx.strokeStyle='rgba(70,48,28,.85)';ctx.lineWidth=Math.max(.6,q*.035);const n=tile?(sq.k==='quin'?4:3):(sq.k==='quin'?7:5);
+        for(const sg of [-1,1])for(let i=0;i<n;i++){const a=(i/(n-1)-.5)*L*1.3,sw=Math.sin(ph+i*.25)*q*.13,bx=x+ux*a-uy*sg*sd,by=y+uy*a+ux*sg*sd;
+          ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx-uy*sg*ol+ux*sw,by+ux*sg*ol+uy*sw);ctx.stroke();
+          if(i%2&&Math.sin(ph+i*.25)>.9){ctx.fillStyle='rgba(240,248,252,.45)';ctx.beginPath();ctx.arc(bx-uy*sg*(ol+q*.02)+ux*sw,by+ux*sg*(ol+q*.02)+uy*sw,q*.02+.4,0,7);ctx.fill()}}}
+    }else{// au mouillage : ronds dans l'eau qui s'élargissent
+      const k=(t*.35+f.id*.13+x*.003)%1;ctx.strokeStyle=`rgba(235,245,250,${.35*(1-k)})`;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(x,y,q*(.5+k*.6),q*(.3+k*.4),ang,0,7);ctx.stroke()}
+    ctx.restore();FLSH.push({f,x,y,q,ang})}
+  return _shipSqF.apply(this,arguments)};
+/* ---- blocus : cordon de taille fixe sur la carte (km), escadres dispersées le long du cordon comme les régiments d'un siège ---- */
+const BLK_R=2.4,BLKC={};
+// centré sur la ville (comme l'anneau d'un siège), rayon = murs + BLK_R, seulement la partie sur l'eau, du côté du mouillage
+function blkArc(n){let A=BLKC[n.i];if(A)return A;const ax=n.x,ay=n.y,R=wallKm(n)+BLK_R;let base=Math.atan2(n.anch[1]-n.y,n.anch[0]-n.x);if(!isFinite(base)||Math.hypot(n.anch[1]-n.y,n.anch[0]-n.x)<.01)base=0;
+  const P=[];for(let k=0;k<=40;k++){const a=base-2.2+4.4*k/40;if(!landFast(ax+Math.cos(a)*R,ay+Math.sin(a)*R))P.push(a)}
+  A=BLKC[n.i]={ax,ay,base,R,arc:P.length>=4?P:[...Array(31)].map((_,k)=>base-1.55+3.1*k/30)};return A}
+function blkAt(A,u){const arc=A.arc,f=Math.max(0,Math.min(arc.length-1.001,u*(arc.length-1))),j=Math.floor(f);return arc[j]+(arc[j+1]-arc[j])*(f-j)}
+function blkFleet(f){if(!f||f.inG||f.legs.length||!f.task||f.task.k!=='block')return null;const n=N[f.task.n];if(!n||!n.anch||Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)>=20)return null;return n}
+function blkFormation(f,s,n){const A=blkArc(n),c=FAC[f.side].c,dark='rgba(26,18,10,.95)',q=UNIT_KM*s,U=squadrons(f),t=performance.now()/1000;
+  const mates=S.fleets.filter(g=>g.side===f.side&&blkFleet(g)===n),mi=Math.max(0,mates.indexOf(f)),rr=A.R+.6+mi*.55,pts=[],angs=[];
+  U.forEach((u,i)=>{const ph=t*.16+i*2.3+f.id,uu=(i+.5)/U.length+Math.sin(ph)*.3/U.length,a=blkAt(A,uu);
+    pts.push([view.ox+(A.ax+Math.cos(a)*rr)*s,view.oy+(A.ay+Math.sin(a)*rr)*s]);angs.push(a+(Math.cos(ph)>0?1:-1)*1.5708)});
+  if(sel&&sel.f===f){ctx.fillStyle='rgba(255,243,196,.35)';pts.forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,q*.85,0,7);ctx.fill()})}
+  U.forEach((u,i)=>shipSq(pts[i][0],pts[i][1],q,u,c,dark,angs[i]));f._sq=pts;
+  if(s>1.4||f.side==='car'){const a=blkAt(A,.18+mi*.12),lx=view.ox+(A.ax+Math.cos(a)*(rr+1.1))*s,ly=view.oy+(A.ay+Math.sin(a)*(rr+1.1))*s;
+    ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';const tx=f.name+' · blocus',tw=ctx.measureText(tx).width;
+    ctx.fillStyle='rgba(238,226,196,.92)';ctx.strokeStyle='rgba(60,40,20,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.rect(lx-tw/2-5,ly-7,tw+10,14);ctx.fill();ctx.stroke();ctx.fillStyle='#2b2115';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(tx,lx,ly)}}
+{const _ffB=fleetFormation;fleetFormation=function(f,s){const n=blkFleet(f);if(!n)return _ffB.apply(this,arguments);FLCUR=f;
+  try{ctx.save();blkFormation(f,s,n);ctx.restore()}catch(e){console.error(e);ctx.restore();FLCUR=null;return _ffB.apply(this,arguments)}finally{FLCUR=null}}}
+/* ---- scènes animées : blocus d'un port, descente et pillage des côtes ---- */
+const flH=k=>{const x=Math.sin(k*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+// petit personnage (même facture que les sièges) : corps aux couleurs du camp, tête, bras qui tient quelque chose
+function flMan(x,y,e,c,arm,step){const b=step?Math.abs(Math.sin(step))*e*.18:0;y-=b;
+  ctx.fillStyle=c;ctx.fillRect(x-e*.35,y-e*.9,e*.7,e*.9);ctx.fillStyle='#d9b48a';ctx.fillRect(x-e*.22,y-e*1.3,e*.44,e*.4);
+  if(step){ctx.strokeStyle='#2b1c0e';ctx.lineWidth=Math.max(1,e*.16);const l=Math.sin(step)*e*.3;ctx.beginPath();ctx.moveTo(x-e*.15,y);ctx.lineTo(x-e*.15-l,y+e*.35+b);ctx.moveTo(x+e*.15,y);ctx.lineTo(x+e*.15+l,y+e*.35+b);ctx.stroke()}
+  if(arm!=null){ctx.strokeStyle='#3a2a18';ctx.lineWidth=Math.max(1,e*.18);ctx.beginPath();ctx.moveTo(x,y-e*.7);ctx.lineTo(x+Math.cos(arm)*e*1.1,y-e*.7+Math.sin(arm)*e*1.1);ctx.stroke()}}
+function flFlame(x,y,sz,t,k,al){for(let j=0;j<3;j++){const fl=Math.sin(t*12+k*2.3+j*1.9)*.5+.5;ctx.fillStyle=`rgba(${235+fl*20|0},${100+fl*90|0},30,${(al==null?.9:al)})`;
+  ctx.beginPath();ctx.moveTo(x+(j-1)*sz*.5-sz*.4,y);ctx.quadraticCurveTo(x+(j-1)*sz*.5,y-sz*(1.2+fl*1.1),x+(j-1)*sz*.5+sz*.4,y);ctx.fill()}
+  for(let j=0;j<3;j++){const u=(t*.35+j/3+k*.17)%1,wd=windOf();ctx.fillStyle=`rgba(60,55,50,${.32*(1-u)*(al==null?1:al)})`;ctx.beginPath();ctx.arc(x+Math.cos(wd.a)*u*sz*3,y-sz*1.6-u*sz*4+Math.sin(wd.a)*u*sz,sz*(.5+u*1.2),0,7);ctx.fill()}}
+function blockScene(id,n,b,s,t,SX,SY){const V=S.nav,ax=n.x,ay=n.y,X=SX(ax),Y=SY(ay),c=FAC[b.side].c,col=`rgb(${c[0]},${c[1]},${c[2]})`,hid=flH(n.i);
+  // taille fixe sur la carte : le cordon grandit et rapetisse avec le zoom, comme la ville
+  const A=blkArc(n),R=A.R*s,e=.22*s,base=A.base,arc=A.arc,full=e>=1.5;
+  const at=(u,rr)=>{const f=Math.max(0,Math.min(arc.length-1.001,u*(arc.length-1))),j=Math.floor(f),a=arc[j]+(arc[j+1]-arc[j])*(f-j);return [X+Math.cos(a)*rr,Y+Math.sin(a)*rr,a]};
+  ctx.save();ctx.lineCap='round';
+  // chaîne de troncs flottants qui ondulent, reliés par une chaîne
+  ctx.strokeStyle='rgba(30,22,14,.8)';ctx.lineWidth=Math.max(1,e*.14);ctx.beginPath();
+  for(let k=0;k<=40;k++){const [x,y]=at(k/40,R+Math.sin(t*1.6+k*.8)*e*.12);k?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
+  for(let k=0;k<20&&full;k++){const [x,y,a]=at((k+.5)/20,R+Math.sin(t*1.6+k*1.6)*e*.12);ctx.save();ctx.translate(x,y);ctx.rotate(a+1.5708+Math.sin(t*1.3+k)*.08);
+    ctx.fillStyle='#6b4a2a';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(0,0,e*.75,e*.22,0,0,7);ctx.fill();ctx.stroke();ctx.restore();
+    if(k%2&&Math.sin(t*1.6+k*1.6)>.85){ctx.fillStyle='rgba(240,248,252,.5)';ctx.beginPath();ctx.arc(x,y,e*.3,0,7);ctx.fill()}}
+  // dans le port : les navires enfermés, voiles carguées, qui se balancent
+  for(let k=0;k<3&&full;k++){const a=base+(k-1)*.35,rr=(wallKm(n)+.45)*s,wx=ax+Math.cos(a)*rr/s,wy=ay+Math.sin(a)*rr/s;if(landFast(wx,wy))continue;nvShip(X+Math.cos(a)*rr,Y+Math.sin(a)*rr,e*.95,base+1.5708+Math.sin(t*.7+k)*.06,'#3a2a1a',null)}
+  // chaloupes de ronde, fanal à la proue
+  for(let k=0;k<3&&full;k++){const u=(k+.5)/3+Math.sin(t*.09+k)*.12,[x,y,a]=at(u,R+e*8+Math.sin(t*.3+k)*e);nvShip(x,y,e*.7,a+1.5708,'#7a5634',null);
+    const p=.5+.5*Math.sin(t*3+k*2);ctx.fillStyle=`rgba(255,215,130,${.4+.5*p})`;ctx.beginPath();ctx.arc(x,y-e*.5,Math.max(1.2,e*.22),0,7);ctx.fill()}
+  // un forceur de blocus tente sa chance : pris et remorqué, ou il passe
+  if(full){const Tc=16,ph=(t/Tc+hid)%1,ci=Math.floor(t/Tc+hid),esc=flH(ci*7.3+n.i)<.25||(V.brun&&V.brun[id]===Math.floor(S.day)),ua=.15+.7*flH(ci*3.1+n.i);
+    const [sx,sy,sa]=at(ua,R+e*18),[mx,my]=at(ua,R+e*6.5),[gx,gy]=at(ua,R+e*2.2),al=ph<.08?ph/.08:ph>.9?(1-ph)/.1:1;ctx.globalAlpha=al;
+    let px,py,ph2,qx=gx,qy=gy,ang=sa+Math.PI;
+    if(ph<.45){const v=ph/.45;px=sx+(mx-sx)*v;py=sy+(my-sy)*v;if(ph>.2){const w=(ph-.2)/.25;qx=gx+(mx-gx)*w*.85;qy=gy+(my-gy)*w*.85}}
+    else if(!esc){px=mx;py=my;qx=gx+(mx-gx)*.85;qy=gy+(my-gy)*.85;
+      if(ph<.62){ctx.strokeStyle='rgba(30,20,10,.85)';ctx.lineWidth=1;for(let j=0;j<3;j++){ctx.beginPath();ctx.moveTo(qx+(j-1)*e*.4,qy);ctx.lineTo(px+(j-1)*e*.4,py);ctx.stroke()}
+        for(let j=0;j<4;j++){if(Math.sin(t*20+j*3)>.4){ctx.fillStyle='#ffe9a8';ctx.beginPath();ctx.arc((px+qx)/2+(flH(j+ci)-.5)*e*2,(py+qy)/2+(flH(j*3+ci)-.5)*e*2,Math.max(1,e*.18),0,7);ctx.fill()}}}
+      else{const v=(ph-.62)/.38;qx+=(gx-qx)*v;qy+=(gy-qy)*v;px=qx+(mx-gx)*.25;py=qy+(my-gy)*.25;ang=sa;
+        ctx.strokeStyle='rgba(30,20,10,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(qx,qy);ctx.lineTo(px,py);ctx.stroke()}}
+    else{const v=(ph-.45)/.55;px=mx+(X-mx)*v;py=my+(Y-my)*v;ang=Math.atan2(Y-my,X-mx);const w=Math.min(1,v*1.4);qx=gx+(px-gx)*w*.7;qy=gy+(py-gy)*w*.7}
+    nvShip(px,py,e*1.15,ang,'#6a4a2a',esc||ph<.62?'#efe6d2':null);nvShip(qx,qy,e*1.35,Math.atan2(py-qy,px-qx),'#5a3d22',col);ctx.globalAlpha=1}
+  // la ville affamée : fumées des fours éteints… et, si le blocus dure, des feux de détresse sur les murs
+  const days=Math.floor(S.day)-((V.bk0&&V.bk0[id])!=null?V.bk0[id]:Math.floor(S.day));
+  // étiquette, durée, prises et étanchéité du blocus
+  if(s>.35){const st=V.storms.some(q=>Math.hypot(q.x-n.x,q.y-n.y)<q.r+20),bl=S.fleets.filter(f=>f.side===b.side&&f.task&&f.task.k==='block'&&f.task.n===n.i),vig=bl.some(f=>admTr(f)==='aud'||admTr(f)==='cor')?.08:0;
+    const p=Math.min(.92,(.35+b.w/40+vig)*(st?.6:1)),pr=(V.bkp&&V.bkp[id])||0,[lx,ly]=at(.5,R+e*10);
+    const txt=b.pend?(b.pend===1?'Blocus en place…':'Blocus impossible : '+b.pend):`Blocus · ${days} j${pr?` · ${pr} prise${pr>1?'s':''}`:''}`;ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    const tw=Math.max(56,ctx.measureText(txt).width+12);ctx.fillStyle='rgba(22,19,14,.78)';ctx.fillRect(lx-tw/2,ly-14,tw,24);ctx.strokeStyle='rgba(214,184,120,.45)';ctx.lineWidth=1;ctx.strokeRect(lx-tw/2+.5,ly-13.5,tw-1,23);
+    ctx.fillStyle='#efe6d2';ctx.fillText(txt,lx,ly-1);ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(lx-tw/2+6,ly+4,tw-12,3);ctx.fillStyle=b.side==='car'?'#b48ae6':'#e2665a';ctx.fillRect(lx-tw/2+6,ly+4,(tw-12)*p,3)}
+  ctx.restore()}
+// ---- fermes de la carte (mêmes tirages que les parcelles dessinées de près : cases de 2,5 km) ----
+function farmsNear(x,y,r){const cell=2.5,out=[];for(let i=Math.floor((x-r)/cell);i<=Math.ceil((x+r)/cell);i++)for(let j=Math.floor((y-r)/cell);j<=Math.ceil((y+r)/cell);j++){
+    const h=hash(i,j);if(h>.32||h<.08)continue;const fx=(i+hash(j,i))*cell,fy=(j+hash(i+7,j))*cell;if(Math.hypot(fx-x,fy-y)>r||!landFast(fx,fy))continue;
+    const t=terrFast(fx,fy);if(t==='montagne'||t==='foret'||(t==='desert'&&h>=.12))continue;out.push({x:fx,y:fy,a:h*9,k:i+':'+j,d:Math.hypot(fx-x,fy-y)})}
+  return out.sort((p,q)=>p.d-q.d)}
+// fermes brûlées (simple décor, non sauvegardé) et détachements en route vers elles
+const FB={},FR=[];
+function farmRaid(ox,oy,side,n,r,t0,dur){const used=new Set(FR.map(q=>q.k));for(const fm of farmsNear(ox,oy,r)){if(n<=0)break;if(used.has(fm.k)||(FB[fm.k]&&S.day-FB[fm.k]<60))continue;FR.push({ox,oy,fx:fm.x,fy:fm.y,a:fm.a,k:fm.k,side,t0,dur});n--}}
+// petit détachement : 2 ou 3 carrés aux couleurs du camp ; en revenant, chacun porte son butin (point brun)
+function flSq(x,y,q,c,load){const h=q/2;ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(x-h+1,y-h+1.5,q,q);ctx.fillStyle=c;ctx.fillRect(x-h,y-h,q,q);ctx.strokeStyle='rgba(26,18,10,.95)';ctx.lineWidth=Math.max(1,q/8);ctx.strokeRect(x-h,y-h,q,q);
+  if(load){ctx.fillStyle='#8a6a3e';ctx.beginPath();ctx.arc(x+h,y-h,Math.max(1.4,q*.28),0,7);ctx.fill();ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.stroke()}}
+function flParty(x,y,q,c,n,ang,load,t,seed){const ux=Math.cos(ang),uy=Math.sin(ang);for(let k=0;k<n;k++){const b=Math.sin(t*9+k*1.7+seed)*q*.08,o=(k-(n-1)/2)*q*1.25,bx=x-ux*(k%2)*q*1.1-uy*o,by=y-uy*(k%2)*q*1.1+ux*o+b;flSq(bx,by,q,c,load)}}
+const flQ=s=>Math.max(4,Math.min(11,.16*s));
+// une ferme : à l'aller (0–.4), on la met à sac et on y met le feu (.4–.65), retour chargés (.65–1)
+function farmRaidDraw(R,u,t,s,SX,SY,c){const ox=SX(R.ox),oy=SY(R.oy),fx=SX(R.fx),fy=SY(R.fy),e=Math.max(3.5,Math.min(14,s*.2)),col=`rgb(${c[0]},${c[1]},${c[2]})`,h=R.fx*7.3+R.fy*3.1;
+  /* PILLAGE ANCIEN (9 nov., demande de Baptiste) : petits pillards au lieu des carrés — course (0–.4), sac (.4–.65), retour chargés */
+  for(let q=0;q<3;q++){const jx=(flH(q+h)-.5)*e*2.2,jy=(flH(q*3+h)-.5)*e*1.6,lag=q*.02,w0=u-lag;if(w0<0)continue;
+    if(w0<.4){const w=w0/.4;flMan(ox+(fx-ox)*w+jx,oy+(fy-oy)*w+jy,e,col,-.9,t*14+q)}
+    else if(w0<.65){const sw=(t*2.2+q*.4)%1;flMan(fx+jx*1.4,fy+jy*1.4,e,col,-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5,0)}
+    else{const w=Math.min(1,(w0-.65)/.35),x=fx+(ox-fx)*w+jx,y=fy+(oy-fy)*w+jy;flMan(x,y,e,col,null,t*11+q);
+      ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}
+  if(u>=.4&&u<.65){const fl=Math.sin(t*14)*.5+.5;ctx.fillStyle=`rgba(255,${150+fl*80|0},50,.95)`;ctx.beginPath();ctx.arc(fx+e*.8,fy-e*1.4,Math.max(1.5,e*.25),0,7);ctx.fill()}}
+// ferme brûlée : parcelle noircie, bâtiments en cendres, fumée les premiers jours
+function farmBurntDraw(k,x,y,a,day,t,s,SX,SY){return;/*SANS-FERMES*/if(s<3)return;const X=SX(x),Y=SY(y),co=Math.cos(a),si=Math.sin(a),age=S.day-day;
+  ctx.save();ctx.translate(X,Y);ctx.rotate(a);const w=.9*s,h=.6*s;ctx.fillStyle=`rgba(38,30,24,${age<30?.72:Math.max(0,.72-(age-30)/40)})`;ctx.fillRect(-w/2,-h/2,w,h);
+  ctx.strokeStyle='rgba(20,16,12,.6)';ctx.lineWidth=1;ctx.beginPath();for(let m=1;m<5;m++){const yy=-h/2+h*m/5;ctx.moveTo(-w*.44,yy);ctx.lineTo(w*.44,yy)}ctx.stroke();
+  ctx.fillStyle='rgba(30,22,16,.9)';for(const [hx,hy,hq] of [[.28,-.2,.13],[.42,-.12,.1]])ctx.fillRect((hx-hq/2)*s,(hy-hq/2)*s,hq*s,hq*s);ctx.restore();
+  if(age<6){const hx=X+(.28*co+.2*si)*s,hy=Y+(.28*si-.2*co)*s,al=age<4?1:(6-age)/2;flFlame(hx,hy,Math.max(3,Math.min(12,.08*s)),t,x*7,al*(age<1.5?1:.35))}}
+// descente : chaloupes qui accostent, détachements qui courent aux villages et aux fermes, villageois qui fuient, retour chargés de butin
+function raidScene(a,X,Y,age,t,s,SX,SY,loop){const tx=SX(a.tx),ty=SY(a.ty),c=FAC[a.side]?FAC[a.side].c:[200,180,140],col=`rgb(${c[0]},${c[1]},${c[2]})`,e=Math.max(3.5,Math.min(14,s*.2));
+  // flotte collée au rivage : les chaloupes partent un peu plus au large, à l'opposé des villages
+  if(Math.hypot(tx-X,ty-Y)<e*9&&a.vs&&a.vs.length){let mx=0,my=0;for(const p of a.vs){mx+=SX(p[0]);my+=SY(p[1])}mx/=a.vs.length;my/=a.vs.length;const dx=tx-mx,dy=ty-my,l=Math.hypot(dx,dy)||1;X=tx+dx/l*e*10;Y=ty+dy/l*e*10}
+  const d=Math.hypot(tx-X,ty-Y),ux=d>1?(tx-X)/d:1,uy=d>1?(ty-Y)/d:0,nb=a.big?6:4,al=loop?1:age<.04?age/.04:age>.94?(1-age)/.06:1;
+  ctx.save();ctx.globalAlpha=al;ctx.lineCap='round';
+  // chaloupes : aller (0–.2), tirées sur la plage, retour (.78–1)
+  const v=age<.2?age/.2:age<.78?1:1-(age-.78)/.22,back=age>=.78;
+  for(let k=0;k<nb;k++){const o=(k-(nb-1)/2)*e*1.6,bx=X+(tx-X)*v*.97-uy*o,by=Y+(ty-Y)*v*.97+ux*o;
+    if(v>0&&v<1){ctx.strokeStyle='rgba(240,248,252,.5)';ctx.lineWidth=1;const sg=back?-1:1;ctx.beginPath();ctx.moveTo(bx-ux*e*sg,by-uy*e*sg);ctx.lineTo(bx-ux*e*2.6*sg,by-uy*e*2.6*sg);ctx.stroke()}
+    nvShip(bx,by,Math.max(3.5,e*1.15),Math.atan2(uy,ux)+(back?Math.PI:0)+(v===1?Math.sin(t*1.5+k)*.05:0),'#7a5634',null);
+    if(v>0&&v<1){ctx.strokeStyle='rgba(70,48,28,.85)';ctx.lineWidth=1;const sw=Math.sin(t*7+k)*e*.35;for(const sg of [-1,1]){ctx.beginPath();ctx.moveTo(bx-uy*sg*e*.3,by+ux*sg*e*.3);ctx.lineTo(bx-uy*sg*e*1.1+ux*sw,by+ux*sg*e*1.1+uy*sw);ctx.stroke()}}}
+  /* PILLAGE ANCIEN (9 nov., demande de Baptiste) : petits pillards, villageois et troupeau qui fuient (comme avant la v105) */
+  if(s>1.2){const tg=(a.vs||[]).map(p=>[SX(p[0]),SY(p[1]),0]).concat((a.fm||[]).map(p=>[SX(p[0]),SY(p[1]),1])).filter(p=>Math.hypot(p[0]-tx,p[1]-ty)<300);
+    tg.forEach(([vx,vy,isF],j)=>{const m=isF?2:a.big?4:3;
+      // pillards : course vers la cible (.2–.42), sac (.42–.6), retour chargés (.6–.8)
+      for(let q=0;q<m;q++){const lag=q*.015+j*.01,u=age-lag;let x,y,arm=null,stp=0,load=false;
+        const jx=(flH(q+j*5)-.5)*e*2.2,jy=(flH(q*3+j)-.5)*e*1.6;
+        if(u<.2||u>.8)continue;
+        if(u<.42){const w=(u-.2)/.22;x=tx+(vx-tx)*w+jx;y=ty+(vy-ty)*w+jy;stp=t*14+q;arm=-.9}
+        else if(u<.6){x=vx+jx*1.4;y=vy+jy*1.4;const sw=(t*2.2+q*.4)%1;arm=-Math.PI/2+(sw<.3?sw/.3*2:2*(1-(sw-.3)/.7))-.5}
+        else{const w=(u-.6)/.2;x=vx+(tx-vx)*w+jx;y=vy+(ty-vy)*w+jy;stp=t*11+q;load=true}
+        flMan(x,y,e,col,arm,stp);
+        if(load){if(!isF&&q%3===2){const cx=x+e*1.2,cy=y+e*.3;flMan(cx,cy,e*.9,'#d8ccb0',null,t*11+q);ctx.strokeStyle='rgba(40,28,14,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+e*.3,y-e*.6);ctx.lineTo(cx-e*.3,cy-e*.6);ctx.stroke()}
+          else{ctx.fillStyle='#8a6a3e';ctx.strokeStyle='#2b1c0e';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x+e*.2,y-e*1.5,e*.45,0,7);ctx.fill();ctx.stroke()}}}
+      // villageois qui fuient à l'opposé de la plage, troupeau dispersé
+      if(!isF&&age>.36&&age<.75){const w=(age-.36)/.39,fx=vx-tx,fy=vy-ty,fl=Math.hypot(fx,fy)||1;
+        for(let q=0;q<4;q++){const sp=(q-1.5)*.5,dx=fx/fl*Math.cos(sp)-fy/fl*Math.sin(sp),dy=fy/fl*Math.cos(sp)+fx/fl*Math.sin(sp),r=w*e*(10+q*2);ctx.globalAlpha=al*(1-w);
+          if(q===3){ctx.fillStyle='#e9e1cc';ctx.beginPath();ctx.ellipse(vx+dx*r,vy+dy*r,e*.55,e*.35,0,0,7);ctx.fill()}else flMan(vx+dx*r,vy+dy*r,e*.85,'#cbbf9c',null,t*15+q)}ctx.globalAlpha=al}
+      // en boucle (mission « piller ») : les cibles flambent après le passage
+      if(loop&&age>.45)flFlame(vx,vy,e*1.1,t,j,Math.min(1,(age-.45)*6)*(age>.9?(1-age)*10:1))})}
+  ctx.restore()}
+function flDraw(s,w,h){if(!S||!S.nav)return;const V=S.nav,t=performance.now()/1000,now=S.day;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
+  const SX=x=>view.ox+x*s,SY=y=>view.oy+y*s,inS=(X,Y,m)=>X>-m&&Y>-m&&X<w+m&&Y<h+m;
+  // vent : traînées blanches qui filent sur la mer
+  {const wd=windOf(),ux=Math.cos(wd.a),uy=Math.sin(wd.a),n=Math.round(14+wd.s*22),sp=40+wd.s*90;ctx.strokeStyle='rgba(245,250,252,.28)';ctx.lineWidth=1.2;ctx.lineCap='round';
+    for(let i=0;i<n;i++){const hx=((i*9301+49297)%233280)/233280,hy=((i*4421+7777)%9973)/9973,per=w+h;const off=(t*sp+i*137)%per;
+      let X=(hx*w+ux*off)%w,Y=(hy*h+uy*off)%h;if(X<0)X+=w;if(Y<0)Y+=h;const wx=(X-view.ox)/s,wy=(Y-view.oy)/s;if(landFast(wx,wy))continue;
+      const a=Math.sin(((off/per)*Math.PI));ctx.globalAlpha=a;const l=10+wd.s*18;ctx.beginPath();ctx.moveTo(X,Y);ctx.quadraticCurveTo(X-ux*l*.5-uy*2,Y-uy*l*.5+ux*2,X-ux*l,Y-uy*l);ctx.stroke()}ctx.globalAlpha=1}
+  // rose des vents
+  {const wd=windOf(),X=w-46,Y=h-150;ctx.fillStyle='rgba(22,19,14,.7)';ctx.beginPath();ctx.arc(X,Y,22,0,7);ctx.fill();ctx.strokeStyle='rgba(214,184,120,.6)';ctx.lineWidth=1;ctx.stroke();
+    ctx.save();ctx.translate(X,Y);ctx.rotate(wd.a);ctx.fillStyle='#e9dcb8';ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-9,-6);ctx.lineTo(-5,0);ctx.lineTo(-9,6);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.font='10px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.fillStyle='#d6b878';ctx.fillText('N',X,Y-25);ctx.fillStyle='rgba(239,230,210,.85)';ctx.fillText(windName().replace('Vent ',''),X,Y+34)}
+  // vigies : portée et balayage du guetteur ; ligne de patrouille
+  for(const f of S.fleets){if(!f.vig||f.side!=='car'||f.inG)continue;const X=SX(f.x),Y=SY(f.y),R=FL.vigR*s;if(!inS(X,Y,R))continue;
+    ctx.strokeStyle='rgba(214,184,120,.25)';ctx.setLineDash([4,6]);ctx.lineWidth=1;ctx.beginPath();ctx.arc(X,Y,R,0,7);ctx.stroke();ctx.setLineDash([]);
+    const a=t*.8+f.id;const g=ctx.createRadialGradient(X,Y,0,X,Y,R);g.addColorStop(0,'rgba(214,184,120,.18)');g.addColorStop(1,'rgba(214,184,120,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(X,Y);ctx.arc(X,Y,R,a,a+.5);ctx.closePath();ctx.fill();
+    if(f.task&&f.task.k==='vline'){ctx.strokeStyle='rgba(214,184,120,.6)';ctx.setLineDash([2,5]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(SX(f.task.a[0]),SY(f.task.a[1]));ctx.lineTo(SX(f.task.b[0]),SY(f.task.b[1]));ctx.stroke();ctx.setLineDash([])}}
+  // blocus : chaîne flottante, galères de garde, navire amiral, rondes, forceurs pris ou passés
+  for(const id in S.block){const n=N[NI[id]];if(!n||!n.anch)continue;const b=S.block[id];if(b.side!=='car'&&ownerN(n.i)!=='car'&&visAt(n.x,n.y)<1)continue;if(!inS(SX(n.anch[0]),SY(n.anch[1]),BLK_R*s*6+300))continue;try{blockScene(id,n,b,s,t,SX,SY)}catch(e){}}
+  // blocus ordonné mais pas encore compté (il l'est au changement de jour) : on montre déjà le cordon qui se met en place
+  for(const f of S.fleets){if(f.side!=='car'||f.inG||!f.task||f.task.k!=='block')continue;const n=N[f.task.n];if(!n||!n.anch||S.block[n.id])continue;
+    if(Math.hypot(n.anch[0]-f.x,n.anch[1]-f.y)>=20||!inS(SX(n.anch[0]),SY(n.anch[1]),BLK_R*s*6+300))continue;
+    const w=warN(f),why=w<5?'il faut 5 navires de guerre':!cityHostile(n.i,f.side)?"le port n'est pas ennemi":'';
+    try{blockScene(n.id,n,{side:f.side,w,pend:why||1},s,t,SX,SY)}catch(e){}}
+  // pillage des côtes (mission « piller ») : allers et retours des chaloupes, villages qui brûlent en boucle
+  for(const f of S.fleets){if(f.inG||f.legs.length||!f.task||f.task.k!=='raid'||f.task.n==null)continue;const tn=N[f.task.n];if(!S.raid||!S.raid[tn.id])continue;if(f.side!=='car'&&visAt(f.x,f.y)<1)continue;if(!inS(SX(f.x),SY(f.y),16*s+300))continue;
+    if(!f._rsc||f._rsc.x!==f.x||f._rsc.y!==f.y){const p=nearestLand(f.x,f.y,30,.3);let vs=[];if(p){vs=villagesIn(p[0]-14,p[1]-14,p[0]+14,p[1]+14).filter(v=>Math.hypot(v.x-p[0],v.y-p[1])<14).slice(0,3).map(v=>[v.x,v.y]);
+      if(!vs.length)vs=[[p[0]+(p[0]-f.x)*.4,p[1]+(p[1]-f.y)*.4]]}f._rsc={x:f.x,y:f.y,p,vs,fm:p?farmsNear(p[0],p[1],7).slice(0,3).map(q=>[q.x,q.y]):[]}}
+    const R=f._rsc;if(!R.p)continue;try{raidScene({tx:R.p[0],ty:R.p[1],vs:R.vs,fm:R.fm,side:f.side,big:f.cargo.length?1:0},SX(f.x),SY(f.y),(t/22+f.id*.37)%1,t,s,SX,SY,true)}catch(e){}}
+  // fermes : brûlées (décor) et détachements de fourrageurs qui vont les piller
+  /*SANS-FERMES : plus de détachements vers les fermes autour d'un village pillé*/
+  for(let i=FR.length-1;i>=0;i--){const R=FR[i],u=(S.day-R.t0)/R.dur;if(u>=1){FB[R.k]=R.t0+R.dur*.55;FR.splice(i,1);continue}if(u>.55&&FB[R.k]==null)FB[R.k]=S.day;
+    if(u<0||(R.side!=='car'&&visAt(R.fx,R.fy)<1)||s<1.5||!inS(SX(R.fx),SY(R.fy),200))continue;try{farmRaidDraw(R,u,t,s,SX,SY,FAC[R.side].c)}catch(e){}}
+  if(s>=3)for(const k in FB){const [i,j]=k.split(':').map(Number),cell=2.5,fx=(i+hash(j,i))*cell,fy=(j+hash(i+7,j))*cell;if(S.day-FB[k]>70||S.day<FB[k]-2){delete FB[k];continue}if(S.day<FB[k]||!inS(SX(fx),SY(fy),60))continue;try{farmBurntDraw(k,fx,fy,hash(i,j)*9,FB[k],t,s,SX,SY)}catch(e){}}
+  // chaloupes : aiguade et vivres au mouillage, ravitaillement par convoi
+  for(const f of S.fleets){if(f.inG||(f.side!=='car'&&visAt(f.x,f.y)<2))continue;const X=SX(f.x),Y=SY(f.y);if(!inS(X,Y,40)||s<.5)continue;
+    let tx=null,ty=null;
+    if(f._feed!=null&&now-f._feed<1){const g=supplyOf(f);if(g){tx=SX(g.x);ty=SY(g.y)}}
+    else if(!f.legs.length&&f._refill!=null&&now-f._refill<1){const p=f.at!=null?[N[f.at].x,N[f.at].y]:nearestLand(f.x,f.y,10,.3);if(p){tx=SX(p[0]);ty=SY(p[1])}}
+    if(tx==null)continue;const d=Math.hypot(tx-X,ty-Y);if(d<4||d>260)continue;
+    for(let k=0;k<3;k++){const u=((t*.18+k/3+f.id*.1)%1),v=u<.5?u*2:2-u*2,px=X+(tx-X)*v,py=Y+(ty-Y)*v;nvShip(px,py,4,Math.atan2(ty-Y,tx-X)+(u<.5?0:Math.PI),'#7a5634',null)}}
+  // effets ponctuels : incendies, brûlots, abordages, forceurs de blocus, signaux
+  V.anim=(V.anim||[]).filter(a=>now-a.d<a.t+(a.w||0));
+  for(const a of V.anim){if(a.w&&now-a.d<a.w)continue;const X=SX(a.x),Y=SY(a.y);if(!inS(X,Y,a.k==='raid'?16*s+300:160))continue;const age=(now-a.d-(a.w||0))/a.t,fade=1-age;
+    if(a.k==='raid'){raidScene(a,X,Y,age,t,s,SX,SY);continue}
+    if(a.k==='burn'||a.k==='smoke'){const big=a.big?1.8:1,wd=windOf();
+      for(let k=0;k<7;k++){const u=((t*.25+k/7)%1),px=X+Math.cos(wd.a)*u*30*big+Math.sin(k*3)*4,py=Y+Math.sin(wd.a)*u*30*big-u*26*big;ctx.fillStyle=`rgba(60,55,50,${.35*(1-u)*fade})`;ctx.beginPath();ctx.arc(px,py,(4+u*10)*big,0,7);ctx.fill()}
+      if(a.k==='burn')for(let k=0;k<5;k++){const fl=Math.sin(t*12+k*2)*.5+.5;ctx.fillStyle=`rgba(${230+fl*25|0},${110+fl*80|0},30,${.8*fade})`;ctx.beginPath();ctx.moveTo(X+(k-2)*3*big-3,Y);ctx.quadraticCurveTo(X+(k-2)*3*big,Y-(8+fl*8)*big,X+(k-2)*3*big+3,Y);ctx.fill()}}
+    else if(a.k==='fireships'){const u=Math.min(1,age*1.6),px=X+(SX(a.tx)-X)*u,py=Y+(SY(a.ty)-Y)*u;nvShip(px,py,9,Math.atan2(SY(a.ty)-Y,SX(a.tx)-X),'#3a2618',null);
+      for(let k=0;k<4;k++){const fl=Math.sin(t*14+k)*.5+.5;ctx.fillStyle=`rgba(255,${120+fl*90|0},40,.85)`;ctx.beginPath();ctx.arc(px+(k-1.5)*3,py-4-fl*6,2.5+fl*2,0,7);ctx.fill()}}
+    else if(a.k==='boats'){const tx=SX(a.tx),ty=SY(a.ty);for(let k=0;k<5;k++){const u=((t*.22+k/5)%1),v=u<.5?u*2:2-u*2;nvShip(X+(tx-X)*v+Math.sin(k)*4,Y+(ty-Y)*v+Math.cos(k)*4,4,Math.atan2(ty-Y,tx-X)+(u<.5?0:Math.PI),'#7a5634',null)}}
+    else if(a.k==='board'||a.k==='run'){ctx.strokeStyle=a.k==='board'?`rgba(255,230,160,${fade})`:`rgba(160,220,255,${fade})`;ctx.lineWidth=2;const r=10+age*30;ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.stroke();
+      if(a.k==='run'){const px=X+age*60,py=Y-age*10;nvShip(px,py,6,0,'#5a3d22','#e9e1cc')}}
+    else if(a.k==='signal'){ctx.strokeStyle=`rgba(255,240,180,${fade})`;ctx.lineWidth=1.5;for(let k=0;k<3;k++){const r=((t*30+k*14)%42);ctx.globalAlpha=(1-r/42)*fade;ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.stroke()}ctx.globalAlpha=1;
+      if(Math.sin(t*10)>0){ctx.fillStyle='#ffd27a';ctx.beginPath();ctx.arc(X,Y-14,2.5,0,7);ctx.fill()}}}
+  FLSH.length=0;ctx.restore()}
+const _drawDynamicF=drawDynamic;
+drawDynamic=function(w,h,s){const r=_drawDynamicF.apply(this,arguments);try{flDraw(s,w,h)}catch(e){console.error(e)}return r};
+window.__flotte={makeVigie,descent,fireShips,fireTarget,raidTargets,canDescent,windOf,windName,windMul,admOf,goodsFix,goodsOf,blockDaily,foodDaily,supplyOf,vigDaily,flAnim,GOODS,FB,FR,farmsNear};
+/* ================= FIN NAVAL FLOTTE ================= */

@@ -1,0 +1,80 @@
+/* ================= INTERFACE BRONZE : bataille (fil « Refaire l'interface ») =================
+   Panneaux bronze et frise comme la campagne, cartes d'unités en bas, fiche d'unité à gauche.
+   Enveloppe hudTick et renderSel ; ne touche ni aux règles ni aux figurines. */
+{
+const css=`
+:root{--bz:#8a6a3c;--bzL:#d2ae6c;--bzD:#1d1712;--pan2:linear-gradient(180deg,rgba(43,34,25,.95),rgba(28,22,17,.95))}
+.hud{background:var(--pan2)!important;border:1px solid var(--bz)!important;border-radius:2px!important;box-shadow:0 0 0 1px rgba(13,10,7,.8),0 8px 22px rgba(0,0,0,.4);backdrop-filter:none!important}
+#top{padding:6px 14px 8px!important}
+#top::after{content:"";position:absolute;left:0;right:0;top:100%;height:8px;pointer-events:none;background:
+ repeating-linear-gradient(90deg,transparent 0 2px,var(--bz) 2px 4px,transparent 4px 12px,var(--bz) 12px 14px,transparent 14px 18px),
+ linear-gradient(var(--bz),var(--bz)) 0 0/100% 2px no-repeat,linear-gradient(var(--bz),var(--bz)) 0 100%/100% 2px no-repeat,var(--bzD)}
+#forces .bar{height:12px!important;border-radius:1px!important;box-shadow:inset 0 0 0 1px rgba(0,0,0,.5)}
+#forces .bar::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:#f3e2b8;opacity:.6}
+#forces span{font-family:var(--display);font-size:15px}
+button{border-radius:2px!important}
+#top .ctrl button,#sel button,#camBtns button{border-color:rgba(210,174,108,.38)}
+#clock{font-family:var(--display);color:#efe4cc!important;font-size:16px}
+#camBtns{top:auto!important;bottom:178px}
+#sel{width:300px!important;bottom:122px!important}
+#sel h2{font-size:20px!important}
+#sel .meter{height:5px!important;border-radius:1px!important}
+.card{background:var(--pan2)!important;border:1px solid var(--bz)!important;border-radius:2px!important;position:relative;padding-top:28px!important;box-shadow:0 0 0 1px #0d0a07,0 16px 40px rgba(0,0,0,.6)}
+.card::before{content:"";position:absolute;left:0;right:0;top:0;height:9px;background:
+ repeating-linear-gradient(90deg,transparent 0 2px,var(--bz) 2px 4px,transparent 4px 12px,var(--bz) 12px 14px,transparent 14px 18px),
+ linear-gradient(var(--bz),var(--bz)) 0 100%/100% 2px no-repeat}
+#uiCards{position:absolute;left:max(12px,env(safe-area-inset-left,0px));right:calc(max(12px,env(safe-area-inset-right,0px)) + 268px);bottom:max(12px,env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:6px;overflow-x:auto;scrollbar-width:thin}
+#uiCards .gap{flex:none;width:8px}
+.ui-uc{flex:none;width:58px;height:94px;position:relative;border:1px solid rgba(210,174,108,.45);background:linear-gradient(180deg,#3a2c1e,#211a13);display:grid;justify-items:center;align-content:start;gap:1px;padding-top:6px;font-size:10.5px;line-height:1.1;color:#b9a98a;cursor:pointer;text-align:center;transition:transform .12s}
+.ui-uc:hover{border-color:#e2c27e}
+.ui-uc svg{color:#c9a6ef}
+.ui-uc b{color:#efe4cc;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.ui-uc .n{max-width:54px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ui-uc .g{position:absolute;left:4px;right:4px;bottom:4px;display:grid;gap:2px}
+.ui-uc .g s{display:block;height:3px;background:rgba(255,255,255,.1);text-decoration:none}
+.ui-uc .g s i{display:block;height:100%}
+.ui-uc .st{position:absolute;right:3px;top:3px;width:8px;height:8px;border-radius:50%}
+.ui-uc.on{border-color:#f1d08a;box-shadow:0 0 0 1px #f1d08a,0 0 12px rgba(241,208,138,.35);transform:translateY(-5px)}
+.ui-uc.fight .st{background:#e0883c}.ui-uc.fire .st{background:#e5c06c}
+.ui-uc.rout{opacity:.6}.ui-uc.rout .st{background:#d24a3a}
+.ui-uc.dead{opacity:.28;cursor:default}
+#fps{bottom:auto!important;top:96px}
+@media (max-width:760px){#uiCards{display:none}#sel{bottom:max(12px,env(safe-area-inset-bottom,0px))!important}}`;
+const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
+const symB=k=>{const c='currentColor',w=1.6;let o=`<svg viewBox="0 0 20 14" width="30" height="21" aria-hidden="true"><rect x="1" y="1" width="18" height="12" fill="rgba(107,63,159,.35)" stroke="${c}" stroke-width="${w}"/>`;
+  if(k==='inf')o+=`<path d="M1 1L19 13M19 1L1 13" stroke="${c}" stroke-width="${w}"/>`;
+  else if(k==='cav')o+=`<path d="M1 13L19 1" stroke="${c}" stroke-width="${w}"/>`;
+  else if(k==='lcav')o+=`<path d="M1 13L19 1" stroke="${c}" stroke-width="${w}"/><circle cx="15" cy="10" r="1.5" fill="${c}"/>`;
+  else if(k==='eleph')o+=`<path d="M5 10c0-5 3-7 5-7s5 2 5 7M10 3v8" fill="none" stroke="${c}" stroke-width="${w}"/>`;
+  else o+=`<circle cx="6" cy="7" r="1.6" fill="${c}"/><circle cx="10" cy="7" r="1.6" fill="${c}"/><circle cx="14" cy="7" r="1.6" fill="${c}"/>`;
+  return o+'</svg>'};
+const ORD={cav:0,lcav:1,inf:2,eleph:3,skirm:4};
+const bar=document.createElement('div');bar.id='uiCards';bar.className='hud';bar.setAttribute('aria-label','Vos régiments');
+$('app').appendChild(bar);
+let built=null,cards=[];
+function buildCards(){
+  const mine=units.filter(u=>u.side===0).sort((a,b)=>(ORD[a.T.kind]-ORD[b.T.kind])||(a.id-b.id||0));
+  bar.innerHTML='';cards=[];let lastK=null;
+  for(const u of mine){if(lastK!=null&&u.T.kind!==lastK){const g=document.createElement('span');g.className='gap';bar.appendChild(g)}lastK=u.T.kind;
+    const d=document.createElement('div');d.className='ui-uc';d.title=u.label+' · '+u.T.name;
+    const short=(u.label||u.T.name).replace(/^Infanterie /,'').replace(/^Cavalerie /,'Cav. ');
+    d.innerHTML=`<span class="st"></span>${symB(u.T.kind)}<b>0</b><span class="n">${short}</span><div class="g"><s><i style="background:#d2ae6c"></i></s><s><i></i></s></div>`;
+    d.onclick=e=>{if(u.dead)return;if(!(e.shiftKey||e.ctrlKey))selected.clear();if(selected.has(u)&&(e.shiftKey||e.ctrlKey))selected.delete(u);else selected.add(u);renderSel();updCards()};
+    d.ondblclick=()=>{if(!u.dead){cam.tx=u.x;cam.ty=u.y}};
+    bar.appendChild(d);cards.push([u,d,d.querySelector('b'),d.querySelectorAll('.g i')])}
+  built=units;
+}
+function updCards(){
+  if(built!==units||!cards.length)buildCards();
+  for(const [u,d,b,gi] of cards){
+    const m=Math.max(0,u.morale/u.T.morale),f=frac(u);
+    b.textContent=Math.ceil(u.men);
+    gi[0].style.width=(f*100)+'%';gi[1].style.width=(m*100)+'%';gi[1].style.background=m>.5?'#9fd18c':m>.25?'#e0883c':'#d24a3a';
+    d.classList.toggle('on',selected.has(u));d.classList.toggle('dead',!!u.dead);d.classList.toggle('rout',!u.dead&&!!u.routing);
+    d.classList.toggle('fight',!u.dead&&!u.routing&&u.contacts.length>0);d.classList.toggle('fire',!u.dead&&!u.routing&&!u.contacts.length&&u.underFire>0);
+  }
+}
+const _hudTick=hudTick;
+hudTick=function(){_hudTick();try{updCards()}catch(e){}};
+}
+/* ================= FIN INTERFACE BRONZE : bataille ================= */

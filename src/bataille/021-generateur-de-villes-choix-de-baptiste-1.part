@@ -1,0 +1,441 @@
+/* ================= GÉNÉRATEUR DE VILLES (choix de Baptiste, 10 nov. : générateur pour toutes les villes, plans à la main pour les grandes) =================
+   GENT : les villes de la campagne → [culture, taille 1-3, port, mer (16 secteurs depuis l'est, sens horaire, 0 à 4), angle du fleuve proche, nom].
+   Relevé sur la carte de la campagne (PL, isLand, RIVERS). Cultures : gre grecque, pun punique, ita italique, ibe ibère ou illyrienne (oppidum de pierre),
+   cel celte (oppidum sans tours), num numide. Le nom sert de graine : une ville a toujours le même plan. Un plan fait à la main (PLANS) passe avant. */
+const GENT={"carthage":["pun",3,1,"4444422200001234",null,"Carthage"],"carthago":"carthage","utique":["pun",2,1,"0000000000000000",null,"Utique"],"utica":"utique","hippodiarrhytus":["pun",1,1,"4211334200024444",null,"Hippo Diarrhytus"],"hippodiarr":"hippodiarrhytus","thugga":["num",1,0,"",null,"Thugga"],"sicca":["num",1,0,"",null,"Sicca"],"zama":["num",1,0,"",null,"Zama"],"hadrumete":["pun",2,1,"4400000000044444",null,"Hadrumète"],"hadrumetum":"hadrumete","thapsus":["pun",1,1,"4444431000134444",null,"Thapsus"],"thaenae":["pun",1,1,"3333332000000002",null,"Thaenae"],"tacape":["pun",1,1,"3200000000002333",null,"Tacapé"],"tacapae":"tacape","sabratha":["pun",1,1,"0000000000233321",null,"Sabratha"],"oea":["pun",1,1,"0000000023344331",null,"Oea"],"leptis":["pun",2,1,"4400000000344444",null,"Leptis"],"melite":["pun",1,1,"0000111221101100",null,"Mélité"],"melita":"melite","hippone":["pun",2,1,"2000000000000123",null,"Hippone"],"hipporeg":"hippone","euhesperides":["gre",1,1,"0000000223221000",null,"Euhespérides"],"berenice":"euhesperides","barce":["gre",1,0,"",null,"Barcé"],"barca":"barce","cyrene":["gre",2,1,"0000000000000000",null,"Cyrène"],"cirta":["num",3,0,"",null,"Cirta"],"thagaste":["num",1,0,"",-0.25,"Thagaste"],"theveste":["num",1,0,"",null,"Théveste"],"sitifis":["num",1,0,"",null,"Sitifis"],"igilgili":["pun",1,1,"0000000013444443",null,"Igilgili"],"rusicade":["pun",1,1,"0000000000034433",null,"Rusicade"],"saldae":["pun",1,1,"4442000000022244",null,"Saldae"],"icosium":["pun",1,1,"4300000000144444",null,"Icosium"],"iol":["pun",1,1,"1000000444444444",null,"Iol"],"auzia":["num",1,0,"",null,"Auzia"],"siga":["num",3,1,"0000000000111000",null,"Siga"],"rusaddir":["pun",1,1,"3311000000003344",null,"Rusaddir"],"tingis":["pun",2,1,"0000000002334430",null,"Tingis"],"lixus":["pun",1,1,"0000000112110000",null,"Lixus"],"volubilis":["num",1,0,"",null,"Volubilis"],"gades":["pun",2,1,"3421444434444333",null,"Gadès"],"malaca":["pun",1,1,"0444440000000000",null,"Malaca"],"abdera":["pun",1,1,"0013344300000000",null,"Abdéra"],"baria":["pun",1,1,"0010000000000000",null,"Baria"],"novacarthago":["pun",3,1,"0023332100000000",null,"Nova Carthago"],"cnova":"novacarthago","castulo":["ibe",2,0,"",null,"Castulo"],"hispalis":["ibe",1,0,"",2.7,"Hispalis"],"corduba":["ibe",1,0,"",2.95,"Corduba"],"onuba":["pun",1,1,"1002100000000000",null,"Onuba"],"akraleuke":["pun",1,1,"4444441000000001",null,"Akra Leukè"],"akra":"akraleuke","ebusus":["pun",1,1,"2444430000000000",null,"Ébusus"],"sagonte":["ibe",2,1,"1111000000000001",null,"Sagonte"],"saguntum":"sagonte","dertosa":["ibe",1,0,"",null,"Dertosa"],"tarraco":["ibe",1,1,"2344433000000000",null,"Tarraco"],"ilerda":["ibe",2,0,"",null,"Ilerda"],"osca":["ibe",1,0,"",null,"Osca"],"salduie":["ibe",1,0,"",0.52,"Salduie"],"pompaelo":["ibe",1,0,"",null,"Pompaelo"],"numance":["cel",2,0,"",null,"Numance"],"numantia":"numance","segobriga":["cel",1,0,"",null,"Ségobriga"],"tolede":["cel",1,0,"",null,"Tolède"],"toletum":"tolede","asturica":["cel",1,0,"",null,"Asturica"],"cantabres":["cel",1,0,"",0.4,"Cantabres"],"iuliobriga":"cantabres","helmantica":["cel",1,0,"",null,"Helmantica"],"norba":["cel",1,0,"",null,"Norba"],"olisipo":["cel",2,1,"3322211000000022",null,"Olisipo"],"brigantium":["cel",1,1,"2100000022333332",null,"Brigantium"],"conimbriga":["cel",1,0,"",null,"Conimbriga"],"palma":["ibe",2,1,"0034432000000000",null,"Palma"],"mago":["ibe",1,1,"1220111000000111",null,"Mago"],"emporion":["gre",1,1,"4200000000000444",null,"Emporion"],"massalia":["gre",3,1,"0000034443100000",null,"Massalia"],"agathe":["gre",1,1,"1122232000000000",null,"Agathè"],"agatha":"agathe","nicee":["gre",1,0,"",null,"Nicée"],"nicaea":"nicee","ruscino":["cel",1,0,"",null,"Ruscino"],"naro":["cel",1,1,"0000000000000000",null,"Naro"],"narbo":"naro","tolosa":["cel",2,0,"",-0.9,"Tolosa"],"nemausus":["cel",1,0,"",null,"Nemausus"],"theline":["cel",1,0,"",1.7,"Thélinè"],"arelate":"theline","vienna":["cel",2,0,"",1.62,"Vienna"],"gergovie":["cel",2,0,"",null,"Gergovie"],"gergovia":"gergovie","burdigala":["cel",1,1,"0000000000000100",-2.16,"Burdigala"],"bibracte":["cel",2,0,"",null,"Bibracte"],"genava":["cel",1,0,"",2.41,"Genava"],"lapurdum":["cel",1,1,"0000000011110000",null,"Lapurdum"],"eburodunum":["cel",1,0,"",null,"Eburodunum"],"ebrodunum":"eburodunum","darantasia":["cel",1,0,"",null,"Darantasia"],"genua":["cel",1,1,"0244444440000000",null,"Genua"],"albingaunum":["cel",1,1,"3443310000000033",null,"Albingaunum"],"taurasia":["cel",2,0,"",-0.64,"Taurasia"],"segusio":["cel",1,0,"",null,"Segusio"],"mediolanum":["cel",3,0,"",null,"Mediolanum"],"comum":["cel",1,0,"",null,"Comum"],"salasses":["cel",1,0,"",null,"Salasses"],"augusta":"salasses","felsina":["cel",2,0,"",null,"Felsina"],"mutina":["cel",1,0,"",null,"Mutina"],"parma":["cel",1,0,"",null,"Parma"],"brixia":["ita",1,0,"",null,"Brixia"],"patavium":["ita",2,0,"",null,"Patavium"],"ateste":["ita",1,0,"",null,"Ateste"],"altinum":["ita",1,1,"1213231000000000",null,"Altinum"],"cremone":["ita",1,0,"",null,"Crémone"],"cremona":"cremone","placentia":["ita",1,0,"",0.06,"Placentia"],"ariminum":["ita",1,1,"3200000000022333",null,"Ariminum"],"pisae":["ita",1,1,"0000000000000000",3.02,"Pisae"],"arretium":["ita",1,0,"",null,"Arretium"],"faesulae":["ita",1,0,"",3.07,"Faesulae"],"volaterrae":["ita",1,0,"",null,"Volaterrae"],"perusia":["ita",1,0,"",1.41,"Perusia"],"clusium":["ita",1,0,"",null,"Clusium"],"tarquinii":["ita",1,0,"",null,"Tarquinii"],"rome":["ita",3,0,"",1.31,"Rome"],"roma":"rome","ostie":["ita",1,1,"0002333221000000",2.51,"Ostie"],"ostia":"ostie","spoletium":["ita",1,0,"",null,"Spoletium"],"narnia":["ita",1,0,"",1.51,"Narnia"],"senagallica":["ita",1,1,"4400000000444444",null,"Sena Gallica"],"ancone":["ita",1,1,"4410000024444444",null,"Ancône"],"ancona":"ancone","asculum":["ita",1,0,"",null,"Asculum"],"hatria":["ita",1,0,"",null,"Hatria"],"albafucens":["ita",1,0,"",null,"Alba Fucens"],"corfinium":["ita",1,0,"",null,"Corfinium"],"aesernia":["ita",1,0,"",1.23,"Aesernia"],"bovianum":["ita",1,0,"",null,"Bovianum"],"capoue":["ita",2,0,"",2.58,"Capoue"],"capua":"capoue","neapolis":["gre",2,1,"0033331000000000",null,"Néapolis"],"benevent":["ita",1,0,"",null,"Bénévent"],"beneventum":"benevent","venusia":["ita",1,0,"",null,"Venusia"],"luceria":["ita",1,0,"",null,"Luceria"],"arpi":["ita",1,0,"",null,"Arpi"],"canusium":["ita",1,0,"",-0.7,"Canusium"],"sipontum":["ita",1,1,"4444421111112344",null,"Sipontum"],"barium":["ita",1,1,"2000000000234443",null,"Barium"],"brundisium":["ita",2,1,"1000000000122233",null,"Brundisium"],"tarente":["gre",2,1,"0001334443111223",null,"Tarente"],"tarentum":"tarente","metaponte":["gre",1,1,"3333200000000002",null,"Métaponte"],"metapontum":"metaponte","thurii":["gre",1,1,"0000000000000000",null,"Thurii"],"crotone":["gre",1,1,"4420000000000444",null,"Crotone"],"croton":"crotone","locres":["gre",1,1,"3443310000000003",null,"Locres"],"locri":"locres","rhegium":["gre",1,1,"0000122334330000",null,"Rhegium"],"consentia":["ita",1,0,"",null,"Consentia"],"paestum":["gre",1,1,"0000044443200000",null,"Paestum"],"grumentum":["ita",1,0,"",null,"Grumentum"],"messana":["gre",1,1,"2333200000000032",null,"Messana"],"panormus":["pun",2,1,"3200000000001333",null,"Panormus"],"lilybee":["pun",2,1,"0000444444444310",null,"Lilybée"],"lilybaeum":"lilybee","agrigente":["gre",2,1,"0000121100000000",null,"Agrigente"],"agrigentum":"agrigente","segeste":["gre",1,0,"",null,"Ségeste"],"segesta":"segeste","henna":["gre",1,0,"",null,"Henna"],"gela":["gre",1,1,"0003333320000000",null,"Gela"],"syracuse":["gre",3,1,"4441300000023344",null,"Syracuse"],"syracusae":"syracuse","leontinoi":["gre",1,0,"",null,"Léontinoi"],"leontini":"leontinoi","catane":["gre",1,1,"4444200000000023",null,"Catane"],"catana":"catane","tauromenion":["gre",1,1,"4444410000000034",null,"Tauroménion"],"tauromenium":"tauromenion","caralis":["pun",2,1,"0124444214000000",null,"Caralis"],"tharros":["pun",1,1,"4444444444410033",null,"Tharros"],"olbia":["pun",1,1,"2000000000000012",null,"Olbia"],"sulci":["pun",1,1,"1321001111012122",null,"Sulci"],"alalia":["pun",1,1,"4444444211112344",null,"Alalia"],"tergeste":["ibe",1,1,"0001113334300000",null,"Tergeste"],"iader":["ibe",1,1,"0004332344300000",null,"Iader"],"salona":["ibe",1,1,"0022222140000000",null,"Salona"],"narona":["ibe",1,0,"",null,"Narona"],"scodra":["ibe",3,0,"",null,"Scodra"],"rhizon":["ibe",1,1,"0000121000000000",null,"Rhizon"],"lissus":["ibe",1,1,"0000000121000000",null,"Lissus"],"siscia":["cel",1,0,"",0.34,"Siscia"],"sirmium":["cel",1,0,"",null,"Sirmium"],"epidamne":["gre",2,1,"0134444432200000",null,"Épidamne"],"epidamnus":"epidamne","apollonia":["gre",1,1,"0000000000000000",null,"Apollonia"],"oricum":["gre",1,1,"0000123334444000",null,"Oricum"],"naissus":["cel",1,0,"",null,"Naissus"],"scupi":["cel",2,0,"",0.98,"Scupi"],"ambracie":["gre",3,1,"0000000000000000",null,"Ambracie"],"ambracia":"ambracie","phoinike":["gre",1,0,"",null,"Phoinikè"],"phoenice":"phoinike","dodone":["gre",1,0,"",null,"Dodone"],"dodona":"dodone","pella":["gre",3,0,"",0.98,"Pella"],"thessalonique":["gre",2,1,"0000333220000000",null,"Thessalonique"],"thessalonica":"thessalonique","amphipolis":["gre",1,1,"0001210000000000",0.9,"Amphipolis"],"pydna":["gre",1,1,"1221000000001222",null,"Pydna"],"heraclee":["gre",1,0,"",null,"Héraclée"],"heraclealync":"heraclee","larissa":["gre",2,0,"",null,"Larissa"],"demetrias":["gre",1,1,"0344420000000000",null,"Démétrias"],"corinthe":["gre",2,1,"0000000000022210",null,"Corinthe"],"corinthus":"corinthe","chalcis":["gre",1,1,"0033201100134400",null,"Chalcis"],"philippopolis":["cel",2,0,"",0.25,"Philippopolis"],"seuthopolis":["cel",1,0,"",null,"Seuthopolis"],"abdere":["gre",1,1,"4444444300000134",null,"Abdère"],"abderathr":"abdere","thermos":["gre",2,0,"",null,"Thermos"],"thermon":"thermos","naupacte":["gre",1,1,"2443343100000000",null,"Naupacte"],"naupactus":"naupacte","elis":["gre",1,0,"",null,"Élis"],"sparte":["gre",2,0,"",null,"Sparte"],"sparta":"sparte","argos":["gre",1,0,"",null,"Argos"],"megalopolis":["gre",2,0,"",null,"Mégalopolis"],"patras":["gre",1,1,"0000004444444300",null,"Patras"],"patrae":"patras","messene":["gre",1,1,"0000000000000000",null,"Messène"],"athenes":["gre",3,1,"0000011000000000",null,"Athènes"],"athenae":"athenes","thebes":["gre",1,0,"",null,"Thèbes"],"thebae":"thebes","gortyne":["gre",2,1,"0000000000000000",null,"Gortyne"],"gortyn":"gortyne","cnossos":["gre",1,1,"0000000000111110",null,"Cnossos"],"kydonia":["gre",1,1,"0000000002344410",null,"Kydonia"],"tunes":["pun",1,0,"",null,"Tunès"],"neapolisafr":["pun",1,1,"1333331000000000",null,"Néapolis"],"aspis":["pun",1,1,"3333331000001222",null,"Aspis"],"vaga":["num",1,0,"",null,"Vaga"],"uthina":["pun",1,0,"",null,"Uthina"],"thysdrus":["num",1,0,"",null,"Thysdrus"],"leptisminor":["pun",1,1,"3000000000024443",null,"Leptis Minor"],"acholla":["pun",1,1,"0010000000000111",null,"Acholla"],"gightis":["pun",1,1,"1000001444444443",null,"Gightis"],"ilici":["ibe",1,0,"",null,"Ilici"],"ilorci":["ibe",1,0,"",null,"Ilorci"],"basti":["ibe",1,0,"",null,"Basti"],"acci":["ibe",1,0,"",null,"Acci"],"iliberri":["ibe",1,0,"",null,"Iliberri"],"oretum":["ibe",1,0,"",null,"Orétum"],"carteia":["pun",1,1,"1124432200000001",null,"Carteia"],"sexi":["pun",1,1,"3444444310000000",null,"Sexi"],"carmo":["ibe",1,0,"",null,"Carmo"],"urso":["ibe",1,0,"",null,"Urso"],"asido":["ibe",1,0,"",null,"Asido"],"consabura":["ibe",1,0,"",null,"Consabura"],"arbucala":["cel",1,0,"",null,"Arbucala"],"pallantia":["cel",1,0,"",null,"Pallantia"],"megare":["gre",1,1,"1122222000000000",null,"Mégare"],"megara":"megare","lamia":["gre",1,0,"",null,"Lamia"],"elatee":["gre",1,0,"",null,"Élatée"],"elatea":"elatee","pergame":["gre",3,0,"",2.85,"Pergame"],"pergamum":"pergame","pitane":["gre",1,1,"0133321110000000",2.56,"Pitané"],"assos":["gre",1,1,"2344444400000000",null,"Assos"],"alexandriedetroade":["gre",1,1,"0000033443330000",null,"Alexandrie de Troade"],"troas":"alexandriedetroade","ilion":["gre",1,0,"",null,"Ilion"],"lampsaque":["gre",1,1,"0000000433344300",null,"Lampsaque"],"lampsacus":"lampsaque","mytilene":["gre",1,1,"3310002120003333",null,"Mytilène"],"methymna":["gre",1,1,"0000023333344433",null,"Méthymna"],"sestos":["gre",1,1,"2221320000000001",null,"Sestos"],"lysimacheia":["gre",1,0,"",null,"Lysimacheia"],"lysimachia":"lysimacheia","egine":["gre",1,1,"0002344444444432",null,"Égine"],"aegina":"egine","elaia":["gre",1,1,"0000244200000000",2.56,"Élaia"],"adramyttion":["gre",1,1,"0000344430000000",null,"Adramyttion"],"adramyttium":"adramyttion","kyme":["gre",1,1,"0000000134431000",null,"Kymé"],"cyme":"kyme","thyatire":["gre",1,0,"",null,"Thyatire"],"thyatira":"thyatire","phocee":["gre",1,1,"0001232444411000",null,"Phocée"],"phocaea":"phocee","smyrne":["gre",1,1,"0000000134321000",null,"Smyrne"],"smyrna":"smyrne","ephese":["gre",2,1,"0000000110000000",2.86,"Éphèse"],"ephesus":"ephese","milet":["gre",1,1,"0000001001000000",2.67,"Milet"],"miletus":"milet","halicarnasse":["gre",1,1,"0023333100000100",null,"Halicarnasse"],"halicarnassus":"halicarnasse","chios":["gre",1,1,"4443000000000444",null,"Chios"],"samos":["gre",1,1,"3444444000000003",null,"Samos"],"cyzique":["gre",1,1,"4000000342100024",null,"Cyzique"],"cyzicus":"cyzique","abydos":["gre",1,1,"0000042332222344",null,"Abydos"],"perinthe":["gre",1,1,"4444444300000044",null,"Périnthe"],"perinthus":"perinthe","byzance":["gre",2,1,"2244444400000032",null,"Byzance"],"byzantium":"byzance","chalcedoine":["gre",1,1,"0023444442111000",null,"Chalcédoine"],"chalcedon":"chalcedoine","nicomedie":["gre",2,1,"0002332300000000",null,"Nicomédie"],"nicomedia":"nicomedie","pruse":["gre",1,0,"",null,"Pruse"],"prusa":"pruse","sardes":["gre",2,0,"",null,"Sardes"],"sardis":"sardes","magnesiedusipyle":["gre",1,0,"",-2.89,"Magnésie du Sipyle"],"magnesia":"magnesiedusipyle","tralles":["gre",1,0,"",2.62,"Tralles"],"laodiceedulycos":["gre",1,0,"",3.02,"Laodicée du Lycos"],"laodicea":"laodiceedulycos","apamee":["gre",1,0,"",null,"Apamée"],"apamea":"apamee","rhodes":["gre",2,1,"3333000133334444",null,"Rhodes"],"rhodus":"rhodes","kaunos":["gre",1,1,"0000022200000000",null,"Kaunos"],"caunus":"kaunos","lindos":["gre",1,1,"4444222000002334",null,"Lindos"]};
+const GENC={};
+function genRng(str){let h=1779033703^str.length;for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19}
+  return ()=>{h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return ((h^=h>>>16)>>>0)/4294967296}}
+// garde la partie du polygone où nx*x+ny*y <= c
+function clipHalf(poly,nx,ny,c){const out=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],da=nx*a[0]+ny*a[1]-c,db=nx*b[0]+ny*b[1]-c;if(da<=0)out.push(a);if((da<0)!==(db<0)){const t=da/(da-db);out.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t])}}return out}
+// styles par culture : citadelle, place, quartiers, toits, temples, théâtre, part des villes perchées, cultures des champs
+const GSTY={
+ gre:{cit:"l'acropole",pl:'agora',bw:[28,34],bh:[56,80],jit:.08,dens:.96,split:2,roof:['#f2ead4','#ebe0c4','#e8d6b0','#f4eedc','#dccaa4','#e2c9a0'],tmp:[1,3],th:1,hill:.4,mix:{ble:.22,orge:.12,jachere:.12,vigne:.2,olive:.28,pre:.06}},
+ pun:{cit:'la citadelle',pl:'place',bw:[26,32],bh:[50,70],jit:.1,dens:.97,split:2,roof:null,tmp:[1,3],hill:.3,mix:{ble:.3,orge:.14,jachere:.08,vigne:.14,olive:.26,pre:.08}},
+ ita:{cit:"l'arx",pl:'forum',bw:[30,38],bh:[60,90],jit:.12,dens:.93,split:2,roof:['#d9a07a','#cf9068','#e2b48e','#c98660','#e8c4a0','#d49a74','#efe5cc'],tmp:[1,3],hill:.5,mix:{ble:.32,orge:.14,jachere:.1,vigne:.18,olive:.18,pre:.08}},
+ ibe:{cit:'la citadelle',pl:'place',bw:[24,30],bh:[34,50],jit:.35,dens:.97,split:1,roof:['#d8c7a2','#cdb994','#e2d4b2','#c8b48c','#d4c09a'],tmp:[0,1],hill:.85,mix:{ble:.28,orge:.16,jachere:.12,vigne:.12,olive:.24,pre:.08}},
+ cel:{cit:"l'oppidum haut",pl:'',bw:[26,34],bh:[30,44],jit:.45,dens:.9,fill:.6,split:1,roof:['#b39a64','#a88c58','#c1a870','#9c8452','#b8a06a'],tmp:[0,1],hill:.85,towers:0,mix:{ble:.22,orge:.18,jachere:.16,vigne:0,olive:0,pre:.3}},
+ num:{cit:'la citadelle',pl:'marché',bw:[24,32],bh:[30,46],jit:.4,dens:.98,split:1,roof:['#d9b98a','#cfae7e','#e2c69a','#c9a474','#dcc096'],tmp:[0,1],hill:.5,mix:{ble:.4,orge:.2,jachere:.16,vigne:.04,olive:.12,pre:.08}}};
+const GDESC={gre:'la cité grecque',pun:'la ville punique',ita:'la ville italique',ibe:"l'oppidum ibère",cel:"l'oppidum",num:'la ville numide'};
+function genPlan(k){if(k in GENC)return GENC[k];let e=GENT[k];if(typeof e==='string')e=GENT[e];if(!Array.isArray(e)||!e[1])return GENC[k]=null;
+  try{return GENC[k]=genBuild(k,e)}catch(err){console.warn('villes: générateur',k,err);return GENC[k]=null}}
+function genBuild(k,e){const [cu,sz,port,seaS,rv,name]=e,S=GSTY[cu]||GSTY.ita,r=genRng(k),rr=(a,b)=>a+r()*(b-a),TAU=2*Math.PI;
+  const R0=[0,230,320,420][sz]*rr(.9,1.1);
+  // la mer : 16 secteurs depuis l'est, sens horaire (repère de la campagne : x vers l'est, y vers le sud), 0 à 4 = de plus en plus proche
+  const sea=seaS?seaS.split('').map(Number):new Array(16).fill(0);
+  // l'attaquant arrive par le côté le plus terrestre ; il devient le +y du plan
+  let best=0,bs=-1e9;for(let i=0;i<16;i++){let s=0;for(let j=-4;j<=4;j++)s-=sea[(i+j+16)%16]*(5-Math.abs(j));s+=r()*.5;if(s>bs){bs=s;best=i}}
+  const a0=best/16*TAU,toCamp=phi=>phi-Math.PI/2+a0;
+  const wAt=phi=>{let t=toCamp(phi)/TAU*16;t=((t%16)+16)%16;const i=Math.floor(t),f=t-i;let w=sea[i]*(1-f)+sea[(i+1)%16]*f;const dd=Math.abs(Math.atan2(Math.sin(phi-Math.PI/2),Math.cos(phi-Math.PI/2)));if(dd<.95)w*=Math.max(0,(dd-.55)/.4);return w};
+  const coastRaw=phi=>{const w=wAt(phi);return w<.3?R0*12:R0*(1.0+(4-w)*.6)};
+  const NA=96,cr=[];for(let i=0;i<NA;i++)cr.push(Math.log(coastRaw(i/NA*TAU)));
+  const crS=cr.map((_,i)=>{let s=0,n=0;for(let j=-3;j<=3;j++){s+=cr[(i+j+NA)%NA];n++}return Math.exp(s/n)});
+  const coast=phi=>{let t=((phi%TAU)+TAU)%TAU/TAU*NA;const i=Math.floor(t)%NA,f=t-Math.floor(t);return crS[i]*(1-f)+crS[(i+1)%NA]*f};
+  const coastal=sea.some(v=>v>0)&&crS.some(v=>v<R0*4);
+  // le site : perché (crête allongée) ou en plaine ; une enceinte qui suit le terrain, jamais un cercle
+  const hill=r()<(coastal?S.hill*.5:S.hill);
+  const asp=hill?rr(1.5,2.1):rr(1.08,1.4),psi=Math.PI/2+(r()-.5)*(hill?1.4:3),ph=[r()*TAU,r()*TAU,r()*TAU];
+  const shapeR=phi=>{const c=Math.cos(phi-psi),s=Math.sin(phi-psi);const am=hill?1:1.5;return R0/Math.sqrt(asp)/Math.sqrt(c*c/(asp*asp)+s*s)*(1+am*(.09*Math.sin(2*phi+ph[0])+.07*Math.sin(3*phi+ph[1])+.05*Math.sin(5*phi+ph[2])))};
+  const NV=48,step=Math.max(2,Math.round(NV/(9+sz*3))),V=[];
+  for(let i=0;i<NV;i++){const phi=i/NV*TAU,cl=coast(phi)-24,sh=shapeR(phi),sea_=cl<sh*1.3;
+    if(!sea_&&i%step!==0){const pv=(i-1)/NV*TAU,nx=(i+1)/NV*TAU;if(!(coast(pv)-24<shapeR(pv)*1.3)&&!(coast(nx)-24<shapeR(nx)*1.3))continue}
+    const ph2=sea_?phi:phi+(r()-.5)*.5/(9+sz*3)*TAU,rad=Math.max(R0*.42,sea_?cl:shapeR(ph2)*rr(.92,1.06));V.push({x:Math.cos(ph2)*rad,y:Math.sin(ph2)*rad,phi:ph2,s:sea_})}
+  const enc=V.map(v=>[Math.round(v.x),Math.round(v.y)]);
+  // murs : le front (face à l'attaquant), les murs de terre, les murs de mer
+  const FH=hill?.75:.95,cls=[];for(let i=0;i<V.length;i++){const a=V[i],b=V[(i+1)%V.length];let m=Math.atan2(a.y+b.y,a.x+b.x);const dd=Math.abs(Math.atan2(Math.sin(m-Math.PI/2),Math.cos(m-Math.PI/2)));cls.push(a.s&&b.s?'s':dd<FH?'f':'l')}
+  let st=cls.findIndex((c,i)=>c!==cls[(i-1+cls.length)%cls.length]&&c!=='f'&&cls[(i-1+cls.length)%cls.length]!=='f');if(st<0)st=cls.findIndex((c,i)=>c!==cls[(i-1+cls.length)%cls.length]);if(st<0)st=0;
+  const runs=[];for(let n=0;n<cls.length;n++){const i=(st+n)%cls.length,c=cls[i];if(!runs.length||runs[runs.length-1].c!==c)runs.push({c,p:[enc[i]]});runs[runs.length-1].p.push(enc[(i+1)%enc.length])}
+  runs.sort((a,b)=>(a.c==='f'?0:1)-(b.c==='f'?0:1));if(runs.filter(q=>q.c==='f').length>1){const f=runs.filter(q=>q.c==='f');f.sort((a,b)=>b.p.length-a.p.length);for(const q of f.slice(1))q.c='l';runs.sort((a,b)=>(a.c==='f'?0:1)-(b.c==='f'?0:1))}
+  const tw=S.towers===0;
+  const walls=runs.map(q=>q.c==='f'?{k:'mur',c:15,t:tw?0:90,wb:40,p:q.p}:q.c==='s'?{k:'mur',c:10,t:tw?0:120,wb:18,p:q.p}:{k:'mur',c:13,t:tw?0:110,wb:26,p:q.p});
+  // la citadelle : au bout haut de la crête, ou en arrière de la ville
+  let pc=hill?(Math.sin(psi)<0?psi:psi+Math.PI):-Math.PI/2+(r()-.5)*1.3;const cd=hill?.55:.42,lim=Math.min(shapeR(pc),coast(pc)-30);const C0=[Math.cos(pc)*lim*cd,Math.sin(pc)*lim*cd];
+  const dEdge=(x,y)=>{let m=1e9;for(let i=0;i<enc.length;i++){const a=enc[i],b=enc[(i+1)%enc.length],vx=b[0]-a[0],vy=b[1]-a[1],L=vx*vx+vy*vy||1,t=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/L));m=Math.min(m,Math.hypot(a[0]+vx*t-x,a[1]+vy*t-y))}return inPoly(x,y,enc)?m:-m};
+  let rc=[0,58,68,80][sz],cit=[];const cra=Array.from({length:8},(_,i)=>[i/8*TAU+(r()-.5)*.4,rr(.8,1.15)]);
+  for(let tries=0;tries<12;tries++){cit=cra.map(([a,f])=>[Math.round(Math.cos(a)*rc*f),Math.round(Math.sin(a)*rc*f)]);
+    if(cit.every(([x,y])=>dEdge(C0[0]+x*1.25/1.5,C0[1]+y*1.25/1.5)>28))break;rc*=.88}
+  // tout est ramené à la citadelle (origine du plan) : la ville ×1,5, la citadelle ×1,25 au chargement
+  const CX=C0[0],CY=C0[1],sh=p=>[Math.round(p[0]-CX),Math.round(p[1]-CY)],shA=a=>a.map(sh);
+  const citP=cit;
+  const inside=shA(enc);for(const w of walls)w.p=shA(w.p);
+  walls.push({k:'citadelle',c:12,t:0,closed:1,p:citP});
+  const ray=(poly,ox,oy,ang,closed)=>{const dx=Math.cos(ang),dy=Math.sin(ang);let best=null;const n=closed?poly.length:poly.length-1;for(let i=0;i<n;i++){const a=poly[i],b=poly[(i+1)%poly.length],ex=b[0]-a[0],ey=b[1]-a[1],den=dx*ey-dy*ex;if(Math.abs(den)<1e-9)continue;const t=((a[0]-ox)*ey-(a[1]-oy)*ex)/den,u=((a[0]-ox)*dy-(a[1]-oy)*dx)/den;if(t>0&&u>=0&&u<=1&&(!best||t<best.t))best={t,x:ox+dx*t,y:oy+dy*t}}return best};
+  const cen=[-CX,-CY]; // le centre de la ville, dans le nouveau repère
+  const compass=(x,y)=>{const th=toCamp(Math.atan2(y-cen[1],x-cen[0])),i=Math.round(((th%TAU)+TAU)%TAU/(TAU/8))%8;return ["de l'est",'du sud-est','du sud','du sud-ouest',"de l'ouest",'du nord-ouest','du nord','du nord-est'][i]};
+  const gates=[],used=new Set();const gname=(x,y,pre)=>{let n=pre||('porte '+compass(x,y));if(used.has(n))n+=' '+['haute','basse','neuve','vieille'][used.size%4];used.add(n);return n};
+  const pathLen=p=>{let L=0;for(let i=0;i<p.length-1;i++)L+=Math.hypot(p[i+1][0]-p[i][0],p[i+1][1]-p[i][1]);return L};
+  const along=(p,f)=>{const L=pathLen(p)*f;let a=0;for(let i=0;i<p.length-1;i++){const l=Math.hypot(p[i+1][0]-p[i][0],p[i+1][1]-p[i][1]);if(a+l>=L){const t=(L-a)/(l||1);return [p[i][0]+(p[i+1][0]-p[i][0])*t,p[i][1]+(p[i+1][1]-p[i][1])*t]}a+=l}return p[p.length-1]};
+  const fr=walls[0].p,g0=ray(fr,cen[0],cen[1],Math.PI/2,false)||{x:along(fr,.5)[0],y:along(fr,.5)[1]};
+  gates.push({w:0,x:Math.round(g0.x),y:Math.round(g0.y),n:gname(g0.x,g0.y)});
+  if(sz>=2){const g1=ray(fr,cen[0],cen[1],Math.PI/2+(r()<.5?-.6:.6),false);if(g1&&Math.hypot(g1.x-g0.x,g1.y-g0.y)>140)gates.push({w:0,x:Math.round(g1.x),y:Math.round(g1.y),n:gname(g1.x,g1.y)})}
+  walls.forEach((w,wi)=>{if(wi===0||w.k!=='mur')return;const L=pathLen(w.p);if(w.c===10){if(port&&L>160){const q=along(w.p,.5);gates.push({w:wi,x:Math.round(q[0]),y:Math.round(q[1]),n:gname(0,0,'porte de la mer'),open:1})}}
+    else if(L>150){const q=along(w.p,rr(.35,.65));gates.push({w:wi,x:Math.round(q[0]),y:Math.round(q[1]),n:gname(q[0],q[1])})}});
+  const cg=citP.reduce((b,q)=>q[1]>b[1]?q:b,citP[0]);gates.push({w:walls.length-1,x:cg[0],y:cg[1],n:'porte de '+S.cit.replace(/^l'|^la /,m=>m==="l'"?"l'":'la ')});
+  // place, quartiers, temples, théâtre, loges à navires
+  const fg=gates[0],ang0=Math.atan2(fg.y-cg[1]*1.25/1.5,fg.x-cg[0]*1.25/1.5)+Math.PI/2+(r()-.5)*.3;
+  let pl=[cg[0]*1.25/1.5+(fg.x-cg[0]*1.25/1.5)*.5,cg[1]*1.25/1.5+(fg.y-cg[1]*1.25/1.5)*.5];
+  const insideS=(x,y,m)=>{if(!inPoly(x,y,inside))return false;for(let i=0;i<inside.length;i++){const a=inside[i],b=inside[(i+1)%inside.length],vx=b[0]-a[0],vy=b[1]-a[1],L=vx*vx+vy*vy||1,t=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/L));if(Math.hypot(a[0]+vx*t-x,a[1]+vy*t-y)<m)return false}return true};
+  const plaza=[];const PS=[0,[56,40],[78,54],[100,68]][sz];if(S.pl&&insideS(pl[0],pl[1],90))plaza.push([Math.round(pl[0]),Math.round(pl[1]),PS[0],PS[1],S.pl,ang0]);
+  const dist=[];{const base={k:'grid',bw:S.bw,bh:S.bh,dens:S.dens,jit:S.jit};if(S.fill)base.fill=S.fill;
+    if(S.split>1&&sz>=2){const a=ang0+rr(.3,1.2),nx=Math.cos(a),ny=Math.sin(a),c=nx*pl[0]+ny*pl[1];const A=clipHalf(inside,nx,ny,c),B=clipHalf(inside,-nx,-ny,-c);
+      if(A.length>2)dist.push(Object.assign({},base,{p:A,ang:ang0}));if(B.length>2)dist.push(Object.assign({},base,{p:B,ang:ang0+rr(.25,.6)*(r()<.5?-1:1)}))}
+    else dist.push(Object.assign({},base,{p:inside,ang:ang0}))}
+  const xs=inside.map(q=>q[0]),ys=inside.map(q=>q[1]),X0=Math.min(...xs),X1=Math.max(...xs),Y0=Math.min(...ys),Y1=Math.max(...ys);
+  const temples=[],nT=Math.round(rr(S.tmp[0],S.tmp[1]+.99))+sz-1;for(let t=0;t<400&&temples.length<nT;t++){const x=rr(X0,X1),y=rr(Y0,Y1);if(!insideS(x,y,60)||Math.hypot(x,y)<rc*1.25/1.5*1.5+40||plaza.some(p=>Math.hypot(p[0]-x,p[1]-y)<90)||temples.some(q=>Math.hypot(q[0]-x,q[1]-y)<110))continue;
+    temples.push(cu==='cel'?[Math.round(x),Math.round(y),18,15,ang0]:[Math.round(x),Math.round(y),Math.round(rr(22,32)),Math.round(rr(13,19)),ang0])}
+  const blds=[];if(S.th&&sz>=2){for(let t=0;t<60;t++){const a=rr(0,TAU),d=rc*1.25/1.5+rr(50,90),x=Math.cos(a)*d,y=Math.sin(a)*d;if(insideS(x,y,50)&&!plaza.some(p=>Math.hypot(p[0]-x,p[1]-y)<80)){blds.push([Math.round(x),Math.round(y),46,46,a+Math.PI/2,'theatre']);break}}}
+  if(port&&(cu==='pun'||cu==='gre')){const sw=walls.filter(w=>w.c===10).sort((a,b)=>pathLen(b.p)-pathLen(a.p))[0];if(sw&&pathLen(sw.p)>140){const L=pathLen(sw.p),q0=along(sw.p,.45),q1=along(sw.p,.55),a=Math.atan2(q1[1]-q0[1],q1[0]-q0[0]),m=along(sw.p,.5);let nx=-Math.sin(a),ny=Math.cos(a);if(!inPoly(m[0]+nx*30,m[1]+ny*30,inside)){nx=-nx;ny=-ny}
+    blds.push([Math.round(m[0]+nx*34),Math.round(m[1]+ny*34),Math.round(Math.min(150,L*.5)),26,a,'neoria'])}}
+  // routes : chaque porte vers la campagne, et vers la place ; la première route finit à la porte de la citadelle
+  const hub=plaza.length?[plaza[0][0],plaza[0][1]]:[Math.round(pl[0]),Math.round(pl[1])];
+  const roads=[];for(const g of gates){if(g.w===walls.length-1)continue;const dx=g.x-cen[0],dy=g.y-cen[1],L=Math.hypot(dx,dy)||1;const far=[Math.round(g.x+dx/L*1800),Math.round(g.y+dy/L*1800)],mid=[Math.round(g.x+dx/L*500+(r()-.5)*120),Math.round(g.y+dy/L*500+(r()-.5)*120)];
+    roads.push(g===gates[0]?[far,mid,[g.x,g.y],hub,[cg[0],cg[1]]]:[far,mid,[g.x,g.y],hub])}
+  // fleuve : il passe à côté de la ville, du côté opposé à l'attaquant, avec un pont sur chaque route qui le croise
+  const water=[];
+  if(coastal){const land=[];for(let i=0;i<72;i++){const phi=i/72*TAU,d=Math.min(coast(phi),R0*11);land.push([Math.round(Math.cos(phi)*d-CX),Math.round(Math.sin(phi)*d-CY)])}
+    const B=R0*14;water.push({k:'mer',n:'Mer',p:[[-B,-B],[B,-B],[B,B],[-B,B]],holes:[land],landHoles:1})}
+  if(rv!=null){const be=rv-a0+Math.PI/2,dx=Math.cos(be),dy=Math.sin(be);let nx=-dy,ny=dx;if(ny>.2||(Math.abs(ny)<=.2&&r()<.5)){nx=-nx;ny=-ny}
+    const d0=Math.max(...inside.map(q=>(q[0]-cen[0])*nx+(q[1]-cen[1])*ny))+80,pm=r()*TAU,axe=[];for(let t=-14;t<=14;t+=.5){const off=d0+28*Math.sin(t*1.3+pm);axe.push([cen[0]+nx*off+dx*t*R0,cen[1]+ny*off+dy*t*R0])}
+    const hw=rr(11,15),L1=[],L2=[];axe.forEach((q,i)=>{const a=axe[Math.max(0,i-1)],b=axe[Math.min(axe.length-1,i+1)],ex=b[0]-a[0],ey=b[1]-a[1],L=Math.hypot(ex,ey)||1;L1.push([Math.round(q[0]-ey/L*hw),Math.round(q[1]+ex/L*hw)]);L2.push([Math.round(q[0]+ey/L*hw),Math.round(q[1]-ex/L*hw)])});
+    const bridges=[];for(const rd of roads)for(let i=0;i<rd.length-1;i++)for(let j=0;j<axe.length-1;j++){const a=rd[i],b=rd[i+1],c=axe[j],d=axe[j+1],den=(b[0]-a[0])*(d[1]-c[1])-(b[1]-a[1])*(d[0]-c[0]);if(Math.abs(den)<1e-9)continue;
+      const t=((c[0]-a[0])*(d[1]-c[1])-(c[1]-a[1])*(d[0]-c[0]))/den,u=((c[0]-a[0])*(b[1]-a[1])-(c[1]-a[1])*(b[0]-a[0]))/den;if(t<0||t>1||u<0||u>1)continue;
+      const x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t,L=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/L,uy=(b[1]-a[1])/L,h=hw+10,w=7;bridges.push([[x-ux*h-uy*w,y-uy*h+ux*w],[x+ux*h-uy*w,y+uy*h+ux*w],[x+ux*h+uy*w,y+uy*h-ux*w],[x-ux*h+uy*w,y-uy*h-ux*w]].map(q=>q.map(Math.round)))}
+    water.push({k:'fleuve',n:'',p:L1.concat(L2.reverse()),holes:bridges,bridges})}
+  // relief et campagne
+  const hills=[{x:0,y:0,rx:rc*1.25/1.5*1.9,ry:rc*1.25/1.5*1.7,n:'',p:citP.map(([x,y])=>[Math.round(x*1.25/1.5*1.9),Math.round(y*1.25/1.5*1.9)])}];
+  const country={ang:ang0+rr(-.4,.4),tombs:300+sz*120,farms:.14,mix:S.mix};
+  if(hill){const rel=inside.map(([x,y])=>[Math.round(cen[0]+(x-cen[0])*1.45),Math.round(cen[1]+(y-cen[1])*1.45)]);const H={x:cen[0],y:cen[1],rx:(X1-X0)*.72,ry:(Y1-Y0)*.72,n:'',p:rel};country.relief=[H];country.wild=[rel]}
+  const front=walls[0].p,fxs=front.map(q=>q[0]);
+  const labels=[[name.toUpperCase(),Math.round(cen[0]*.6+hub[0]*.4),Math.round(cen[1]*.6+hub[1]*.4+30),20],[S.cit.replace(/^l'|^la /,'').toUpperCase(),0,Math.round(-rc*1.25/1.5-26),11]];
+  if(plaza.length)labels.push([S.pl,plaza[0][0],plaza[0][1]+plaza[0][3]/2+14,10,1]);
+  for(const g of gates)if(g.w!==walls.length-1){const dx=g.x-cen[0],dy=g.y-cen[1],L=Math.hypot(dx,dy)||1;labels.push([g.n,Math.round(g.x+dx/L*55),Math.round(g.y+dy/L*55),10,1])}
+  if(coastal){let bi=0;for(let i=0;i<72;i++)if(coast(i/72*TAU)<coast(bi/72*TAU))bi=i;const phi=bi/72*TAU,d=coast(phi)+160;labels.push(['Mer',Math.round(Math.cos(phi)*d-CX),Math.round(Math.sin(phi)*d-CY),17,1])}
+  const ix=inside.map(q=>q[0]),iy=inside.map(q=>q[1]);
+  return {n:name,gen:cu,pt:{x:0,y:0,r:[0,60,70,85][sz],n:S.cit},ext:[Math.min(...ix)-500,Math.min(...iy)-450,Math.max(...ix)+500,Math.max(...iy)+900],fx:Math.round(fxs.reduce((a,b)=>a+b,0)/fxs.length),defx:[Math.min(...fxs),Math.max(...fxs)],
+    inside,water,walls,gates,breaches:[.3,.5,.72].map(f=>along(front,f)).filter(q=>gates.every(g=>Math.hypot(g.x-q[0],g.y-q[1])>60)).map(q=>[0,Math.round(q[0]),Math.round(q[1])]),
+    hills,roads,plaza,blds,temples,dist,fields:[],country,labels,roof:S.roof,
+    txt:`Assaut de ${name} : ${GDESC[cu]||'la ville'} ${hill?'tient une hauteur':coastal?'tourne le dos à la mer':'barre la plaine'}. Passez par la brèche, enfoncez une porte ou montez aux échelles, puis prenez ${S.cit} et tenez-la une minute.`}}
+
+const SC=1.5; // les cartes de ville, agrandies (les maisons et les murs gardent leur taille)
+function scalePlan(P0){const s=v=>v*SC,pt=p=>[p[0]*SC,p[1]*SC],poly=p=>p.map(pt),P=JSON.parse(JSON.stringify(P0));
+  P.pt.x=s(P.pt.x);P.pt.y=s(P.pt.y);P.pt.r=P.pt.r*1.25;P.ext=P.ext.map(s);P.inside=poly(P.inside);if(P.town)P.town=poly(P.town);
+  for(const w of P.water){if(w.c){w.c=[s(w.c[0]),s(w.c[1]),s(w.c[2])];if(w.isle)w.isle=[s(w.isle[0]),s(w.isle[1]),w.isle[2]*1.2]}else w.p=poly(w.p);if(w.holes)w.holes=w.holes.map(poly);if(w.island)w.island=poly(w.island);if(w.bridges)w.bridges=w.bridges.map(poly)}
+  if(P.fx)P.fx=s(P.fx);if(P.defx)P.defx=P.defx.map(s);if(P.blds)for(const b of P.blds){b[0]=s(b[0]);b[1]=s(b[1]);b[2]=s(b[2]);b[3]=s(b[3])}if(P.circus){const c=P.circus;c[0]=s(c[0]);c[1]=s(c[1]);c[2]=s(c[2]);c[3]=s(c[3])}
+  for(const w of P.walls)w.p=w.k==='citadelle'?w.p.map(q=>[q[0]*1.25,q[1]*1.25]):poly(w.p);
+  for(const q of P.gates){const cg=P0.walls[q.w]&&P0.walls[q.w].k==='citadelle';if(P0.n==='Carthage'){q.x=s(q.x);q.y=q.w===4?q.y*1.25:s(q.y)}else{q.x*=cg?1.25:SC;q.y*=cg?1.25:SC}}
+  P.breaches=P.breaches.map(b=>[b[0],s(b[1]),s(b[2])]);if(P.ditch)P.ditch=P.ditch.map(poly);
+  for(const h of P.hills){h.x=s(h.x);h.y=s(h.y);h.rx=s(h.rx);h.ry=s(h.ry);if(h.p)h.p=poly(h.p)}
+  P.roads=P.roads.map(r=>r.map((q,i)=>i===r.length-1&&r===P.roads[0]?[q[0]*1.25,q[1]*1.25]:pt(q)));
+  for(const q of P.plaza){q[0]=s(q[0]);q[1]=s(q[1]);q[2]=s(q[2]);q[3]=s(q[3])}
+  for(const q of (P.temples||[])){q[0]=s(q[0]);q[1]=s(q[1])}
+  for(const d of P.dist){d.p=poly(d.p);if(d.c){d.c=pt(d.c);d.r0*=SC;d.r1*=SC}}
+  for(const f of P.fields){f[0]=s(f[0]);f[1]=s(f[1]);f[2]=s(f[2]);f[3]=s(f[3])}
+  if(P.country){const C0=P.country;if(C0.wild)C0.wild=C0.wild.map(poly);if(C0.beds)C0.beds=C0.beds.map(poly);if(C0.relief)for(const h of C0.relief){h.x=s(h.x);h.y=s(h.y);h.rx=s(h.rx);h.ry=s(h.ry);if(h.p)h.p=poly(h.p)}if(C0.tombs)C0.tombs*=SC}
+  for(const l of P.labels){l[1]=s(l[1]);l[2]=s(l[2])}
+  return P}
+const pickPlan=n=>{if(!n)return null;let k=String(n).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,'');k={carthago:'carthage',cnova:'novacarthago',saguntum:'sagonte',tarentum:'tarente',athenae:'athenes',roma:'rome',syracusae:'syracuse',siracusa:'syracuse',syrakousai:'syracuse',athenai:'athenes',athens:'athenes',athene:'athenes',athen:'athenes',taras:'tarente',tarentum:'tarente',taranto:'tarente',saguntum:'sagonte',sagunto:'sagonte',arse:'sagonte',carthagene:'novacarthago',carthagonova:'novacarthago',cartagena:'novacarthago',qarthadasht:'novacarthago'}[k]||k;if(PLANS[k])return Object.assign({key:k},scalePlan(PLANS[k]));const gp=genPlan(k);return gp?Object.assign({key:k},scalePlan(gp)):null};
+let P=null,MODE=null,DEFS=1,FLIP=false;
+// mode et ville
+{const hm=/^#ville-([a-z]+)((?:-(?:murs|def|machines))*)$/.exec(location.hash||'');if(hm){QS.set('ville',hm[1]);const f=hm[2]||'';if(/-murs/.test(f))QS.set('mode','murs');if(/-def/.test(f))QS.set('camp','def');if(/-machines/.test(f))QS.set('machines','rams,tow,lad,cat')}
+ const qv=QS.get('ville');
+ if(CAMP&&CAMP.b&&CAMP.b.walls&&pickPlan(CAMP.b.walls.n)){P=pickPlan(CAMP.b.walls.n);MODE='assaut';DEFS=CAMP.b.walls.side==='p'?0:1}
+ else if(CT&&CT.town&&pickPlan(CT.town.n)&&!(CAMP&&CAMP.b&&CAMP.b.walls)){P=pickPlan(CT.town.n);MODE='murs'}
+ else if(qv&&pickPlan(qv)){P=pickPlan(qv);MODE=QS.get('mode')==='murs'?'murs':'assaut';DEFS=QS.get('camp')==='def'?0:1}}
+if(!P)return;
+// assaut : la carte de la ville prend tout le champ, le champ généré des batailles rangées (CT.rg, bloc suivant) s'efface ;
+// devant les murs : il reste, et dessine ses fleuves et son relief par-dessus (il enveloppe window.__sol2d après nous)
+if(MODE==='assaut'&&CT&&CT.rg)CT.rg.v=0;
+const ATTS=1-DEFS;let KW=(CAMP&&CAMP.b&&CAMP.b.walls&&CAMP.b.walls.k)||1.5;
+// machines de siège de l'attaquant (module Génie de la campagne : CAMP.b.walls.eng={rams,tow,lad,cat}) ; en essai : ?machines=rams,tow,lad,cat
+const ENGS=(()=>{const o={rams:0,tow:0,lad:0,cat:0},e=CAMP&&CAMP.b&&CAMP.b.walls&&CAMP.b.walls.eng,q=QS.get('machines');if(e)for(const k in o)o[k]=e[k]?1:0;if(q)for(const k of q.split(','))if(k in o)o[k]=1;return o})();
+if(ENGS.cat)KW*=.85; // les catapultes balaient le rempart : les créneaux protègent moins
+const CLIMBK=ENGS.lad?.7:1; // échelles en nombre : on monte plus vite (les tours de siège agissent là où elles sont accostées)
+const ENGN={rams:'béliers',tow:'tours de siège',lad:'échelles',cat:'catapultes'};
+FLIP=MODE==='assaut'&&DEFS===0;
+const FY=Math.max(...P.walls.filter(w=>w.k==='mur').map(w=>Math.max(...w.p.map(q=>q[1])))); // face du front
+const FWY=1450; // le front de la ville, sur le champ (unités d'origine), vu depuis le camp de l'attaquant
+// repère plan → champ : assaut = front vers le bas de l'écran (vers le haut si vous défendez) ; murs = à la place de la ville
+let OX=1700-(P.fx||0),OY=FWY-FY,CA=1,SA=0;
+if(MODE==='assaut'){if(FLIP){OX=1500+(P.fx||0);OY=(H0-FWY)+FY;CA=-1;SA=0}}
+else if(CT&&CT.town){const a=Math.atan2(1000-CT.town.y,1700-CT.town.x)-Math.PI/2;CA=Math.cos(a);SA=Math.sin(a);OX=CT.town.x;OY=CT.town.y}
+else{OX=1700;OY=-250-FY}
+const P2F=(x,y)=>[OX+x*CA-y*SA,OY+x*SA+y*CA];
+const F2P=(fx,fy)=>{const dx=fx-OX,dy=fy-OY;return [dx*CA+dy*SA,-dx*SA+dy*CA]};
+const W2P=(wx,wy)=>F2P(wx/G,wy/G);
+function inPoly(x,y,p){let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const xi=p[i][0],yi=p[i][1],xj=p[j][0],yj=p[j][1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c}
+const isMurs=MODE==='murs';
+/* ---- géométrie de jeu (repère plan) ---- */
+const WATER=P.water.filter(w=>!isMurs||w.k==='port').map(w=>w.c?{k:w.k,c:w.c,isle:w.isle}:{k:w.k,p:w.p,holes:w.holes,island:w.island,bridges:w.bridges,landHoles:w.landHoles});
+const inWater=(x,y)=>WATER.some(w=>w.c?(Math.hypot(x-w.c[0],y-w.c[1])<w.c[2]&&!(w.isle&&Math.hypot(x-w.isle[0],y-w.isle[1])<w.isle[2])):inPoly(x,y,w.p)&&!(w.holes&&w.holes.some(h=>inPoly(x,y,h))));
+const inCity=(x,y)=>inPoly(x,y,P.inside);
+const TOWN=P.town||P.inside,inTown=(x,y)=>inPoly(x,y,TOWN); // la ville bâtie (rues) ; l'enceinte peut englober des faubourgs de jardins
+const CITW=P.walls.find(w=>w.k==='citadelle');
+const inCit=(x,y)=>CITW?inPoly(x,y,CITW.p):false;
+const WBK={mur:34,citadelle:24,palissade:0};
+const SEG=[];const GAPS=[];const TOWERS=[];
+P.walls.forEach((w,wi)=>{const p=w.closed?w.p.concat([w.p[0]]):w.p;let acc=0;const WB=w.wb||WBK[w.k]||0;
+  for(let i=0;i<p.length-1;i++){const [ax,ay]=p[i],[bx,by]=p[i+1],L=Math.hypot(bx-ax,by-ay);let nx=-(by-ay)/L,ny=(bx-ax)/L;
+    // côté intérieur du rempart
+    const mx=(ax+bx)/2,my=(ay+by)/2,ins=(x,y)=>w.k==='citadelle'?inCit(x,y):inCity(x,y)&&!inWater(x,y);
+    if(!ins(mx+nx*12,my+ny*12)&&ins(mx-nx*12,my-ny*12)){nx=-nx;ny=-ny}
+    SEG.push({wi,k:w.k,c:w.c,cas:w.cas,ax,ay,bx,by,L,gaps:[],inx:nx,iny:ny,WB,x0:Math.min(ax,bx)-60,x1:Math.max(ax,bx)+60,y0:Math.min(ay,by)-60,y1:Math.max(ay,by)+60});
+    if(w.t){let t=(w.t-acc%w.t)%w.t;for(;t<L;t+=w.t)TOWERS.push({x:ax+(bx-ax)*t/L,y:ay+(by-ay)*t/L,inx:nx,iny:ny,WB,cd:Math.random()*3,wi})}acc+=L}
+  // tours d'angle
+  if(WB){const SG=SEG.filter(s=>s.wi===wi);for(let i=0;i<p.length-(w.closed?1:0);i++){const s0=SG[Math.min(i,SG.length-1)],s1=SG[(i-1+SG.length)%SG.length];
+    const a0=Math.atan2(s0.by-s0.ay,s0.bx-s0.ax),a1=Math.atan2(s1.by-s1.ay,s1.bx-s1.ax);let d=Math.abs(a0-a1);if(d>Math.PI)d=2*Math.PI-d;
+    if(w.closed||i===0||i===p.length-1||d>.42)TOWERS.push({x:p[i][0],y:p[i][1],inx:s0.inx,iny:s0.iny,WB,cd:Math.random()*3,wi,corner:1})}}});
+function addGap(wi,x,y,half,g){let best=null,bd=1e9;for(const s of SEG){if(s.wi!==wi)continue;const vx=s.bx-s.ax,vy=s.by-s.ay,t=Math.max(0,Math.min(1,((x-s.ax)*vx+(y-s.ay)*vy)/(s.L*s.L))),d=Math.hypot(s.ax+vx*t-x,s.ay+vy*t-y);if(d<bd){bd=d;best=[s,t]}}
+  if(!best)return;const [s,t]=best,h=half/s.L;g.s=s;g.t0=t-h;g.t1=t+h;g.x=s.ax+(s.bx-s.ax)*t;g.y=s.ay+(s.by-s.ay)*t;g.nx=s.inx;g.ny=s.iny;g.half=half;s.gaps.push(g);GAPS.push(g);
+  for(let i=TOWERS.length-1;i>=0;i--){const q=TOWERS[i];if(q.wi===wi&&!q.corner&&Math.hypot(q.x-g.x,q.y-g.y)<half+30)TOWERS.splice(i,1)}}
+for(const q of P.gates)addGap(q.w,q.x,q.y,q.wide?48:q.open?30:16,{kind:q.open?'passage':'porte',n:q.n,hp:28,broken:!!q.open});
+let NBR=MODE==='assaut'?Math.max(0,Math.min(P.breaches.length,(CAMP&&CAMP.b&&CAMP.b.walls&&CAMP.b.walls.br!=null)?CAMP.b.walls.br:+(QS.get('breches')||1))):0;
+for(let i=0;i<NBR;i++){const [w,x,y]=P.breaches[i];addGap(w,x,y,26,{kind:'breche',broken:true})}
+// une porte ou une brèche laisse-t-elle passer ce camp ?
+const gapOpen=(g,side,ai)=>g.kind==='breche'||g.kind==='passage'||g.broken||(MODE==='assaut'&&side===DEFS&&!ai);
+function cross(ax,ay,bx,by,s){const rx=bx-ax,ry=by-ay,sx=s.bx-s.ax,sy=s.by-s.ay,den=rx*sy-ry*sx;if(Math.abs(den)<1e-9)return null;
+  const qx=s.ax-ax,qy=s.ay-ay,t=(qx*sy-qy*sx)/den,u=(qx*ry-qy*rx)/den;if(t<0||t>1||u<0||u>1)return null;return {t,u}}
+// premier mur plein franchi par le trajet a→b (en repère plan) pour ce camp ; seule la face extérieure arrête
+function blockOf(ax,ay,bx,by,side,ai){let best=null;const x0=Math.min(ax,bx),x1=Math.max(ax,bx),y0=Math.min(ay,by),y1=Math.max(ay,by);
+  for(const s of SEG){if(x1<s.x0||x0>s.x1||y1<s.y0||y0>s.y1)continue;const c=cross(ax,ay,bx,by,s);if(!c)continue;
+    const gp=s.gaps.find(g=>c.u>=g.t0&&c.u<=g.t1);if(gp&&gapOpen(gp,side,ai))continue;if(!best||c.t<best.t)best={t:c.t,s,gate:gp||null}}
+  return best}
+const ditchAt=(x,y)=>P.ditch&&P.ditch.some(p=>inPoly(x,y,p));
+const segD=(s,x,y)=>{const vx=s.bx-s.ax,vy=s.by-s.ay,t=Math.max(0,Math.min(1,((x-s.ax)*vx+(y-s.ay)*vy)/(s.L*s.L)));return Math.hypot(s.ax+vx*t-x,s.ay+vy*t-y)};
+const nearWall=(x,y,d)=>SEG.some(s=>segD(s,x,y)<d+(s.WB||0));
+// sur le rempart : entre la face extérieure et le bord intérieur
+const onRampart=(x,y)=>SEG.some(s=>{if(!s.WB)return false;const k=(x-s.ax)*s.inx+(y-s.ay)*s.iny;return k>-4&&k<s.WB+6&&segD(s,x,y)<s.WB+6});
+// défenseurs postés sur le rempart à moins de d (m) d'un point du plan
+const defNear=(x,y,d)=>{let k=0;for(const e of units){if(e.side!==DEFS||e.dead||e.pend||e.routing)continue;const [ex,ey]=W2P(e.x,e.y);if(Math.hypot(ex-x,ey-y)<d&&onRampart(ex,ey))k++}return k};
+let lastRep=-9;
+// les collines du plan comptent comme collines du champ (bonus de hauteur)
+const HREF=[];try{for(const h of P.hills){const [fx,fy]=P2F(h.x,h.y);const q={x:fx,y:fy,r:(h.rx+h.ry)/2*.95,h:20};HREF.push(q);HILLS.push(q)}}catch(e){}
+// pendant l'assaut, le champ s'étend : la ville dépasse le bord habituel
+const YMIN=Math.min(...P.inside.map(q=>q[1]))-60,XMIN=Math.min(...P.inside.map(q=>q[0]))-80,XMAX=Math.max(...P.inside.map(q=>q[0]))+80;
+const EXT=MODE==='assaut'?Math.max(470,FLIP?P2F(0,YMIN)[1]-H0:-P2F(0,YMIN)[1]):0,EXX=MODE==='assaut'?[Math.min(-280,P2F(FLIP?XMAX:XMIN,0)[0]),Math.max(W0+480,P2F(FLIP?XMIN:XMAX,0)[0])]:[0,W0];
+// la campagne couvre tout ce que la caméra peut montrer : on agrandit l'emprise, on pousse au loin les bords de mer,
+// on prolonge les routes jusqu'au bout de la carte
+if(MODE==='assaut'){const M=2000,old=P.ext.slice(),cs=[[EXX[0]-M,-EXT-M],[EXX[1]+M,-EXT-M],[EXX[1]+M,H0+EXT+M],[EXX[0]-M,H0+EXT+M]].map(([fx,fy])=>F2P(fx,fy));
+  const nx0=Math.min(old[0],...cs.map(q=>q[0])),ny0=Math.min(old[1],...cs.map(q=>q[1])),nx1=Math.max(old[2],...cs.map(q=>q[0])),ny1=Math.max(old[3],...cs.map(q=>q[1]));P.ext=[nx0,ny0,nx1,ny1];
+  const push=q=>{if(q[0]<=old[0]+40)q[0]=nx0-300;else if(q[0]>=old[2]-40)q[0]=nx1+300;if(q[1]<=old[1]+40)q[1]=ny0-300;else if(q[1]>=old[3]-40)q[1]=ny1+300};
+  for(const w of P.water){if(w.c||w.k==='fleuve')continue;w.p.forEach(push);(w.holes||[]).forEach(h=>h.forEach(push))}
+  const far=(x,y)=>P.inside.every(q=>Math.hypot(q[0]-x,q[1]-y)>250)&&!inCity(x,y);
+  for(const r of P.roads)for(const end of [0,1]){const a=end?r[r.length-1]:r[0],b=end?r[r.length-2]:r[1];if(!far(a[0],a[1]))continue;const dx=a[0]-b[0],dy=a[1]-b[1],L=Math.hypot(dx,dy)||1,f=[a[0]+dx/L*12000,a[1]+dy/L*12000];if(end)r.push(f);else r.unshift(f)}}
+if(MODE==='assaut'){const _cm=clampMap;clampMap=function(u){if(OFF)return _cm.apply(this,arguments);u.x=Math.max(EXX[0]*G,Math.min(EXX[1]*G,u.x));if(!u.routing)u.y=Math.max(-EXT*G,Math.min(H+EXT*G,u.y))};
+  // la caméra peut aller jusqu'à la pointe de la ville
+  const _uc=updateCamera;updateCamera=function(){const tx=cam.tx,ty=cam.ty;_uc.apply(this,arguments);if(OFF)return;
+    const ny=Math.max((-EXT-30)*G,Math.min(H+(EXT+30)*G,ty)),nx=Math.max((EXX[0]-200)*G,Math.min((EXX[1]+200)*G,tx));if(ny!==cam.ty||nx!==cam.tx){cam.ty=ny;cam.tx=nx;try{resize()}catch(e){}}}}
+/* ---- déploiement ---- */
+function place(){
+  if(MODE==='assaut'){
+    const D=units.filter(u=>u.side===DEFS&&!u.pend&&!u.dead),A=units.filter(u=>u.side===ATTS&&!u.pend&&!u.dead);
+    const mv=(u,x,y)=>{const [fx,fy]=P2F(x,y);u.x=fx*G;u.y=fy*G;if(u.order&&u.order.type==='move')u.order=null};
+    // défenseurs : la première ligne d'infanterie sur le rempart, le reste dans les rues derrière
+    if(D.length){const inf=D.filter(u=>u.T.kind==='inf');let front=-1e9;for(const u of (inf.length?inf:D)){const [,py]=W2P(u.x,u.y);front=Math.max(front,py)}const dy=(FY-17)-front;
+      const xm=P.defx?P.defx[0]:P.inside.reduce((a,q)=>Math.min(a,q[0]),1e9)+60,xM=P.defx?P.defx[1]:P.inside.reduce((a,q)=>Math.max(a,q[0]),-1e9)-60;
+      const fsg=SEG.filter(s=>s.k==='mur'&&Math.max(s.ay,s.by)>=FY-400),faceY=x=>{let b=-1e9;for(const s of fsg){if(x<Math.min(s.ax,s.bx)||x>Math.max(s.ax,s.bx))continue;const t=(x-s.ax)/((s.bx-s.ax)||1e-9);b=Math.max(b,s.ay+(s.by-s.ay)*t)}return b>-1e9?b:FY};
+      const okD=(x,y)=>inCity(x,y)&&!inWater(x,y)&&!inWater(x,y-30),land=[];for(let x=xm;x<=xM;x+=10)if(okD(x,faceY(x)-17))land.push(x); // pas de défenseur dans l'eau
+      for(const u of D){const [px,py]=W2P(u.x,u.y);let x=Math.max(xm,Math.min(xM,px));if(land.length&&!okD(x,faceY(x)-17))x=land.reduce((b,q)=>Math.abs(q-x)<Math.abs(b-x)?q:b,land[0]);let y=Math.min(faceY(x)-17,py+dy);for(let k=0;k<30&&!okD(x,y);k++)y-=20;mv(u,x,y);u.morale*=1.2;u.T=Object.assign({},u.T,{morale:u.T.morale*1.2})}}
+    // assaillants : hors des murs, au-delà du fossé
+    if(A.length){let m=1e9;for(const u of A){const [,py]=W2P(u.x,u.y);m=Math.min(m,py)}const dy=Math.max(0,FY+250-m);
+      for(const u of A){const [px,py]=W2P(u.x,u.y);let qx=px,qy=py+dy;for(let k=0;k<80&&inWater(qx,qy);k++){const c=P.fx||0;if(Math.abs(qx-c)>45)qx+=Math.sign(c-qx)*45;else qy+=45}mv(u,qx,qy)}}
+    buildSiege();
+  }else{
+    // la ville ne doit pas couper les armées : on l'éloigne du champ si besoin
+    for(let k=0;k<60;k++){let hit=false;for(const u of units){if(u.dead||u.pend)continue;const [px,py]=W2P(u.x,u.y);if(inTown(px,py-150)||inWater(px,py)){hit=true;break}}
+      if(!hit)break;OX+=SA*60;OY-=CA*60}
+    try{HILLS.splice(HILLS.length-HREF.length,HREF.length,...P.hills.map(h=>{const [fx,fy]=P2F(h.x,h.y);return {x:fx,y:fy,r:(h.rx+h.ry)/2*.95,h:20}}))}catch(e){}
+  }
+}
+/* ---- mouvements : murs, eau, fossé, rues ---- */
+const prev=new Map();
+const isAI=u=>u.side===1&&!(window.__pvp&&window.__pvp.on);
+function viaGap(u,tx,ty){// trajet bloqué : passer par une porte ou une brèche du mur qui barre la route (ou enfoncer la porte)
+  const ai=isAI(u),[ux,uy]=W2P(u.x,u.y),[px,py]=W2P(tx,ty),b=blockOf(ux,uy,px,py,u.side,ai);if(!b)return null;
+  if(u.side===ATTS&&(u.T.kind==='inf'||u.T.kind==='skirm')){const cx=ux+(px-ux)*b.t,cy=uy+(py-uy)*b.t;if(SIEGE.some(e=>e.k==='tow'&&e.st==='dock'&&Math.hypot(e.fx-cx,e.fy-cy)<120))return null}
+  const ram=MODE==='assaut'&&u.side===ATTS&&u.T.kind!=='skirm'&&u.T.kind!=='cav'&&u.T.kind!=='lcav';
+  const direct=Math.hypot(px-ux,py-uy);let best=null,bc=1e9;
+  for(const g of GAPS){if(g.s.wi!==b.s.wi)continue;const open=gapOpen(g,u.side,ai);if(!open&&!(ram&&g.kind==='porte'))continue;
+    const side=Math.sign((ux-g.x)*g.nx+(uy-g.y)*g.ny)||1,o1=side>0?g.s.WB+40:40,o2=side>0?40:g.s.WB+40,ax=g.x+g.nx*side*o1,ay=g.y+g.ny*side*o1,bx=g.x-g.nx*side*o2,by=g.y-g.ny*side*o2;
+    const c=Math.hypot(ax-ux,ay-uy)+o1+o2+Math.hypot(px-bx,py-by)+(open?0:220);if(c<bc&&c<direct*2.6+600){bc=c;best=Math.hypot(ax-ux,ay-uy)<24||!open&&Math.hypot(ax-ux,ay-uy)<60?[bx,by]:[ax,ay]}}
+  return best}
+{const _mu=moveUnit;moveUnit=function(u,dt){const o=u.order;
+  if(!OFF&&o&&!u.routing&&(o.type==='move'||o.type==='attack')){const tx=o.type==='attack'?o.target.x:o.x,ty=o.type==='attack'?o.target.y:o.y;
+    if(!(o.type==='attack'&&o.target.dead)){const v=viaGap(u,tx,ty);if(v){const [fx,fy]=P2F(v[0],v[1]);const tmp={type:'move',x:fx*G,y:fy*G,run:o.run,face:null};u.order=tmp;const r=_mu.call(this,u,dt);u.order=o;return r}}}
+  return _mu.apply(this,arguments)}}
+let msg=null;const say=(t,c)=>{msg={t,c:c||'#f0e2bd',at:performance.now()}};
+let DRAWN=false,OFF=false;
+{const _st=step;step=function(dt){
+  // sans le crochet de dessin (vue 3D, ou vue 2D reconstruite sans lui), pas de murs invisibles : le module se retire
+  if(OFF||(!DRAWN&&time>1.5)){OFF=true;return _st.apply(this,arguments)}
+  for(const u of units)if(!u.dead&&!u.pend)prev.set(u,[u.x,u.y]);
+  const r=_st.apply(this,arguments);
+  for(const u of units){if(u.dead||u.pend)continue;const pv=prev.get(u);if(!pv)continue;
+    const [ax,ay]=W2P(pv[0],pv[1]);let [bx,by]=W2P(u.x,u.y);if(ax===bx&&ay===by)continue;
+    // rues, fossé : on avance moins vite (et pas de charge en ville)
+    const city=inTown(bx,by),slow=ditchAt(bx,by)?.4:city&&!u.routing?(u.T.kind==='cav'||u.T.kind==='lcav'||u.T.kind==='eleph'?.5:.75):1;
+    if(slow<1){bx=ax+(bx-ax)*slow;by=ay+(by-ay)*slow;const [fx,fy]=P2F(bx,by);u.x=fx*G;u.y=fy*G}
+    if(city&&u.chargeT>0&&!u.contacts.length)u.chargeT=0;
+    if(inWater(bx,by)&&!inWater(ax,ay)){u.x=pv[0];u.y=pv[1];u.v=0;continue}
+    const b=blockOf(ax,ay,bx,by,u.side,isAI(u));if(!b){u._cl=0;continue}
+    const s=b.s,canClimb=MODE==='assaut'&&u.side===ATTS&&!u.routing&&(u.T.kind==='inf'||u.T.kind==='skirm');
+    if(b.gate&&b.gate.kind==='porte'&&MODE==='assaut'&&u.side===ATTS&&u.T.kind!=='skirm'&&!u.routing){b.gate.hp-=dt*(u.T.kind==='eleph'?3:1);u._bat=time;b.gate.bat=time;
+      if(b.gate.hp<=0)breakGate(b.gate)}
+    else if(canClimb){const ix=ax+(bx-ax)*b.t,iy=ay+(by-ay)*b.t,d=Math.min(12,s.WB*.4||12),lx=ix+s.inx*d,ly=iy+s.iny*d;
+      // sous le tir des défenseurs du rempart : on monte moins vite et on perd des hommes (sauf à couvert d'une tour de siège)
+      const twr=SIEGE.find(e=>e.k==='tow'&&e.st==='dock'&&Math.hypot(e.fx-lx,e.fy-ly)<55),CK=twr?.45:CLIMBK,k=twr?0:Math.min(3,defNear(lx,ly,36));u._twr=twr||null;u._ck=CK;
+      u._cl=(u._clS===s?u._cl||0:0)+dt/(1+.35*k);u._clS=s;u._clT=time;u._clK=k;
+      if(k){hurt(u,1.1*k*dt/(u.T.def||1));u.underFire=1;u.morale-=.05*k*dt;if(u.morale<=0&&!u.routing)rout(u)}
+      // en haut de l'échelle : des défenseurs au pied de l'échelle la repoussent, sinon le carré prend pied sur le rempart
+      if(u._cl>=s.c*CK){if(!twr&&defNear(lx,ly,20)&&Math.random()<.6){u._cl=s.c*CK*.45;u.morale-=.25;hurt(u,3/(u.T.def||1));if(u.morale<=0&&!u.routing)rout(u);
+          if(time-lastRep>6){lastRep=time;say(u.side===0?'Vos échelles sont repoussées !':"Les défenseurs repoussent l'échelle !",u.side===0?'#f1a097':'#cbb1ee')}}
+        else{u._cl=0;const [fx,fy]=P2F(lx,ly);u.x=fx*G;u.y=fy*G;if(!u._said){u._said=1;if(u.side===0)say('Vos hommes prennent pied sur le rempart !','#cbb1ee');else say("L'ennemi monte sur le rempart !",'#f1a097')}}continue}}
+    u.x=pv[0];u.y=pv[1];u.v=0}
+  if(MODE==='assaut'&&started&&!ended){towers(dt);capture(dt);siege(dt)}
+  return r}}
+// défenseurs sur le rempart : les créneaux les protègent ; dans la citadelle un peu ; assaillants sur les échelles : plus exposés
+if(MODE==='assaut'){const _h=hurt;hurt=function(e,cas){if(!OFF&&e&&!e.dead){const [x,y]=W2P(e.x,e.y);
+  if(e.side===DEFS&&onRampart(x,y))cas/=KW;else if(e.side===DEFS&&inCit(x,y))cas/=Math.sqrt(KW);
+  if(e._clT!=null&&time-e._clT<.3)cas*=1.5}return _h.call(this,e,cas)}}
+// IA qui défend : les carrés libres les plus proches vont au pied des échelles
+if(MODE==='assaut'&&DEFS===1){const _ai=ai;ai=function(){const r=_ai.apply(this,arguments);if(OFF)return r;try{
+  const D=units.filter(u=>u.side===1&&!u.dead&&!u.pend&&!u.routing&&!u.contacts.length&&(u.T.kind==='inf'||u.T.kind==='skirm')),used=new Set();
+  for(const a of units){if(a.side!==0||a.dead||a._clT==null||time-a._clT>.5||!a._clS)continue;const s=a._clS,[ux,uy]=W2P(a.x,a.y),vx=s.bx-s.ax,vy=s.by-s.ay,t=Math.max(0,Math.min(1,((ux-s.ax)*vx+(uy-s.ay)*vy)/(s.L*s.L))),lx=s.ax+vx*t+s.inx*Math.min(12,s.WB*.4||12),ly=s.ay+vy*t+s.iny*Math.min(12,s.WB*.4||12);
+    if(defNear(lx,ly,20)>=2)continue;let best=null,bd=260;for(const d of D){if(used.has(d))continue;const [dx,dy]=W2P(d.x,d.y),dd=Math.hypot(dx-lx,dy-ly);if(dd<bd){bd=dd;best=d}}
+    if(best){used.add(best);const [fx,fy]=P2F(lx,ly);best.order={type:'move',x:fx*G,y:fy*G,face:null,run:true}}}}catch(e){}return r}}
+/* ---- engins de siège sur le champ ---- */
+// tours roulantes (accostent le mur : on y monte vite et à couvert), béliers sous tortue (enfoncent une porte),
+// catapultes en batterie (pierres sur le rempart). Les défenseurs proches et les tours du mur les incendient.
+const SIEGE=[],STONES=[];
+function breakGate(g){if(g.broken)return;g.broken=true;say((g.n?'La '+g.n:'La porte')+' cède !',ATTS===0?'#cbb1ee':'#f1a097')}
+function buildSiege(){SIEGE.length=0;STONES.length=0;if(MODE!=='assaut'||!(ENGS.tow||ENGS.rams||ENGS.cat))return;
+  const fw=P.walls.findIndex(w=>w.k==='mur'&&Math.max(...w.p.map(q=>q[1]))===FY),FS=SEG.filter(s=>s.wi===fw);if(!FS.length)return;
+  const A=units.filter(u=>u.side===ATTS&&!u.dead&&!u.pend).map(u=>W2P(u.x,u.y)),x0=A.length?Math.min(...A.map(q=>q[0])):-600,x1=A.length?Math.max(...A.map(q=>q[0])):600;
+  // points du front : sur la face du mur, loin des portes et des brèches
+  const pts=[];for(const s of FS)for(let d=40;d<s.L-40;d+=20){const t=d/s.L,x=s.ax+(s.bx-s.ax)*t,y=s.ay+(s.by-s.ay)*t;if(!s.gaps.some(g=>Math.hypot(g.x-x,g.y-y)<g.half+70))pts.push({s,x,y})}
+  for(let i=pts.length-1;i>=0;i--){const q=pts[i];if(inWater(q.x-q.s.inx*440,q.y-q.s.iny*440)||inWater(q.x-q.s.inx*200,q.y-q.s.iny*200))pts.splice(i,1)} // pas d'engin qui partirait de la mer
+  const near=xx=>pts.reduce((b,q)=>!b||Math.abs(q.x-xx)<Math.abs(b.x-xx)?q:b,null);
+  const mk=(k,q,off,dock,hp)=>{const s=q.s,ix=s.inx,iy=s.iny,e={k,s,ix,iy,fx:q.x,fy:q.y,tx:q.x-ix*dock,ty:q.y-iy*dock,x:q.x-ix*off,y:q.y-iy*off,hp,hp0:hp,st:k==='cat'?'dock':'move',dk:1,cd:2+Math.random()*3,said:0,id:SIEGE.length};SIEGE.push(e);return e};
+  // sur un front étroit (isthme), on répartit les engins sur la longueur du front plutôt que sur la ligne des assaillants
+  const px0=pts.length?Math.min(...pts.map(q=>q.x)):x0,px1=pts.length?Math.max(...pts.map(q=>q.x)):x1,lo=Math.max(x0,px0),hi=Math.min(x1,px1),[a0,a1]=hi-lo>200?[lo,hi]:[px0,px1];
+  if(ENGS.tow)for(const f of [.2,.5,.8]){const q=near(a0+(a1-a0)*f);if(q&&!SIEGE.some(e=>Math.hypot(e.fx-q.x,e.fy-q.y)<150))mk('tow',q,380,20,120)}
+  if(ENGS.rams){const gs=GAPS.filter(g=>g.kind==='porte'&&g.s.wi===fw&&g.x>x0-200&&g.x<x1+200).sort((a,b)=>Math.abs(a.x-(x0+x1)/2)-Math.abs(b.x-(x0+x1)/2)).slice(0,2);
+    for(const g of gs){const e=mk('rams',{s:g.s,x:g.x,y:g.y},330,17,70);e.gate=g}}
+  if(ENGS.cat)for(const f of [.3,.5,.7]){const q=near(a0+(a1-a0)*f);if(q&&!SIEGE.some(e=>e.k==='cat'&&Math.hypot(e.fx-q.x,e.fy-q.y)<90))mk('cat',q,430,430,30)}}
+function siege(dt){
+  for(const e of SIEGE){if(e.st==='dead')continue;
+    if(e.st==='move'){const dx=e.tx-e.x,dy=e.ty-e.y,d=Math.hypot(dx,dy),sp=(e.k==='tow'?4.5:7)*(ditchAt(e.x,e.y)?.5:1)*dt;
+      if(d<=sp){e.x=e.tx;e.y=e.ty;e.st=e.dk?'dock':'idle';if(!e.dk||e.k==='cat'){if(e.k==='cat'&&e.dk)e.cd=Math.min(e.cd,2)}
+        else if(e.k==='tow')say(ATTS===0?'Une tour de siège accoste le mur !':"Une tour ennemie accoste le mur !",ATTS===0?'#cbb1ee':'#f1a097');
+        else say(ATTS===0?`Le bélier frappe la ${e.gate.n||'porte'}`:`Le bélier ennemi frappe la ${e.gate.n||'porte'}`,ATTS===0?'#cbb1ee':'#f1a097')}
+      else{e.x+=dx/d*sp;e.y+=dy/d*sp;e.ha=Math.atan2(dy,dx)}}
+    else if(e.st==='idle'){}
+    else if(e.k==='rams'&&e.gate&&!e.gate.broken){e.gate.hp-=dt*1.6;e.gate.bat=time;e.hit=time;if(e.gate.hp<=0)breakGate(e.gate)}
+    else if(e.k==='cat'){e.cd-=dt;if(e.cd<=0){e.cd=5.5+Math.random()*1.5;
+      let best=null,bd=560;const tg=e.tgt&&!e.tgt.dead&&!e.tgt.routing?e.tgt:null;if(tg){const [ux,uy]=W2P(tg.x,tg.y),dd=Math.hypot(ux-e.x,uy-e.y);if(dd<600){best=tg;bd=dd}}
+      if(!best)for(const u of units){if(u.side!==DEFS||u.dead||u.pend||u.routing)continue;const [ux,uy]=W2P(u.x,u.y),dd=Math.hypot(ux-e.x,uy-e.y);if(dd<bd&&(onRampart(ux,uy)||dd<300)){bd=dd;best=u}}
+      if(best){const [ux,uy]=W2P(best.x,best.y);STONES.push({x0:e.x,y0:e.y,tx:ux+(Math.random()-.5)*14,ty:uy+(Math.random()-.5)*14,e:best,t:0,dur:1.1+bd/500});e.fire=time}}}
+    // incendie : défenseurs à portée de torche ou de javelot, flèches enflammées des tours du mur
+    let k=0;for(const u of units){if(u.side!==DEFS||u.dead||u.pend||u.routing)continue;const [ux,uy]=W2P(u.x,u.y);if(Math.hypot(ux-e.x,uy-e.y)<42)k++}
+    let tw=0;if(e.k==='tow')for(const q of TOWERS)if(Math.hypot(q.x-e.x,q.y-e.y)<150)tw++;
+    const dmg=dt*(k*(e.k==='rams'?.35:e.k==='cat'?1.6:1)+tw*.25);if(dmg>0){e.hp-=dmg;e.hurtT=time}
+    if(e.hp<=0){e.st='dead';e.burn=time;const n={tow:'Une tour de siège',rams:'Un bélier',cat:'Une catapulte'}[e.k];say(n+(ATTS===0?' brûle !':' ennemie brûle !'),ATTS===0?'#f1a097':'#cbb1ee')}}
+  for(let i=STONES.length-1;i>=0;i--){const st=STONES[i];st.t+=dt;if(st.t>=st.dur){STONES.splice(i,1);const e=st.e;if(!e.dead){const [ux,uy]=W2P(e.x,e.y);if(Math.hypot(ux-st.tx,uy-st.ty)<30){hurt(e,9/(e.T.def||1));e.underFire=1.5;e.morale-=.5;if(e.morale<=0&&!e.routing)rout(e)}}}}}
+// IA qui attaque : deux carrés montent par chaque tour accostée
+if(MODE==='assaut'&&ATTS===1){const _ai2=ai;ai=function(){const r=_ai2.apply(this,arguments);if(OFF)return r;try{
+  for(const e of SIEGE){if(e.k!=='tow'||e.st!=='dock')continue;const cand=units.filter(u=>u.side===1&&!u.dead&&!u.pend&&!u.routing&&!u.contacts.length&&u.T.kind==='inf'&&!(u._clT!=null&&time-u._clT<.5)).map(u=>{const [x,y]=W2P(u.x,u.y);return [u,Math.hypot(x-e.fx,y-e.fy)]}).filter(q=>q[1]<520).sort((a,b)=>a[1]-b[1]).slice(0,2);
+    for(const [u] of cand){const [fx,fy]=P2F(e.fx+e.ix*20,e.fy+e.iy*20);u.order={type:'move',x:fx*G,y:fy*G,face:null,run:true}}}}catch(err){}return r}}
+/* ---- commander les engins (seulement les vôtres : vous attaquez) ---- */
+const SSEL=new Set(),ENGT={tow:'Tour de siège',rams:'Bélier',cat:'Catapulte'};
+const mineEng=()=>MODE==='assaut'&&ATTS===0&&!(window.__pvp&&window.__pvp.on&&window.__pvp.role==='g');
+function engAt(cx,cy){if(!mineEng())return null;let best=null,bd=1e9;for(const e of SIEGE){if(e.st==='dead')continue;const [fx,fy]=P2F(e.x,e.y),s=toScreen(fx*G,fy*G,0),[gx,gy]=P2F(e.x+10,e.y),s1=toScreen(gx*G,gy*G,0),ppm=Math.hypot(s1.x-s.x,s1.y-s.y)/10,r=Math.max(18,(e.k==='tow'?26:e.k==='rams'?22:16)*ppm),d=Math.hypot(s.x-cx,s.y-cy);if(d<r&&d<bd){bd=d;best=e}}return best}
+// un ordre : point du plan ; un mur proche = y accoster (tour), une porte proche = la frapper (bélier) ; on ne traverse jamais un mur
+function engOrder(e,px,py,tu){if(e.st==='dead')return;e.tgt=null;const DK={tow:20,rams:17,cat:40}[e.k];
+  if(inWater(px,py))return;
+  // point de mur le plus proche
+  let ws=null,wd=1e9,wt=0;for(const s of SEG){if(!s.WB||s.k==='citadelle')continue;const vx=s.bx-s.ax,vy=s.by-s.ay,t=Math.max(0,Math.min(1,((px-s.ax)*vx+(py-s.ay)*vy)/(s.L*s.L))),d=Math.hypot(s.ax+vx*t-px,s.ay+vy*t-py);if(d<wd){wd=d;ws=s;wt=t}}
+  let cr=null;for(const s of SEG){if(!s.WB||s.k==='citadelle')continue;const c=cross(e.x,e.y,px,py,s);if(c&&(!cr||c.t<cr.t))cr={t:c.t,s,u:c.u}}
+  if(cr){ws=cr.s;wt=cr.u;wd=0}
+  const near=ws&&wd<140,wx=ws?ws.ax+(ws.bx-ws.ax)*wt:0,wy=ws?ws.ay+(ws.by-ws.ay)*wt:0;
+  if(e.k==='cat'&&tu){e.tgt=tu;const [ux,uy]=W2P(tu.x,tu.y);const d=Math.hypot(ux-e.x,uy-e.y);if(d<520){e.st='dock';e.dk=1;return}px=e.x+(ux-e.x)*(1-480/d);py=e.y+(uy-e.y)*(1-480/d);
+    let c2=null;for(const s of SEG){if(!s.WB)continue;const c=cross(e.x,e.y,px,py,s);if(c&&(!c2||c.t<c2.t))c2={t:c.t,s}}if(c2){px=e.x+(px-e.x)*c2.t-c2.s.inx*DK;py=e.y+(py-e.y)*c2.t-c2.s.iny*DK}}
+  else if(e.k==='rams'){const g=GAPS.filter(g=>g.kind==='porte'&&!g.broken).map(g=>[g,Math.hypot(g.x-(cr?wx:px),g.y-(cr?wy:py))]).sort((a,b)=>a[1]-b[1])[0];
+    if(g&&g[1]<120){const G0=g[0];e.gate=G0;e.s=G0.s;e.ix=G0.s.inx;e.iy=G0.s.iny;e.fx=G0.x;e.fy=G0.y;e.tx=G0.x-e.ix*DK;e.ty=G0.y-e.iy*DK;e.st='move';e.dk=1;return}
+    e.gate=null;if(cr||near&&inTown(px,py)){px=wx-ws.inx*DK;py=wy-ws.iny*DK}}
+  else if(e.k==='tow'&&(cr||near)){e.s=ws;e.ix=ws.inx;e.iy=ws.iny;e.fx=wx;e.fy=wy;e.tx=wx-e.ix*DK;e.ty=wy-e.iy*DK;e.st='move';e.dk=1;return}
+  else if(cr){px=wx-ws.inx*DK;py=wy-ws.iny*DK}
+  e.tx=px;e.ty=py;e.st='move';e.dk=e.k==='cat'?1:0}
+{const _ck=click;click=function(cx,cy,btn,add){try{if(!OFF&&mineEng()){
+    if(btn===0){const e=engAt(cx,cy);if(e){if(!add){selected.clear();SSEL.clear()}SSEL.has(e)&&add?SSEL.delete(e):SSEL.add(e);renderSel();return}if(!add)SSEL.clear()}
+    else if(btn===2&&SSEL.size){const p=groundAt(cx,cy);if(p){const [px,py]=W2P(p.x,p.y),tu=pick(p,cx,cy),foe=tu&&tu.side===1?tu:null,arr=[...SSEL].filter(e=>e.st!=='dead');
+      const mx=arr.reduce((a,e)=>a+e.x,0)/(arr.length||1),my=arr.reduce((a,e)=>a+e.y,0)/(arr.length||1);
+      for(const e of arr){const o=arr.length>1&&!foe?[e.x-mx,e.y-my]:[0,0],k=Math.min(1,160/(Math.hypot(o[0],o[1])||1));engOrder(e,px+o[0]*k,py+o[1]*k,foe)}
+      if(!selected.size)return}}}}catch(err){console.warn('villes (ordres)',err)}return _ck.apply(this,arguments)}}
+// sélection au cadre
+host.addEventListener('pointerup',ev=>{try{if(OFF||!mineEng()||!drag||drag.mode!=='box'||drag.btn!==0)return;const r=host.getBoundingClientRect(),x0=Math.min(drag.sx,ev.clientX),x1=Math.max(drag.sx,ev.clientX),y0=Math.min(drag.sy,ev.clientY),y1=Math.max(drag.sy,ev.clientY);
+  if(!drag.add)SSEL.clear();for(const e of SIEGE){if(e.st==='dead')continue;const [fx,fy]=P2F(e.x,e.y),q=toScreen(fx*G,fy*G,0),sx=q.x+r.left,sy=q.y+r.top;if(sx>=x0&&sx<=x1&&sy>=y0&&sy<=y1)SSEL.add(e)}}catch(err){}},true);
+addEventListener('keydown',ev=>{if(ev.key==='Escape')SSEL.clear()});
+try{const b=document.getElementById('bNone');if(b)b.addEventListener('click',()=>{SSEL.clear();renderSel()})}catch(e){}
+{const _h=halt;halt=function(){for(const e of SSEL)if(e.st==='move'){e.st='idle';e.tx=e.x;e.ty=e.y;e.dk=e.k==='cat'?1:0;if(e.k==='cat')e.st='dock'}return _h.apply(this,arguments)}}
+// fiche dans le panneau de sélection
+const ENGST=e=>e.st==='dead'?'Détruite':e.st==='move'?(e.dk&&e.k==='tow'?'Roule vers le mur':e.dk&&e.k==='rams'?'Roule vers la '+((e.gate&&e.gate.n)||'porte'):'En route'):e.st==='dock'?(e.k==='tow'?'Accostée : on y monte':e.k==='rams'?(e.gate&&!e.gate.broken?'Frappe la '+(e.gate.n||'porte'):'Porte enfoncée'):(e.tgt&&!e.tgt.dead?'Tire sur '+(e.tgt.label||'la cible'):'En batterie')):'À l\'arrêt';
+{const _rs=renderSel;renderSel=function(){const r=_rs.apply(this,arguments);try{for(const e of SSEL)if(e.st==='dead')SSEL.delete(e);if(!SSEL.size)return r;const b=document.getElementById('selBody');if(!b)return r;
+  const arr=[...SSEL],h=arr.map(e=>{const f=Math.max(0,e.hp/e.hp0);return `<div class="row"><span>${arr.length>1?ENGT[e.k]:'Solidité '+Math.round(f*100)+' %'}</span><span>${ENGST(e)}</span></div><div class="meter"><i style="width:${f*100}%;background:${f>.5?'#d6b878':'#d24a3a'}"></i></div>`}).join('');
+  const tip='<div style="color:var(--muted);font-size:12px;line-height:1.35">Clic droit : sur un mur, la tour y accoste ; sur une porte, le bélier la frappe ; sur un ennemi, la catapulte le vise ; ailleurs, l\'engin s\'y rend.</div>';
+  const head=selected.size?'':`<h2>${arr.length>1?arr.length+' engins de siège':ENGT[arr[0].k]}</h2>`;b.innerHTML=(selected.size?b.innerHTML:'')+head+h+tip}catch(e){}return r}}
+function drawSiege(g2,px){const lw=v=>Math.max(v,v*.35*px);
+  for(const e of SIEGE){const a=e.st==='move'&&e.ha!=null&&!e.dk?e.ha:e.st==='idle'&&e.ha!=null?e.ha:Math.atan2(e.iy,e.ix),dead=e.st==='dead';
+    if(SSEL.has(e)&&!dead){const r=e.k==='tow'?22:e.k==='rams'?19:13;g2.strokeStyle='#fff2c0';g2.lineWidth=Math.max(2,1.4*px);g2.setLineDash([6,4]);g2.beginPath();g2.arc(e.x,e.y,r,0,6.283);g2.stroke();
+      if(e.st==='move'){g2.strokeStyle='rgba(255,242,192,.7)';g2.beginPath();g2.moveTo(e.x,e.y);g2.lineTo(e.tx,e.ty);g2.stroke()}g2.setLineDash([])}g2.save();g2.translate(e.x,e.y);g2.rotate(a);const SZ=e.k==='tow'?1.5:e.k==='rams'?1.3:1.4;g2.scale(SZ,SZ);
+    if(e.k==='tow'){// tour roulante : 22 m de profondeur, 20 de large, peaux mouillées sur la face, pont-levis abaissé quand elle accoste
+      if(e.st==='dock'&&!dead){g2.fillStyle='rgba(30,20,10,.3)';g2.fillRect(11,-6+3,30,12);g2.fillStyle='#9a7a52';g2.fillRect(11,-6,30,12);g2.strokeStyle='#3a2a18';g2.lineWidth=lw(1);g2.strokeRect(11,-6,30,12);for(let x=15;x<41;x+=4){g2.beginPath();g2.moveTo(x,-6);g2.lineTo(x,6);g2.stroke()}}
+      g2.fillStyle='rgba(30,20,10,.38)';g2.fillRect(-11+5,-10+6,22,20);
+      for(const [wx,wy] of [[-8,-12],[6,-12],[-8,10],[6,10]]){g2.fillStyle='#2a1e12';g2.fillRect(wx-2.5,wy-1,5,3)}
+      g2.fillStyle=dead?'#2b2420':'#6b4c30';g2.fillRect(-11,-10,22,20);g2.strokeStyle='#2a1c10';g2.lineWidth=lw(1.6);g2.strokeRect(-11,-10,22,20);
+      if(!dead){g2.strokeStyle='rgba(40,26,14,.55)';g2.lineWidth=lw(.8);for(let y=-7;y<10;y+=3.4){g2.beginPath();g2.moveTo(-11,y);g2.lineTo(11,y);g2.stroke()}
+        g2.fillStyle='#8a6a48';g2.fillRect(-7,-6,14,12);g2.strokeStyle='#2a1c10';g2.lineWidth=lw(1);g2.strokeRect(-7,-6,14,12);
+        g2.fillStyle='#7b5f45';g2.fillRect(8,-10,3,20); // peaux sur la face
+        g2.fillStyle='#3a2a18';for(let y=-9;y<10;y+=4)g2.fillRect(-7,y,2,2)}}
+    else if(e.k==='rams'){// bélier sous sa tortue : toit à deux pans, poutre ferrée qui dépasse
+      const hit=e.hit&&time-e.hit<.5?Math.sin(time*9)*2.5:0;
+      g2.fillStyle='rgba(30,20,10,.35)';g2.fillRect(-12+3,-6+4,24,12);
+      if(!dead){g2.fillStyle='#4a3420';g2.fillRect(-4+hit,-1.8,22,3.6);g2.fillStyle='#5c5a55';g2.beginPath();g2.moveTo(18+hit,-3);g2.lineTo(23+hit,0);g2.lineTo(18+hit,3);g2.closePath();g2.fill()}
+      g2.fillStyle=dead?'#2b2420':'#7a5c3c';g2.fillRect(-12,-6,24,6);g2.fillStyle=dead?'#231d1a':'#5f462c';g2.fillRect(-12,0,24,6);
+      g2.strokeStyle='#2a1c10';g2.lineWidth=lw(1.2);g2.strokeRect(-12,-6,24,12);g2.beginPath();g2.moveTo(-12,0);g2.lineTo(12,0);g2.stroke();
+      if(!dead){g2.strokeStyle='rgba(40,26,14,.5)';g2.lineWidth=lw(.7);for(let x=-9;x<12;x+=3.5){g2.beginPath();g2.moveTo(x,-6);g2.lineTo(x,6);g2.stroke()}}}
+    else{// catapulte : bâti, roues, bras qui se relève après le tir
+      g2.fillStyle='rgba(30,20,10,.32)';g2.fillRect(-7+3,-6+3,14,12);
+      for(const [wx,wy] of [[-5,-7.5],[4,-7.5],[-5,6],[4,6]]){g2.fillStyle='#2a1e12';g2.fillRect(wx-2,wy,4,1.6)}
+      g2.fillStyle=dead?'#2b2420':'#7a5c3c';g2.fillRect(-7,-6,14,12);g2.strokeStyle='#2a1c10';g2.lineWidth=lw(1.2);g2.strokeRect(-7,-6,14,12);
+      if(!dead){const f=e.fire?Math.min(1,(time-e.fire)/1.2):1,L=-9+18*(1-f);g2.strokeStyle='#4a3420';g2.lineWidth=lw(2.2);g2.beginPath();g2.moveTo(-2,0);g2.lineTo(L,0);g2.stroke();
+        g2.fillStyle='#5c5a55';g2.beginPath();g2.arc(L,0,1.8,0,6.283);g2.fill();g2.fillStyle='#3a2a18';g2.fillRect(2,-6,2,12)}}
+    g2.restore();
+    // feu et fumée
+    const hot=dead?Math.max(0,1-(time-e.burn)/25):e.hp<e.hp0*.5?.5:0;
+    if(hot>0){const n=e.k==='tow'?9:5;for(let i=0;i<n;i++){const t=time*3+i*1.7,r=(e.k==='tow'?9:5)*(.5+.5*Math.sin(t*1.3+i)),ox=Math.sin(i*2.1+t)*6,oy=Math.cos(i*1.3+t*.8)*6;
+      g2.fillStyle=`rgba(${230+Math.sin(t)*20|0},${90+Math.sin(t*1.7)*50|0},30,${.55*hot})`;g2.beginPath();g2.arc(e.x+ox,e.y+oy,r,0,6.283);g2.fill()}}
+    if(dead||e.hp<e.hp0*.5){for(let i=0;i<4;i++){const f=((time*.25+i*.25)%1),r=6+f*16;g2.fillStyle=`rgba(50,45,40,${.35*(1-f)})`;g2.beginPath();g2.arc(e.x+f*18,e.y-f*24,r,0,6.283);g2.fill()}}
+    // état
+    if(!dead&&e.hp<e.hp0){const w=e.k==='tow'?34:22,f=Math.max(0,e.hp/e.hp0),yb=e.y-(e.k==='tow'?26:18);g2.fillStyle='rgba(20,16,10,.7)';g2.fillRect(e.x-w/2,yb,w,Math.max(2.5,1.4*px));g2.fillStyle=f>.5?'#d8b25a':'#d0513f';g2.fillRect(e.x-w/2,yb,w*f,Math.max(2.5,1.4*px))}}
+  // pierres en vol : ombre au sol, pierre en cloche
+  for(const st of STONES){const f=st.t/st.dur,x=st.x0+(st.tx-st.x0)*f,y=st.y0+(st.ty-st.y0)*f,h=Math.sin(f*Math.PI)*60;g2.fillStyle='rgba(20,15,10,.3)';g2.beginPath();g2.arc(x,y,2.4,0,6.283);g2.fill();g2.fillStyle='#4a4640';g2.beginPath();g2.arc(x-h*.3,y-h,Math.max(2.6,1.2*px),0,6.283);g2.fill()}}
+/* ---- tours qui tirent ---- */
+const ARW=[];
+function towers(dt){for(const q of TOWERS){q.cd-=dt;if(q.cd>0)continue;q.cd=2.6+Math.random()*1.2;
+  const [fx,fy]=P2F(q.x,q.y),wx=fx*G,wy=fy*G;let best=null,bd=170*G;
+  for(const e of units){if(e.side!==ATTS||e.dead||e.pend||e.routing)continue;const d=Math.hypot(e.x-wx,e.y-wy);if(d<bd){bd=d;best=e}}
+  if(!best)continue;const tg=best;ARW.push({x0:q.x,y0:q.y,e:tg,tx:W2P(tg.x,tg.y),t:0,dur:.5+bd/G/400,dmg:6/(tg.T.def||1)*(tg.T.kind==='eleph'?.2:1)})}
+  for(let i=ARW.length-1;i>=0;i--){const a=ARW[i];a.t+=dt;if(a.t>=a.dur){ARW.splice(i,1);if(!a.e.dead){hurt(a.e,a.dmg);a.e.underFire=1.5;a.e.morale-=.3;if(a.e.morale<=0&&!a.e.routing)rout(a.e)}}}}
+/* ---- citadelle à tenir ---- */
+let CAP=0,TAKEN=false;const CAPT=60;
+function capture(dt){if(TAKEN)return;const pt=P.pt;let a=0,d=0;
+  for(const u of units){if(u.dead||u.pend||u.routing)continue;const [x,y]=W2P(u.x,u.y);if(Math.hypot(x-pt.x,y-pt.y)<pt.r){if(u.side===ATTS)a++;else d++}}
+  if(a&&!d)CAP+=dt;else if(d&&!a)CAP=Math.max(0,CAP-dt*.5);
+  if(CAP>=CAPT){TAKEN=true;say((pt.n.charAt(0).toUpperCase()+pt.n.slice(1))+' est prise !',ATTS===0?'#cbb1ee':'#f1a097');
+    for(const u of units)if(u.side===DEFS&&!u.dead&&!u.routing)rout(u)}}
+window.__villes={P,MODE,DEFS,ENGS,SIEGE,SSEL,engOrder,scr:(x,y)=>{const q=toScreen(x,y,0),r=host.getBoundingClientRect();return [q.x+r.left,q.y+r.top]},SEG,GAPS,TOWERS,W2P,P2F,G,get time(){return time},get cap(){return CAP/CAPT},inCity,inTown,onRampart,blockOf,dbgPt:(x,y)=>({town:inTown(x,y),water:inWater(x,y),cit:inCit(x,y),plaza:onPlaza(x,y),wall:nearWall(x,y,8),road:nearRoad(x,y,9),free:free(x,y)})};
+{const _su=setup;setup=function(){CAP=0;TAKEN=false;ARW.length=0;STONES.length=0;for(const g of GAPS)if(g.kind==='porte'){g.hp=28;g.broken=false}const r=_su.apply(this,arguments);try{place()}catch(e){console.warn('villes',e)}return r}}
+// carte de départ
+try{const card=document.querySelector('#start .card'),ps=card&&card.querySelectorAll('p');if(ps&&ps[0]){const p=document.createElement('p');p.className='ville-p';p.style.cssText='margin:6px 0;font-size:13px;line-height:1.45';
+  const eng=Object.keys(ENGS).filter(k=>ENGS[k]).map(k=>ENGN[k]);const engTxt=eng.length?` Machines de siège ${DEFS===0?'de l\'ennemi':'à votre disposition'} : ${eng.join(', ')}.`:'';
+  p.textContent=(MODE==='assaut'?(DEFS===0?`Vous défendez ${P.n}. Vos premières lignes tiennent le rempart. Si l'ennemi tient ${P.pt.n} une minute, la ville tombe.`:P.txt+(NBR?` ${NBR>1?NBR+' brèches sont ouvertes':'Une brèche est ouverte'} par le siège.`:'')):`Les murs de ${P.n} bordent le champ de bataille : portes fermées, on ne passe pas.`)+(MODE==='assaut'?engTxt:'');ps[0].after(p)}}catch(e){}
+

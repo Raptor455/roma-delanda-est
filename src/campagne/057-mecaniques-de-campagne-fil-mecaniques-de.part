@@ -1,0 +1,713 @@
+/* ================= MÉCANIQUES DE CAMPAGNE (fil « Mécaniques de campagne ») =================
+   Source : /mnt/project-files/mecaniques/meca.js, injecté avant « BOUCLE » par mecaniques/patch.py (relançable).
+   Étape 1 : situation de départ de Carthage en 218 (lieux et tributaires dans MÉCA-LIEUX), régions historiques,
+   peuples tributaires (tribut, fidélité, contingents, otages de Sagonte). */
+const TRIB_ADJ={carp:'carpétan',olc:'olcade',vac:'vaccéen'};
+const isTrib=f=>S.fac[f]&&S.fac[f].st==='tribut_car';
+// ---- régions ----
+let REGN=null;
+const o0s=n=>S&&S.mirror?(n.o0==='car'?'rom':n.o0==='rom'?'car':n.o0):n.o0; // propriétaire d'origine, vu du camp interne (miroir « Jouer Rome »)
+function regionsBuild(){REGN=REGIONS.map(([n,lo,la])=>{const [x,y]=prj(lo,la);return {n,x,y,towns:[]}});
+  const RB={};for(const r of REGN)RB[r.n]=r;for(const n of N){if(n.col)continue;let b=RB[REG_FIX[n.id]]||null,bd=b?-1:1e9;for(const r of REGN){const d=Math.hypot(r.x-n.x,r.y-n.y);if(d<bd){bd=d;b=r}}n.reg=b.n;b.towns.push(n.i)}
+  for(const r of REGN)if(r.towns.length){let sx=0,sy=0;for(const i of r.towns){sx+=N[i].x;sy+=N[i].y}r.lx=(sx/r.towns.length+r.x)/2;r.ly=(sy/r.towns.length+r.y)/2}else{r.lx=r.x;r.ly=r.y}}
+const regOf=n=>{if(!REGN)regionsBuild();return n.reg||null};
+function drawRegionLabels(s){
+  if(s<.75||s>3.6)return;if(!REGN)regionsBuild();
+  const a=s<.95?(s-.75)/.2:s>2.4?(3.6-s)/1.2:1;if(a<=0)return;
+  ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.textAlign='center';ctx.textBaseline='middle';
+  const fs=Math.round(11+Math.min(5,s*2.5));ctx.font=`italic ${fs}px Marcellus, Georgia, serif`;ctx.lineJoin='round';
+  const w=cv.clientWidth,h=cv.clientHeight;
+  for(const r of REGN){if(!r.towns.length)continue;const X=r.lx*s+view.ox,Y=r.ly*s+view.oy;if(X<-200||Y<-40||X>w+200||Y>h+40)continue;
+    const t=r.n.toUpperCase().split('').join(' ');
+    ctx.lineWidth=3;ctx.strokeStyle=`rgba(244,234,208,${.45*a})`;ctx.strokeText(t,X,Y);ctx.fillStyle=`rgba(58,38,20,${.62*a})`;ctx.fillText(t,X,Y)}
+  ctx.restore();
+}
+const _drawDynamicM=drawDynamic;
+drawDynamic=function(w,h,s,z,inV){try{drawRegionLabels(s)}catch(e){}return _drawDynamicM.apply(this,arguments)};
+
+// ---- départ de 218 ----
+function mecaStart(){
+  for(const f in FAC)if(FAC[f].trib&&S.fac[f]){S.fac[f].st='tribut_car';S.fac[f].fid=62;S.fac[f].car=Math.max(S.fac[f].car,45)}
+  S.otages=true;S.meca=1;S.t0=N.filter(n=>!n.col&&S.own[n.id]==='car').length;
+  const U=(t,n)=>Array.from({length:n},()=>({t,men:UT[t].men}));
+  const at=id=>N[NI[id]];
+  const put=(id,units,name,g)=>{const n=at(id);const a={id:S.uid++,side:'car',name,x:n.x,y:n.y,at:n.i,legs:[],units,scout:0,cool:0};if(g)a.g=true;S.armies.push(a);return a};
+  // l'armée d'Hispanie d'Hasdrubal : Libyens, Ligures, Baléares, cavaliers libyphéniciens et numides, éléphants (Polybe III, 33)
+  const h=S.armies.find(a=>a.side==='car'&&a.name==='Hasdrubal');
+  if(h){h.units=[...U('lib',3),...U('gaul',1),...U('sling',1),...U('hcav',1),...U('ncav',2),...U('eleph',1)]}
+  // Hannibal fait passer des Ibères en Afrique et des Africains en Hispanie : garnison ibère à Carthage
+  const gc=S.armies.find(a=>a.side==='car'&&a.g&&a.at===NI.carthago);if(gc)gc.units=[...U('iber',3),...U('sling',1),...U('lib',1)];
+  put('saguntum',[...U('lib',2),...U('sling',1)],'Garnison de Sagonte',true);
+  put('gades',[...U('lib',1),...U('sling',1)],'Garnison de Gadès',true);
+  put('melita',[...U('lib',2)],'Garnison de Mélité',true);
+  put('leptis',[...U('lib',1),...U('ncav',1)],'Garnison de Leptis',true);
+  S.log=S.log||[];
+  log("Les otages des peuples ibères sont gardés à Sagonte.");
+}
+const _newGameM=newGame;
+newGame=function(){_newGameM();mecaStart()};
+const _afterLoadM=afterLoad;
+afterLoad=function(){
+  // anciennes sauvegardes : nouveaux lieux et nouveaux peuples
+  for(const n of N)if(n.o0&&!(n.id in S.own)&&!n.col&&!S.meca)S.own[n.id]=n.o0;
+  for(const f in FAC)if(FAC[f].a&&!S.fac[f])S.fac[f]={car:FAC[f].a[0],rom:FAC[f].a[1],st:FAC[f].trib?'tribut_car':'neutre',cd:0,fid:55};
+  if(S.otages==null)S.otages=ownerN(NI.saguntum)==='car';
+  S.meca=1;territoryDirty=true;if(typeof socInit==='function')socInit();
+  return _afterLoadM.apply(this,arguments);
+};
+
+// ---- tributaires ----
+function tribTowns(f){return N.filter(n=>!n.col&&ownerN(n.i)===f)}
+function tribute(f){return Math.round(tribTowns(f).reduce((s,n)=>s+townIncome(n),0)*.5)}
+const _incomeM=income;
+income=function(side){const r=_incomeM.apply(this,arguments);if(side==='car'){let t=0;for(const f in S.fac)if(isTrib(f))t+=tribute(f);r.inc+=t;r.trib=t}return r};
+function near(f,side,km){const T=tribTowns(f);return S.armies.some(a=>a.side===side&&!a.g&&!a.dead&&T.some(n=>Math.hypot(a.x-n.x,a.y-n.y)<km))}
+function fidTxt(v){return v>=75?'loyaux':v>=50?'soumis':v>=30?'agités':'au bord de la révolte'}
+function tribMonthly(){
+  for(const f in S.fac){if(!isTrib(f))continue;const F=S.fac[f];let d=-2;
+    if(near(f,'car',200))d+=3;if(near(f,'rom',200))d-=5;
+    if(S.otages&&ownerN(NI.saguntum)==='car')d+=2;if(S.gold.car<=0)d-=8;
+    F.fid=Math.max(0,Math.min(100,(F.fid==null?55:F.fid)+d));
+    if(F.fid<30&&!F.warn){F.warn=1;log(`Les ${FAC[f].n} s'agitent : leur fidélité faiblit (${Math.round(F.fid)}).`)}
+    if(F.fid>=40)F.warn=0;
+    if(F.fid<12){F.st='neutre';F.car=Math.min(F.car,-15);F.rom=Math.max(F.rom,10);F.fid=0;log(`Révolte ! Les ${FAC[f].n} refusent le tribut et chassent vos percepteurs.`);S.paused=true;territoryDirty=true}
+  }
+}
+const _dailyM=daily;
+daily=function(d){const r=_dailyM.apply(this,arguments);if(d%30===0){try{tribMonthly()}catch(e){console.error(e)}}return r};
+// Rome travaille les tributaires de Carthage
+const _aiDipM=aiDiplomacy;
+aiDiplomacy=function(){_aiDipM.apply(this,arguments);for(const f in S.fac)if(isTrib(f)&&contact('rom',f)){S.fac[f].fid-=2;S.fac[f].rom=Math.min(100,S.fac[f].rom+3)}};
+// Sagonte perdue : les otages s'échappent (ou sont rendus par Rome)
+const _captureM=capture;
+capture=function(i,side){const prev=ownerN(i);const r=_captureM.apply(this,arguments);
+  if(N[i].id==='saguntum'&&prev==='car'&&side!=='car'&&S.otages){S.otages=false;for(const f in S.fac)if(isTrib(f)){S.fac[f].fid-=25}
+    for(const f in S.fac)if(FAC[f].cul==='ibe'&&S.fac[f].st==='neutre')S.fac[f].car-=10;
+    log("Sagonte est perdue : les otages ibères sont rendus à leurs peuples. Les tributaires d'Hispanie relèvent la tête.");S.paused=true}
+  return r};
+function tribAction(f,k){const F=S.fac[f];if(!isTrib(f)||F.cd>0)return;
+  if(k==='gift'){if(S.gold.car<60)return;S.gold.car-=60;F.fid=Math.min(100,F.fid+15);F.cd=1;log(`Présents aux chefs ${FAC[f].n.toLowerCase()} : fidélité +15.`)}
+  if(k==='levy'){const T=tribTowns(f).sort((a,b)=>b.size-a.size)[0];if(!T)return;const n=T;
+    const units=Array.from({length:2},()=>({t:'iber',men:UT.iber.men}));
+    S.armies.push({id:S.uid++,side:'car',name:'Contingent '+(TRIB_ADJ[f]||FAC[f].n),x:n.x,y:n.y,at:n.i,legs:[],units,scout:0,cool:0,mor:60,food:12});
+    F.fid=Math.max(0,F.fid-12);F.cd=3;log(`Les ${FAC[f].n} fournissent un contingent de 2 régiments à ${n.n} (fidélité −12).`)}
+  if(k==='annex'){if(F.fid<80)return;joinAlliance(f,'car');F.cd=2;log(`Les ${FAC[f].n} entrent pleinement dans l'empire barcide.`)}
+  renderAll();openDip();
+}
+// ---- fenêtre Diplomatie : alliés italiens de Rome, tributaires, peuples et traités ----
+openDip=function(){
+  socInit();
+  const bar=(v,col)=>`<i style="background:${col};${v>=0?`left:50%;width:${v/2}%`:`right:50%;width:${-v/2}%`}"></i>`;
+  const bar01=(v,col)=>`<i style="background:${col};left:0;width:${v}%"></i>`;
+  const B=(attr,lab,dis,tip)=>`<button ${attr} type="button" ${dis?'disabled':''} ${tip?`title="${tip}"`:''}>${lab}</button>`;
+  // alliés italiens
+  const MI=!!S.mirror,PUN=MI?'rom':'car';
+  const soc=Object.keys(SOCII).map(g=>{const G=S.soc[g],T=socTowns(g),own=T.filter(id=>ownerN(NI[id])===PUN).length,near=MI?socTowns(g).some(id=>{const n=N[NI[id]];return S.armies.find(a=>a.side==='rom'&&!a.g&&!a.dead&&!a.ship&&a.units.length>=4&&Math.hypot(a.x-n.x,a.y-n.y)<200)}):socNearCar(g,200);
+    const st=MI?(own===T.length?'<b style="color:var(--bad)">passés à Carthage</b>':own?`<b style="color:var(--bad)">${own} ville${own>1?'s':''} perdue${own>1?'s':''}</b>`:G.fid<25?'<b style="color:var(--bad)">prêts à faire défection</b>':G.fid<45?'<span class="sub">hésitants</span>':'<span class="sub">fidèles</span>'):own===T.length?'<b style="color:var(--good)">passés à Carthage</b>':own?`<b style="color:var(--good)">${own} ville${own>1?'s':''} ralliée${own>1?'s':''}</b>`:G.fid<25?'<b style="color:var(--gold)">prêts à faire défection</b>':G.fid<45?'<span class="sub">hésitants</span>':'<span class="sub">fidèles à Rome</span>';
+    const pend=(S.env||[]).find(x=>x.f===g&&x.kind==='s');
+    const act=own===T.length?'':MI?`<br>${B(`data-s="env" data-g="${g}"`,'Rassurer 40',G.cd>0||S.gold.car<40,'Fidélité +6')} ${B(`data-s="prom" data-g="${g}"`,'Promesses 100',G.cd>0||S.gold.car<100,'Part du butin et des terres : fidélité +14')}`:pend?`<br><span class="sub">Ambassade en route (${ENV_LAB[pend.key]})</span>`:`<br>${B(`data-s="env" data-g="${g}"`,'Émissaires 40',G.cd>0||S.gold.car<40,'Fidélité envers Rome −3, −7 si une de vos armées est à moins de 200 km')} ${B(`data-s="prom" data-g="${g}"`,'Promesses 100',G.cd>0||S.gold.car<100,'Liberté et autonomie : −6, −14 avec une armée proche')}`;
+    return `<tr><td><b>${SOCII[g].n}</b><br><span class="sub">${T.map(id=>N[NI[id]].n).join(', ')}</span></td><td style="min-width:190px"><div class="att"><span>Fidélité à Rome</span><span class="g">${bar01(G.fid,MI?'var(--punic)':'var(--roma)')}</span><span>${Math.round(G.fid)}</span></div>${near?'<span class="sub">une armée punique est proche</span>':''}</td><td>${st}${act}</td></tr>`}).join('');
+  const rows=Object.keys(S.fac).map(f=>{const F=S.fac[f],c=contact('car',f);let st,act='';
+    if(isTrib(f)){st=`<b style="color:var(--gold)">tributaire</b><br><span class="sub">tribut ${tribute(f)}/mois · ${fidTxt(F.fid)}</span>`;
+      act=`<br>${B(`data-t="gift" data-f="${f}"`,'Présents 60',F.cd>0||S.gold.car<60,'Fidélité +15')} ${B(`data-t="levy" data-f="${f}"`,'Contingent',F.cd>0,'2 régiments ibères, fidélité −12')} ${B(`data-t="annex" data-f="${f}"`,'Intégrer',F.cd>0||F.fid<80,'Possible quand leur fidélité atteint 80')} ${F.ot?'<span class="sub">otages échangés</span>':B(`data-k="host" data-f="${f}"`,'Otages',F.cd>0,'Fidélité +10')}`}
+    else if(isPact(f)){st='<b style="color:var(--good)">traité d’amitié</b>'+(F.ot?'<br><span class="sub">otages échangés</span>':'');
+      act=`<br>${B(`data-k="levy" data-f="${f}"`,'Demander des troupes 40',F.cd>0||S.gold.car<40,'2 ou 3 régiments de leur peuple, attitude −6')} ${F.ot?'':B(`data-k="host" data-f="${f}"`,'Otages',F.cd>0,'Attitude +8, puis +2 par mois')} ${B(`data-d="ally" data-f="${f}"`,'Alliance',F.cd>0||!canAlly(F),'Ils rejoignent Carthage avec leurs villes')}`}
+    else{st=F.st==='neutre'?(c?(F.pass?'<span class="sub">passage accordé</span>':''):'<span class="sub">hors de portée</span>'):F.st==='allie_car'?'<b style="color:var(--good)">allié</b>':F.st==='allie_rom'?'<b style="color:var(--bad)">allié de Rome</b>':F.st==='soumis'?'<span class="sub">soumis</span>':'<b style="color:var(--bad)">en guerre</b>';
+      if(F.st==='neutre'&&c){act=`<br>${B(`data-d="env" data-f="${f}"`,'Émissaires 25',F.cd>0||S.gold.car<25)} ${B(`data-d="gift" data-f="${f}"`,'Présents 120',F.cd>0||S.gold.car<120)} ${F.pass?'':B(`data-k="pass" data-f="${f}"`,'Passage 40',F.cd>0||S.gold.car<40||F.car<20,'Attitude 20 : vos armées traversent leurs terres sans les fâcher')} ${B(`data-k="pact" data-f="${f}"`,'Traité 80',F.cd>0||S.gold.car<80||F.car<40||F.car<F.rom+10,'Attitude 40 et 10 de plus que Rome : ils gardent leurs villes et vous prêtent des troupes')} ${B(`data-d="ally" data-f="${f}"`,'Alliance',F.cd>0||!canAlly(F),'Attitude 50 et 15 de plus que Rome : ils rejoignent Carthage avec leurs villes')}`;
+        if(['num','mae'].includes(f)&&!S.mar)act+=` ${B(`data-k="marr" data-f="${f}"`,'Mariage royal 150',F.cd>0||S.gold.car<150,'Une fille de grande famille carthaginoise épouse leur roi : attitude +30 (une seule fois)')}`}}
+    {const e=(S.env||[]).find(x=>x.f===f&&x.kind!=='s');if(e){act=`<br><span class="sub">Ambassade en route (${ENV_LAB[e.key]}) : ≈ ${Math.max(1,Math.round(Math.hypot(e.tx-e.x,e.ty-e.y)/ENV_KMD))} j</span>`}}
+    const why=typeof whyTxt==='function'?whyTxt(f):'';
+    const fidRow=isTrib(f)?`<div class="att"><span>Fidélité</span><span class="g">${bar01(F.fid,'var(--gold)')}</span><span>${Math.round(F.fid)}</span></div>`:'';
+    return `<tr><td><b>${FAC[f].n}</b><br><span class="sub">${N.filter(n=>ownerN(n.i)===f).map(n=>n.n).slice(0,5).join(', ')||'—'}</span>${why?`<br><span class="sub" style="color:var(--gold)">${why}</span>`:''}</td><td style="min-width:190px">${fidRow}<div class="att"><span>Carthage</span><span class="g">${bar(F.car,'var(--punic)')}</span><span>${Math.round(F.car)}</span></div><div class="att"><span>Rome</span><span class="g">${bar(F.rom,'var(--roma)')}</span><span>${Math.round(F.rom)}</span></div></td><td>${st}${act}</td></tr>`}).join('');
+  modal(`<h2>Diplomatie</h2>
+   <p class="sub">Chaque démarche part de votre ville ou armée la plus proche (${ENV_KMD} km par jour) et ne compte qu'à son arrivée ; une armée romaine peut intercepter l'ambassade.</p>
+   <h3 style="margin:10px 0 4px">Les alliés italiens de Rome</h3>
+   <p class="sub">Rome tient l'Italie par ses alliés. Chaque victoire punique, surtout en Italie, ébranle leur fidélité ; une armée punique proche (4 régiments ou plus) les fait réfléchir ; piller leurs terres les rejette vers Rome. Sous 25, une ville proche d'une de vos armées peut chasser sa garnison et passer à Carthage. Les colonies latines ne trahissent jamais.</p>
+   <p class="sub">Prisonniers alliés : <button id="dFree" type="button" class="${S.dipl.free?'on':''}">Les renvoyer sans rançon</button> <button id="dRan" type="button" class="${S.dipl.free?'':'on'}">Exiger une rançon</button> ${S.dipl.free?'(fidélité −3 de plus à chaque victoire en Italie)':'(de l’or à chaque victoire)'}</p>
+   <table class="dip"><tr><th>Peuple</th><th>Fidélité</th><th></th></tr>${soc}</table>
+   <h3 style="margin:16px 0 4px">Peuples, tributaires et traités</h3>
+   <p class="sub">Une démarche par peuple et par mois. Passage : vos armées traversent sans fâcher. Traité d'amitié : ils gardent leurs villes, ne gênent plus vos armées et vous prêtent des troupes ; il tient tant que leur attitude reste positive. Alliance : ils rejoignent Carthage avec leurs villes et leurs troupes. Les tributaires (soumis par les Barcides) paient la moitié du revenu de leurs villes ; ils restent fidèles quand une armée punique est proche et tant que vous gardez leurs otages à Sagonte${S.otages?' (otages à Sagonte : oui)':' (les otages sont perdus)'} ; sous 12, ils se révoltent.</p>
+   <table class="dip"><tr><th>Peuple</th><th>Attitude</th><th></th></tr>${rows}</table><div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');
+  const ENVK={d:['env','gift','ally'],k:['pass','pact','host','marr'],s:['env','prom'],t:['gift']};
+  const go=(kind,f,key,fn)=>{if(ENVK[kind].includes(key)&&typeof sendEnvoy==='function')sendEnvoy(kind,key,f);else fn()};
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>go('d',b.dataset.f,b.dataset.d,()=>dipAction(b.dataset.f,b.dataset.d)));
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>go('t',b.dataset.f,b.dataset.t,()=>tribAction(b.dataset.f,b.dataset.t)));
+  document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>go('k',b.dataset.f,b.dataset.k,()=>treaty(b.dataset.f,b.dataset.k)));
+  document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>go('s',b.dataset.g,b.dataset.s,()=>socAction(b.dataset.g,b.dataset.s)));
+  $('dFree').onclick=()=>{S.dipl.free=true;openDip()};$('dRan').onclick=()=>{S.dipl.free=false;openDip()};
+  $('mClose').onclick=closeModal;
+};
+$('bDip').onclick=()=>openDip();
+// ---- panneau de la ville : région et statut de tributaire ----
+const _townBlockM=townBlock;
+townBlock=function(i,main){let h=_townBlockM.apply(this,arguments);const n=N[i];if(n.col)return h;
+  const r=regOf(n);if(r)h=h.replace(main?'</h2>':'</h3>',(main?'</h2>':'</h3>')+`<p class="sub" style="font-family:var(--display);letter-spacing:.06em">${r}</p>`);
+  const o=ownerN(i);if(o&&isTrib(o)){const F=S.fac[o];h+=`<p class="sub">Tributaire de Carthage (${FAC[o].n}) : fidélité ${Math.round(F.fid)}, ${fidTxt(F.fid)}. Tribut ${tribute(o)} or par mois. Voir la fenêtre Diplomatie.</p>`}
+  return h};
+
+/* ---- Étape 2 : DIPLOMATIE POUSSÉE ---- */
+// Alliés italiens de Rome (socii) : chaque peuple a une fidélité envers Rome ; les colonies latines et romaines ne font jamais défection.
+const SOCII={
+  cam:{n:'Campaniens',f0:50,t:{capua:0}},
+  sam:{n:'Samnites',f0:55,t:{bovianum:0,corfinium:20}},
+  luc:{n:'Lucaniens',f0:50,t:{grumentum:0}},
+  bru:{n:'Bruttiens',f0:45,t:{consentia:0}},
+  ita:{n:'Grecs d’Italie',f0:55,t:{tarentum:0,metapontum:0,thurii:0,croton:0,locri:0,rhegium:30,neapolis:30}},
+  apu:{n:'Apuliens',f0:55,t:{arpi:0,canusium:20,barium:10}},
+  etr:{n:'Étrusques',f0:75,t:{arretium:0,faesulae:0,volaterrae:0,perusia:0,clusium:0,tarquinii:0,pisae:5}},
+  umb:{n:'Ombriens et Picéniens',f0:85,t:{asculum:0,ancona:5}}
+};
+const ITALY_REG=new Set(['Gaule cisalpine','Vénétie','Étrurie','Ombrie','Picénum','Latium','Samnium','Campanie','Apulie','Lucanie','Calabre','Bruttium']);
+const inItaly=(x,y)=>{if(!REGN)regionsBuild();const n=townAt(x,y);return !!n&&ITALY_REG.has(n.reg)};
+function socInit(){if(!S.soc){S.soc={};for(const g in SOCII)S.soc[g]={fid:SOCII[g].f0,cd:0}}if(!S.dipl)S.dipl={free:true};}
+const socTowns=g=>Object.keys(SOCII[g].t).filter(id=>NI[id]!=null);
+function socAdj(g,v){S.soc[g].fid=Math.max(0,Math.min(100,S.soc[g].fid+v))}
+function carArmyNear(x,y,km,min){return S.armies.find(a=>a.side==='car'&&!a.g&&!a.dead&&!a.ship&&a.units.length>=(min||1)&&Math.hypot(a.x-x,a.y-y)<km)}
+function romArmyNear(x,y,km){return S.armies.find(a=>a.side==='rom'&&!a.g&&!a.dead&&!a.ship&&Math.hypot(a.x-x,a.y-y)<km)}
+function socNearCar(g,km){return socTowns(g).some(id=>{const n=N[NI[id]];return carArmyNear(n.x,n.y,km,4)})}
+function defect(id){const i=NI[id],n=N[i];S.own[id]='car';delete S.siege[id];delete S.q[id];
+  for(const a of S.armies)if(a.side==='rom'&&a.g&&a.at===i){a.side='car';a.name='Socii de '+n.n}
+  territoryDirty=true;log(`Défection ! ${n.n} chasse sa garnison romaine et ouvre ses portes à Carthage.`);S.paused=true}
+function socCheck(){socInit();
+  for(const g in SOCII)for(const id of socTowns(g)){const i=NI[id],n=N[i];if(ownerN(i)!=='rom'||COL_IDS.has(id))continue;
+    const tf=S.soc[g].fid+SOCII[g].t[id];if(tf>=25)continue;
+    const c=carArmyNear(n.x,n.y,150,4);if(!c)continue;const r=romArmyNear(n.x,n.y,30);if(r&&strength(r)>strength(c)*.6)continue;
+    if(Math.random()<.5)defect(id)}}
+function socMonthly(){socInit();
+  for(const g in SOCII){const G=S.soc[g];if(G.cd>0)G.cd--;
+    if(socNearCar(g,120))socAdj(g,-2);else if(G.fid<SOCII[g].f0)socAdj(g,1);
+    if(socTowns(g).some(id=>{const n=N[NI[id]];return romArmyNear(n.x,n.y,80)}))socAdj(g,1)}
+  socCheck()}
+// victoires et défaites en Italie
+const _applyResultM=applyResult;
+applyResult=function(b,res){
+  const ids=[...b.att,...b.def],sides={};for(const id of ids){const a=S.armies.find(x=>x.id===id);if(a)sides[id]=a.side}
+  const before={};for(const id of ids){const a=S.armies.find(x=>x.id===id);if(a)before[id]=a.units.reduce((s,u)=>s+u.men,0)}
+  const r=_applyResultM.apply(this,arguments);
+  try{socInit();const aS=sides[b.att[0]],dS=sides[b.def[0]];if(!((aS==='car'&&dS==='rom')||(aS==='rom'&&dS==='car')))return r;
+    const wS=res.attWin?aS:dS;let romLost=0,carLost=0;for(const id of ids){const a=S.armies.find(x=>x.id===id),l=before[id]-(a&&!a.dead?a.units.reduce((s,u)=>s+u.men,0):0);if(sides[id]==='rom')romLost+=l;else carLost+=l}
+    if(wS==='car'){if(romLost>=1500)S.vict=(S.vict||0)+1; // une escarmouche ne compte pas comme une victoire
+      if(romLost>=8000)S.bigWin=(S.bigWin||0)+1;
+      const ital=inItaly(b.x,b.y),k=Math.min(22,3+romLost/1200)*(ital?1:.4)+(S.dipl.free&&ital?3:0);
+      for(const g in SOCII){const near=socTowns(g).some(id=>{const n=N[NI[id]];return Math.hypot(n.x-b.x,n.y-b.y)<260});socAdj(g,-k*(near?1.5:1))}
+      if(!S.dipl.free&&romLost>0){const ran=Math.round(romLost/150);S.gold.car+=ran;log(`Rançon des prisonniers alliés : +${ran} or.`)}
+      else if(ital&&romLost>0)log("Vous renvoyez sans rançon les prisonniers alliés : « Hannibal ne fait pas la guerre aux Italiens, mais à Rome ».");
+      if(romLost>=8000)log("Le désastre romain ébranle toute l'Italie : les alliés de Rome hésitent.");
+      socCheck();
+    }else if(wS==='rom'){if(carLost>=1500)S.defeats=(S.defeats||0)+1;for(const g in SOCII)socAdj(g,2)}
+  }catch(e){console.error(e)}
+  return r};
+// piller les terres d'un peuple italien le rapproche de Rome
+const _vPillageM=vPillage;
+vPillage=function(v,a){const r=_vPillageM.apply(this,arguments);try{if(a&&a.side==='car'){socInit();const n=N[v.t];for(const g in SOCII)if(SOCII[g].t[n.id]!=null)socAdj(g,4)}}catch(e){}return r};
+function socAction(g,k){socInit();const G=S.soc[g];if(G.cd>0)return;
+  const near=socNearCar(g,200);
+  if(k==='env'){if(S.gold.car<40)return;S.gold.car-=40;const d=near?7:3;socAdj(g,-d);G.cd=1;log(`Émissaires chez les ${SOCII[g].n} : fidélité envers Rome −${d}.`)}
+  if(k==='prom'){if(S.gold.car<100)return;S.gold.car-=100;const d=near?14:6;socAdj(g,-d);G.cd=3;log(`Promesse de liberté et d'autonomie aux ${SOCII[g].n} : fidélité envers Rome −${d}.`)}
+  socCheck();renderAll();openDip();
+}
+// Traités avec les peuples neutres : droit de passage, pacte d'amitié (ils gardent leurs villes), otages, mariage royal numide
+const isPact=f=>S.fac[f]&&S.fac[f].st==='pacte_car';
+function poolOf(f){const c=FAC[f].cul;return (POOL_CAR[c]||['iber'])[0]}
+function treaty(f,k){const F=S.fac[f];if(F.cd>0)return;
+  if(k==='pass'){if(S.gold.car<40||F.car<20||F.pass)return;S.gold.car-=40;F.pass=1;F.cd=1;log(`Droit de passage accordé par les ${FAC[f].n}.`)}
+  if(k==='pact'){if(S.gold.car<80||F.car<40||F.car<F.rom+10)return;S.gold.car-=80;F.st='pacte_car';F.pass=1;F.cd=1;log(`Traité d'amitié avec les ${FAC[f].n} : ils gardent leurs villes, ouvrent leurs routes et vous fourniront des troupes.`);territoryDirty=true}
+  if(k==='levy'){if(!isPact(f)||S.gold.car<40)return;const T=N.filter(n=>!n.col&&ownerN(n.i)===f).sort((a,b)=>b.size-a.size)[0];if(!T)return;S.gold.car-=40;
+    const t=poolOf(f),units=Array.from({length:t==='ncav'||t==='sling'?3:2},()=>({t,men:UT[t].men}));
+    S.armies.push({id:S.uid++,side:'car',name:'Alliés '+FAC[f].n.toLowerCase(),x:T.x,y:T.y,at:T.i,legs:[],units,scout:0,cool:0,mor:65,food:12});F.car-=6;F.cd=4;log(`Les ${FAC[f].n} envoient ${units.length} régiments à ${T.n}.`)}
+  if(k==='host'){if(F.ot||!(isPact(f)||isTrib(f)))return;F.ot=1;F.cd=1;if(isTrib(f))F.fid=Math.min(100,F.fid+10);else F.car=Math.min(100,F.car+8);log(`Échange d'otages avec les ${FAC[f].n} : le traité est plus solide.`)}
+  if(k==='marr'){if(S.mar||S.gold.car<150||!['num','mae'].includes(f))return;S.gold.car-=150;S.mar=f;F.car=Math.min(100,F.car+30);F.rom-=10;F.cd=1;log(`Une fille de grande famille carthaginoise épouse le roi des ${FAC[f].n} : attitude +30.`)}
+  renderAll();openDip();
+}
+// le pacte tient tant que l'attitude reste positive ; les otages le renforcent
+function pactMonthly(){for(const f in S.fac){const F=S.fac[f];if(F.st==='pacte_car'){if(F.ot)F.car=Math.min(100,F.car+2);if(F.car<0){F.st='neutre';F.pass=0;log(`Les ${FAC[f].n} rompent leur traité avec Carthage.`);territoryDirty=true}}}}
+const _dailyM2=daily;
+daily=function(d){const keep={};for(const f in S.fac)if(S.fac[f].pass)keep[f]=S.fac[f].car;
+  const r=_dailyM2.apply(this,arguments);
+  for(const f in keep)if(S.fac[f].car<keep[f])S.fac[f].car=Math.max(S.fac[f].car,keep[f]-.01); // passage autorisé : traverser ne fâche plus
+  if(d%30===0){try{socMonthly();pactMonthly()}catch(e){console.error(e)}}return r};
+
+/* ---- Étape 3 : ambassades sur la carte, raisons de l'attitude, grands acteurs ---- */
+// Ambassades : la démarche part de votre ville ou armée la plus proche et ne compte qu'à l'arrivée ; une armée romaine peut l'intercepter.
+const ENV_COST={d:{env:25,gift:120,ally:0},k:{pass:40,pact:80,host:0,marr:150},s:{env:40,prom:100},t:{gift:60}};
+const ENV_LAB={env:'émissaires',gift:'présents',ally:"proposition d'alliance",pass:'demande de passage',pact:"traité d'amitié",host:"échange d'otages",marr:'mariage royal',prom:'promesses'};
+const ENV_KMD=45;
+let NO_DIP=false;
+function envTarget(kind,f){const T=kind==='s'?socTowns(f).map(id=>N[NI[id]]).filter(n=>ownerN(n.i)==='rom'):N.filter(n=>!n.col&&ownerN(n.i)===f);return T.sort((a,b)=>b.size-a.size)[0]}
+function envOrigin(t){let best=null,bd=1e9;for(const n of N)if(!n.col&&ownerN(n.i)==='car'){const d=Math.hypot(n.x-t.x,n.y-t.y);if(d<bd){bd=d;best=[n.x,n.y,n.n]}}
+  for(const a of S.armies)if(a.side==='car'&&!a.g&&!a.dead&&!a.ship){const d=Math.hypot(a.x-t.x,a.y-t.y);if(d<bd){bd=d;best=[a.x,a.y,a.name]}}return best}
+const envPending=(kind,f)=>(S.env||[]).find(e=>e.kind===kind&&e.f===f);
+function sendEnvoy(kind,key,f){S.env=S.env||[];if(envPending(kind,f))return;
+  const cost=ENV_COST[kind][key]||0;if(S.gold.car<cost)return;
+  const cdObj=kind==='s'?S.soc[f]:S.fac[f];if(cdObj.cd>0)return;
+  const t=envTarget(kind,f);if(!t)return;const o=envOrigin(t);if(!o)return;
+  S.gold.car-=cost;cdObj.cd=1;
+  const days=Math.max(1,Math.round(Math.hypot(t.x-o[0],t.y-o[1])/ENV_KMD));
+  S.env.push({kind,key,f,x:o[0],y:o[1],tx:t.x,ty:t.y,tn:t.n,cost});
+  log(`Ambassade (${ENV_LAB[key]}) partie ${o[2].startsWith('Garnison')?'avec la '+o[2].charAt(0).toLowerCase()+o[2].slice(1):deN(o[2])} vers ${t.n} : ≈ ${days} jour${days>1?'s':''}.`);
+  renderAll();openDip();
+}
+function envArrive(e){const cdObj=e.kind==='s'?S.soc[e.f]:S.fac[e.f];if(!cdObj)return;
+  S.gold.car+=e.cost;cdObj.cd=0;NO_DIP=true;
+  try{if(e.kind==='d')dipAction(e.f,e.key);else if(e.kind==='k')treaty(e.f,e.key);else if(e.kind==='s')socAction(e.f,e.key);else if(e.kind==='t')tribAction(e.f,e.key)}finally{NO_DIP=false}
+  if(S.gold.car>=e.cost&&cdObj.cd===0){S.gold.car-=0;log(`L'ambassade arrive à ${e.tn}, mais la démarche n'a plus d'objet : présents rapportés.`)}
+}
+function envDaily(){if(!S.env||!S.env.length)return;
+  S.env=S.env.filter(e=>{const d=Math.hypot(e.tx-e.x,e.ty-e.y);
+    const r=S.armies.find(a=>a.side==='rom'&&!a.dead&&!a.ship&&Math.hypot(a.x-e.x,a.y-e.y)<6);
+    if(r&&!(r.g&&e.kind==='s')){log(`Votre ambassade vers ${e.tn} est interceptée par ${armyLabel(r)}.`);return false}
+    if(d<=ENV_KMD){e.x=e.tx;e.y=e.ty;envArrive(e);return false}
+    e.x+=(e.tx-e.x)/d*ENV_KMD;e.y+=(e.ty-e.y)/d*ENV_KMD;return true});
+}
+const _openDipE=openDip;openDip=function(){if(NO_DIP)return;return _openDipE.apply(this,arguments)};
+function drawEnvoys(s){if(!S.env||!S.env.length)return;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const e of S.env){const X=e.x*s+view.ox,Y=e.y*s+view.oy,TX=e.tx*s+view.ox,TY=e.ty*s+view.oy;
+    ctx.setLineDash([3,5]);ctx.strokeStyle='rgba(236,208,138,.75)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(TX,TY);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#5a2f8a';ctx.strokeStyle='#ecd08a';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(X,Y,8,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#efe6d2';ctx.fillRect(X-4.5,Y-3,9,6);ctx.strokeStyle='#8a6630';ctx.lineWidth=1;ctx.strokeRect(X-4.5,Y-3,9,6);ctx.beginPath();ctx.moveTo(X-2.5,Y-1);ctx.lineTo(X+2.5,Y-1);ctx.moveTo(X-2.5,Y+1);ctx.lineTo(X+2.5,Y+1);ctx.stroke();
+    if(s>.6){ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='rgba(30,22,14,.7)';const t='Ambassade · '+ENV_LAB[e.key];ctx.strokeText(t,X+11,Y);ctx.fillStyle='#ecd08a';ctx.fillText(t,X+11,Y)}}
+  ctx.restore()}
+const _drawDynamicE=drawDynamic;
+drawDynamic=function(w,h,s){const r=_drawDynamicE.apply(this,arguments);try{drawEnvoys(s)}catch(e){}return r};
+
+// Raisons de l'attitude envers Carthage : chaque changement est attribué à sa cause (en retirant les causes imbriquées)
+const ATT=[];
+function attSnap(){const o={};for(const f in S.fac)o[f]=S.fac[f].car;return o}
+function attWrap(fn,why){return function(){if(!S||!S.fac)return fn.apply(this,arguments);const b=attSnap(),fr={};ATT.push(fr);let r;
+  try{r=fn.apply(this,arguments)}finally{ATT.pop();
+    for(const f in S.fac){const d=S.fac[f].car-(b[f]==null?S.fac[f].car:b[f]);if(!d)continue;const own=d-(fr[f]||0);
+      if(Math.abs(own)>1e-6){const F=S.fac[f];F.why=F.why||{};F.why[why]=(F.why[why]||0)+own}
+      const up=ATT[ATT.length-1];if(up)up[f]=(up[f]||0)+d}}
+  return r}}
+shiftOpinion=attWrap(shiftOpinion,'batailles proches');
+aiDiplomacy=attWrap(aiDiplomacy,'émissaires romains');
+vPillage=attWrap(vPillage,'vos pillages');
+vForage=attWrap(vForage,'vos fourrageurs');
+declareWar=attWrap(declareWar,'guerres contre leurs voisins');
+dipAction=attWrap(dipAction,'vos ambassades');
+treaty=attWrap(treaty,'vos traités');
+tribAction=attWrap(tribAction,'vos exigences');
+function whyMonthly(){for(const f in S.fac){const W=S.fac[f].why;if(!W)continue;for(const k in W){W[k]*=.7;if(Math.abs(W[k])<.5)delete W[k]}}}
+function whyTxt(f){const W=S.fac[f]&&S.fac[f].why;if(!W)return '';const L=Object.entries(W).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,3);
+  return L.length?'Récemment : '+L.map(([k,v])=>`${k} ${v>0?'+':'−'}${Math.round(Math.abs(v))}`).join(', '):''}
+
+// Grands acteurs : Gaulois cisalpins, Syracuse, Macédoine, Numides
+function bigActors(d){S.ev=S.ev||{};const E=S.ev,c=cal(d);
+  // Boïens et Insubres se soulèvent quand une grande armée punique arrive près d'eux
+  const ins=S.fac.ins;if(ins&&ins.st==='neutre'&&!E.ins&&N.some(n=>ownerN(n.i)==='ins'&&carArmyNear(n.x,n.y,140,6))){E.ins=1;joinAlliance('ins','car');log("Boïens et Insubres se soulèvent contre Rome et rejoignent votre armée !");S.paused=true}
+  // Hiéron II meurt (215) : son petit-fils Hiéronyme peut rompre avec Rome
+  if(!E.hieron&&d>=3*360+120){E.hieron=1;const F=S.fac.syr,p=(S.vict||0)>=2?.75:(S.vict||0)>=1?.5:.2;
+    if(Math.random()<p){log("Hiéron II de Syracuse est mort : son petit-fils Hiéronyme rompt avec Rome et se tourne vers Carthage !");
+      if(F&&F.st==='neutre'){F.st='pacte_car';F.car=Math.max(F.car,55);F.rom=-30;F.pass=1}
+      else for(const id of ['syracusae','leontini'])if(ownerN(NI[id])==='rom')defect(id);
+      S.paused=true;territoryDirty=true}
+    else log("Hiéron II de Syracuse est mort ; Syracuse reste fidèle à Rome.")}
+  // Philippe V de Macédoine propose une alliance après de grandes victoires (traité de 215)
+  const M=S.fac.mac;if(!E.mac&&M&&M.st==='neutre'&&d>=300&&((S.bigWin||0)>=1||(S.vict||0)>=3)){E.mac=1;S.paused=true;
+    modal(`<h2>Ambassade de Philippe V</h2><p>Xénophanès, envoyé du roi de Macédoine, a traversé l'Italie jusqu'à votre camp. Philippe V propose une alliance : il fera la guerre à Rome en Illyrie, et vous promet son appui pour la paix.</p><p class="sub">Accepter : traité d'amitié avec la Macédoine, Rome perd 25 or par mois à défendre l'Illyrie, et les Macédoniens peuvent lui prendre Épidamne, Apollonia ou Oricum. Refuser : la Macédoine reste neutre.</p><div class="row"><button class="go" id="mAcc" type="button">Accepter l'alliance</button><button id="mRef" type="button">Refuser</button></div>`);
+    $('mAcc').onclick=()=>{M.st='pacte_car';M.car=Math.max(M.car,60);M.rom=-60;M.pass=1;S.macWar=1;territoryDirty=true;log("Traité avec Philippe V : la Macédoine entre en guerre contre Rome en Illyrie.");closeModal();renderAll()};
+    $('mRef').onclick=()=>{M.car-=10;log("Vous renvoyez l'ambassade macédonienne.");closeModal()}}
+  if(S.macWar&&c.mo===5&&d%30===0&&Math.random()<.35){const id=['oricum','apollonia','epidamnus'].find(id=>ownerN(NI[id])==='rom'&&!romArmyNear(N[NI[id]].x,N[NI[id]].y,60));
+    if(id){S.own[id]='mac';territoryDirty=true;log(`Philippe V s'empare ${deN(N[NI[id]].n)} en Illyrie.`)}}
+  // Syphax (Masaesyles) courtisé par Rome à partir de 213
+  const Y=S.fac.mae;if(!E.syphax&&d>=5*360&&Y&&Y.st==='neutre'){E.syphax=1;if(Y.car<50){Y.rom=Math.min(100,Y.rom+35);log("Des centurions romains sont chez Syphax, roi des Masaesyles, pour instruire son infanterie.")}}
+  // Massinissa (Massyles) passe à Rome si Carthage perd l'Hispanie
+  const Q=S.fac.num;if(!E.massi&&d>=8*360&&Q&&Q.st==='neutre'){const lost=N.filter(n=>n.o0==='car'&&n.lon<4&&n.lat>36.1&&ownerN(n.i)==='rom').length;
+    if(lost>=5){E.massi=1;Q.rom=Math.min(100,Q.rom+40);Q.car-=30;log("Massinissa, prince des Massyles, a vu tomber l'Hispanie punique : il se rapproche de Rome.")}}
+}
+const _incomeE=income;
+income=function(side){const r=_incomeE.apply(this,arguments);if(side==='rom'&&S.macWar)r.up+=25;return r};
+const _dailyE=attWrap(daily,'traversées de vos armées');
+daily=function(d){const r=_dailyE.apply(this,arguments);try{envDaily();if(d%30===0){whyMonthly();bigActors(d)}else if(d%10===0)bigActors(d)}catch(e){console.error(e)}return r};
+
+/* ---- Points 1 et 2 : VILLES À GÉRER ET ÉCONOMIE ---- */
+const MINES=new Set(['castulo','cnova','oretum','corduba']);
+const BLD={
+  mar:{n:'Marché',max:3,cost:[60,120,200],days:[30,45,60],txt:'revenu de la ville +15 % par niveau'},
+  port:{n:'Port marchand',max:2,need:n=>n.port,cost:[80,160],days:[40,60],txt:'commerce maritime : +2 or par mois et par niveau (rien si le port est bloqué)'},
+  tem:{n:'Temple',max:2,cost:[50,120],days:[30,50],txt:'ordre public +8 par niveau'},
+  cas:{n:'Caserne',max:2,cost:[70,140],days:[30,45],txt:'recrues formées 40 % plus vite par niveau'},
+  mur:{n:'Remparts',max:2,cost:[100,200],days:[45,75],txt:'un siège dure 50 % de plus par niveau'},
+  gre:{n:'Greniers',max:1,cost:[60],days:[30],txt:'ordre +5 ; armées et garnison refont leurs vivres en ville'},
+  min:{n:'Mines d’argent',max:3,need:n=>MINES.has(n.id),cost:[80,150,250],days:[40,60,80],txt:'+8 or par mois et par niveau'}
+};
+const TAX={bas:{n:'Bas',m:.8,o:8},norm:{n:'Normal',m:1,o:0},haut:{n:'Lourds',m:1.3,o:-12}};
+const bl=(id,k)=>(S.bld&&S.bld[id]&&S.bld[id][k])||0;
+function ecoInit(){S.bld=S.bld||{};S.ord=S.ord||{};S.bq=S.bq||{};S.conq=S.conq||{};S.tax=S.tax||'norm';
+  if(!S.eco0){S.eco0=1;const B={carthago:{mar:2,port:2,tem:1,mur:2,gre:1,cas:1},cnova:{mar:1,port:1,mur:1,cas:1,min:1},castulo:{min:1},gades:{mar:1,port:1,tem:1},utica:{mar:1,port:1,mur:1},hadrumetum:{mar:1,port:1},leptis:{mar:1,port:1},saguntum:{mur:1},
+    roma:{mar:3,tem:2,mur:2,gre:1,cas:2},capua:{mar:2,mur:1},tarentum:{mar:2,port:2,mur:2},syracusae:{mar:2,port:2,mur:2},neapolis:{mar:1,port:1},ostia:{port:2},brundisium:{port:1,mur:1},placentia:{mur:1},cremona:{mur:1}};
+    for(const id in B)if(NI[id]!=null)S.bld[id]=Object.assign({},B[id])}
+  for(const n of N)if(!n.col&&ownerN(n.i)==='car'&&S.ord[n.id]==null)S.ord[n.id]=ordTarget(n)}
+// ordre public : cible vers laquelle l'ordre tend de 3 points par mois
+function ordParts(n){const id=n.id,P=[['base',50]];
+  if(bl(id,'tem'))P.push(['temple',8*bl(id,'tem')]);if(bl(id,'gre'))P.push(['greniers',5]);
+  const t=TAX[S.tax||'norm'];if(t.o)P.push(['impôts',t.o]);
+  if(S.armies.some(a=>a.side==='car'&&!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<8))P.push(['troupes en ville',10]);
+  const cq=S.conq&&S.conq[id];if(cq!=null){const m=Math.max(0,25-Math.floor((S.day-cq)/30)*2);if(m)P.push(['conquête récente',-m])}
+  if(n.cul&&!['afr','ibe','bal','num'].includes(n.cul))P.push(['peuple étranger',-10]);
+  if(S.gold.car<=0)P.push(['trésor vide',-10]);
+  if(S.armies.some(a=>a.side==='rom'&&!a.g&&!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<40))P.push(['Romains tout près',-8]);
+  return P}
+const ordTarget=n=>Math.max(0,Math.min(100,ordParts(n).reduce((s,p)=>s+p[1],0)));
+const ordMul=o=>.7+.006*o; // 50 → 1, 100 → 1,3, 20 → 0,82
+const _townIncomeM=townIncome;
+townIncome=function(n){let v=_townIncomeM.apply(this,arguments);if(!S||!S.bld)return v;const id=n.id,o=ownerN(n.i);
+  v*=1+.15*bl(id,'mar');
+  if(bl(id,'port')&&!(S.block&&S.block[id]))v+=2*bl(id,'port');
+  v+=8*bl(id,'min');
+  if(o==='car'){v*=TAX[S.tax||'norm'].m*ordMul(S.ord[id]==null?60:S.ord[id]);
+    if(S.armies.some(a=>a.side==='rom'&&!a.g&&!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<30))v*=.7}
+  return Math.max(0,Math.round(v))};
+function revolt(n){const id=n.id,o0=o0s(n),back=o0&&o0!=='car'&&!(FAC[o0].a&&S.fac[o0]&&S.fac[o0].st==='soumis')?o0:null;
+  delete S.ord[id];delete S.bq[id];delete S.q[id];
+  for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===n.i){a.dead=true}S.armies=S.armies.filter(a=>!a.dead);
+  if(back){S.own[id]=back;const t=back==='rom'?['legion','velites']:['iber','iber'];
+    S.armies.push({id:S.uid++,side:back,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:t.map(t=>({t,men:UT[t].men})),scout:0,cool:0,g:true});
+    if(back!=='rom'&&S.fac[back]){S.fac[back].car=Math.min(S.fac[back].car,-20)}}
+  else S.own[id]=null;
+  territoryDirty=true;log(`Révolte à ${n.n} ! La ville chasse vos officiers${back?' et revient '+(back==='rom'?'à Rome':'aux '+FAC[back].n):''}.`);S.paused=true}
+function ecoMonthly(){ecoInit();
+  for(const n of N){if(n.col||ownerN(n.i)!=='car')continue;const id=n.id,t=ordTarget(n),o=S.ord[id]==null?t:S.ord[id];
+    S.ord[id]=o+Math.max(-3,Math.min(3,t-o));
+    if(S.ord[id]<30&&!S.armies.some(a=>a.side==='car'&&!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<8)){if(Math.random()<(30-S.ord[id])/40&&n.size>=1)log(`Troubles à ${n.n} : l'ordre public s'effondre.`);if(S.ord[id]<12&&Math.random()<.5)revolt(n)}}
+  // Rome entretient aussi ses villes
+  if(S.gold.rom>260&&Math.random()<.4){const T=N.filter(n=>!n.col&&ownerN(n.i)==='rom'&&n.size>=1);const n=T[Math.floor(Math.random()*T.length)];if(n){const k=Math.random()<.5?'mar':'mur',b=S.bld[n.id]=S.bld[n.id]||{};if((b[k]||0)<BLD[k].max){S.gold.rom-=BLD[k].cost[b[k]||0];b[k]=(b[k]||0)+1}}}
+}
+function ecoDaily(){ecoInit();
+  for(const id in S.bq){const q=S.bq[id];if(ownerN(NI[id])!=='car'){delete S.bq[id];continue}if(--q.d<=0){const b=S.bld[id]=S.bld[id]||{};b[q.k]=(b[q.k]||0)+1;delete S.bq[id];log(`${BLD[q.k].n} ${b[q.k]>1?'(niveau '+b[q.k]+') ':''}achevé à ${N[NI[id]].n}.`)}}
+  for(const id in S.q){const q=S.q[id],c=bl(id,'cas');if(c&&q.d>1){q._c=(q._c||0)+.4*c;if(q._c>=1){q.d--;q._c--}}}
+  for(const id in S.siege){const sg=S.siege[id],m=bl(id,'mur');if(m&&!sg._mur){sg._mur=1;sg.need=Math.round(sg.need*(1+.5*m))}}
+  for(const id in S.bld){if(!bl(id,'gre')||ownerN(NI[id])!=='car')continue;const n=N[NI[id]];for(const a of S.armies)if(a.side==='car'&&!a.dead&&a.at===n.i&&!a.legs.length&&a.food!=null){const mx=typeof armyFoodMax==='function'?armyFoodMax(a):20;a.food=Math.min(mx,a.food+a.units.length)}}
+}
+function build(id,k){ecoInit();const n=N[NI[id]],B=BLD[k],l=bl(id,k);if(ownerN(n.i)!=='car'||S.bq[id]||l>=B.max||(B.need&&!B.need(n)))return;const c=B.cost[l];if(S.gold.car<c)return;
+  S.gold.car-=c;S.bq[id]={k,d:B.days[l]};log(`Travaux à ${n.n} : ${B.n.toLowerCase()}${l?' (niveau '+(l+1)+')':''}, ${B.days[l]} jours.`);renderAll()}
+const _captureE=capture;
+capture=function(i,side){const r=_captureE.apply(this,arguments);try{ecoInit();const id=N[i].id;if(side==='car'){S.conq[id]=S.day;S.ord[id]=35}else{delete S.ord[id];delete S.bq[id]}}catch(e){}return r};
+const _defectE=defect;defect=function(id){_defectE(id);ecoInit();S.conq[id]=S.day;S.ord[id]=55};
+// panneau de la ville
+function ecoBlock(i){ecoInit();const n=N[i],id=n.id;if(ownerN(i)!=='car'||n.col)return '';const o=Math.round(S.ord[id]==null?ordTarget(n):S.ord[id]),P=ordParts(n);
+  let h=`<h3>Gouvernement de la ville</h3><div class="att"><span>Ordre</span><span class="g"><i style="background:${o<30?'var(--bad)':o<50?'var(--gold)':'var(--good)'};left:0;width:${o}%"></i></span><span>${o}</span></div>`;
+  h+=`<p class="sub">Vers ${Math.round(ordTarget(n))} : ${P.filter(p=>p[0]!=='base').map(p=>`${p[0]} ${p[1]>0?'+':'−'}${Math.abs(p[1])}`).join(', ')||'rien à signaler'}. Revenu ${townIncome(n)} or par mois${o<30?' ; sous 12, la ville peut se révolter':''}.</p>`;
+  const q=S.bq[id];if(q)h+=`<p>Travaux : ${BLD[q.k].n.toLowerCase()}, encore ${Math.ceil(q.d)} jours.</p>`;
+  h+=Object.keys(BLD).filter(k=>!BLD[k].need||BLD[k].need(n)).map(k=>{const B=BLD[k],l=bl(id,k),full=l>=B.max;
+    return `<div class="rec"><span>${B.n} ${l?`<b style="color:var(--gold)">${'●'.repeat(l)}</b>`:''}<span class="sub">${'○'.repeat(B.max-l)} · ${B.txt}</span></span>${full?'<span class="sub">complet</span>':`<button data-bld="${k}" data-id="${id}" type="button" ${q||S.gold.car<B.cost[l]?'disabled':''} title="${B.days[l]} jours">${B.cost[l]}</button>`}</div>`}).join('');
+  return h}
+const _townBlockE=townBlock;
+townBlock=function(i,main){let h=_townBlockE.apply(this,arguments);const n=N[i];if(!n.col)h=h.replace(`Revenu ${n.inc} par mois.`,`Revenu ${townIncome(n)} par mois.`);if(main)try{h+=ecoBlock(i)}catch(e){console.error(e)}return h};
+const _bindTownE=bindTown;
+bindTown=function(){const r=_bindTownE.apply(this,arguments);document.querySelectorAll('[data-bld]').forEach(b=>b.onclick=()=>build(b.dataset.id,b.dataset.bld));return r};
+// fenêtre Économie
+function openEco(){ecoInit();const T=N.filter(n=>!n.col&&ownerN(n.i)==='car').sort((a,b)=>townIncome(b)-townIncome(a));
+  const I=income('car');let towns=0,mines=0,trade=0;for(const n of T){towns+=townIncome(n);mines+=8*bl(n.id,'min');if(!(S.block&&S.block[n.id]))trade+=2*bl(n.id,'port')}
+  const rows=T.map(n=>{const o=Math.round(S.ord[n.id]==null?ordTarget(n):S.ord[n.id]),q=S.bq[n.id];
+    return `<tr><td><b>${n.n}</b><br><span class="sub">${regOf(n)||''}</span></td><td><div class="att" style="grid-template-columns:minmax(60px,1fr) 30px"><span class="g"><i style="background:${o<30?'var(--bad)':o<50?'var(--gold)':'var(--good)'};left:0;width:${o}%"></i></span><span>${o}</span></div></td><td>${townIncome(n)}</td><td class="sub">${Object.keys(BLD).filter(k=>bl(n.id,k)).map(k=>BLD[k].n+(bl(n.id,k)>1?' '+bl(n.id,k):'')).join(', ')||'—'}${q?`<br>travaux : ${BLD[q.k].n.toLowerCase()} (${Math.ceil(q.d)} j)`:''}</td><td><button data-goto="${n.i}" type="button">Voir</button></td></tr>`}).join('');
+  modal(`<h2>Économie et villes</h2>
+    <p>Revenu mensuel <b>${Math.round(I.inc)}</b> : villes ${Math.round(towns)} (dont mines ${mines} et commerce maritime ${trade}), tributs ${I.trib||0}. Dépenses <b>${Math.round(I.up)}</b> (armées, flottes, dépôts). Solde <b>${Math.round(I.inc-I.up)}</b> par mois.</p>
+    <p>Impôts : ${Object.keys(TAX).map(k=>`<button data-tax="${k}" type="button" class="${S.tax===k?'on':''}">${TAX[k].n}</button>`).join(' ')} <span class="sub">${S.tax==='bas'?'revenu −20 %, ordre +8':S.tax==='haut'?'revenu +30 %, ordre −12':'revenu et ordre normaux'}</span></p>
+    <p class="sub">L'ordre public multiplie le revenu (×0,82 à 20, ×1 à 50, ×1,3 à 100). Une ville récemment conquise, d'un peuple étranger, ou menacée par une armée romaine est plus difficile à tenir ; un temple, des greniers ou des troupes en ville la calment. Sous 12, elle peut se révolter. Une armée romaine à moins de 30 km coupe son commerce (revenu −30 %). Construisez dans le panneau de chaque ville.</p>
+    <table class="dip"><tr><th>Ville</th><th>Ordre</th><th>Or</th><th>Bâtiments</th><th></th></tr>${rows}</table>
+    <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');
+  document.querySelectorAll('[data-tax]').forEach(b=>b.onclick=()=>{S.tax=b.dataset.tax;renderAll();openEco()});
+  document.querySelectorAll('[data-goto]').forEach(b=>b.onclick=()=>{const n=N[+b.dataset.goto];closeModal();sel={n:n.i};centerOn(n.x,n.y,Math.max(view.s,3));renderAll()});
+  $('mClose').onclick=closeModal}
+{const b=document.createElement('button');b.id='bEco';b.type='button';b.textContent='Économie';b.title='Villes, bâtiments, impôts et revenus';b.onclick=()=>openEco();$('bDip').before(b)}
+const _dailyF=daily;
+daily=function(d){const r=_dailyF.apply(this,arguments);try{ecoDaily();if(d%30===0)ecoMonthly()}catch(e){console.error(e)}return r};
+const _afterLoadF=afterLoad;afterLoad=function(){const r=_afterLoadF.apply(this,arguments);try{ecoInit()}catch(e){console.error(e)}return r};
+
+/* ---- Point 3 : POLITIQUE : Sénat de Carthage, consuls de Rome ---- */
+const CONSULS={218:[['P. Cornelius Scipio','p'],['Ti. Sempronius Longus','a']],217:[['C. Flaminius','a'],['Cn. Servilius Geminus','p']],216:[['C. Terentius Varro','a'],['L. Aemilius Paullus','p']],
+  215:[['Ti. Sempronius Gracchus','p'],['Q. Fabius Maximus','t']],214:[['Q. Fabius Maximus','t'],['M. Claudius Marcellus','a']],213:[['Q. Fabius Maximus le jeune','p'],['Ti. Sempronius Gracchus','p']],
+  212:[['Ap. Claudius Pulcher','p'],['Q. Fulvius Flaccus','a']],211:[['Cn. Fulvius Centumalus','p'],['P. Sulpicius Galba','p']],210:[['M. Claudius Marcellus','a'],['M. Valerius Laevinus','p']],
+  209:[['Q. Fabius Maximus','t'],['Q. Fulvius Flaccus','a']],208:[['M. Claudius Marcellus','a'],['T. Quinctius Crispinus','p']],207:[['C. Claudius Nero','a'],['M. Livius Salinator','p']],
+  206:[['L. Veturius Philo','p'],['Q. Caecilius Metellus','p']],205:[['P. Cornelius Scipio (l’Africain)','a'],['P. Licinius Crassus','p']]};
+const TRAIT={a:'offensif',p:'prudent',t:'temporisateur'};
+const MODE={agressif:"cherche la bataille, même à forces presque égales",prudent:"n'attaque que s'il est nettement plus fort",temporise:"refuse la bataille, suit vos armées à distance et les affame"};
+function polInit(){if(S.pol)return;S.pol={bar:60,cd:0,low:0};romElect(true)}
+function romElect(first){const y=cal(Math.floor(S.day)).year;let C=CONSULS[y];
+  if(!C){const P=['L. Cornelius Lentulus','P. Aelius Paetus','Cn. Cornelius Lentulus','M. Porcius Cato','T. Quinctius Flamininus','Sex. Aelius Paetus'];const r=k=>P[(y*7+k*3)%P.length];C=[[r(0),Math.random()<.5?'a':'p'],[r(1),'p']]}
+  S.pol.cons=C;const t=C.map(c=>c[1]);
+  S.pol.mode=S.pol.dict&&S.pol.dict>S.day?'temporise':t.includes('t')?'temporise':t.includes('a')&&!(S.pol.lastDis&&S.day-S.pol.lastDis<200)?'agressif':'prudent';
+  if(!first)log(`Rome élit ses consuls pour ${y} : ${C.map(c=>c[0]).join(' et ')}. Conduite de la guerre : ${S.pol.mode==='agressif'?'offensive':S.pol.mode==='temporise'?'temporisation':'prudence'}.`)}
+function senAdj(v){polInit();S.pol.bar=Math.max(0,Math.min(100,S.pol.bar+v))}
+const SUBS=b=>b>=70?40:b>=55?25:b>=40?10:0;
+function polMonthly(d){polInit();const P=S.pol;if(P.cd>0)P.cd--;
+  const AFR=new Set(['Zeugitane','Byzacène','Emporia','Numidie massyle']);if(!REGN)regionsBuild();if(S.armies.some(a=>a.side==='rom'&&!a.g&&!a.dead&&!a.ship&&AFR.has((townAt(a.x,a.y)||{}).reg)&&landFast(a.x,a.y))){senAdj(-4);log("Une armée romaine menace l'Afrique : le parti d'Hannon gagne des voix au Sénat.")}
+  if(S.gold.car<=0)senAdj(-3);
+  P.bar+=P.bar<50?.5:P.bar>50?-.5:0;
+  const sub=SUBS(P.bar);if(sub){S.gold.car+=sub}
+  if(P.bar<20){P.low++;if(P.low===1)log("Le Sénat de Carthage, dominé par Hannon, refuse de financer la guerre.");if(P.bar<20)S.gold.car=Math.max(0,S.gold.car-15)}else P.low=0;
+  if(P.dict&&P.dict<=S.day&&P.mode==='temporise'){P.dict=0;romElectMode();log("La dictature de Fabius s'achève : Rome s'impatiente de sa « temporisation ».")}
+  const c=cal(d);if(c.mo===2&&d>0)romElect(false)}
+function romElectMode(){const t=S.pol.cons.map(c=>c[1]);S.pol.mode=t.includes('t')?'temporise':t.includes('a')?'agressif':'prudent'}
+function senAction(k){polInit();const P=S.pol;
+  if(k==='loot'){if(S.gold.car<100)return;S.gold.car-=100;senAdj(8);log("Vous envoyez du butin à Carthage : les Barcides en sortent renforcés au Sénat (+8).")}
+  if(k==='reinf'){if(P.cd>0||P.bar<45)return;P.cd=4;const ok=Math.random()<(P.bar>=60?.9:.55);
+    if(ok){senAdj(-8);const n=N[NI.carthago],U=(t,k)=>Array.from({length:k},()=>({t,men:UT[t].men}));S.armies.push({id:S.uid++,side:'car',name:'Renforts du Sénat',x:n.x,y:n.y,at:n.i,legs:[],units:[...U('lib',2),...U('ncav',2),...U('eleph',1)],scout:0,cool:0,mor:65,food:20});log("Le Sénat vote des renforts : 5 régiments vous attendent à Carthage (influence −8).")}
+    else{senAdj(-3);log("Le Sénat refuse vos renforts : Hannon rappelle que l'Hispanie aussi en a besoin.")}}
+  renderAll();openPol()}
+// effets des batailles et des prises de villes
+const _applyResultP=applyResult;
+applyResult=function(b,res){const sides={};for(const id of [...b.att,...b.def]){const a=S.armies.find(x=>x.id===id);if(a)sides[id]=a.side}
+  const v0=S.vict||0,bw0=S.bigWin||0;const r=_applyResultP.apply(this,arguments);
+  try{polInit();const aS=sides[b.att[0]],dS=sides[b.def[0]];if(aS!=='car'&&dS!=='car')return r;const wS=res.attWin?aS:dS;
+    if(wS==='car'){senAdj((S.bigWin||0)>bw0?12:5);if(!S.mirror&&(S.bigWin||0)>bw0&&(aS==='rom'||dS==='rom')){const P=S.pol;P.lastDis=S.day;
+        if(!P.dict||S.day-P.dict>360){P.dict=S.day+180;P.mode='temporise';log("Après le désastre, Rome nomme Q. Fabius Maximus dictateur : il refusera la bataille et vous harcèlera.")}
+        const rm=N[NI.roma],U=(t,k)=>Array.from({length:k},()=>({t,men:UT[t].men}));S.gold.rom+=150;S.armies.push({id:S.uid++,side:'rom',name:'Légions de levée',x:rm.x,y:rm.y,at:rm.i,legs:[],units:[...U('legion',4),...U('velites',2)],scout:0,cool:0});
+        log("Rome lève de nouvelles légions, jusqu'aux esclaves et aux prisonniers.")}}
+    else if(aS==='rom'||dS==='rom')senAdj(-6)}catch(e){console.error(e)}
+  return r};
+const _captureP=capture;
+capture=function(i,side){const prev=ownerN(i);const r=_captureP.apply(this,arguments);try{const n=N[i];if(side==='car'&&prev!=='car')senAdj(n.size>=2?5:2);else if(prev==='car'&&side!=='car')senAdj(n.size>=2?-10:-4)}catch(e){}return r};
+// conduite de la guerre par Rome
+const _aiTurnP=aiTurn;
+aiTurn=function(){const r=_aiTurnP.apply(this,arguments);try{polInit();const mode=S.pol.mode,foes=romKnown();
+  for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship||a.cool>0||a.ai==='defend'||a.units.length<4)continue;const my=strength(a);
+    if(mode==='agressif'&&!a.legs.length){let best=null,bd=220;for(const f of foes){const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<bd&&strength(f)<=my*1.15){bd=d;best=f}}if(best)order(a,best.x,best.y,null)}
+    if(mode==='temporise'){for(const f of foes){const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<60&&strength(f)>my*.5){const k=Math.min(1,40/Math.max(1,d));const tx=f.x+(a.x-f.x)*Math.max(1,40/Math.max(1,d)),ty=f.y+(a.y-f.y)*Math.max(1,40/Math.max(1,d));
+        if(d<35){a.legs=[];order(a,tx,ty,null)}else if(a.legs.length){const L=a.legs[a.legs.length-1];if(Math.hypot(L.x-f.x,L.y-f.y)<12)a.legs=[]}break}}}}
+  }catch(e){console.error(e)}return r};
+// fenêtre Politique
+function openPol(){polInit();const P=S.pol,b=Math.round(P.bar),c=cal(Math.floor(S.day));
+  modal(`<h2>Politique</h2>
+   <h3 style="margin:10px 0 4px">Le Sénat de Carthage</h3>
+   <p class="sub">Les Barcides veulent la guerre ; le parti d'Hannon veut la paix et l'Afrique. Vos victoires et vos conquêtes renforcent les Barcides ; vos défaites, les villes perdues, une armée romaine en Afrique ou un trésor vide renforcent Hannon. Sous 20, le Sénat ne finance plus la guerre ; à 0, il demande la paix à Rome.</p>
+   <div class="att" style="grid-template-columns:90px 1fr 90px"><span>Hannon</span><span class="g"><i style="background:var(--punic);left:0;width:${b}%"></i></span><span style="text-align:right">Barcides ${b}</span></div>
+   <p>Subsides du Sénat : <b>${SUBS(P.bar)}</b> or par mois.${P.bar<20?' <b style="color:var(--bad)">Le Sénat retient 15 or par mois.</b>':''}</p>
+   <div class="row"><button id="pLoot" type="button" ${S.gold.car<100?'disabled':''} title="Influence des Barcides +8">Envoyer du butin (100)</button><button id="pReinf" type="button" ${P.cd>0||P.bar<45?'disabled':''} title="Influence 45 au moins ; 5 régiments à Carthage ; influence −8">Demander des renforts${P.cd>0?' (dans '+P.cd+' mois)':''}</button></div>
+   <h3 style="margin:16px 0 4px">Rome, ${c.year} av. J.-C.</h3>
+   <p>Consuls : ${P.cons.map(x=>`<b>${x[0]}</b> <span class="sub">(${TRAIT[x[1]]})</span>`).join(' et ')}.${P.dict&&P.dict>S.day?' <b>Dictateur : Q. Fabius Maximus</b>.':''}</p>
+   <p class="sub">Conduite de la guerre : <b>${P.mode==='agressif'?'offensive':P.mode==='temporise'?'temporisation':'prudence'}</b> : Rome ${MODE[P.mode]}. Nouveaux consuls chaque printemps ; après un désastre, Rome nomme un dictateur et lève de nouvelles légions.</p>
+   <h3 style="margin:16px 0 4px">Score de guerre : ${warScore().v}</h3>
+   <p class="sub">${warScore().P.filter(p=>p[1]).map(p=>`${p[0]} ${p[1]>0?'+':'−'}${Math.abs(p[1])}`).join(', ')||'Rien encore.'}</p>
+   <p class="sub">Comment gagner : prendre Rome ; ou détacher de Rome 60 % de ses alliés italiens, dont Capoue et Tarente ; ou atteindre 60 au score de guerre, et Rome demandera la paix ; ou finir au printemps 201 avec un score positif. On perd si Carthage tombe, si le Sénat tombe à 0, ou au printemps 201 avec un score négatif ou nul.</p>
+   <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('pLoot').onclick=()=>senAction('loot');$('pReinf').onclick=()=>senAction('reinf');$('mClose').onclick=closeModal}
+{const b=document.createElement('button');b.id='bPol';b.type='button';b.textContent='Politique';b.title='Sénat de Carthage, consuls de Rome';b.onclick=()=>openPol();$('bDip').after(b)}
+const _dailyP=daily;
+daily=function(d){const r=_dailyP.apply(this,arguments);try{if(d%30===0)polMonthly(d)}catch(e){console.error(e)}return r};
+const _afterLoadP=afterLoad;afterLoad=function(){const r=_afterLoadP.apply(this,arguments);try{polInit()}catch(e){}return r};
+
+/* ---- Point 5 : ÉVÉNEMENTS ---- */
+// fenêtre d'événement (ou simple journal si une autre fenêtre est ouverte)
+function evCard(title,txt,pause){log(`${title} : ${txt}`);if(pause)S.paused=true;if(!$('modal').hidden||S.cur||S.over)return;
+  modal(`<h2>${title}</h2><p>${txt}</p><div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Continuer</button></div>`);$('mClose').onclick=closeModal}
+const pick=L=>L[Math.floor(Math.random()*L.length)];
+function regMod(n){const M=S.rmod&&S.rmod[n.reg];return M&&M.until>S.day?M.m:1}
+const _townIncomeV=townIncome;townIncome=function(n){const v=_townIncomeV.apply(this,arguments);if(!S||!S.rmod)return v;if(!REGN)regionsBuild();return Math.round(v*regMod(n))};
+const EVENTS=[
+  {w:3,ok:()=>true,f:()=>{const T=N.filter(n=>!n.col&&n.size>=2&&['car','rom'].includes(ownerN(n.i)));const n=pick(T);if(!n)return;const mine=ownerN(n.i)==='car';
+    for(const a of S.armies)if(!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<8)a.units.forEach(u=>u.men*=.85);if(mine&&S.ord){S.ord[n.id]=Math.max(0,(S.ord[n.id]||50)-15)}
+    evCard('Épidémie',`La peste frappe ${n.n}. Les troupes qui y sont perdent 15 % de leurs hommes${mine?", et l'ordre public chute":''}.`,mine)}},
+  {w:3,ok:()=>true,f:()=>{if(!REGN)regionsBuild();const R=pick(REGN.filter(r=>r.towns.length));S.rmod=S.rmod||{};const good=Math.random()<.45;S.rmod[R.n]={m:good?1.25:.7,until:S.day+90};
+    const mine=R.towns.some(i=>ownerN(i)==='car');evCard(good?'Récolte abondante':'Mauvaise récolte',`${good?'Les greniers débordent':'La sécheresse a brûlé les blés'} en ${R.n} : revenus des villes ${good?'+25':'−30'} % pendant trois mois.`,false&&mine)}},
+  {w:2,ok:()=>true,f:()=>{const g=40+Math.round(Math.random()*60);S.gold.car+=g;evCard('Marchands de Tyr',`Des navires de la ville mère apportent de l'argent et des présents : +${g} or.`)}},
+  {w:1,ok:()=>ownerN(NI.castulo)==='car',f:()=>{S.gold.car+=90;evCard("Nouveau filon d'argent","Les mineurs de Castulo ont trouvé un filon : +90 or.")}},
+  {w:2,ok:()=>true,f:()=>{const n=pick(['carthago','utica','hadrumetum','cnova','gades'].filter(id=>ownerN(NI[id])==='car'));if(!n)return;const g=Math.min(S.gold.car,40+Math.round(Math.random()*40));S.gold.car-=g;evCard('Incendie',`Un incendie ravage les entrepôts ${deN(N[NI[n]].n)} : −${g} or.`)}},
+  {w:2,ok:()=>true,f:()=>{for(const a of S.armies)if(a.side==='rom'&&a.mor!=null)a.mor=Math.max(0,a.mor-8);evCard('Prodiges à Rome',"On a vu pleuvoir des pierres et un bœuf a parlé au forum : les légions doutent (moral −8). Le Sénat consulte les livres sibyllins.")}},
+  {w:2,ok:()=>true,f:()=>{for(const a of S.armies)if(a.side==='car'&&a.mor!=null)a.mor=Math.min(100,a.mor+6);evCard('Présages favorables',"Les devins ont lu des entrailles parfaites ; Hannibal a rêvé d'un guide envoyé par les dieux. Vos armées reprennent courage (moral +6).")}},
+  {w:2,ok:()=>S.gold.car<=20,f:()=>{const a=pick(S.armies.filter(a=>a.side==='car'&&!a.g&&a.units.some(u=>['iber','gaul','sling','hcav'].includes(u.t))));if(!a)return;const L=a.units.filter(u=>['iber','gaul','sling','hcav'].includes(u.t));const u=pick(L);a.units.splice(a.units.indexOf(u),1);cleanArmy(a);evCard('Mercenaires impayés',`Faute de solde, un régiment de ${esc(uName(u)).toLowerCase()} quitte ${armyLabel(a)}.`,true)}},
+  {w:1,ok:()=>true,f:()=>{senAdj(-5);evCard('Hannon le Grand au Sénat',"« Hannibal demande des soldats ? Il a donc perdu. Il demande de l'or ? Il a donc tout pillé. » Le parti de la paix gagne des voix (−5).")}},
+  {w:1,ok:()=>(S.vict||0)>=2,f:()=>{senAdj(6);evCard('Anneaux d’or',"Magon vide sur le sol du Sénat les anneaux d'or des chevaliers romains tués : les Barcides triomphent (+6).")}}
+];
+function eventsMonthly(d){S.ev=S.ev||{};
+  // événements historiques datés
+  const c=cal(d);
+  if(!S.ev.tras&&c.year===217&&c.mo===5){S.ev.tras=1;evCard('Tremblement de terre',"Un séisme secoue l'Italie : des villes s'effondrent, des fleuves changent de cours. Les combattants, dit-on, ne l'ont même pas senti.")}
+  const rm=N[NI.roma];if(!S.ev.portas&&ownerN(rm.i)==='rom'&&carArmyNear(rm.x,rm.y,60,6)){S.ev.portas=d;
+    for(const a of S.armies)if(a.side==='rom'&&!a.g&&!a.dead&&!a.ship&&Math.hypot(a.x-rm.x,a.y-rm.y)<450){order(a,0,0,rm.i);a.ai='defend'}
+    for(const g in SOCII)socAdj(g,-5);evCard('Hannibal ad portas !',"Votre armée est sous les murs de Rome. Les matrones balaient les temples de leurs cheveux ; Rome rappelle ses légions de toute l'Italie. Les alliés hésitent (fidélité −5).",true)}
+  if(Math.random()<.14){const E=EVENTS.filter(e=>e.ok());let t=E.reduce((s,e)=>s+e.w,0),r=Math.random()*t;for(const e of E){r-=e.w;if(r<=0){try{e.f()}catch(x){console.error(x)}break}}}
+}
+
+/* ---- Point 6 : CONDITIONS DE VICTOIRE, SCORE DE GUERRE, PAIX ---- */
+const END_DAY=17*360; // printemps 201
+function warScore(){polInit();if(S.t0==null)S.t0=47;
+  const held=N.filter(n=>!n.col&&ownerN(n.i)==='car').length,soc=Object.keys(SOCII).reduce((s,g)=>s+socTowns(g).filter(id=>ownerN(NI[id])==='car').length,0);
+  const P=[['victoires',6*(S.vict||0)],['défaites',-6*(S.defeats||0)],['grandes victoires',8*(S.bigWin||0)],['villes gagnées ou perdues',2*(held-S.t0)],['alliés italiens ralliés',4*soc],['Sénat',Math.round((S.pol.bar-50)/5)]];
+  return {v:Math.max(-100,Math.min(100,P.reduce((s,p)=>s+p[1],0))),P,soc}}
+function finish(kind,title,txt){S.over=kind;S.overMsg={title,txt};endGame()}
+const _endGameV=endGame;
+endGame=function(){if(!S.overMsg)return _endGameV.apply(this,arguments);S.paused=true;save();const M=S.overMsg;
+  modal(`<h2>${M.title}</h2><p>${M.txt}</p><p class="sub">Score de guerre final : ${warScore().v}.</p><div class="row"><button class="go" id="mNew" type="button">Nouvelle campagne</button><button id="mClose" type="button">Regarder la carte</button></div>`);
+  $('mNew').onclick=()=>{newGame();afterLoad();closeModal()};$('mClose').onclick=closeModal};
+function victoryCheck(d){if(S.over)return;const W=warScore();
+  // l'Italie se détache de Rome
+  const soc=Object.keys(SOCII).flatMap(g=>socTowns(g).filter(id=>!COL_IDS.has(id))),own=soc.filter(id=>ownerN(NI[id])==='car').length;
+  if(own>=Math.ceil(soc.length*.6)&&ownerN(NI.capua)==='car'&&ownerN(NI.tarentum)==='car'){finish('win','La confédération romaine se brise',"Capoue, Tarente et la plupart des alliés italiens ont rejoint Carthage. Rome, réduite au Latium, demande la paix : la Sicile, la Sardaigne et l'Hispanie reviennent à Carthage.");return}
+  if(S.pol.bar<=0){finish('lose','La paix d’Hannon',"Le Sénat de Carthage, las de la guerre, a rappelé ses généraux et demandé la paix à Rome. Hannibal rentre en Afrique, invaincu mais trahi.");return}
+  if(d>=END_DAY){if(W.v>0)finish('win','Paix de compromis',`Après dix-sept ans de guerre, Rome épuisée accepte de traiter. Score de guerre ${W.v} : Carthage garde l'Hispanie et ses îles.`);else finish('lose','Paix de Zama',`Après dix-sept ans de guerre, Carthage doit accepter la paix romaine : flotte livrée, tribut, plus de guerre sans l'accord de Rome. Score de guerre ${W.v}.`);return}
+  // Rome propose la paix quand elle perd trop ; Carthage peut la demander
+  if(W.v>=60&&!S.ev.romPeace){S.ev.romPeace=d;S.paused=true;modal(`<h2>Rome demande la paix</h2><p>Après tant de désastres, le Sénat romain envoie dix ambassadeurs : Rome renonce à l'Hispanie, à la Sardaigne et à la Sicile occidentale et paiera tribut.</p><p class="sub">Score de guerre ${W.v}. Accepter met fin à la campagne par une victoire.</p><div class="row"><button class="go" id="pAcc" type="button">Accepter la paix</button><button id="pRef" type="button">Continuer la guerre jusqu'à Rome</button></div>`);
+    $('pAcc').onclick=()=>{closeModal();finish('win','Paix victorieuse',"Rome a cédé : Carthage retrouve la Sicile, la Sardaigne et l'Hispanie, et domine la Méditerranée occidentale.")};$('pRef').onclick=()=>{closeModal();log("Vous refusez la paix : il faut détruire Rome.")}}
+  if(W.v<=-60&&!S.ev.carPeace){S.ev.carPeace=d;S.paused=true;modal(`<h2>Rome dicte ses conditions</h2><p>Le Sénat de Carthage vous fait savoir que Rome accepterait la paix : abandon de l'Hispanie, flotte réduite à dix trières, lourd tribut.</p><p class="sub">Score de guerre ${W.v}. Accepter met fin à la campagne par une défaite.</p><div class="row"><button id="pAcc" type="button">Accepter</button><button class="go" id="pRef" type="button">Refuser et se battre</button></div>`);
+    $('pAcc').onclick=()=>{closeModal();finish('lose','Paix humiliante',"Carthage a accepté les conditions de Rome. Hannibal s'exile.")};$('pRef').onclick=()=>{closeModal();senAdj(-5);log("Vous refusez les conditions de Rome ; Hannon s'indigne au Sénat (−5).")}}
+}
+
+/* ---- Point 7 : IA ROMAINE ---- */
+function aiRome(d){
+  // 218 : les Scipions débarquent en Hispanie (Cnaeus à Emporion)
+  if(!S.ev.scip&&d>=150&&S.gold.rom>=150){S.ev.scip=1;const n=N[NI.emporion]||N[NI.tarraco],U=(t,k)=>Array.from({length:k},()=>({t,men:UT[t].men}));S.gold.rom-=120;
+    S.armies.push({id:S.uid++,side:'rom',name:'Cn. Cornelius Scipio',x:n.x,y:n.y,at:n.i,legs:[],units:[...U('legion',3),...U('velites',2),...U('rcav',1)],scout:0,cool:0});
+    if(visAt(n.x,n.y)>=1||true)log("Une armée romaine débarque à Emporion sous Cn. Cornelius Scipio : la guerre gagne l'Hispanie.")}
+  // reconquête des villes passées à Carthage
+  for(const n of N){if(n.col||ownerN(n.i)!=='car'||n.o0!=='rom')continue;if(S.siege[n.id])continue;
+    const def=S.armies.filter(a=>a.side==='car'&&!a.dead&&Math.hypot(a.x-n.x,a.y-n.y)<10).reduce((s,a)=>s+strength(a),0);
+    const c=S.armies.filter(a=>a.side==='rom'&&!a.g&&!a.dead&&!a.ship&&!a.legs.length&&a.ai!=='defend'&&a.units.length>=5&&strength(a)>def*1.3).sort((p,q)=>Math.hypot(p.x-n.x,p.y-n.y)-Math.hypot(q.x-n.x,q.y-n.y))[0];
+    if(c&&Math.hypot(c.x-n.x,c.y-n.y)<400){order(c,0,0,n.i);break}}
+  // Rome lève plus de troupes quand l'ennemi est en Italie
+  if(d%30===0&&S.armies.some(a=>a.side==='car'&&!a.g&&inItaly(a.x,a.y)))S.gold.rom+=30;
+}
+const _dailyV=daily;
+daily=function(d){const r=_dailyV.apply(this,arguments);try{S.ev=S.ev||{};if(d%10===0)aiRome(d);if(d%30===0){eventsMonthly(d);victoryCheck(d)}}catch(e){console.error(e)}return r};
+
+/* ---- Point 4 : ESPIONS ET AGENTS ---- */
+// Un agent est recruté dans une ville punique (bourg ou plus), voyage sur la carte (50 km/j) et accomplit une mission à l'arrivée.
+const AG_KMD=50,AG_MAX=4,AG_COST=60;
+const MISS={
+  vue:{n:'Espionner',t:'ville',c:0,txt:"s'installe sur place et vous montre les environs (30 km) tant qu'il y reste",p:()=>1},
+  corr:{n:'Corrompre la garnison',t:'ville',c:n=>120+80*n.size,txt:"la ville vous ouvre ses portes (pas une capitale ni une colonie latine)",p:(ag,n)=>.25+.1*ag.lv-.08*n.size+(S.soc&&grpOf(n.id)?Math.max(0,(40-S.soc[grpOf(n.id)].fid)/100):0)},
+  sab:{n:'Saboter',t:'ville',c:40,txt:"incendie des greniers et des chantiers : revenu −50 % pendant 60 jours, recrues perdues, remparts abîmés",p:ag=>.5+.1*ag.lv},
+  rev:{n:'Attiser la révolte',t:'ville',c:60,txt:"chez un allié italien de Rome : sa fidélité baisse de 12",p:ag=>.55+.1*ag.lv},
+  ass:{n:'Assassiner le général',t:'armée',c:100,txt:"le général de l'armée romaine la plus proche meurt ; l'armée perd 20 de moral",p:ag=>.2+.08*ag.lv},
+  disc:{n:'Semer la discorde à Rome',t:'rome',c:80,txt:"rumeurs au forum : les consuls se disputent (Rome devient prudente), alliés −4, Rome −80 or",p:ag=>.45+.1*ag.lv},
+  garde:{n:'Contre-espionnage',t:'sienne',c:0,txt:"reste dans une de vos villes et déjoue les agents romains à 150 km",p:()=>1}
+};
+const mnL=m=>MISS[m].n.charAt(0).toLowerCase()+MISS[m].n.slice(1);
+const grpOf=id=>{for(const g in SOCII)if(SOCII[g].t[id]!=null)return g;return null};
+const AG_NAMES=['Bostar','Carthalon','Magon le Phénicien','Himilcon','Sosylos','Silénos','Gisgon','Bomilcar','Adherbal','Himilcon le Jeune','Abdmelqart','Hannon le Borgne'];
+function agInit(){S.ag=S.ag||[];if(S.agU==null)S.agU=1}
+function agRecruit(i){agInit();const n=N[i];if(ownerN(i)!=='car'||n.size<1||S.ag.length>=AG_MAX||S.gold.car<AG_COST)return;S.gold.car-=AG_COST;
+  const name=AG_NAMES[(S.agU-1)%AG_NAMES.length];S.ag.push({id:S.agU++,name,lv:1,x:n.x,y:n.y,m:null,t:null,st:'idle',at:n.i});log(`${name} entre à votre service comme agent à ${n.n}.`);renderAll();openAgents()}
+function agSend(id,m,ti){agInit();const ag=S.ag.find(a=>a.id===id);if(!ag)return;const M=MISS[m];const n=ti!=null?N[ti]:N[capOf('rom')];
+  const c=typeof M.c==='function'?M.c(n):M.c;if(S.gold.car<c)return;S.gold.car-=c;ag.m=m;ag.t=n.i;ag.cost=c;ag.st='route';ag.d0=S.day;
+  log(`${ag.name} part pour ${n.n} : ${mnL(m)}.`);renderAll();openAgents()}
+function agCaught(ag,n){S.ag=S.ag.filter(a=>a!==ag);log(`${ag.name} a été pris à ${n.n} et mis à mort.`);if(ownerN(n.i)==='rom'&&S.pol)S.pol.bar=Math.max(0,S.pol.bar-2)}
+function agDo(ag){const n=N[ag.t],M=MISS[ag.m],o=ownerN(n.i);let p=M.p(ag,n);
+  if(ag.m==='vue'||ag.m==='garde'){ag.st='poste';log(`${ag.name} est en place à ${n.n}.`);return}
+  if(ag.m==='corr'&&(n.size>=3||COL_IDS.has(n.id)||o==='car'))p=0;
+  if(ag.m==='rev'&&!(S.mirror?(S.fac[o]&&/^tribut_/.test(S.fac[o].st||'')):grpOf(n.id)))p=0;
+  if(Math.random()<Math.max(0,Math.min(.95,p))){ag.lv=Math.min(3,ag.lv+1);
+    if(ag.m==='corr'){if(o==='rom')defect(n.id);else{capture(n.i,'car');log(`${n.n} est livrée par ses magistrats corrompus.`)}}
+    if(ag.m==='sab'){S.sab=S.sab||{};S.sab[n.id]=S.day+60;delete S.q[n.id];const b=S.bld&&S.bld[n.id];if(b&&b.mur)b.mur--;log(`Sabotage réussi à ${n.n} : greniers et chantiers en flammes.`)}
+    if(ag.m==='rev'&&S.mirror){const F=S.fac[o];F.fid=Math.max(0,(F.fid==null?50:F.fid)-12);log(`${ag.name} attise la haine de Carthage chez les ${FAC[o].n} (fidélité −12).`)}
+    else if(ag.m==='rev'){socAdj(grpOf(n.id),-12);log(`${ag.name} attise la haine de Rome chez les ${SOCII[grpOf(n.id)].n} (fidélité −12).`);socCheck()}
+    if(ag.m==='ass'){const a=S.armies.filter(a=>a.side==='rom'&&!a.dead&&!a.g).sort((p,q)=>Math.hypot(p.x-n.x,p.y-n.y)-Math.hypot(q.x-n.x,q.y-n.y))[0];
+      if(a&&Math.hypot(a.x-n.x,a.y-n.y)<80){const g=a.gen!=null&&S.gens?S.gens.find(g=>g.id===a.gen):null;if(g){g.dead=true;a.gen=null}a.mor=Math.max(0,(a.mor||60)-20);log(`${ag.name} a assassiné ${g?g.name:'le chef'} de ${armyLabel(a)} : l'armée est désemparée.`)}else log(`${ag.name} ne trouve aucune armée romaine près ${deN(n.n)}.`)}
+    if(ag.m==='disc'&&S.mirror){S.gold.rom=Math.max(0,S.gold.rom-100);log("Vos agents répandent à Carthage des rumeurs de trahison : le Sénat punique retient l'or de ses généraux (−100).")}
+    else if(ag.m==='disc'){polInit();S.pol.mode='prudent';S.gold.rom=Math.max(0,S.gold.rom-80);for(const g in SOCII)socAdj(g,-4);log("Vos agents sèment la discorde à Rome : les consuls se querellent, la guerre est menée sans audace.")}
+    ag.m=null;ag.st='idle';ag.at=null}
+  else if(Math.random()<.5)agCaught(ag,n);
+  else{log(`${ag.name} échoue à ${n.n} (${mnL(ag.m)}) mais s'échappe.`);ag.m=null;ag.st='idle'}}
+function agDaily(){agInit();
+  for(const ag of S.ag.slice()){if(ag.st!=='route')continue;const n=N[ag.t],d=Math.hypot(n.x-ag.x,n.y-ag.y);
+    if(d<=AG_KMD){ag.x=n.x;ag.y=n.y;agDo(ag)}else{ag.x+=(n.x-ag.x)/d*AG_KMD;ag.y+=(n.y-ag.y)/d*AG_KMD}}
+  // agent en poste : un risque d'être découvert chaque mois en ville ennemie
+}
+function agMonthly(){agInit();
+  for(const ag of S.ag.slice())if(ag.st==='poste'&&ag.m==='vue'&&ownerN(ag.t)!=='car'&&Math.random()<.08)agCaught(ag,N[ag.t]);
+  // les agents romains
+  if(Math.random()<.18){const T=N.filter(n=>!n.col&&ownerN(n.i)==='car'&&n.size>=1);const n=T[Math.floor(Math.random()*T.length)];if(!n)return;
+    const guard=S.ag.find(a=>a.st==='poste'&&a.m==='garde'&&Math.hypot(N[a.t].x-n.x,N[a.t].y-n.y)<150);
+    if(guard&&Math.random()<.7){guard.lv=Math.min(3,guard.lv+1);log(`${guard.name} démasque un espion ${S.mirror?"carthaginois":"romain"} à ${n.n}.`);return}
+    const k=Math.random();
+    if(k<.45){S.sab=S.sab||{};S.sab[n.id]=S.day+45;log(`Des agents ${S.mirror?'carthaginois':'romains'} ont incendié les entrepôts ${deN(n.n)} : revenu réduit pendant 45 jours.`)}
+    else if(k<.75){const f=Object.keys(S.fac).find(f=>isTrib(f));if(f){S.fac[f].fid-=10;log(`Des émissaires secrets ${S.mirror?'de Carthage':'de Rome'} travaillent les ${FAC[f].n} (fidélité −10).`)}}
+    else{if(S.ord&&S.ord[n.id]!=null){S.ord[n.id]=Math.max(0,S.ord[n.id]-12);log(`Des agents ${S.mirror?'carthaginois':'romains'} sèment le trouble à ${n.n} (ordre −12).`)}}}}
+const _townIncomeA=townIncome;townIncome=function(n){const v=_townIncomeA.apply(this,arguments);return S&&S.sab&&S.sab[n.id]>S.day?Math.round(v*.5):v};
+const _sourcesOfA=sourcesOf;sourcesOf=function(side){const L=_sourcesOfA.apply(this,arguments);if(side==='car'&&S&&S.ag)for(const a of S.ag)if(a.st==='poste'&&a.m==='vue')L.push([a.x,a.y,30]);return L};
+function drawAgents(s){if(!S.ag||!S.ag.length)return;ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const a of S.ag){const X=a.x*s+view.ox,Y=a.y*s+view.oy;if(a.st==='route'){const n=N[a.t];ctx.setLineDash([2,4]);ctx.strokeStyle='rgba(200,200,210,.6)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(X,Y);ctx.lineTo(n.x*s+view.ox,n.y*s+view.oy);ctx.stroke();ctx.setLineDash([])}
+    ctx.fillStyle='#1d1a22';ctx.strokeStyle='#c9c3b2';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(X,Y-(a.st==='route'?0:12),7,0,7);ctx.fill();ctx.stroke();
+    const y=Y-(a.st==='route'?0:12);ctx.fillStyle='#e8e1cc';ctx.beginPath();ctx.ellipse(X,y,4.6,2.6,0,0,7);ctx.fill();ctx.fillStyle='#1d1a22';ctx.beginPath();ctx.arc(X,y,1.6,0,7);ctx.fill();
+    if(s>.6){ctx.font='600 11px Barlow Semi Condensed, Arial Narrow, sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='rgba(30,22,14,.7)';ctx.strokeText(a.name,X+10,y);ctx.fillStyle='#d8d2c0';ctx.fillText(a.name,X+10,y)}}
+  ctx.restore()}
+const _drawDynamicA=drawDynamic;drawDynamic=function(w,h,s){const r=_drawDynamicA.apply(this,arguments);try{drawAgents(s)}catch(e){}return r};
+function openAgents(){agInit();const mine=N.filter(n=>!n.col&&ownerN(n.i)==='car'&&n.size>=1).sort((a,b)=>b.size-a.size||a.n.localeCompare(b.n));
+  const foe=N.filter(n=>!n.col&&ownerN(n.i)&&ownerN(n.i)!=='car'&&(ownerN(n.i)==='rom'||(S.fac[ownerN(n.i)]&&(S.fac[ownerN(n.i)].st==='neutre'||(S.mirror&&/^tribut_/.test(S.fac[ownerN(n.i)].st||'')))))).sort((a,b)=>a.n.localeCompare(b.n));
+  const opt=(L,sel)=>L.map(n=>`<option value="${n.i}" ${sel===n.i?'selected':''}>${n.n} (${sideName(ownerN(n.i))})</option>`).join('');
+  const rows=S.ag.map(a=>{const lv='★'.repeat(a.lv)+'☆'.repeat(3-a.lv);
+    const st=a.st==='route'?`en route vers ${N[a.t].n} (${mnL(a.m)}), ≈ ${Math.max(1,Math.round(Math.hypot(N[a.t].x-a.x,N[a.t].y-a.y)/AG_KMD))} j`:a.st==='poste'?`en poste à ${N[a.t].n} (${mnL(a.m)})`:'disponible';
+    return `<tr><td><b>${esc(a.name)}</b> <span style="color:var(--gold)">${lv}</span><br><span class="sub">${st}</span></td><td>${a.st==='route'?'':`<select data-agm="${a.id}">${Object.keys(MISS).map(k=>`<option value="${k}">${MISS[k].n}</option>`).join('')}</select> <select data-agt="${a.id}">${opt(foe,null)}</select><select data-agt2="${a.id}" hidden>${opt(mine,null)}</select> <button data-ago="${a.id}" type="button">Envoyer</button>`}</td></tr>`}).join('');
+  modal(`<h2>Agents</h2><p class="sub">Recrutez jusqu'à ${AG_MAX} agents (${AG_COST} or) dans vos villes. Chacun voyage à ${AG_KMD} km par jour et tente sa mission à l'arrivée ; s'il échoue, il peut être pris. Chaque réussite le rend plus habile (★). Rome a aussi ses espions : un agent en contre-espionnage les déjoue.</p>
+    <p class="sub">${Object.values(MISS).map(m=>`<b>${m.n}</b>${m.c&&typeof m.c==='number'?' ('+m.c+')':m.c?' (120 + 80 par taille)':''} : ${m.txt}.`).join(' ')}</p>
+    <div class="row"><select id="agTown">${opt(mine,null)}</select><button id="agRec" type="button" ${S.ag.length>=AG_MAX||S.gold.car<AG_COST?'disabled':''}>Recruter un agent (${AG_COST})</button></div>
+    <table class="dip"><tr><th>Agent</th><th>Mission</th></tr>${rows||'<tr><td class="sub">Aucun agent.</td><td></td></tr>'}</table>
+    <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');
+  $('agRec').onclick=()=>agRecruit(+$('agTown').value);
+  document.querySelectorAll('[data-agm]').forEach(s=>s.onchange=()=>{const id=s.dataset.agm,k=s.value,t=document.querySelector(`[data-agt="${id}"]`),t2=document.querySelector(`[data-agt2="${id}"]`);
+    t.hidden=MISS[k].t==='rome'||MISS[k].t==='sienne';t2.hidden=MISS[k].t!=='sienne'});
+  document.querySelectorAll('[data-ago]').forEach(b=>b.onclick=()=>{const id=+b.dataset.ago,k=document.querySelector(`[data-agm="${id}"]`).value;
+    const ti=MISS[k].t==='rome'?capOf('rom'):MISS[k].t==='sienne'?+document.querySelector(`[data-agt2="${id}"]`).value:+document.querySelector(`[data-agt="${id}"]`).value;agSend(id,k,ti)});
+  $('mClose').onclick=closeModal}
+{const b=document.createElement('button');b.id='bAg';b.type='button';b.textContent='Agents';b.title='Espions et agents';b.onclick=()=>openAgents();($('bPol')||$('bDip')).after(b)}
+
+/* ---- Point 5 : QUARTIERS D'HIVER ---- */
+// L'hiver, une armée arrêtée dans une de vos villes (ou chez un tributaire ou un peuple ami) prend ses quartiers d'hiver :
+// plus d'usure, régiments refaits, fatigue effacée, moral en hausse ; elle en sort au printemps ou dès qu'elle repart.
+const qhOK=(a)=>{if(a.at==null||a.legs.length||a.ship||a.g)return false;const o=ownerN(a.at);return o===a.side||(a.side==='car'&&o&&(isTrib(o)||isPact(o)))};
+function qhDaily(){const win=season()==='Hiver';
+  for(const a of S.armies){if(a.dead)continue;
+    if(a.qh&&(!win||!qhOK(a))){a.qh=false;if(a.side==='car')log(`${armyLabel(a).replace(/^./,m=>m.toUpperCase())} quitte ses quartiers d'hiver.`);continue}
+    if(!a.qh&&win&&qhOK(a)&&(a.side!=='car'||S.qhAuto!==false)){a.qh=true;if(a.side==='car')log(`${armyLabel(a).replace(/^./,m=>m.toUpperCase())} prend ses quartiers d'hiver à ${N[a.at].n}.`)}
+    if(!a.qh)continue;const n=N[a.at],own=ownerN(a.at)===a.side;
+    for(const u of a.units){const mx=UT[u.t].men;u.men=Math.min(mx,u.men+mx*(own?.006:.012))}
+    if(a.fat!=null)a.fat=Math.max(0,a.fat-10);if(a.mor!=null)a.mor=Math.min(85,a.mor+.4);
+    if(a.food!=null&&typeof armyFoodMax==='function')a.food=Math.min(armyFoodMax(a),a.food+a.units.length);
+    // une grosse armée pèse sur la ville qui la loge
+    if(a.side==='car'&&own&&S.ord&&S.ord[n.id]!=null&&a.units.length>[4,8,14,20][n.size])S.ord[n.id]=Math.max(0,S.ord[n.id]-.15);
+    if(a.side==='car'&&!own){const F=S.fac[ownerN(a.at)];if(F){if(isTrib(ownerN(a.at)))F.fid=Math.max(0,F.fid-.1);else F.car-=.1}}}
+  // l'IA romaine rentre hiverner chez elle quand l'hiver arrive
+  if(win&&Math.floor(S.day)%10===5)for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship||a.legs.length||a.qh||a.ai==='defend')continue;
+    if(a.at!=null&&S.siege[N[a.at].id]&&S.siege[N[a.at].id].a===a.id)continue;if(ownerAt(a.x,a.y)==='rom')continue;
+    let best=null,bd=300;for(const n of N)if(!n.col&&ownerN(n.i)==='rom'&&n.size>=1){const d=Math.hypot(n.x-a.x,n.y-a.y);if(d<bd){bd=d;best=n}}if(best)order(a,0,0,best.i)}}
+// les délices de Capoue : hiverner dans une grande ville riche et étrangère amollit l'armée au printemps
+function qhSpring(){for(const a of S.armies)if(a.side==='car'&&a._qhRich){a._qhRich=0;if(a.mor!=null)a.mor=Math.max(0,a.mor-8);log(`Les délices de l'hiver ont amolli ${armyLabel(a)} (moral −8).`)}}
+const _renderSideQ=renderSide;
+renderSide=function(){const r=_renderSideQ.apply(this,arguments);try{if(sel&&sel.a&&isMine(sel.a)&&!sel.a.dead){const a=sel.a,el=$('side');const d=document.createElement('div');
+  if(a.qh)d.innerHTML=`<p class="sub" style="color:var(--gold)">En quartiers d'hiver à ${N[a.at].n} : pas d'usure, régiments refaits, repos complet.</p>`;
+  else if(season()==='Hiver'&&!a.g)d.innerHTML=`<p class="sub">Hiver : arrêtez cette armée dans une de vos villes (ou chez un tributaire ou un peuple ami) pour prendre ses quartiers d'hiver.</p>`;
+  if(d.innerHTML)el.appendChild(d)}}catch(e){}return r};
+
+/* ---- Point 7 : CHRONIQUES ---- */
+// Les faits marquants du journal sont gardés par année et par saison ; la fenêtre les présente comme une chronique, à lire ou à télécharger.
+const CHR=[/victoire|défaite|tombe aux mains|Défection|Ralliement|Révolte|élit ses consuls|dictateur|Hiéron|Philippe|Boïens|ad portas|Épidémie|Prodiges|Tremblement|Rome demande|Rome lève|Sénat vote|Sénat refuse|débarque|révolte|assassiné|Sabotage|corrompus|rejoint|rompent|traité|Traité|Mariage|épouse|Massinissa|Syphax|quartiers d'hiver à|délices|otages|Hannon/];
+const _logC=log;
+log=function(t){const r=_logC.apply(this,arguments);try{if(S&&CHR[0].test(t)){S.chron=S.chron||[];const tt=String(t).replace(/<[^>]+>/g,'');if(!S.chron.slice(-8).some(e=>e.t===tt&&S.day-e.d<20))S.chron.push({d:Math.floor(S.day),t:tt});if(S.chron.length>600)S.chron.splice(0,S.chron.length-600)}}catch(e){}return r};
+function chronYear(d){const c=cal(d);return c.year}
+function chronEndYear(d){polInit();const c=cal(d);if(c.mo!==2||d===0)return;const W=warScore(),held=N.filter(n=>!n.col&&ownerN(n.i)==='car').length;
+  S.chron=S.chron||[];S.chron.push({d:d-1,t:`Bilan de l'année ${c.year+1} : Carthage tient ${held} villes, trésor ${Math.round(S.gold.car)} or, Sénat ${Math.round(S.pol.bar)} pour les Barcides, score de guerre ${W.v}.`,bil:1})}
+function chronText(){const by={};for(const e of (S.chron||[])){const c=cal(e.d),k=c.year;(by[k]=by[k]||{})[c.season]=(by[k][c.season]||[]);by[k][c.season].push(e)}
+  const ys=Object.keys(by).map(Number).sort((a,b)=>b-a);
+  return ys.map(y=>({y,parts:['Printemps','Été','Automne','Hiver'].filter(s=>by[y][s]).map(s=>({s,L:by[y][s]}))}))}
+function openChron(){const Y=chronText();
+  const html=Y.map(({y,parts})=>`<h3 style="margin:14px 0 4px;font-family:var(--display);font-size:20px;text-transform:none;letter-spacing:.02em;color:var(--gold)">An ${y} av. J.-C.</h3>`+parts.map(({s,L})=>`<p style="margin:4px 0"><b>${s}.</b> ${L.map(e=>{const c=cal(e.d);return e.bil?`<i>${e.t}</i>`:`${e.t.replace(/\s*$/,'')}${/[.!»]$/.test(e.t.trim())?'':'.'} <span class="sub">(${c.dm} ${MONTHS[c.mo]})</span>`}).join(' ')}</p>`).join('')).join('');
+  modal(`<h2>Chroniques de la guerre</h2><p class="sub">Les faits marquants de votre partie, année par année, comme les consignerait un annaliste.</p><div style="max-height:62vh;overflow:auto;padding-right:6px">${html||'<p class="sub">Rien encore : l\'histoire commence.</p>'}</div>
+    <div class="row" style="justify-content:flex-end"><button id="chDl" type="button">Télécharger</button><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');$('mClose').onclick=closeModal;
+  $('chDl').onclick=()=>{const txt='CHRONIQUES DE LA GUERRE\n\n'+Y.slice().reverse().map(({y,parts})=>`AN ${y} AV. J.-C.\n`+parts.map(({s,L})=>`${s}. `+L.map(e=>e.t).join(' ')).join('\n')).join('\n\n');
+    const local=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));a.download='chroniques-bellum.txt';document.body.appendChild(a);a.click();a.remove()};
+    // dans l'artefact en ligne, le téléchargement passe par la permission « downloads » ; sur le PC, lien direct
+    const c=window.claude&&window.claude.use?window.claude.use('downloads'):null;
+    if(!c){local();return}
+    c.then(d=>{if(!d){local();return}d.save({filename:'chroniques-bellum.txt',data:txt}).catch(e=>{if(e&&e.code!=='declined')log("Le téléchargement n'est pas disponible ici.")})}).catch(local)}}
+{const b=document.createElement('button');b.id='bChr';b.type='button';b.textContent='Chroniques';b.title='Le récit de votre guerre';b.onclick=()=>openChron();($('bAg')||$('bDip')).after(b)}
+// à la fin de la partie, proposer la chronique
+const _endGameC=endGame;endGame=function(){const r=_endGameC.apply(this,arguments);try{const row=$('mcard').querySelector('.row');if(row&&!$('mChr')){const b=document.createElement('button');b.id='mChr';b.type='button';b.textContent='Lire la chronique';b.onclick=()=>openChron();row.appendChild(b)}}catch(e){}return r};
+
+const _dailyQ=daily;
+daily=function(d){const r=_dailyQ.apply(this,arguments);try{agDaily();qhDaily();if(d%30===0){agMonthly();chronEndYear(d);if(cal(d).mo===2){qhSpring()}}
+  for(const a of S.armies)if(a.qh&&a.side==='car'){const n=N[a.at];if(n&&n.size>=2&&ownerN(a.at)==='car'&&o0s(n)!=='car'&&['ita','gre'].includes(n.cul))a._qhRich=1}}catch(e){console.error(e)}return r};
+
+// icônes des boutons Agents et Chroniques, dans le style de l'interface (si elle est présente)
+setTimeout(()=>{try{const svg=(p,n)=>`<svg class="ui-i" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="currentColor" stroke-width="0" aria-hidden="true">${p}</svg><span>${n}</span>`;
+  const top=$('bDip');if(!top||!top.querySelector('.ui-i'))return;
+  const I={bAg:['<path d="M3 10h18v2H3z"/><path d="M7 10l2-6h6l2 6z"/><circle cx="8" cy="16" r="3" fill="none" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="none" stroke-width="2"/><path d="M11 16h2" fill="none" stroke-width="2"/>','Agents'],
+    bChr:['<path d="M3 5c3-1 6-1 9 1v15c-3-2-6-2-9-1z"/><path d="M21 5c-3-1-6-1-9 1v15c3-2 6-2 9-1z" fill="none" stroke-width="1.8"/><path d="M14.5 9.5h4M14.5 13h4" fill="none" stroke-width="1.4"/>','Chroniques']};
+  for(const id in I){const b=$(id);if(b&&!b.querySelector('.ui-i'))b.innerHTML=svg(I[id][0],I[id][1])}}catch(e){}},0);
+
+window.__meca={agRecruit,agSend,agDaily,agMonthly,openAgents,qhDaily,openChron,chronText,warScore,victoryCheck,eventsMonthly,aiRome,EVENTS,evCard,openPol,polMonthly,senAction,romElect,openEco,build,ecoMonthly,ecoDaily,ordTarget,revolt,sendEnvoy,envDaily,bigActors,whyTxt,SOCII,socCheck,socMonthly,defect,treaty,socAction,REGIONS,tribute,tribMonthly,get REGN(){if(!REGN)regionsBuild();return REGN}};
+/* ================= FIN MÉCANIQUES ================= */

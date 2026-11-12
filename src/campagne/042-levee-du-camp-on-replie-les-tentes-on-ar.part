@@ -1,0 +1,34 @@
+/* ================= LEVÉE DU CAMP : on replie les tentes, on arrache la palissade, puis la colonne repart ================= */
+// Quand une armée qui campe reçoit un ordre de marche, elle reste sur place le temps de lever le camp
+// (0,3 jour pour un camp achevé, 0,08 s'il était en construction), puis se met en colonne.
+const DECAMP_D=.3;
+const _sm=(a0,b0,x)=>{const t=Math.max(0,Math.min(1,(x-a0)/(b0-a0)));return t*t*(3-2*t)};
+function decampFormation(a,s){
+  const d=a.decamp,p=Math.max(0,Math.min(1,(S.day-d.t0)/(d.end-d.t0))),keep=a.camp;
+  if(p<.62){a.camp={...d.cam,ok:false,t:S.day+1-(1-_sm(.25,.6,p))};a._fold=_sm(0,.45,p);a._lev=true;
+    try{campFormation(a,s)}finally{a.camp=keep;a._fold=0;a._lev=false}
+    // chariots qu'on charge devant la porte de départ
+    const q=UNIT_KM*s;if(q>=6){const cx=view.ox+d.cam.x*s,cy=view.oy+d.cam.y*s,c=FAC[a.side].c;ctx.save();
+      for(let k=0;k<3;k++){const wl=Math.max(5,q*.75),wh=wl*.55,x=cx-q*1.2+k*wl*1.4,y=cy+q*1.6,ld=_sm(k*.15,k*.15+.3,p);
+        ctx.fillStyle='#8a6038';ctx.fillRect(x-wl/2,y-wh/2,wl,wh);ctx.strokeStyle='rgba(26,18,10,.9)';ctx.lineWidth=.8;ctx.strokeRect(x-wl/2,y-wh/2,wl,wh);
+        ctx.fillStyle='#e6dcc2';ctx.fillRect(x-wl*.38,y-wh*.38,wl*.76*ld,wh*.76);ctx.fillStyle='#3a2a1a';[-1,1].forEach(sg=>[-1,1].forEach(sy=>{ctx.beginPath();ctx.ellipse(x+sg*wl*.3,y+sy*wh*.55,wh*.28,wh*.13,0,0,6.283);ctx.fill()}))}
+      ctx.restore()}
+    return}
+  // fin : l'emplacement du camp s'efface pendant que les régiments se mettent en colonne
+  const q=UNIT_KM*s,L=campLayout(a),cx=view.ox+d.cam.x*s,cy=view.oy+d.cam.y*s,W=L.W*s,H=L.H*s,al=1-_sm(.62,1,p);
+  ctx.save();ctx.globalAlpha=al;ctx.fillStyle='rgba(150,122,82,.38)';ctx.fillRect(cx-W/2,cy-H/2,W,H);ctx.strokeStyle='rgba(60,45,25,.55)';ctx.lineWidth=Math.max(2,.09*s);ctx.strokeRect(cx-W/2-q*.35,cy-H/2-q*.35,W+q*.7,H+q*.7);
+  // feux éteints qui fument encore, tas de pieux abandonnés
+  for(let k=0;k<5;k++){const x=cx+(hsh(k*7)-.5)*W*.8,y=cy+(hsh(k*13)-.5)*H*.8,ph=((S.day*DAY_S)*.4+k*.2)%1;ctx.fillStyle=`rgba(90,85,80,${.35*(1-ph)})`;ctx.beginPath();ctx.arc(x+ph*q*.3,y-ph*q*.9,q*(.08+ph*.2),0,6.283);ctx.fill();ctx.fillStyle='rgba(40,30,20,.6)';ctx.beginPath();ctx.arc(x,y,q*.08,0,6.283);ctx.fill()}
+  ctx.restore();
+  _formation(a,s);
+}
+const _tick3=tick;
+tick=function(dd){
+  if(S&&S.armies&&!S.cur&&!S.over)for(const a of S.armies){if(a.dead||a.ship)continue;
+    if(a.decamp){if(!a.legs.length){a.camp=a.decamp.cam;a.decamp=null}else if(S.day>=a.decamp.end){a.decamp=null;a.camp=null}}
+    else if(a.camp&&a.legs.length){a.decamp={t0:S.day,end:S.day+(a.camp.ok?DECAMP_D:.08),cam:{...a.camp}};if(a.side==='car'&&a.camp.ok)log(`${a.name} lève le camp.`)}}
+  S._mv=1;try{_tick3(dd)}finally{S._mv=0}
+};
+const _legSpeed4=legSpeed;
+legSpeed=function(a,type){if(a&&a.decamp&&S._mv&&type!=='mer')return 1e-6;return _legSpeed4.apply(null,arguments)};
+

@@ -1,0 +1,32 @@
+/* ================= SIÈGE : encore plus de vie ================= */
+// tentes et feux derrière l'anneau, archers qui tirent sur le rempart, bélier sous son abri à la porte, incendies sur les murs, estafettes
+const _siegeFormation2=siegeFormation;
+siegeFormation=function(a,s,sg){
+  const n=N[a.at],g=cityGeom(n),f=Math.min(1,sg.d/sg.need),T=S.day*DAY_S,c=FAC[a.side].c,q=UNIT_KM*s,SX=x=>view.ox+x*s,SY=y=>view.oy+y*s;
+  const R=g.wall.map(w=>({ang:Math.atan2(w[1]-g.cy,w[0]-g.cx),rr:Math.hypot(w[0]-g.cx,w[1]-g.cy)}));
+  const at=(r,d)=>[SX(g.cx+Math.cos(r.ang)*(r.rr+d)),SY(g.cy+Math.sin(r.ang)*(r.rr+d))];
+  const land=R.map(r=>landFast(g.cx+Math.cos(r.ang)*(r.rr+.6),g.cy+Math.sin(r.ang)*(r.rr+.6)));const cand=R.map((r,k)=>k).filter(k=>land[k]);
+  // sous les troupes : le camp de siège (tentes, feux)
+  if(cand.length&&q>=6){ctx.save();const tw=Math.max(4,q*.45);
+    cand.forEach((k,i)=>{if(i%2)return;const [x,y]=at(R[k],.86);tent(x-tw*.7,y,tw,c,false);tent(x+tw*.7,y,tw,c,false);if(i%4===0)fire(x,y+tw*1.1,Math.max(1.8,q*.1),T,i)});ctx.restore()}
+  _siegeFormation2(a,s,sg);
+  if(!cand.length)return;ctx.save();
+  // archers : volées de flèches des régiments vers le rempart
+  const nv=Math.min(cand.length,3+Math.floor(f*4));
+  for(let j=0;j<nv;j++){const k=cand[Math.floor((j+.5)*cand.length/nv)],r=R[k],ph=(T*.7+j*.37)%1;if(ph>.45)continue;const t=ph/.45,[x1,y1]=at(r,.5),[x2,y2]=at(r,-.03);
+    const hx=x1+(x2-x1)*t,hy=y1+(y2-y1)*t-Math.sin(t*Math.PI)*Math.max(10,q*1.4),ddx=(x2-x1),ddy=(y2-y1),l=Math.hypot(ddx,ddy)||1;
+    ctx.strokeStyle='rgba(25,18,10,.85)';ctx.lineWidth=1;for(let m=-2;m<=2;m++){const ox=-ddy/l*m*q*.18,oy=ddx/l*m*q*.18;ctx.beginPath();ctx.moveTo(hx+ox,hy+oy);ctx.lineTo(hx+ox-ddx/l*Math.max(3,q*.25),hy+oy-ddy/l*Math.max(3,q*.25)+(t-.5)*Math.max(3,q*.25));ctx.stroke()}}
+  // bélier sous sa tortue, contre une porte côté terre
+  const ga=(g.gates||[]).map(a0=>{let b=0,bd=9;R.forEach((r,k)=>{const d=Math.abs(Math.atan2(Math.sin(r.ang-a0),Math.cos(r.ang-a0)));if(d<bd&&land[k]){bd=d;b=k}});return bd<.5?b:null}).filter(k=>k!=null)[0];
+  if(ga!=null&&f>.1){const r=R[ga],hit=Math.abs(Math.sin(T*2.2)),[x,y]=at(r,.08+.07*hit),w=Math.max(6,q*.5),an=r.ang;
+    ctx.save();ctx.translate(x,y);ctx.rotate(an);ctx.fillStyle='#5b3f22';ctx.strokeStyle=dark2();ctx.lineWidth=1;ctx.fillRect(-w*.2,-w*.35,w,w*.7);ctx.strokeRect(-w*.2,-w*.35,w,w*.7);
+    ctx.strokeStyle='rgba(30,20,10,.6)';for(let m=1;m<4;m++){ctx.beginPath();ctx.moveTo(-w*.2+m*w/4,-w*.35);ctx.lineTo(-w*.2+m*w/4,w*.35);ctx.stroke()}
+    ctx.fillStyle='#3a2a1a';ctx.fillRect(-w*.45,-w*.08,w*.3,w*.16);ctx.restore();
+    if(hit<.18){const [wx,wy]=at(r,-.01);ctx.fillStyle=`rgba(190,170,140,${.6*(1-hit/.18)})`;ctx.beginPath();ctx.arc(wx,wy,Math.max(4,q*.45)*(1.3-hit*3),0,7);ctx.fill()}}
+  // incendies sur le rempart
+  const nfire=Math.floor(f*6);for(let j=0;j<nfire;j++){const k=Math.floor(hsh(j*5.7+n.i)*R.length),[x,y]=at(R[k],-.02);fire(x,y,Math.max(2.2,q*.14),T,j+7)}
+  // estafettes au galop autour de l'anneau
+  if(q>=6)for(let j=0;j<3;j++){const ang=T*.06+j*2.09,rr=g.r*1.15+.75,x=SX(g.cx+Math.cos(ang)*rr),y=SY(g.cy+Math.sin(ang)*rr);if(!landFast(g.cx+Math.cos(ang)*rr,g.cy+Math.sin(ang)*rr))continue;
+    ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.strokeStyle='#1e140c';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,Math.max(1.6,q*.09),0,7);ctx.fill();ctx.stroke()}
+  ctx.restore();
+};

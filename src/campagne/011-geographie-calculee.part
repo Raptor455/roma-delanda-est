@@ -1,0 +1,168 @@
+/* ================= GÉOGRAPHIE CALCULÉE ================= */
+let landPath,landSmooth,COAST=[],landCtx,N=[],NI={},EDGES=[],ADJ=[],delaunay,voronoi,CELL=[],BORDER=[],TLAB=null,GLYPH={far:[],near:[],forest:[]},relief;
+function isLand(x,y){return landCtx.isPointInPath(landPath,x,y)}
+// grille de terrain à 1 km (pour le dessin des détails, rapide), bords cassés par un bruit
+let TGRID=null;
+function buildTGrid(){const w=Math.ceil(MW),h=Math.ceil(MH),c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,w,h);g.globalCompositeOperation='lighter';
+  const poly=(q,col)=>{g.fillStyle=col;g.beginPath();q.forEach(([x,y],k)=>k?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.fill()};
+  for(const f of SPOLY)poly(f,'#0f0');for(const f of FPOLY)poly(f,'#00f');
+  const d=g.getImageData(0,0,w,h).data,a=new Uint8Array(w*h);for(let i=0;i<w*h;i++){const o=i*4;a[i]=d[o+1]>127?2:d[o+2]>127?3:0}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(isMountain(x+.5,y+.5))a[y*w+x]=1;TGRID={a,w,h}}
+const TNAME=['plaine','montagne','marais','foret'],DESX=()=>prj(-6,0)[0];
+function terrFast(x,y){if(!TGRID)buildTGrid();const jx=x+(vnoise(x*.7,y*.7)-.5)*1.6,jy=y+(vnoise(x*.7+9,y*.7-4)-.5)*1.6,i=Math.floor(jx),j=Math.floor(jy);
+  const v=i<0||j<0||i>=TGRID.w||j>=TGRID.h?0:TGRID.a[j*TGRID.w+i];if(v)return TNAME[v];return LAT1-y/KY<33.4&&x>DESX()?'desert':'plaine'}
+function terrainAt(x,y){
+  if(isMountain(x,y))return 'montagne';
+  for(const f of SPOLY)if(pip(f,x,y))return 'marais';
+  for(const f of FPOLY)if(pip(f,x,y))return 'foret';
+  const lat=LAT1-y/KY;if(lat<33.4&&x>prj(-6,0)[0])return 'desert';
+  return 'plaine';
+}
+const TERR={plaine:{n:'Plaine',m:1},foret:{n:'Forêt',m:.7},montagne:{n:'Montagne',m:.55},desert:{n:'Désert',m:.75},marais:{n:'Marais',m:.65}};
+function buildGeo(){
+  landPath=new Path2D();for(const poly of LAND){poly.forEach(([x,y],i)=>i?landPath.lineTo(x,y):landPath.moveTo(x,y));landPath.closePath()}
+  // côtes lissées pour l'affichage
+  landSmooth=new Path2D();for(const poly of LAND){const n=poly.length,mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];let m=mid(poly[n-1],poly[0]);landSmooth.moveTo(m[0],m[1]);for(let i=0;i<n;i++){const p=poly[i],q=poly[(i+1)%n],mm=mid(p,q);landSmooth.quadraticCurveTo(p[0],p[1],mm[0],mm[1])}landSmooth.closePath()}
+  // la même côte lissée, en morceaux de 120 points, pour ne tracer que ce qui est à l'écran
+  for(const poly of LAND){const n=poly.length,mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    for(let st=0;st<n;st+=120){const P=new Path2D(),m=mid(poly[(st-1+n)%n],poly[st]);P.moveTo(m[0],m[1]);let bx0=m[0],by0=m[1],bx1=m[0],by1=m[1];
+      for(let i=st;i<Math.min(n,st+120);i++){const p=poly[i],q=poly[(i+1)%n],mm=mid(p,q);P.quadraticCurveTo(p[0],p[1],mm[0],mm[1]);bx0=Math.min(bx0,p[0],mm[0]);by0=Math.min(by0,p[1],mm[1]);bx1=Math.max(bx1,p[0],mm[0]);by1=Math.max(by1,p[1],mm[1])}
+      COAST.push({p:P,b:[bx0,by0,bx1,by1]})}}
+  const c=document.createElement('canvas');c.width=c.height=4;landCtx=c.getContext('2d');buildLandFine();
+  // lieux
+  N=PL.map((p,i)=>{const [x,y]=prj(p[2],p[3]);const o=p[6]||'';return {i,id:p[0],n:p[1],lon:p[2],lat:p[3],x,y,o0:p[4],size:p[5],port:o.includes('p'),col:o.includes('c'),terr:null}});
+  // une ville posée dans l'eau (côte simplifiée) revient sur la rive
+  N.forEach(n=>{if(!landFine(n.x,n.y)){const p=nearestLand(n.x,n.y,4,.3);if(p){n.x=p[0];n.y=p[1]}}});
+  N.forEach(n=>{NI[n.id]=n.i;n.terr=terrainAt(n.x,n.y);
+    n.cul=n.o0==='car'?(n.lon<4&&n.lat>36.1?'ibe':'afr'):n.o0==='rom'?(n.lon>19?'gre':'ita'):n.o0?FAC[n.o0].cul:null;
+    if(n.id==='ebusus')n.cul='bal';
+    if(['igilgili','rusicade','saldae','icosium','iol','rusaddir','tingis','lixus'].includes(n.id))n.cul='afr'; // comptoirs puniques de la côte numide et maure
+    n.inc=n.col?0:[1,4,9,20][n.size]+(n.port?2:0);
+  });
+  // routes : triangulation de Delaunay entre les lieux, sans traverser la mer ni les Alpes et les Pyrénées hors des cols
+  const towns=N.filter(n=>!n.col);
+  const dl=d3.Delaunay.from(towns,n=>n.x,n=>n.y);
+  const has={};
+  const add=(a,b,type)=>{const k=a<b?a+'|'+b:b+'|'+a;if(has[k]!==undefined){if(type!=='piste'){EDGES[has[k]].type=type}return}
+    const A=N[a],B=N[b],km=Math.hypot(A.x-B.x,A.y-B.y)*(type==='mer'?1.1:1.12);
+    let tf=1;if(type!=='mer'&&type!=='col'){for(let s=1;s<10;s++){const t=terrainAt(A.x+(B.x-A.x)*s/10,A.y+(B.y-A.y)*s/10);tf=Math.min(tf,TERR[t].m)}}
+    has[k]=EDGES.length;EDGES.push({a,b,km,type,tf})};
+  const {halfedges,triangles}=dl;
+  for(let e=0;e<triangles.length;e++){
+    if(e<halfedges[e])continue;
+    const a=towns[triangles[e]].i,b=towns[triangles[e%3===2?e-2:e+1]].i,A=N[a],B=N[b],d=Math.hypot(A.x-B.x,A.y-B.y);
+    if(d>260)continue;
+    let ok=true,wet=0;const steps=Math.ceil(d/4);
+    for(let s=1;s<steps&&ok;s++){const x=A.x+(B.x-A.x)*s/steps,y=A.y+(B.y-A.y)*s/steps;if(!isLand(x,y)){wet+=d/steps;if(wet>9)ok=false}else for(const m of MPOLY)if(m.bar&&pip(m.q,x,y)){ok=false;break}}
+    if(ok)add(a,b,'piste');
+  }
+  for(const n of towns){if(Object.keys(has).some(k=>k.split('|').includes(String(n.i))))continue;
+    let best=null,bd=1e9;for(const m of towns){if(m===n)continue;const dd=Math.hypot(m.x-n.x,m.y-n.y);if(dd<bd){bd=dd;best=m}}if(best&&bd<340)add(n.i,best.i,"piste")}
+  for(const half of halfedges)void half;
+  for(const L of VIA)for(let k=1;k<L.length;k++)add(NI[L[k-1]],NI[L[k]],'via');
+  for(const L of ROUTE)for(let k=1;k<L.length;k++)add(NI[L[k-1]],NI[L[k]],'route');
+  for(const [a,b] of VALLEYS)add(NI[a],NI[b],'piste');
+  for(const [c,a,b] of COLS){add(NI[c],NI[a],'col');add(NI[c],NI[b],'col')}
+  for(const [a,b] of SEA)add(NI[a],NI[b],'mer');
+  for(const [a,b] of STRAIT)add(NI[a],NI[b],'detroit');
+  ADJ=N.map(()=>[]);EDGES.forEach((e,k)=>{ADJ[e.a].push(k);ADJ[e.b].push(k)});
+  /*TERR-RASTER*/ // territoires : chaque parcelle de terre va à la ville la plus proche par voie de terre (bruit pour des frontières naturelles), coins adoucis, aucun trou hors du désert
+  delaunay=d3.Delaunay.from(towns,n=>n.x,n=>n.y);voronoi=null;CELL=N.map(()=>null);
+  {const G=3,gw=Math.ceil(MW/G)+2,gh=Math.ceil(MH/G)+2,NP=gw*gh,nT=towns.length;
+   const cv=document.createElement('canvas');cv.width=gw;cv.height=gh;const g=cv.getContext('2d');g.setTransform(1/G,0,0,1/G,0,0);g.fillStyle='#fff';g.fill(landPath);
+   const im=g.getImageData(0,0,gw,gh).data,land=new Uint8Array(NP);for(let p=0;p<NP;p++)land[p]=im[p*4+3]>110?1:0;
+   // mer côtière (5 cases) : les cellules débordent un peu sur l'eau, la côte les coupe ensuite
+   const near=new Uint8Array(NP);{let q=[];for(let p=0;p<NP;p++)if(land[p]){near[p]=1;q.push(p)}
+     for(let r=0;r<5;r++){const nq=[];for(const p of q){const x=p%gw,y=(p/gw)|0;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=gw||Y>=gh)continue;const k=Y*gw+X;if(!near[k]){near[k]=2;nq.push(k)}}}q=nq}}
+   // Dijkstra multi-sources
+   const dist=new Float32Array(NP).fill(1e9),lab=new Int16Array(NP).fill(-1),fix=new Uint8Array(NP);
+   let hk=new Float64Array(1<<20),hv=new Int32Array(1<<20),hn=0,hl=new Int16Array(1<<20);
+   const push=(d,p,l)=>{if(hn>=hk.length){const a=new Float64Array(hk.length*2);a.set(hk);hk=a;const b=new Int32Array(hv.length*2);b.set(hv);hv=b;const c=new Int16Array(hl.length*2);c.set(hl);hl=c}
+     let i=hn++;while(i>0){const j=(i-1)>>1;if(hk[j]<=d)break;hk[i]=hk[j];hv[i]=hv[j];hl[i]=hl[j];i=j}hk[i]=d;hv[i]=p;hl[i]=l};
+   const pop=()=>{const d=hk[0],p=hv[0],l=hl[0];hn--;if(hn>0){const D=hk[hn],P=hv[hn],L=hl[hn];let i=0;for(;;){let j=2*i+1;if(j>=hn)break;if(j+1<hn&&hk[j+1]<hk[j])j++;if(hk[j]>=D)break;hk[i]=hk[j];hv[i]=hv[j];hl[i]=hl[j];i=j}hk[i]=D;hv[i]=P;hl[i]=L}return [d,p,l]};
+   towns.forEach((n,t)=>{const x=Math.min(gw-1,Math.max(0,Math.floor(n.x/G))),y=Math.min(gh-1,Math.max(0,Math.floor(n.y/G))),p=y*gw+x;if(dist[p]>0){dist[p]=0;push(0,p,t);fix[p]=1;near[p]=near[p]||1}});
+   const nb=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+   const fac=new Float32Array(NP);for(let p=0;p<NP;p++)if(near[p]){const x=(p%gw+.5)*G,y=((p/gw)|0)*G+G/2;fac[p]=near[p]===1?.7+.6*vnoise(x*.025,y*.025):3}
+   while(hn){const [d,p,l]=pop();if(lab[p]>=0)continue;lab[p]=l;const x=p%gw,y=(p/gw)|0;
+     for(const [dx,dy,w] of nb){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=gw||Y>=gh)continue;const k=Y*gw+X;if(!near[k]||lab[k]>=0)continue;
+       const nd=d+G*w*(fac[p]+fac[k])/2;if(nd>=dist[k])continue;
+       if(land[k]&&nd>110){const la=LAT1-(Y+.5)*G/KY-34.4+(vnoise(X*.04,Y*.04)-.5)*1.1;if(la<0||nd>110+la*380)continue} // désert : pas de territoire loin des villes, lisière irrégulière
+       dist[k]=nd;push(nd,k,l)}}
+   // adoucir : filtre de majorité (coins et pointes émoussés)
+   const cnt=new Int32Array(nT);
+   for(let pass=0;pass<3;pass++){const src=lab.slice(),R=3;
+     for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){const p=y*gw+x,a=src[p];if(a<0||fix[p])continue;let best=a,bc=0,seen=[];
+       for(let Y=Math.max(0,y-R);Y<=Math.min(gh-1,y+R);Y++)for(let X=Math.max(0,x-R);X<=Math.min(gw-1,x+R);X++){const b=src[Y*gw+X];if(b<0)continue;if(!cnt[b])seen.push(b);cnt[b]++}
+       for(const b of seen){if(cnt[b]>bc||(cnt[b]===bc&&b===a)){bc=cnt[b];best=b}}
+       if(cnt[best]>cnt[a])lab[p]=best;for(const b of seen)cnt[b]=0}}
+   TLAB={lab,G,gw,gh};
+   // contours : arêtes entre cases de maîtres différents, chaînées en boucles (région à droite)
+   const VW=gw+1,L_=(p)=>p<0?-1:lab[p];
+   const out=new Map(); // clé sommet*nT+label -> liste d'arêtes
+   const E=[];const addE=(v0,v1,a,b)=>{const k=v0*nT+a;let l=out.get(k);if(!l)out.set(k,l=[]);l.push(E.length);E.push([v0,v1,a,b,0])};
+   for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){const p=y*gw+x,a=lab[p];if(a<0)continue;
+     const up=y>0?lab[p-gw]:-1,dn=y<gh-1?lab[p+gw]:-1,lf=x>0?lab[p-1]:-1,rt=x<gw-1?lab[p+1]:-1;
+     const v=(X,Y)=>Y*VW+X;
+     if(up!==a)addE(v(x,y),v(x+1,y),a,up);if(rt!==a)addE(v(x+1,y),v(x+1,y+1),a,rt);if(dn!==a)addE(v(x+1,y+1),v(x,y+1),a,dn);if(lf!==a)addE(v(x,y+1),v(x,y),a,lf)}
+   const loops=towns.map(()=>[]);
+   for(let e0=0;e0<E.length;e0++){if(E[e0][4])continue;const a=E[e0][2],L=[];let e=e0;
+     while(e!=null&&!E[e][4]){E[e][4]=1;L.push(e);const l=out.get(E[e][1]*nT+a);e=null;if(l)for(const k of l)if(!E[k][4]){e=k;break}}
+     loops[a].push(L)}
+   const W=v=>[(v%VW)*G,Math.floor(v/VW)*G];
+   const dp=(P,tol)=>{if(P.length<3)return P;const keep=new Uint8Array(P.length);keep[0]=keep[P.length-1]=1;const st=[[0,P.length-1]];
+     while(st.length){const [i,j]=st.pop();const [x1,y1]=P[i],[x2,y2]=P[j],dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1;let m=-1,md=tol;
+       for(let k=i+1;k<j;k++){const d=Math.abs((P[k][0]-x1)*dy-(P[k][1]-y1)*dx)/L;if(d>md){md=d;m=k}}if(m>0){keep[m]=1;st.push([i,m],[m,j])}}
+     return P.filter((_,k)=>keep[k])};
+   const chaikin=(P,closed)=>{for(let it=0;it<2;it++){const Q=closed?[]:[P[0]],n=P.length;for(let k=0;k<(closed?n:n-1);k++){const a=P[k],b=P[(k+1)%n];Q.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}if(!closed)Q.push(P[n-1]);P=Q}return P};
+   const shared=new Map();
+   const runPts=(vs,a,b)=>{const v0=vs[0],v1=vs[vs.length-1];if(b<0)return chaikin(dp(vs.map(W),G*.7),false);
+     const key=Math.min(a,b)+','+Math.max(a,b)+','+Math.min(v0,v1)+','+Math.max(v0,v1);let r=shared.get(key);
+     if(!r){const fw=v0<v1||(v0===v1&&a<b);const P=chaikin(dp((fw?vs:vs.slice().reverse()).map(W),G*.7),false);r={P,v0:fw?v0:v1};shared.set(key,r);
+       const A=fw?a:b,B=fw?b:a;BORDER.push({a:towns[A].i,b:towns[B].i,pts:P})}
+     return r.v0===v0?r.P:r.P.slice().reverse()};
+   towns.forEach((n,a)=>{if(!loops[a].length)return;const path=new Path2D();let pts0=null;
+     for(const L of loops[a]){const bs=L.map(e=>E[e][3]);let st=0;for(let k=0;k<L.length;k++){if(bs[k]!==bs[(k-1+L.length)%L.length]){st=k;break}}
+       let P=[];
+       if(bs.every(b=>b===bs[0])){ // une seule voisine tout autour : boucle fermée, départ au plus petit sommet
+         let mi=0;for(let k=1;k<L.length;k++)if(E[L[k]][0]<E[L[mi]][0])mi=k;const vs=[];for(let k=0;k<L.length;k++)vs.push(E[L[(mi+k)%L.length]][0]);
+         P=chaikin(dp(vs.map(W),G*.7),true);
+         if(bs[0]>=0&&a<bs[0]){/* enclave : la frontière une fois */const key='c'+Math.min(a,bs[0])+','+Math.max(a,bs[0])+','+vs[0];if(!shared.has(key)){shared.set(key,1);BORDER.push({a:n.i,b:towns[bs[0]].i,pts:P.concat([P[0]])})}}
+         else if(bs[0]>=0){const key='c'+Math.min(a,bs[0])+','+Math.max(a,bs[0])+','+vs[0];if(!shared.has(key)){shared.set(key,1);BORDER.push({a:n.i,b:towns[bs[0]].i,pts:P.concat([P[0]])})}}
+       }else{let k=0;while(k<L.length){const b=bs[(st+k)%L.length],vs=[E[L[(st+k)%L.length]][0]];while(k<L.length&&bs[(st+k)%L.length]===b){vs.push(E[L[(st+k)%L.length]][1]);k++}
+           const R=runPts(vs,a,b);for(let j=P.length?1:0;j<R.length;j++)P.push(R[j])}}
+       P.forEach(([x,y],k)=>k?path.lineTo(x,y):path.moveTo(x,y));path.closePath();if(!pts0||P.length>pts0.length)pts0=P}
+     CELL[n.i]={path,pts:pts0||[]}})}
+  /*FIN-TERR-RASTER*/
+  buildRelief();buildTGrid();routeEdges();
+  GLYPH.close=[];
+}
+// teinte peinte des terres : vert tendre au nord, olive sec au sud, sable au Sahara
+function landColor(wx,wy){
+  const n=vnoise(wx*.02,wy*.02)*.6+vnoise(wx*.08,wy*.08)*.4,n2=vnoise(wx*.006+5,wy*.006),lat=LAT1-wy/KY;
+  const gr=Math.max(0,Math.min(1,(lat-35.6+(n2-.5)*3)/5.5)),sand=Math.max(0,Math.min(1,(34.4-lat+(n2-.5)*.8)/1.6));
+  let r=186-gr*50,g=178-gr*14,b=118-gr*24;
+  r+=sand*38;g+=sand*20;b+=sand*26;
+  const k=(n-.5);r+=k*30;g+=k*34;b+=k*18;
+  return [r,g,b];
+}
+function tintTerrain(g,R){g.save();g.globalCompositeOperation='source-atop';g.filter=`blur(${Math.max(1,3*R*4)}px)`;g.scale(R,R);
+  g.fillStyle='rgba(60,92,46,.32)';for(const f of FPOLY){g.beginPath();f.forEach(([x,y],k)=>k?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.fill()}
+  g.restore()}
+// Fond en image : mer, hauts-fonds, terres et déserts (redessiné en vectoriel par-dessus)
+function buildRelief(){
+  const R=.6,w=Math.round(MW*R),h=Math.round(MH*R),c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
+  const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#3f6576');gr.addColorStop(1,'#2b4d5d');g.fillStyle=gr;g.fillRect(0,0,w,h);
+  g.save();g.scale(R,R);g.shadowColor='rgba(160,205,210,.6)';g.shadowBlur=26*R*3;g.fillStyle='#6a96a0';g.fill(landPath);g.restore();
+  g.save();g.scale(R,R);g.fillStyle='#d9cba6';g.fill(landPath);g.restore();
+  const img=g.getImageData(0,0,w,h),d=img.data;
+  const mask=new Uint8Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const o=(y*w+x)*4;if(d[o]<200||d[o+2]>190)continue;mask[y*w+x]=1;
+    const col=landColor(x/R,y/R);d[o]=col[0];d[o+1]=col[1];d[o+2]=col[2]}
+  g.putImageData(img,0,0);tintTerrain(g,R);
+  // couleur des terres sans masque, pour peindre sous les côtes lissées en vue rapprochée
+  const R2=.25,w2=Math.round(MW*R2),h2=Math.round(MH*R2),c2=document.createElement('canvas');c2.width=w2;c2.height=h2;const g2=c2.getContext('2d'),im2=g2.createImageData(w2,h2);
+  for(let y=0;y<h2;y++)for(let x=0;x<w2;x++){const o=(y*w2+x)*4,col=landColor(x/R2,y/R2);im2.data[o]=col[0];im2.data[o+1]=col[1];im2.data[o+2]=col[2];im2.data[o+3]=255}
+  g2.putImageData(im2,0,0);tintTerrain(g2,R2);
+  relief={c,R,w,h,mask,land:c2};
+}
+
