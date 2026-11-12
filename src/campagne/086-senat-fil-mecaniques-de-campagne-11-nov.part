@@ -91,7 +91,7 @@ const SEN_M={
     run(arg){const a=S.armies.find(x=>x.id===+arg)||senBestArmy();if(!a)return 'Aucune armée.';const old=a.name,g=mkGen('car',nextGen('car'));if(!S.gens)S.gens=[];giveGen(a,g);a.mor=Math.max(20,(a.mor||60)-6);return `${old} est relevé ; ${g.name} prend l'armée.`}},
   colonie:{n:'Installer des vétérans',pick:'town',d:()=>'100 or. La ville choisie reçoit deux régiments de garnison et son ordre public monte de 15.',aff:[.2,.5,.4],cd:10,cat:'c',ok:()=>S.gold.car>=100?true:'Il faut 100 or.',
     run(arg){const n=N.find(x=>x.id===arg)||N[senCapI()];S.gold.car-=100;S.ord=S.ord||{};S.ord[n.id]=senClamp((S.ord[n.id]==null?60:S.ord[n.id])+15,0,100);
-      try{let a=S.armies.find(x=>x.g&&!x.dead&&x.at===n.i&&x.side==='car');if(!a){a={id:S.uid++,side:'car',name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
+      try{let a=S.armies.find(x=>x.g&&!x.dead&&x.at===n.i&&x.side==='car');if(!a){a={id:S.uid++,side:'car',name:'Garnison '+deN(n.n),x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
         for(const [t] of senTroops([['inf',2]])){const u={t,men:UT[t].men,gm:1};a.units.push(u);try{if(typeof depOne==='function')depOne(a,u,{})}catch(e){}}}catch(e){console.error(e)}
       return `Des vétérans s'installent à ${n.n}.`}},
   completer:{n:'Compléter les rangs',pick:'army',d:()=>'80 or. Tous les régiments de l’armée choisie retrouvent leur effectif complet.',aff:[.7,.1,-.3],cd:6,cat:'g',ok:()=>S.gold.car<80?'Il faut 80 or.':senMine().length?true:'Aucune armée en campagne.',

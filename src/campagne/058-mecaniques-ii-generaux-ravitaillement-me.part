@@ -326,7 +326,7 @@ function setOwn(ids,side){for(const id of ids){const i=NI[id];if(i==null)continu
   S.armies=S.armies.filter(a=>!(a.g&&a.at===i&&a.side!==side))}}
 function scenArmy(side,at,spec,name,extra){const n=N[NI[at]];if(!n)return null;const units=[];for(const [t,k] of spec)for(let j=0;j<k;j++)units.push({t,men:UT[t].men});
   const a=Object.assign({id:S.uid++,side,name,x:n.x,y:n.y,at:n.i,legs:[],units,scout:0,cool:0,mor:70,bag:true},extra||{});a.food=armyFoodMax(a);S.armies.push(a);return a}
-function scenGar(side,ids,spec){for(const id of ids){const i=NI[id];if(i==null||ownerN(i)!==side||S.armies.some(a=>a.g&&a.at===i&&a.side===side))continue;scenArmy(side,id,spec,'Garnison de '+N[i].n,{g:true})}}
+function scenGar(side,ids,spec){for(const id of ids){const i=NI[id];if(i==null||ownerN(i)!==side||S.armies.some(a=>a.g&&a.at===i&&a.side===side))continue;scenArmy(side,id,spec,'Garnison '+deN(N[i].n),{g:true})}}
 function clearField(side){S.armies=S.armies.filter(a=>a.side!==side||a.g);for(const g of S.gens||[])if(g.side===side&&g.army!=null)g.army=null}
 function applyScen(k){const sc=SCEN[k];if(!sc||k==218)return;S.day=sc.day;S.ev=S.ev||{};Object.assign(S.ev,{scip:1,tras:1});clearField('car');clearField('rom');S.gens=[];S.riv=[];if(S.guid==null)S.guid=1;S.rally=S.rally||{};S.cand=S.cand||{};
   const C='car',R='rom';
@@ -1380,12 +1380,15 @@ function popRegen(){S.pop=S.pop||{};const ru={};
   for(const n of TOWNS){if(n.col||S.siege[n.id])continue;const m=popMax(n);if(!m)continue;const p=popGet(n);if(p>=m)continue;
     const vr=popVil()[n.i]||0,k=vr?1-.7*Math.min(1,(ru[n.i]||0)/vr):1;S.pop[n.id]=Math.min(m,p+m/POP_DAYS*w*k)}}
 // remplissage : tout ce que les règles existantes rendent aux régiments (repos, garnison, quartiers d'hiver, chevaux…) est payé en hommes
-function popSnap(){const M=new Map();for(const a of S.armies)if(!a.dead&&popOn(a.side))for(const u of a.units)M.set(u,u.men);return M}
+// la milice des garnisons (u.gm) est la ville elle-même : elle se refait sans puiser dans les réserves (12 nov., plan de reprise, étape 3)
+function popSnap(){const M=new Map();for(const a of S.armies)if(!a.dead&&popOn(a.side))for(const u of a.units)if(!u.gm)M.set(u,u.men);return M}
+// une garnison ne prévient que si un ennemi rôde à moins de 60 km : sinon le manque d'hommes n'a rien d'urgent
+function popFoeNear(a){try{return S.armies.some(o=>!o.dead&&!o.ship&&o.side!==a.side&&Math.hypot(o.x-a.x,o.y-a.y)<60&&hostile(o,a))}catch(e){return false}}
 function popSettle(M){for(const a of S.armies){if(a.dead||!popOn(a.side))continue;let need=0;const L=[];
     for(const u of a.units){const m0=M.get(u);if(m0==null)continue;const d=u.men-m0;if(d>1e-6){need+=d;L.push([u,m0,d])}}
     if(!need)continue;const i=popHome(a),got=i==null?0:popTake(a.side,i,need,true,a.qh&&i===a.at);
     if(got<need-1e-6){const k=got/need;for(const [u,m0,d] of L)u.men=m0+d*k;
-      if(isMine(a)&&i!=null&&got<need*.5&&!(a._popE>S.day)){a._popE=S.day+90;log(`Les campagnes autour ${deN(N[i].n)} n'ont plus d'hommes : ${esc(a.name)} ne se refait plus. Allez dans une autre région, levez des paysans ou payez des mercenaires.`)}}}}
+      if(isMine(a)&&i!=null&&got<need*.5&&!(a._popE>S.day)&&(!a.g||popFoeNear(a))){a._popE=S.day+90;log(`Les campagnes autour ${deN(N[i].n)} n'ont plus d'hommes : ${esc(a.name)} ne se refait plus. Allez dans une autre région, levez des paysans ou payez des mercenaires.`)}}}}
 setTimeout(()=>{const _dPop=daily;daily=function(d){if(!S||S.cur||S.over)return _dPop.apply(this,arguments);let M=null;try{M=popSnap()}catch(e){}
   const r=_dPop.apply(this,arguments);try{if(M)popSettle(M);popRegen()}catch(e){console.error(e)}return r}},0);
 // recrutement : le régiment prend ses hommes à la ville (ou à sa région) ; ceux du joueur sont retenus dès la mise en formation
@@ -1488,7 +1491,7 @@ function garTypes(o,a){const ok=t=>UT[t]&&(UT[t].k==='inf'||UT[t].k==='skirm');
   return L}
 function garFill(n,max){const o=ownerN(n.i);if(!o)return 0;const m=GARMIN(n);if(!m)return 0;let a=garArmy(n,o),k=0;
   const T=garTypes(o,a);
-  if(!a){a={id:S.uid++,side:o,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
+  if(!a){a={id:S.uid++,side:o,name:'Garnison '+deN(n.n),x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
   while(a.units.length<m&&k<max){const t=T[(a.units.length*2+1)%T.length];a.units.push({t,men:UT[t].men,gm:1});try{const c={};c[t]=a.units.filter(x=>x.t===t).length-1;depOne(a,a.units[a.units.length-1],c)}catch(e){}k++}
   return k}
 function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;if(S.siege&&S.siege[n.id])continue;

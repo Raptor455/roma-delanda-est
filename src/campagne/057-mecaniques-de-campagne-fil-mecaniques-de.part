@@ -363,7 +363,7 @@ function revolt(n){const id=n.id,o0=o0s(n),back=o0&&o0!=='car'&&!(FAC[o0].a&&S.f
   delete S.ord[id];delete S.bq[id];delete S.q[id];
   for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===n.i){a.dead=true}S.armies=S.armies.filter(a=>!a.dead);
   if(back){S.own[id]=back;const t=back==='rom'?['legion','velites']:['iber','iber'];
-    S.armies.push({id:S.uid++,side:back,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:t.map(t=>({t,men:UT[t].men})),scout:0,cool:0,g:true});
+    S.armies.push({id:S.uid++,side:back,name:'Garnison '+deN(n.n),x:n.x,y:n.y,at:n.i,legs:[],units:t.map(t=>({t,men:UT[t].men})),scout:0,cool:0,g:true});
     if(back!=='rom'&&S.fac[back]){S.fac[back].car=Math.min(S.fac[back].car,-20)}}
   else S.own[id]=null;
   territoryDirty=true;log(`Révolte à ${n.n} ! La ville chasse vos officiers${back?' et revient '+(back==='rom'?'à Rome':'aux '+FAC[back].n):''}.`);S.paused=true}

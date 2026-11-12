@@ -1,0 +1,58 @@
+/* ================= GARNISONS, POPULATION ET JOURNAL (étape 3 du plan de reprise, 12 nov.) =================
+   - journal : catégories (logCat), clé de regroupement (logKey, utilisée par log), bandeau avec ×n et sièges/batailles en avant,
+     fenêtre « Journal » avec filtres Tout, Guerre, Diplomatie, Économie, Autres (200 lignes) ;
+   - barre du haut : hommes en campagne et hommes en garnison séparés, chiffres tenus à jour (le revenu du lancement était périmé) ;
+   - fiche de territoire : ne recouvre plus la barre du haut quand une armée est choisie ;
+   - noms des garnisons des anciennes parties : « Garnison d'Utique » au lieu de « Garnison de Utique ».
+   La milice qui ne puise plus dans les réserves et le message de garnison réservé aux villes menacées sont dans POPULATION (bloc 058). */
+const {ico:uIco,townIn:uTown,logIcon:uLogIco}=window.__ui||{ico:()=>'',townIn:()=>null,logIcon:()=>''};
+const LOG_CAT={imp:'Sièges et batailles',guerre:'Guerre',dipl:'Diplomatie',eco:'Économie',autre:'Autres'};
+function logCat(t){const s=String(t).replace(/<[^>]+>/g,'').toLowerCase();
+  if(/bataille|vaincu|victoire|défaite|assiég|siège|assaut|se rend\b|se rendent|capitul|tombe |tombée|prend d'assaut|s'empare de [A-ZÀ-Ý]|massacr|écras/.test(s))return 'imp';
+  if(/sénat|consul|élu|élit|alli|traité|émissaire|ambassad|pacte|tribut|otage|motion|paix|déclare la guerre|fidélité|neutre|peuple/.test(s))return 'dipl';
+  if(/(^|[^a-zà-ÿ])or([^a-zà-ÿ]|$)|trésor|revenu|impôt|marché|convoi|ration|vivres|ravitaill|commerce|butin|mercenaire|chantier|construi|pirates|pillent les côtes/.test(s))return 'eco';
+  if(/armée|attaqu|guerre|messager|éclaireur|repér|embuscade|pill|garnison|régiment|marche|camp|fourrageur|flotte|navire|pont|général/.test(s))return 'guerre';
+  return 'autre'}
+// clé de regroupement : même phrase aux nombres et aux noms propres près ; jamais pour les sièges et les batailles
+function logKey(t){const s=String(t).replace(/<[^>]+>/g,'');if(logCat(s)==='imp')return null;
+  const t2=s.replace(/\d[\d  .,]*/g,'#');return (' '+t2).replace(/(\s|['’])[A-ZÀ-Ý][\wÀ-ÿ’-]*(\s+[A-ZÀ-Ý][\wÀ-ÿ’-]*)*/g,'$1X').trim().slice(0,160)}
+function logRow(l,big){const c=cal(l.d),tn=uTown(l.t),k=logCat(l.t);
+  return `<div class="lg-${k}${k==='imp'?' imp':''}${tn?' ui-go':''}"${tn?` data-ui-town="${tn.i}" title="Centrer sur ${esc(tn.n)}"`:''}>${uLogIco(l.t)}${l.t}${l.n>1?` <b class="lgN" title="Message semblable reçu ${l.n} fois en un mois">×${l.n}</b>`:''}<em>${c.dm===1?'1er':c.dm} ${MONTHS[c.mo]}${big?' '+c.year:''}</em></div>`}
+function logBind(el,close){el.querySelectorAll('[data-ui-town]').forEach(d=>d.onclick=()=>{const n=N[+d.dataset.uiTown];if(!n)return;if(close)closeModal();centerOn(n.x,n.y,Math.max(view.s,1.2));try{renderAll()}catch(e){}})}
+renderLog=function(){const el=$('log');if(!el||!S)return;
+  el.innerHTML=S.log.slice(0,3).map(l=>logRow(l)).join('')+(S.log.length?`<div class="lgAll" title="Les ${S.log.length} derniers messages, avec filtres">Journal (${S.log.length})</div>`:'');
+  logBind(el,false);const b=el.querySelector('.lgAll');if(b)b.onclick=()=>openJournal()};
+let LOG_F='tout';
+function openJournal(f){if(f)LOG_F=f;const L=S.log||[],inF=l=>{const k=logCat(l.t);return LOG_F==='tout'||(LOG_F==='guerre'?k==='imp'||k==='guerre':k===LOG_F)};
+  const cnt=k=>L.filter(l=>{const c=logCat(l.t);return k==='tout'||(k==='guerre'?c==='imp'||c==='guerre':c===k)}).length;
+  const F=[['tout','Tout'],['guerre','Guerre'],['dipl','Diplomatie'],['eco','Économie'],['autre','Autres']];
+  modal(`<h2>Journal</h2><p class="sub">Les ${L.length} derniers messages. Les sièges et les batailles sont marqués en rouge ; un message qui revient plusieurs fois dans le mois n'occupe qu'une ligne (×n). Cliquez sur une ligne pour centrer la carte.</p>
+    <div class="row" style="flex-wrap:wrap;gap:6px;margin:6px 0 8px">${F.map(([k,n])=>`<button type="button" data-lgf="${k}" class="${LOG_F===k?'on':''}">${n} (${cnt(k)})</button>`).join('')}</div>
+    <div id="lgList" style="max-height:60vh;overflow:auto;padding-right:6px">${L.filter(inF).map(l=>logRow(l,true)).join('')||'<p class="sub">Aucun message.</p>'}</div>
+    <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');$('mClose').onclick=closeModal;document.querySelectorAll('[data-lgf]').forEach(b=>b.onclick=()=>openJournal(b.dataset.lgf));logBind($('lgList'),true)}
+{const st=document.createElement('style');st.textContent=`
+#log > div.imp{border-color:#a8452e!important;box-shadow:0 0 0 1px #0d0a07,0 0 0 2px rgba(168,69,46,.55),0 6px 16px rgba(0,0,0,.4)!important;opacity:1!important}
+#log .lgN{font-size:11px;color:var(--bzL,#d6b878);margin-left:4px}
+#log > div.lgAll{display:block!important;padding:3px 10px!important;font-size:12px;cursor:pointer;text-align:right;opacity:1!important;color:var(--bzL,#d6b878)}
+#log > div.lgAll:hover{border-color:var(--bzL,#d6b878)}
+#lgList > div{position:relative;padding:6px 8px 6px 36px;border-bottom:1px solid rgba(214,184,120,.15);font-size:13px;line-height:1.35}
+#lgList > div .ui-i{position:absolute;left:8px;top:7px;width:19px;height:19px}
+#lgList > div em{display:block;font-style:normal;font-size:11px;opacity:.7}
+#lgList > div.imp{background:rgba(168,69,46,.16)}
+#lgList > div.ui-go{cursor:pointer}#lgList > div.ui-go:hover{background:rgba(214,184,120,.1)}
+#lgList .lgN{font-size:11px;color:#d6b878;margin-left:4px}
+details.garFold{margin:4px 0}details.garFold summary{cursor:pointer;padding:4px 0}`;document.head.appendChild(st)}
+// barre du haut : hommes en campagne / en garnison
+{const _rtG=renderTop;renderTop=function(){const r=_rtG.apply(this,arguments);try{const b=document.querySelector('#gold .ui-r[data-tt^="Hommes sous les armes"]');if(b&&S){let fm=0,gm=0;
+    for(const a of S.armies)if(a.side==='car'&&!a.dead)for(const u of a.units){if(a.g)gm+=u.men;else fm+=u.men}
+    b.dataset.tt='Hommes en campagne (armées hors garnisons)';b.innerHTML=`${uIco('helm',18)}<b>${Math.round(fm).toLocaleString('fr-FR')}</b>`;
+    b.insertAdjacentHTML('afterend',`<div class="ui-r" data-tt="Hommes en garnison dans vos villes">${uIco('tower',18)}<b>${Math.round(gm).toLocaleString('fr-FR')}</b></div>`)}}catch(e){console.error(e)}return r}}
+// chiffres de la barre tenus à jour (au lancement, le revenu affiché datait d'avant les garnisons)
+{setInterval(()=>{try{if(typeof S==='undefined'||!S||S.cur||!S.armies||!S.gold)return;const i=document.querySelector('#gold .ui-r i'),g=document.querySelector('#gold .ui-r b');if(!i||!g)return;const {inc,up}=income('car'),net=Math.round(inc-up);
+  if(i.textContent!==(net>=0?'+':'')+net||g.textContent!==Math.round(S.gold.car).toLocaleString('fr-FR'))renderTop()}catch(e){}},1000)}
+// fiche de territoire : à côté du panneau quand elle n'a pas la place au-dessus
+{const _rgP=rgcPlace;rgcPlace=function(){const r=_rgP.apply(this,arguments);try{const c=$('rgCard'),t=$('top'),sd=$('side');if(!c||!t)return r;const tb=t.getBoundingClientRect().bottom,H=window.innerHeight;
+  if(c.getBoundingClientRect().top<tb+6&&sd&&sd.style.display!=='none'&&sd.offsetHeight>0){const q=sd.getBoundingClientRect();c.style.left=(q.right+8)+'px';c.style.bottom='10px';c.style.width='300px';c.style.maxHeight=Math.max(120,H-tb-24)+'px'}}catch(e){}return r}}
+// noms des garnisons des parties commencées avant la correction
+{const _dNm=daily;daily=function(){const r=_dNm.apply(this,arguments);try{if(S&&!S.nmFix){S.nmFix=1;for(const a of S.armies)if(a.name)a.name=a.name.replace(/^Garnison de (?=[AEIOUYÉÈÊÂÎÔÛH][a-zà-ÿ])/,"Garnison d'")}}catch(e){}return r}}

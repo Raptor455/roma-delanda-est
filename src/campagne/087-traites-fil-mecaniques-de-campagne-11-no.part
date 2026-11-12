@@ -18,7 +18,7 @@ const trThreat=f=>dvNear(f,'rom',260)>0;
 const trWants=(f,k)=>dvP(f).w.some(w=>w[0]===k);
 const trCapN=f=>dvTowns(f).sort((a,b)=>b.size-a.size)[0];
 function trTakeTown(id,f){const i=NI[id];if(i==null||ownerN(i)!==f)return false;const n=N[i];S.own[id]='car';delete S.siege[id];
-  for(const a of S.armies)if(a.side===f&&a.g&&a.at===i){a.side='car';a.name='Garnison de '+n.n}
+  for(const a of S.armies)if(a.side===f&&a.g&&a.at===i){a.side='car';a.name='Garnison '+deN(n.n)}
   territoryDirty=true;try{if(typeof garFill==='function')garFill(n)}catch(e){}return true}
 function trAllies(f,k,name){const Tn=trCapN(f);if(!Tn)return null;const t=poolOf(f),units=Array.from({length:k},()=>({t,men:UT[t].men}));
   const a={id:S.uid++,side:'car',name:name||('Alliés '+FAC[f].n.toLowerCase()),x:Tn.x,y:Tn.y,at:Tn.i,legs:[],units,scout:0,cool:0,mor:65,food:12};S.armies.push(a);

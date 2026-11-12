@@ -32,7 +32,7 @@ function corpsMul(a,role){if(a.g||!a.units.length)return 1;const C=corpsOf(a),to
     if(c.k>0&&c.g){const g=c.g,cav=power(c.u.map(i=>a.units[i]).filter(u=>isCavK(UT[u.t].k)))/p;f=1+.025*stars(g)+(hasTr(g,'tact')?.04:0)+(hasTr(g,'cav')?.15*cav:0)+(hasTr(g,'fouge')?(role==='att'?.06:-.03):0)+(hasTr(g,'prud')&&role==='def'?.06:0)+(hasTr(g,'tem')?(role==='att'?.03:-.05):0)}
     m+=p*f;w0+=p}
   let k=w0?m/w0:1;const n=a.units.length,subs=C.length-1;
-  if(n>10)k*=Math.max(.88,1-.015*Math.max(0,n-10-subs*5));
+  if(n>10)k*=Math.max(.88,1-.015*Math.max(0,n-10-subs*10));/* un second pour dix régiments : 3 seconds couvrent 40 régiments (MAXU) */
   // un second qui ne s'entend pas avec le chef
   const chief=genOf(a);for(const c of C)if(c.k>0&&c.g&&chief&&(rivalTr(chief,c.g)||(typeof areRivals==='function'&&areRivals(chief,c.g))))k*=.95;
   return k}
@@ -130,7 +130,7 @@ renderSide=function(){_renderSide10.apply(this,arguments);if(!S||!(sel&&sel.a&&!
   try{const T=el.querySelectorAll('.ui-tiles label, label.unit');if(T.length===n)a.units.forEach((u,k)=>{const L=T[k];if(!u.cp&&!u.gd)return;L.style.position='relative';
     L.insertAdjacentHTML('beforeend',`<span style="position:absolute;top:1px;left:3px;font:bold 10px Georgia,serif;text-shadow:0 0 2px #000;color:${u.gd?'#ffd77a':'#e8dcc0'}" title="${u.gd?'Garde du commandant en chef':corpsN(u.cp)}">${u.gd?'♛':ROM_N[u.cp]}</span>`)})}catch(e){}
   const inCity=a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side,free=inCity?S.gens.filter(g=>g.side===a.side&&!g.dead&&g.army==null&&g.sub==null&&g.at===a.at):[];
-  const warn=n>10&&C.length-1<Math.ceil((n-10)/5)?`<p class="sub" style="margin:2px 0;color:#e0a060">${n} régiments pour un seul état-major : −${Math.round((1-Math.max(.88,1-.015*Math.max(0,n-10-(C.length-1)*5)))*100)} % au combat. Nommez des sous-généraux (un pour cinq régiments au-delà de dix).</p>`:'';
+  const warn=n>10&&C.length-1<Math.ceil((n-10)/10)?`<p class="sub" style="margin:2px 0;color:#e0a060">${n} régiments pour un seul état-major : −${Math.round((1-Math.max(.88,1-.015*Math.max(0,n-10-(C.length-1)*10)))*100)} % au combat. Nommez des sous-généraux (un pour dix régiments au-delà de dix).</p>`:'';
   let h=`<p class="sub" style="margin:8px 0 2px">Chaîne de commandement</p>${warn}<div style="font-size:12px;line-height:1.5">`;
   for(const c of C){const g=c.g,rv=c.k>0&&g&&genOf(a)&&(rivalTr(genOf(a),g)||(typeof areRivals==='function'&&areRivals(genOf(a),g)));
     h+=`<div style="display:flex;gap:6px;align-items:center;justify-content:space-between"><span>${c.k?`<b>${corpsN(c.k)}</b>`:'<b>Commandant en chef</b>'} · ${g?esc(g.name)+' '+'★'.repeat(stars(g)):'—'}${g&&g.tr.length?` <span class="sub">(${g.tr.map(t=>TRAITS[t].n).join(', ')})</span>`:''} · ${c.u.length} rég.${rv?' <span style="color:#e0a060" title="Ils ne s’entendent pas : −5 %">⚔ rivalité</span>':''}</span>${c.k?`<button type="button" data-csub="${c.k}" title="Renvoyer ce sous-général ; ses régiments reviennent au chef">✕</button>`:''}</div>`}

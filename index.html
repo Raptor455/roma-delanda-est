@@ -2289,7 +2289,7 @@ function newGame(){
   army('rom','roma',[...U('legion',3),...U('velites',1)],'Garnison de Rome').g=true;
   const GAR={num:['ncav','ncav','lib'],mae:['ncav','lib'],mau:['ncav','iber'],cyr:['lib','sling'],ibe:['iber','iber','sling'],cel:['iber','iber','hcav'],lus:['iber','sling'],bal:['sling','sling'],mas:['lib','lib','sling'],gau:['gaul','gaul','hcav'],lig:['gaul','gaul'],ins:['gaul','gaul','gaul','hcav'],ven:['iber','sling'],syr:['lib','lib','lib','sling'],ill:['iber','sling'],dar:['iber','hcav'],epi:['lib','sling'],mac:['lib','lib','lib','hcav','hcav'],thr:['hcav','sling','iber'],eto:['lib','sling'],ach:['lib','lib'],ath:['lib','lib'],cre:['sling','sling']};
   N.forEach(n=>{if(!n.o0||!FAC[n.o0].a||n.size<1)return;const g=GAR[n.o0]||['iber'];const k=n.size>=3?5:n.size===2?3:1;
-    army(n.o0,n.id,Array.from({length:k},(_,j)=>({t:g[j%g.length],men:UT[g[j%g.length]].men})),'Garnison de '+n.n).g=true});
+    army(n.o0,n.id,Array.from({length:k},(_,j)=>({t:g[j%g.length],men:UT[g[j%g.length]].men})),'Garnison '+deN(n.n)).g=true});
   initFleets();
   log("Printemps 218 : Sagonte est tombée, Rome déclare la guerre. Hannibal attend vos ordres à Nova Carthago.");
 }
@@ -2313,7 +2313,9 @@ const landFast=(x,y)=>{const X=Math.round(x*relief.R),Y=Math.round(y*relief.R);r
 const sideName=s=>FAC[s]?FAC[s].n:s;
 const armyLabel=a=>a.g?'la '+a.name.charAt(0).toLowerCase()+a.name.slice(1):"l'armée de "+a.name;
 const deN=t=>/^[AEIOUÉÈÂÎH]/i.test(t)?"d'"+t:'de '+t;
-function log(t){S.log.unshift({d:Math.floor(S.day),t});S.log.length=Math.min(S.log.length,40);renderLog()}
+// journal : 200 lignes ; un message semblable à un message récent (30 jours) le remplace et le compte (×n) au lieu de s'empiler (12 nov., étape 3)
+function log(t){const e={d:Math.floor(S.day),t};try{const k=typeof logKey==='function'?logKey(t):null;if(k){e.k=k;for(let j=0;j<Math.min(20,S.log.length);j++){const o=S.log[j];if(o.k===k&&e.d-o.d<=30){S.log.splice(j,1);e.n=(o.n||1)+1;break}}}}catch(x){}
+  S.log.unshift(e);S.log.length=Math.min(S.log.length,200);renderLog()}
 function income(side){let inc=0,up=fleetUpkeep(side);N.forEach(n=>{if(ownerN(n.i)===side)inc+=townIncome(n)});S.armies.forEach(a=>{if(a.side===side)a.units.forEach(u=>up+=uCost(u)/12)});return {inc,up:Math.round(up)}}
 function hostile(a,b){if(a.side===b.side)return false;const ma=!FAC[a.side].a,mb=!FAC[b.side].a;if(ma&&mb)return true;if(!ma&&!mb)return false;const f=ma?b.side:a.side,s=ma?a.side:b.side;return S.fac[f]&&S.fac[f].st==='guerre_'+s}
 function cityHostile(i,side){const o=ownerN(i);if(!o||o===side)return false;if(!FAC[o].a)return true;return S.fac[o]&&S.fac[o].st==='guerre_'+side}
@@ -3001,7 +3003,7 @@ function contact(side,f){
 function joinAlliance(f,side){
   S.fac[f].st='allie_'+side;
   N.forEach(n=>{if(ownerN(n.i)===f){S.own[n.id]=side;delete S.siege[n.id]}});
-  S.armies.forEach(a=>{if(a.side===f){a.side=side;a.name=(side==='car'?'Alliés ':'Socii ')+'– '+a.name.replace('Garnison de ','')}});
+  S.armies.forEach(a=>{if(a.side===f){a.side=side;a.name=(side==='car'?'Alliés ':'Socii ')+'– '+a.name.replace(/^Garnison d(e |')/,'')}});
   log(`Ralliement : ${FAC[f].n} rejoint le camp de ${sideName(side)} !`);territoryDirty=true;
 }
 function dipAction(f,kind){
@@ -3077,7 +3079,7 @@ function autoResolve(b){
   const hit=(L,l)=>L.map(u=>Math.round(u.men*(1-Math.min(.95,l*(.7+Math.random()*.6)))));
   return {attWin,A:hit(A,attWin?wl:ll),D:hit(D,attWin?ll:wl)};
 }
-const placeName=b=>{const n=N[b.node],d=Math.hypot(n.x-b.x,n.y-b.y);return d<6?n.n:'près de '+n.n};
+const placeName=b=>{const n=N[b.node],d=Math.hypot(n.x-b.x,n.y-b.y);return d<6?n.n:'près '+deN(n.n)};
 const battleTitle=b=>{const p=placeName(b);return p.startsWith('près')?'Bataille '+p:'Bataille '+deN(p)};
 function applyResult(b,res){
   const A=bFlat(b.att),D=bFlat(b.def);
@@ -3917,13 +3919,15 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function unitLines(a,checks){return a.units.map((u,k)=>{const f=u.men/UT[u.t].men;return `<label class="unit">${checks?`<input type="checkbox" data-k="${k}">`:'<span></span>'}<span>${sqSVG(UT[u.t].k,f)} ${esc(uName(u))}</span><span class="sub">${Math.round(u.men).toLocaleString('fr-FR')}</span><span class="bar"><i style="width:${Math.round(f*100)}%"></i></span></label>`}).join('')}
 const SIZE=['Village','Bourg','Ville','Capitale'];
 const canGar=a=>!a.g&&!a.ship&&!a.inG&&!a.legs.length&&a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side;
-function where(a){if(a.at!=null&&!a.legs.length)return N[a.at].n;const t=townAt(a.x,a.y);return 'près de '+t.n}
+function where(a){if(a.at!=null&&!a.legs.length)return N[a.at].n;const t=townAt(a.x,a.y);return 'près '+deN(t.n)}
 function renderSide(){
   const el=$('side');
   if(sel&&sel.f&&!S.fleets.includes(sel.f))sel=null;
   if(sel&&sel.f){el.innerHTML=fleetPanel(sel.f);if(sel.f.side==='car')bindFleet(sel.f);return}
   if(!sel){el.innerHTML=`<h2>Carthage</h2><p class="sub">Clic gauche sur un écu violet pour choisir une armée, puis <b>clic droit</b> sur la carte pour marcher (sur mobile : toucher). L'armée suit les routes ; hors route, elle avance deux fois moins vite. Molette pour zoomer jusqu'aux rues des villes.</p>
-    <h3>Vos armées</h3>${S.armies.filter(isMine).map(a=>`<div class="rec"><span>${esc(a.name)} <span class="sub">· ${a.units.length} rég. · ${a.ship?'à bord':a.inG?'garnison, '+N[a.at].n:a.legs.length?'en marche':where(a)}</span></span><button data-sel="${a.id}" type="button">Voir</button></div>`).join('')||'<p class="sub">Aucune armée.</p>'}
+    <h3>Vos armées</h3>${(()=>{const rec=a=>`<div class="rec"><span>${esc(a.name)} <span class="sub">· ${a.units.length} rég. · ${a.ship?'à bord':a.inG?'garnison, '+N[a.at].n:a.legs.length?'en marche':where(a)}</span></span><button data-sel="${a.id}" type="button">Voir</button></div>`;
+      const M=S.armies.filter(isMine),F=M.filter(a=>!a.g),G=M.filter(a=>a.g);/* garnisons repliées en une ligne (12 nov., plan de reprise, étape 3) */
+      return (F.map(rec).join('')||'<p class="sub">Aucune armée en campagne.</p>')+(G.length?`<details class="garFold"><summary>Garnisons (${G.length}) <span class="sub">· ${Math.round(G.reduce((s,a)=>s+a.units.reduce((t,u)=>t+u.men,0),0)).toLocaleString('fr-FR')} hommes</span></summary>${G.map(rec).join('')}</details>`:'')})()}
     <h3>Vos flottes</h3>${S.fleets.filter(f=>f.side==='car').map(f=>`<div class="rec"><span>${esc(f.name)} <span class="sub">· ${shipsN(f)} navires · ${f.legs.length?'en mer':f.inG?'à l\'abri, '+N[f.at].n:f.at!=null?N[f.at].n:'au mouillage'}</span></span><button data-self="${f.id}" type="button">Voir</button></div>`).join('')||'<p class="sub">Aucune flotte.</p>'}
     <h3>Légende</h3><p class="sub">Double trait clair : voie romaine. Trait brun épais : route. Trait brun fin : piste. Tirets clairs : chemin de terre vers un village. Tirets rouges et triangle : col de montagne. Pointillés blancs et croix : fermé par la neige. Pointillés clairs : détroit, franchissable à pied. Pour passer la mer, une armée doit embarquer sur une flotte (galères et transports) depuis un port.</p>`;
     el.querySelectorAll('[data-self]').forEach(b=>b.onclick=()=>{const f=S.fleets.find(x=>x.id==b.dataset.self);sel={f};centerOn(f.x,f.y,Math.max(view.s,1));renderAll()});
@@ -6052,7 +6056,7 @@ function corpsMul(a,role){if(a.g||!a.units.length)return 1;const C=corpsOf(a),to
     if(c.k>0&&c.g){const g=c.g,cav=power(c.u.map(i=>a.units[i]).filter(u=>isCavK(UT[u.t].k)))/p;f=1+.025*stars(g)+(hasTr(g,'tact')?.04:0)+(hasTr(g,'cav')?.15*cav:0)+(hasTr(g,'fouge')?(role==='att'?.06:-.03):0)+(hasTr(g,'prud')&&role==='def'?.06:0)+(hasTr(g,'tem')?(role==='att'?.03:-.05):0)}
     m+=p*f;w0+=p}
   let k=w0?m/w0:1;const n=a.units.length,subs=C.length-1;
-  if(n>10)k*=Math.max(.88,1-.015*Math.max(0,n-10-subs*5));
+  if(n>10)k*=Math.max(.88,1-.015*Math.max(0,n-10-subs*10));/* un second pour dix régiments : 3 seconds couvrent 40 régiments (MAXU) */
   // un second qui ne s'entend pas avec le chef
   const chief=genOf(a);for(const c of C)if(c.k>0&&c.g&&chief&&(rivalTr(chief,c.g)||(typeof areRivals==='function'&&areRivals(chief,c.g))))k*=.95;
   return k}
@@ -6150,7 +6154,7 @@ renderSide=function(){_renderSide10.apply(this,arguments);if(!S||!(sel&&sel.a&&!
   try{const T=el.querySelectorAll('.ui-tiles label, label.unit');if(T.length===n)a.units.forEach((u,k)=>{const L=T[k];if(!u.cp&&!u.gd)return;L.style.position='relative';
     L.insertAdjacentHTML('beforeend',`<span style="position:absolute;top:1px;left:3px;font:bold 10px Georgia,serif;text-shadow:0 0 2px #000;color:${u.gd?'#ffd77a':'#e8dcc0'}" title="${u.gd?'Garde du commandant en chef':corpsN(u.cp)}">${u.gd?'♛':ROM_N[u.cp]}</span>`)})}catch(e){}
   const inCity=a.at!=null&&!N[a.at].col&&ownerN(a.at)===a.side,free=inCity?S.gens.filter(g=>g.side===a.side&&!g.dead&&g.army==null&&g.sub==null&&g.at===a.at):[];
-  const warn=n>10&&C.length-1<Math.ceil((n-10)/5)?`<p class="sub" style="margin:2px 0;color:#e0a060">${n} régiments pour un seul état-major : −${Math.round((1-Math.max(.88,1-.015*Math.max(0,n-10-(C.length-1)*5)))*100)} % au combat. Nommez des sous-généraux (un pour cinq régiments au-delà de dix).</p>`:'';
+  const warn=n>10&&C.length-1<Math.ceil((n-10)/10)?`<p class="sub" style="margin:2px 0;color:#e0a060">${n} régiments pour un seul état-major : −${Math.round((1-Math.max(.88,1-.015*Math.max(0,n-10-(C.length-1)*10)))*100)} % au combat. Nommez des sous-généraux (un pour dix régiments au-delà de dix).</p>`:'';
   let h=`<p class="sub" style="margin:8px 0 2px">Chaîne de commandement</p>${warn}<div style="font-size:12px;line-height:1.5">`;
   for(const c of C){const g=c.g,rv=c.k>0&&g&&genOf(a)&&(rivalTr(genOf(a),g)||(typeof areRivals==='function'&&areRivals(genOf(a),g)));
     h+=`<div style="display:flex;gap:6px;align-items:center;justify-content:space-between"><span>${c.k?`<b>${corpsN(c.k)}</b>`:'<b>Commandant en chef</b>'} · ${g?esc(g.name)+' '+'★'.repeat(stars(g)):'—'}${g&&g.tr.length?` <span class="sub">(${g.tr.map(t=>TRAITS[t].n).join(', ')})</span>`:''} · ${c.u.length} rég.${rv?' <span style="color:#e0a060" title="Ils ne s’entendent pas : −5 %">⚔ rivalité</span>':''}</span>${c.k?`<button type="button" data-csub="${c.k}" title="Renvoyer ce sous-général ; ses régiments reviennent au chef">✕</button>`:''}</div>`}
@@ -6694,7 +6698,7 @@ function revolt(n){const id=n.id,o0=o0s(n),back=o0&&o0!=='car'&&!(FAC[o0].a&&S.f
   delete S.ord[id];delete S.bq[id];delete S.q[id];
   for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===n.i){a.dead=true}S.armies=S.armies.filter(a=>!a.dead);
   if(back){S.own[id]=back;const t=back==='rom'?['legion','velites']:['iber','iber'];
-    S.armies.push({id:S.uid++,side:back,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:t.map(t=>({t,men:UT[t].men})),scout:0,cool:0,g:true});
+    S.armies.push({id:S.uid++,side:back,name:'Garnison '+deN(n.n),x:n.x,y:n.y,at:n.i,legs:[],units:t.map(t=>({t,men:UT[t].men})),scout:0,cool:0,g:true});
     if(back!=='rom'&&S.fac[back]){S.fac[back].car=Math.min(S.fac[back].car,-20)}}
   else S.own[id]=null;
   territoryDirty=true;log(`Révolte à ${n.n} ! La ville chasse vos officiers${back?' et revient '+(back==='rom'?'à Rome':'aux '+FAC[back].n):''}.`);S.paused=true}
@@ -7370,7 +7374,7 @@ function setOwn(ids,side){for(const id of ids){const i=NI[id];if(i==null)continu
   S.armies=S.armies.filter(a=>!(a.g&&a.at===i&&a.side!==side))}}
 function scenArmy(side,at,spec,name,extra){const n=N[NI[at]];if(!n)return null;const units=[];for(const [t,k] of spec)for(let j=0;j<k;j++)units.push({t,men:UT[t].men});
   const a=Object.assign({id:S.uid++,side,name,x:n.x,y:n.y,at:n.i,legs:[],units,scout:0,cool:0,mor:70,bag:true},extra||{});a.food=armyFoodMax(a);S.armies.push(a);return a}
-function scenGar(side,ids,spec){for(const id of ids){const i=NI[id];if(i==null||ownerN(i)!==side||S.armies.some(a=>a.g&&a.at===i&&a.side===side))continue;scenArmy(side,id,spec,'Garnison de '+N[i].n,{g:true})}}
+function scenGar(side,ids,spec){for(const id of ids){const i=NI[id];if(i==null||ownerN(i)!==side||S.armies.some(a=>a.g&&a.at===i&&a.side===side))continue;scenArmy(side,id,spec,'Garnison '+deN(N[i].n),{g:true})}}
 function clearField(side){S.armies=S.armies.filter(a=>a.side!==side||a.g);for(const g of S.gens||[])if(g.side===side&&g.army!=null)g.army=null}
 function applyScen(k){const sc=SCEN[k];if(!sc||k==218)return;S.day=sc.day;S.ev=S.ev||{};Object.assign(S.ev,{scip:1,tras:1});clearField('car');clearField('rom');S.gens=[];S.riv=[];if(S.guid==null)S.guid=1;S.rally=S.rally||{};S.cand=S.cand||{};
   const C='car',R='rom';
@@ -8424,12 +8428,15 @@ function popRegen(){S.pop=S.pop||{};const ru={};
   for(const n of TOWNS){if(n.col||S.siege[n.id])continue;const m=popMax(n);if(!m)continue;const p=popGet(n);if(p>=m)continue;
     const vr=popVil()[n.i]||0,k=vr?1-.7*Math.min(1,(ru[n.i]||0)/vr):1;S.pop[n.id]=Math.min(m,p+m/POP_DAYS*w*k)}}
 // remplissage : tout ce que les règles existantes rendent aux régiments (repos, garnison, quartiers d'hiver, chevaux…) est payé en hommes
-function popSnap(){const M=new Map();for(const a of S.armies)if(!a.dead&&popOn(a.side))for(const u of a.units)M.set(u,u.men);return M}
+// la milice des garnisons (u.gm) est la ville elle-même : elle se refait sans puiser dans les réserves (12 nov., plan de reprise, étape 3)
+function popSnap(){const M=new Map();for(const a of S.armies)if(!a.dead&&popOn(a.side))for(const u of a.units)if(!u.gm)M.set(u,u.men);return M}
+// une garnison ne prévient que si un ennemi rôde à moins de 60 km : sinon le manque d'hommes n'a rien d'urgent
+function popFoeNear(a){try{return S.armies.some(o=>!o.dead&&!o.ship&&o.side!==a.side&&Math.hypot(o.x-a.x,o.y-a.y)<60&&hostile(o,a))}catch(e){return false}}
 function popSettle(M){for(const a of S.armies){if(a.dead||!popOn(a.side))continue;let need=0;const L=[];
     for(const u of a.units){const m0=M.get(u);if(m0==null)continue;const d=u.men-m0;if(d>1e-6){need+=d;L.push([u,m0,d])}}
     if(!need)continue;const i=popHome(a),got=i==null?0:popTake(a.side,i,need,true,a.qh&&i===a.at);
     if(got<need-1e-6){const k=got/need;for(const [u,m0,d] of L)u.men=m0+d*k;
-      if(isMine(a)&&i!=null&&got<need*.5&&!(a._popE>S.day)){a._popE=S.day+90;log(`Les campagnes autour ${deN(N[i].n)} n'ont plus d'hommes : ${esc(a.name)} ne se refait plus. Allez dans une autre région, levez des paysans ou payez des mercenaires.`)}}}}
+      if(isMine(a)&&i!=null&&got<need*.5&&!(a._popE>S.day)&&(!a.g||popFoeNear(a))){a._popE=S.day+90;log(`Les campagnes autour ${deN(N[i].n)} n'ont plus d'hommes : ${esc(a.name)} ne se refait plus. Allez dans une autre région, levez des paysans ou payez des mercenaires.`)}}}}
 setTimeout(()=>{const _dPop=daily;daily=function(d){if(!S||S.cur||S.over)return _dPop.apply(this,arguments);let M=null;try{M=popSnap()}catch(e){}
   const r=_dPop.apply(this,arguments);try{if(M)popSettle(M);popRegen()}catch(e){console.error(e)}return r}},0);
 // recrutement : le régiment prend ses hommes à la ville (ou à sa région) ; ceux du joueur sont retenus dès la mise en formation
@@ -8532,7 +8539,7 @@ function garTypes(o,a){const ok=t=>UT[t]&&(UT[t].k==='inf'||UT[t].k==='skirm');
   return L}
 function garFill(n,max){const o=ownerN(n.i);if(!o)return 0;const m=GARMIN(n);if(!m)return 0;let a=garArmy(n,o),k=0;
   const T=garTypes(o,a);
-  if(!a){a={id:S.uid++,side:o,name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
+  if(!a){a={id:S.uid++,side:o,name:'Garnison '+deN(n.n),x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
   while(a.units.length<m&&k<max){const t=T[(a.units.length*2+1)%T.length];a.units.push({t,men:UT[t].men,gm:1});try{const c={};c[t]=a.units.filter(x=>x.t===t).length-1;depOne(a,a.units[a.units.length-1],c)}catch(e){}k++}
   return k}
 function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;if(S.siege&&S.siege[n.id])continue;
@@ -8906,7 +8913,7 @@ function decorate(){
   // médaillon devant le titre
   const h2=el.querySelector('h2');
   if(h2&&!h2.closest('.ui-head')){let cls='',ch='';
-    if(sel&&sel.a){cls=sel.a.side==='car'?'':'rom';ch=(sel.a.name||'?').replace(/^(Garnison de |Armée )/,'').charAt(0)}
+    if(sel&&sel.a){cls=sel.a.side==='car'?'':'rom';ch=(sel.a.name||'?').replace(/^(Garnison d(?:e |')|Armée )/,'').charAt(0)}
     else if(sel&&sel.f){cls='fl';ch=''}else if(sel&&sel.n!=null){cls='tw'}else{cls='';ch=''}
     const w=document.createElement('div');w.className='ui-head';h2.before(w);
     w.innerHTML=`<div class="ui-med ${cls}">${sel&&sel.f?ico('ship',24):sel&&(sel.n!=null||sel.v!=null)?ico('tower',24):ch?esc(ch):ico('tanit',24)}</div>`;w.appendChild(h2)}
@@ -9121,6 +9128,7 @@ function uaInstall(){
 setTimeout(uaInstall,0);
 const mo=new MutationObserver(()=>{if(!$('modal').hidden)tabify()});
 mo.observe($('mcard'),{childList:true});
+window.__ui={ico,townIn,logIcon};/* pour le journal et la barre (bloc GARNISONS, POPULATION ET JOURNAL) */
 })();
 /* ================= FIN INTERFACE BRONZE ================= */
 /* ================= MULTIJOUEUR (fil « Jouer à plusieurs en multijoueur ») =================
@@ -11482,7 +11490,7 @@ const LEGE={exp:null,expK:{}};
   function checkNew(){const L=marks(),now=performance.now();
     if(!mkInit){mkInit=true;for(const m of L)seenMk.add(mkKey(m));return}
     for(const m of L){const K=mkKey(m);if(seenMk.has(K))continue;seenMk.add(K);if(m.side!=='car'||m.by&&m.by===myNick())continue;pingT.set(m.id,now);const o=MK[m.k]||MK.ral;
-      let where='';try{const n=nearestNode(m.x,m.y);where=Math.hypot(n.x-m.x,n.y-m.y)<6?' à '+n.n:' près de '+n.n}catch(e){}
+      let where='';try{const n=nearestNode(m.x,m.y);where=Math.hypot(n.x-m.x,n.y-m.y)<6?' à '+n.n:' près '+deN(n.n)}catch(e){}
       log(`${m.by?esc(m.by):'Un allié'} pose un repère${where} : <b>${o.n}</b>${m.txt?` — « ${esc(m.txt)} »`:''}.`);
       try{const W=window.__son;if(W&&W.ok()){const t=W.now()+.03;W.bell(t,660,.12);W.bell(t+.18,880,.1)}}catch(e){}}
     // repères expirés
@@ -11984,7 +11992,7 @@ function grHire(i,j){const L=grCand(i),x=L[j];if(!x)return;const c=grCost(x);if(
   x.id=S.guid++;L.splice(j,1);x.army=null;x.sub=null;x.at=i;S.gens.push(x);log(`${x.name} est engagé à ${N[i].n} (${c} or).`);renderAll()}
 function grNewArmy(g,i){const A=grHere(i).filter(a=>a.units.length);if(!A.length)return;
   let h=`<h2>Nouvelle armée de ${esc(g.name)}</h2><p class="sub">Cochez les régiments qui partent avec lui. Ils quittent leur armée ou la garnison de ${esc(N[i].n)}.</p>`;
-  for(const a of A){h+=`<h3>${esc(a.g?'Garnison de '+N[i].n:a.name)}</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px">`+
+  for(const a of A){h+=`<h3>${esc(a.g?'Garnison '+deN(N[i].n):a.name)}</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px">`+
     a.units.map((u,k)=>`<label class="unit" style="grid-template-columns:18px 1fr"><input type="checkbox" data-gra="${a.id}" data-grk="${k}"><span>${esc(typeof uName==='function'?uName(u):u.t)} <span class="sub">${Math.round(u.men)}</span></span></label>`).join('')+`</div>`}
   h+=`<div class="row" style="margin-top:12px"><button type="button" class="go" id="grOk">Former l'armée</button><button type="button" id="grNo">Annuler</button></div>`;
   modal(h);$('mcard').classList.add('wide');$('grNo').onclick=closeModal;
@@ -12028,7 +12036,7 @@ const CAP_N={car:['Bodo','Adherbal','Bostar','Himilcon','Magon','Mutin','Abdmelq
 function capName(side){const r=typeof realSide==='function'?realSide(side):side,L=CAP_N[r]||CAP_N.car;return 'Capitaine '+L[Math.floor(Math.random()*L.length)]}
 function capNeed(a){return !a.dead&&!a.ship&&(a.reinf!=null||(a.g&&a.legs&&a.legs.length))}
 function capSync(){if(!S||!S.gens)return;
-  for(const g of S.gens){if(!g.capt||g.dead)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(!a||a.gen!==g.id||!capNeed(a)){if(a&&a.gen===g.id){a.gen=null;if(a.g&&a.at!=null)a.name='Garnison de '+N[a.at].n;else if(a.reinf!=null)a.name='Renforts'}g.dead=true;g.army=null}}
+  for(const g of S.gens){if(!g.capt||g.dead)continue;const a=S.armies.find(x=>x.id===g.army&&!x.dead);if(!a||a.gen!==g.id||!capNeed(a)){if(a&&a.gen===g.id){a.gen=null;if(a.g&&a.at!=null)a.name='Garnison '+deN(N[a.at].n);else if(a.reinf!=null)a.name='Renforts'}g.dead=true;g.army=null}}
   S.gens=S.gens.filter(g=>!(g.capt&&g.dead));
   for(const a of S.armies){if(!capNeed(a)||(a.gen!=null&&S.gens.some(g=>g.id===a.gen&&!g.dead&&g.army===a.id)))continue;
     const g=mkGen(a.side,capName(a.side));g.tr=[];g.xp=0;g.capt=1;g.army=a.id;g.at=null;g.lx=a.x;g.ly=a.y;S.gens.push(g);a.gen=g.id;a.name=g.name}}
@@ -12510,7 +12518,7 @@ function dvSend(f){dvInit();const F=S.fac[f],o=DVS.offer;if(!o||F.cd>0)return;co
   DVS.view='fiche';DVS.offer=null;renderAll();openDip(f)}
 if(typeof ENV_LAB!=='undefined')ENV_LAB.neg='négociation';
 function dvGiveTown(id,f){const i=NI[id],n=N[i];if(ownerN(i)!=='car')return false;S.own[id]=f;delete S.siege[id];delete S.q[id];
-  for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===i){a.side=f;a.name='Garnison de '+n.n}
+  for(const a of S.armies)if(a.side==='car'&&a.g&&a.at===i){a.side=f;a.name='Garnison '+deN(n.n)}
   territoryDirty=true;return true}
 function dvPromise(p){dvInit();p.id=S.dv.uid++;p.d0=Math.floor(S.day);S.dv.prom.push(p);return p}
 function dvArrive(e){dvInit();const f=e.f,F=S.fac[f];if(!F)return;F.cd=1;const o=e.o,nm=FAC[f].n;
@@ -14478,7 +14486,7 @@ const SEN_M={
     run(arg){const a=S.armies.find(x=>x.id===+arg)||senBestArmy();if(!a)return 'Aucune armée.';const old=a.name,g=mkGen('car',nextGen('car'));if(!S.gens)S.gens=[];giveGen(a,g);a.mor=Math.max(20,(a.mor||60)-6);return `${old} est relevé ; ${g.name} prend l'armée.`}},
   colonie:{n:'Installer des vétérans',pick:'town',d:()=>'100 or. La ville choisie reçoit deux régiments de garnison et son ordre public monte de 15.',aff:[.2,.5,.4],cd:10,cat:'c',ok:()=>S.gold.car>=100?true:'Il faut 100 or.',
     run(arg){const n=N.find(x=>x.id===arg)||N[senCapI()];S.gold.car-=100;S.ord=S.ord||{};S.ord[n.id]=senClamp((S.ord[n.id]==null?60:S.ord[n.id])+15,0,100);
-      try{let a=S.armies.find(x=>x.g&&!x.dead&&x.at===n.i&&x.side==='car');if(!a){a={id:S.uid++,side:'car',name:'Garnison de '+n.n,x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
+      try{let a=S.armies.find(x=>x.g&&!x.dead&&x.at===n.i&&x.side==='car');if(!a){a={id:S.uid++,side:'car',name:'Garnison '+deN(n.n),x:n.x,y:n.y,at:n.i,legs:[],units:[],scout:0,cool:0,g:true,mor:65};S.armies.push(a)}
         for(const [t] of senTroops([['inf',2]])){const u={t,men:UT[t].men,gm:1};a.units.push(u);try{if(typeof depOne==='function')depOne(a,u,{})}catch(e){}}}catch(e){console.error(e)}
       return `Des vétérans s'installent à ${n.n}.`}},
   completer:{n:'Compléter les rangs',pick:'army',d:()=>'80 or. Tous les régiments de l’armée choisie retrouvent leur effectif complet.',aff:[.7,.1,-.3],cd:6,cat:'g',ok:()=>S.gold.car<80?'Il faut 80 or.':senMine().length?true:'Aucune armée en campagne.',
@@ -14765,7 +14773,7 @@ const trThreat=f=>dvNear(f,'rom',260)>0;
 const trWants=(f,k)=>dvP(f).w.some(w=>w[0]===k);
 const trCapN=f=>dvTowns(f).sort((a,b)=>b.size-a.size)[0];
 function trTakeTown(id,f){const i=NI[id];if(i==null||ownerN(i)!==f)return false;const n=N[i];S.own[id]='car';delete S.siege[id];
-  for(const a of S.armies)if(a.side===f&&a.g&&a.at===i){a.side='car';a.name='Garnison de '+n.n}
+  for(const a of S.armies)if(a.side===f&&a.g&&a.at===i){a.side='car';a.name='Garnison '+deN(n.n)}
   territoryDirty=true;try{if(typeof garFill==='function')garFill(n)}catch(e){}return true}
 function trAllies(f,k,name){const Tn=trCapN(f);if(!Tn)return null;const t=poolOf(f),units=Array.from({length:k},()=>({t,men:UT[t].men}));
   const a={id:S.uid++,side:'car',name:name||('Alliés '+FAC[f].n.toLowerCase()),x:Tn.x,y:Tn.y,at:Tn.i,legs:[],units,scout:0,cool:0,mor:65,food:12};S.armies.push(a);
@@ -15099,6 +15107,64 @@ window.__traites={get S(){return S},TR_C,trEval,trCounter,trApply,trSign,trArriv
   window.__ga={dsm:DSM,side:GAS};
 }
 /* ================= FIN PERFORMANCE DES GRANDES ARMÉES ================= */
+/* ================= GARNISONS, POPULATION ET JOURNAL (étape 3 du plan de reprise, 12 nov.) =================
+   - journal : catégories (logCat), clé de regroupement (logKey, utilisée par log), bandeau avec ×n et sièges/batailles en avant,
+     fenêtre « Journal » avec filtres Tout, Guerre, Diplomatie, Économie, Autres (200 lignes) ;
+   - barre du haut : hommes en campagne et hommes en garnison séparés, chiffres tenus à jour (le revenu du lancement était périmé) ;
+   - fiche de territoire : ne recouvre plus la barre du haut quand une armée est choisie ;
+   - noms des garnisons des anciennes parties : « Garnison d'Utique » au lieu de « Garnison de Utique ».
+   La milice qui ne puise plus dans les réserves et le message de garnison réservé aux villes menacées sont dans POPULATION (bloc 058). */
+const {ico:uIco,townIn:uTown,logIcon:uLogIco}=window.__ui||{ico:()=>'',townIn:()=>null,logIcon:()=>''};
+const LOG_CAT={imp:'Sièges et batailles',guerre:'Guerre',dipl:'Diplomatie',eco:'Économie',autre:'Autres'};
+function logCat(t){const s=String(t).replace(/<[^>]+>/g,'').toLowerCase();
+  if(/bataille|vaincu|victoire|défaite|assiég|siège|assaut|se rend\b|se rendent|capitul|tombe |tombée|prend d'assaut|s'empare de [A-ZÀ-Ý]|massacr|écras/.test(s))return 'imp';
+  if(/sénat|consul|élu|élit|alli|traité|émissaire|ambassad|pacte|tribut|otage|motion|paix|déclare la guerre|fidélité|neutre|peuple/.test(s))return 'dipl';
+  if(/(^|[^a-zà-ÿ])or([^a-zà-ÿ]|$)|trésor|revenu|impôt|marché|convoi|ration|vivres|ravitaill|commerce|butin|mercenaire|chantier|construi|pirates|pillent les côtes/.test(s))return 'eco';
+  if(/armée|attaqu|guerre|messager|éclaireur|repér|embuscade|pill|garnison|régiment|marche|camp|fourrageur|flotte|navire|pont|général/.test(s))return 'guerre';
+  return 'autre'}
+// clé de regroupement : même phrase aux nombres et aux noms propres près ; jamais pour les sièges et les batailles
+function logKey(t){const s=String(t).replace(/<[^>]+>/g,'');if(logCat(s)==='imp')return null;
+  const t2=s.replace(/\d[\d  .,]*/g,'#');return (' '+t2).replace(/(\s|['’])[A-ZÀ-Ý][\wÀ-ÿ’-]*(\s+[A-ZÀ-Ý][\wÀ-ÿ’-]*)*/g,'$1X').trim().slice(0,160)}
+function logRow(l,big){const c=cal(l.d),tn=uTown(l.t),k=logCat(l.t);
+  return `<div class="lg-${k}${k==='imp'?' imp':''}${tn?' ui-go':''}"${tn?` data-ui-town="${tn.i}" title="Centrer sur ${esc(tn.n)}"`:''}>${uLogIco(l.t)}${l.t}${l.n>1?` <b class="lgN" title="Message semblable reçu ${l.n} fois en un mois">×${l.n}</b>`:''}<em>${c.dm===1?'1er':c.dm} ${MONTHS[c.mo]}${big?' '+c.year:''}</em></div>`}
+function logBind(el,close){el.querySelectorAll('[data-ui-town]').forEach(d=>d.onclick=()=>{const n=N[+d.dataset.uiTown];if(!n)return;if(close)closeModal();centerOn(n.x,n.y,Math.max(view.s,1.2));try{renderAll()}catch(e){}})}
+renderLog=function(){const el=$('log');if(!el||!S)return;
+  el.innerHTML=S.log.slice(0,3).map(l=>logRow(l)).join('')+(S.log.length?`<div class="lgAll" title="Les ${S.log.length} derniers messages, avec filtres">Journal (${S.log.length})</div>`:'');
+  logBind(el,false);const b=el.querySelector('.lgAll');if(b)b.onclick=()=>openJournal()};
+let LOG_F='tout';
+function openJournal(f){if(f)LOG_F=f;const L=S.log||[],inF=l=>{const k=logCat(l.t);return LOG_F==='tout'||(LOG_F==='guerre'?k==='imp'||k==='guerre':k===LOG_F)};
+  const cnt=k=>L.filter(l=>{const c=logCat(l.t);return k==='tout'||(k==='guerre'?c==='imp'||c==='guerre':c===k)}).length;
+  const F=[['tout','Tout'],['guerre','Guerre'],['dipl','Diplomatie'],['eco','Économie'],['autre','Autres']];
+  modal(`<h2>Journal</h2><p class="sub">Les ${L.length} derniers messages. Les sièges et les batailles sont marqués en rouge ; un message qui revient plusieurs fois dans le mois n'occupe qu'une ligne (×n). Cliquez sur une ligne pour centrer la carte.</p>
+    <div class="row" style="flex-wrap:wrap;gap:6px;margin:6px 0 8px">${F.map(([k,n])=>`<button type="button" data-lgf="${k}" class="${LOG_F===k?'on':''}">${n} (${cnt(k)})</button>`).join('')}</div>
+    <div id="lgList" style="max-height:60vh;overflow:auto;padding-right:6px">${L.filter(inF).map(l=>logRow(l,true)).join('')||'<p class="sub">Aucun message.</p>'}</div>
+    <div class="row" style="justify-content:flex-end"><button class="go" id="mClose" type="button">Fermer</button></div>`);
+  $('mcard').classList.add('wide');$('mClose').onclick=closeModal;document.querySelectorAll('[data-lgf]').forEach(b=>b.onclick=()=>openJournal(b.dataset.lgf));logBind($('lgList'),true)}
+{const st=document.createElement('style');st.textContent=`
+#log > div.imp{border-color:#a8452e!important;box-shadow:0 0 0 1px #0d0a07,0 0 0 2px rgba(168,69,46,.55),0 6px 16px rgba(0,0,0,.4)!important;opacity:1!important}
+#log .lgN{font-size:11px;color:var(--bzL,#d6b878);margin-left:4px}
+#log > div.lgAll{display:block!important;padding:3px 10px!important;font-size:12px;cursor:pointer;text-align:right;opacity:1!important;color:var(--bzL,#d6b878)}
+#log > div.lgAll:hover{border-color:var(--bzL,#d6b878)}
+#lgList > div{position:relative;padding:6px 8px 6px 36px;border-bottom:1px solid rgba(214,184,120,.15);font-size:13px;line-height:1.35}
+#lgList > div .ui-i{position:absolute;left:8px;top:7px;width:19px;height:19px}
+#lgList > div em{display:block;font-style:normal;font-size:11px;opacity:.7}
+#lgList > div.imp{background:rgba(168,69,46,.16)}
+#lgList > div.ui-go{cursor:pointer}#lgList > div.ui-go:hover{background:rgba(214,184,120,.1)}
+#lgList .lgN{font-size:11px;color:#d6b878;margin-left:4px}
+details.garFold{margin:4px 0}details.garFold summary{cursor:pointer;padding:4px 0}`;document.head.appendChild(st)}
+// barre du haut : hommes en campagne / en garnison
+{const _rtG=renderTop;renderTop=function(){const r=_rtG.apply(this,arguments);try{const b=document.querySelector('#gold .ui-r[data-tt^="Hommes sous les armes"]');if(b&&S){let fm=0,gm=0;
+    for(const a of S.armies)if(a.side==='car'&&!a.dead)for(const u of a.units){if(a.g)gm+=u.men;else fm+=u.men}
+    b.dataset.tt='Hommes en campagne (armées hors garnisons)';b.innerHTML=`${uIco('helm',18)}<b>${Math.round(fm).toLocaleString('fr-FR')}</b>`;
+    b.insertAdjacentHTML('afterend',`<div class="ui-r" data-tt="Hommes en garnison dans vos villes">${uIco('tower',18)}<b>${Math.round(gm).toLocaleString('fr-FR')}</b></div>`)}}catch(e){console.error(e)}return r}}
+// chiffres de la barre tenus à jour (au lancement, le revenu affiché datait d'avant les garnisons)
+{setInterval(()=>{try{if(typeof S==='undefined'||!S||S.cur||!S.armies||!S.gold)return;const i=document.querySelector('#gold .ui-r i'),g=document.querySelector('#gold .ui-r b');if(!i||!g)return;const {inc,up}=income('car'),net=Math.round(inc-up);
+  if(i.textContent!==(net>=0?'+':'')+net||g.textContent!==Math.round(S.gold.car).toLocaleString('fr-FR'))renderTop()}catch(e){}},1000)}
+// fiche de territoire : à côté du panneau quand elle n'a pas la place au-dessus
+{const _rgP=rgcPlace;rgcPlace=function(){const r=_rgP.apply(this,arguments);try{const c=$('rgCard'),t=$('top'),sd=$('side');if(!c||!t)return r;const tb=t.getBoundingClientRect().bottom,H=window.innerHeight;
+  if(c.getBoundingClientRect().top<tb+6&&sd&&sd.style.display!=='none'&&sd.offsetHeight>0){const q=sd.getBoundingClientRect();c.style.left=(q.right+8)+'px';c.style.bottom='10px';c.style.width='300px';c.style.maxHeight=Math.max(120,H-tb-24)+'px'}}catch(e){}return r}}
+// noms des garnisons des parties commencées avant la correction
+{const _dNm=daily;daily=function(){const r=_dNm.apply(this,arguments);try{if(S&&!S.nmFix){S.nmFix=1;for(const a of S.armies)if(a.name)a.name=a.name.replace(/^Garnison de (?=[AEIOUYÉÈÊÂÎÔÛH][a-zà-ÿ])/,"Garnison d'")}}catch(e){}return r}}
 /* ================= BOUCLE ================= */
 setTimeout(async()=>{
   await loadDEM();buildGeo();TOWNS=N.filter(n=>!n.col);makeTexture();buildSeaGrid();seaCurves();buildVillages();buildChemins();

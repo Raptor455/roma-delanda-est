@@ -5,7 +5,7 @@ function contact(side,f){
 function joinAlliance(f,side){
   S.fac[f].st='allie_'+side;
   N.forEach(n=>{if(ownerN(n.i)===f){S.own[n.id]=side;delete S.siege[n.id]}});
-  S.armies.forEach(a=>{if(a.side===f){a.side=side;a.name=(side==='car'?'Alliés ':'Socii ')+'– '+a.name.replace('Garnison de ','')}});
+  S.armies.forEach(a=>{if(a.side===f){a.side=side;a.name=(side==='car'?'Alliés ':'Socii ')+'– '+a.name.replace(/^Garnison d(e |')/,'')}});
   log(`Ralliement : ${FAC[f].n} rejoint le camp de ${sideName(side)} !`);territoryDirty=true;
 }
 function dipAction(f,kind){

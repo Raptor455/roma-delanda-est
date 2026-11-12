@@ -33,7 +33,7 @@
   function checkNew(){const L=marks(),now=performance.now();
     if(!mkInit){mkInit=true;for(const m of L)seenMk.add(mkKey(m));return}
     for(const m of L){const K=mkKey(m);if(seenMk.has(K))continue;seenMk.add(K);if(m.side!=='car'||m.by&&m.by===myNick())continue;pingT.set(m.id,now);const o=MK[m.k]||MK.ral;
-      let where='';try{const n=nearestNode(m.x,m.y);where=Math.hypot(n.x-m.x,n.y-m.y)<6?' à '+n.n:' près de '+n.n}catch(e){}
+      let where='';try{const n=nearestNode(m.x,m.y);where=Math.hypot(n.x-m.x,n.y-m.y)<6?' à '+n.n:' près '+deN(n.n)}catch(e){}
       log(`${m.by?esc(m.by):'Un allié'} pose un repère${where} : <b>${o.n}</b>${m.txt?` — « ${esc(m.txt)} »`:''}.`);
       try{const W=window.__son;if(W&&W.ok()){const t=W.now()+.03;W.bell(t,660,.12);W.bell(t+.18,880,.1)}}catch(e){}}
     // repères expirés
