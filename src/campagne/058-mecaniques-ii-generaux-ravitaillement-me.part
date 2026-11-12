@@ -299,7 +299,7 @@ function aiSide(side){if(Math.floor(S.day)%30===0){aiTrim(side);
     for(const n of N){if(n.col||!cityHostile(n.i,side))continue;if(H&&H.ok&&!H.ok(n.x,n.y))continue;const days=D.dist[n.i];if(days>=1e9)continue;
       const def=S.armies.filter(x=>x.side===ownerN(n.i)&&!x.dead&&Math.hypot(x.x-n.x,x.y-n.y)<6).reduce((s,x)=>s+strength(x),0);if(def>my*.85)continue;
       const v=(n.inc+12+(n.i===capOf(sideOfReal(realSide(side)==='car'?'rom':'car'))?40:0))/(8+days);if(v>bv){bv=v;best=['n',n.i]}}
-    for(const f of foes){if(f.g||strength(f)>my*.8)continue;if(H&&H.ok&&!H.ok(f.x,f.y))continue;const nn=nearestNode(f.x,f.y),days=D.dist[nn.i];if(days>=1e9)continue;const v=(60+strength(f)/10)/(8+days);if(v>bv){bv=v;best=['p',f.x,f.y]}}
+    for(const f of foes){if(f.g||abriteMurs(f)||strength(f)>my*.8)continue;if(H&&H.ok&&!H.ok(f.x,f.y))continue;const nn=nearestNode(f.x,f.y),days=D.dist[nn.i];if(days>=1e9)continue;const v=(60+strength(f)/10)/(8+days);if(v>bv){bv=v;best=['p',f.x,f.y]}}
     if(best){if(best[0]==='n')order(a,0,0,best[1]);else order(a,best[1],best[2],null)}}}
 // l'IA ne conquiert pas les peuples hors de sa guerre (Grèce, Gaule transalpine, alliés de Rome…) sauf s'ils lui ont déclaré la guerre
 const AI_OFF={rom:new Set(['mas','ven','syr','epi','mac','thr','eto','ach','ath','cre','cyr','ill','dar','gau','num','mae','mau']),car:new Set(['epi','mac','thr','eto','ach','ath','cre','cyr','ill','dar'])};
@@ -1479,7 +1479,7 @@ const _afterLoadG=afterLoad;afterLoad=function(){const r=_afterLoadG.apply(this,
     for(const id in I){const b=$(id);if(b&&!b.querySelector('.ui-i'))b.innerHTML=svg(I[id][0],I[id][1])}}catch(e){}},0)}
 /* ---------- 18. GARNISONS MINIMALES (10 nov., Baptiste : « un minimum acceptable, 5-6 régiments ») ----------
    Chaque bourg, ville et capitale tenus par quelqu'un garde au moins 5 régiments (6 pour une capitale).
-   Les régiments ajoutés sont la milice de la ville (u.gm) : payés par la ville (pas d'entretien), jamais congédiés par l'IA.
+   Les régiments ajoutés sont la milice de la ville (u.gm) : payés surtout par la ville (un cinquième de l'entretien depuis l'étape 4), jamais congédiés par l'IA.
    Au début de la partie (ou au premier jour d'une partie chargée), toutes les garnisons sont complétées ;
    ensuite, chaque mois, une ville qui n'est pas assiégée en relève un de plus si elle est sous le minimum. */
 const GARMIN=n=>!n||n.col?0:n.size>=3?6:n.size>=1?5:0;
@@ -1498,8 +1498,11 @@ function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;
   const o=ownerN(n.i);if(S.armies.some(a=>{if(a.dead||a.g||a.side===o||Math.hypot(a.x-n.x,a.y-n.y)>6)return false;try{return hostile(a,{side:o,units:[]})}catch(e){return true}}))continue;k+=garFill(n,max)}return k}
 {const _dGM=daily;daily=function(d){const r=_dGM.apply(this,arguments);try{if(S&&!S.over&&!S.cur){
   if(!S.garMin){S.garMin=1;garAll(99)}else if(Math.floor(d)%30===15)garAll(1)}}catch(e){console.error(e)}return r}}
-// la milice ne coûte rien : on retire son entretien (la moitié est déjà retirée pour une armée à l'abri des murs)
-{const _incG=income;income=function(side){const r=_incG.apply(this,arguments);try{let x=0;for(const a of S.armies)if(a.side===side&&!a.dead)for(const u of a.units)if(u.gm)x+=uCost(u)/12*(a.inG?.5:1);
+// la milice coûte un cinquième d'un régiment : on retire le reste de son entretien (la moitié est déjà retirée pour une armée à l'abri des murs).
+// Étape 4 du plan de reprise : gratuite, elle laissait un joueur sans rien faire amasser 2 300 or la première année.
+const MIL_PAYE=.2;
+{const _incG=income;income=function(side){const r=_incG.apply(this,arguments);try{let x=0;for(const a of S.armies)if(a.side===side&&!a.dead)for(const u of a.units)if(u.gm)x+=uCost(u)/12*(a.inG?.5:1)*(1-MIL_PAYE);
+  if(realSide(side)==='rom')x*=ROM_ALLY; // l'entretien romain est déjà réduit à ROM_ALLY : sans cela la milice effaçait aussi celui des légions (étape 4)
   if(x&&r&&typeof r.up==='number')r.up=Math.max(0,Math.round(r.up-x))}catch(e){}return r}}
 /* ---------- 19. ARMÉES DE DÉPART DES PEUPLES JOUABLES (10 nov., Baptiste : « re travaille les armées de base, l'équipement des unités surtout ») ----------
    Au début de la partie, chaque régiment des armées et garnisons de Carthage, Rome et des peuples jouables reçoit une troupe

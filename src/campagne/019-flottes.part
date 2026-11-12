@@ -202,7 +202,8 @@ function aiFleets(){
 // expédition : une armée sans cible terrestre gagne un port, embarque et part assiéger une ville punique d'outre-mer
 function aiExpedition(a,bv0=0){
   if(a.ai==='embark'){const f=S.fleets.find(x=>x.id===a.aiF);if(!f||f.legs.length||f.cargo.length){a.ai=null;return true}
-    if(a.at===f.at&&f.at!=null){if(!canBoard(a,f)){a.ai=null;return true}const n=N[a.aiT];board(a,f);const L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(!L){unload(f);a.ai=null;return true}
+    if(a.at===f.at&&f.at!=null){if(f.inG)leavePort(f); // une flotte désarmée au port reprend la mer pour embarquer (avant : l'armée attendait au port pour toujours)
+      if(!canBoard(a,f)){a.ai=null;return true}const n=N[a.aiT];board(a,f);const L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(!L){unload(f);a.ai=null;return true}
       f.legs=L;f.at=null;f.task=null;f.dest=a.aiT;f.ai={land:a.aiT};a.ai=null;return true}
     if(!a.legs.length)order(a,0,0,f.at);return true}
   if(a.units.length<6||S.day<15)return false;

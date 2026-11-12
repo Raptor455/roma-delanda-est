@@ -28,3 +28,12 @@ bloc est déjà à sa place dans la dernière version.
 exact d'assembler.py : les deux sens donnent le même résultat à l'octet près.
 
 `naval.html` n'est pas découpé : c'est une page à part, plus petite, sans chaîne de patchs.
+
+## Mesurer
+
+- `node outils/banc/banc.js` : batailles types jouées en accéléré, comparées à la résolution automatique.
+- `node outils/mesure/pression.js [jours]` : une campagne de Carthage où le joueur ne fait rien,
+  relevée mois par mois (or, villes perdues, sièges, armées romaines). `MESURE_AUTO=1` fait jouer
+  Carthage par l'IA, pour comparer avec un joueur actif. Critère de l'étape 4 du plan de reprise :
+  le joueur passif perd des villes dans l'année et son or reste sous 1 000.
+- `outils/mesure/partie.js` lance une partie de test réutilisable dans d'autres mesures.
