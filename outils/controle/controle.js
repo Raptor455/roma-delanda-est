@@ -7,10 +7,11 @@
 // de test (window.__ev, juste avant le bloc BOUCLE), et vérifie :
 //   1. que src/ et les pages concordent (outils/assembler.py --verifier) ;
 //   2. que les neuf peuples démarrent et tiennent 60 jours ;
-//   3. qu'un an de campagne de Carthage passe sans erreur ;
+//   3. qu'un an de campagne de Carthage passe sans erreur (une défaite en règle compte comme une fin normale) ;
 //   4. qu'une bataille Hannibal contre Scipion s'ouvre, se déploie et se joue 3 minutes ;
-//   5. qu'une sauvegarde se reprend au bon jour ;
-//   6. qu'une partie à deux (deux onglets) reste synchronisée.
+//   5. qu'une sauvegarde se reprend au bon jour (à mi-année) ;
+//   6. qu'une partie à deux (deux onglets) reste synchronisée ;
+//   7. que la première partie guidée (Cannes) amène une bataille en moins de 15 jours de jeu.
 // Toute erreur JavaScript de la page fait échouer le contrôle. Le rapport et les captures
 // vont dans outils/controle/rapport/.
 //
@@ -111,12 +112,17 @@ async function main() {
     let p;
     try {
       p = await page(); await commencer(p, 'Carthage');
-      const r = await jours(p, 365);
-      note('Carthage : un an de campagne', !r.err.length && !p.errs.length && r.day >= 365, (r.err.length || p.errs.length) ? JSON.stringify({ tick: r.err, page: p.errs.slice(0, 3) }) : `jour ${r.day}`);
+      // sauvegarde et reprise à mi-année (un joueur qui ne fait rien peut perdre la partie avant la fin de l'année)
+      const r1 = await jours(p, 180);
       const avant = await p.ev('S.paused=true;save();JSON.stringify({day:+S.day.toFixed(2),or:Math.round(S.gold.car),n:S.armies.length})').then(JSON.parse);
       await p.reload(); await p.waitForSelector('#chgCont', { state: 'visible', timeout: 120000 }); await p.click('#chgCont'); await p.waitForTimeout(2500);
       const apres = await p.evaluate(() => window.__ev('JSON.stringify({day:+S.day.toFixed(2),or:Math.round(S.gold.car),n:S.armies.length})')).then(JSON.parse);
       note('Sauvegarde et reprise', Math.abs(avant.day - apres.day) < 1 && avant.or === apres.or && avant.n === apres.n, `avant ${JSON.stringify(avant)} · après ${JSON.stringify(apres)}`);
+      // le reste de l'année, après la reprise ; une défaite en règle (Sénat, Carthage prise) est une fin normale, pas une erreur
+      const r2 = await jours(p, 365 - Math.floor(apres.day));
+      const fin = await p.ev('JSON.stringify(S.over?{over:S.over,titre:S.overMsg&&S.overMsg.title}:null)').then(JSON.parse);
+      const err = [...r1.err, ...r2.err];
+      note('Carthage : un an de campagne', !err.length && !p.errs.length && (r2.day >= 365 || !!fin), (err.length || p.errs.length) ? JSON.stringify({ tick: err, page: p.errs.slice(0, 3) }) : fin ? `partie finie au jour ${r2.day} (${fin.titre || fin.over})` : `jour ${r2.day}`);
     } catch (e) { note('Carthage : un an de campagne / sauvegarde', false, String(e.message || e).slice(0, 300)); }
     if (p) { await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await p.close(); }
   }
@@ -145,6 +151,21 @@ async function main() {
       note('Bataille : ouverture, déploiement direct, 8 minutes de combat', ok, `Carthage ${r.a[0]} → ${r.b[0]}, Rome ${r.a[1]} → ${r.b[1]}` + (r.err ? ' · ' + r.err : '') + (p.errs.length ? ' · ' + p.errs.slice(0, 3).join(' | ') : ''));
     } catch (e) { note('Bataille : ouverture, déploiement direct, 8 minutes de combat', false, String(e.message || e).slice(0, 300)); if (p) await p.screenshot({ path: path.join(RAPPORT, 'echec-bataille.png') }).catch(() => {}); }
     if (p) { await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await p.close(); }
+  }
+
+  // 7. première partie guidée (Cannes) : règles simples, guide, et les consuls viennent livrer bataille
+  {
+    let p;
+    try {
+      p = await page(); await p.click('#chgNew'); await p.waitForTimeout(600);
+      await p.click('#ppGo');
+      await p.waitForFunction(() => typeof window.__ev === 'function' && document.getElementById('mGo') && /Première partie/.test(document.getElementById('mcard').innerText), null, { timeout: 90000 });
+      await p.click('#mGo'); await p.waitForTimeout(800);
+      const r = await p.ev(`(()=>{const d0=S.day,todo=nvTodoList().map(x=>x.t).join(' | ');for(let i=0;i<4*15&&!S.cur;i++){S.paused=false;tick(.25)}
+        return JSON.stringify({jours:+(S.day-d0).toFixed(1),bataille:!!S.cur,simple:S.simple,guide:/Premiers pas 1/.test(todo)})})()`).then(JSON.parse);
+      note('Première partie guidée : bataille en moins de 15 jours', r.bataille && r.simple === 1 && r.guide && !p.errs.length, JSON.stringify(r) + (p.errs.length ? ' · ' + p.errs.slice(0, 3).join(' | ') : ''));
+    } catch (e) { note('Première partie guidée : bataille en moins de 15 jours', false, String(e.message || e).slice(0, 300)); if (p) await p.screenshot({ path: path.join(RAPPORT, 'echec-premiere.png') }).catch(() => {}); }
+    if (p) { await p.evaluate(() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }); await p.close(); }
   }
 
   // 6. partie à deux entre deux onglets (connexion locale ?mplocal)

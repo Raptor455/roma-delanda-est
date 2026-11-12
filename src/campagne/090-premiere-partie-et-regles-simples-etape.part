@@ -1,0 +1,76 @@
+/* ================= PREMIÈRE PARTIE ET RÈGLES SIMPLES (étape 5 du plan de reprise) ================= */
+// Étape 5 du plan de reprise (« la première heure ») : un nouveau joueur livre sa première bataille en moins de 15 minutes.
+//  1. « Première partie » en tête de l'écran de départ : Carthage en 216 (Cannes), facile, règles simples, et des premiers pas
+//     guidés en tête de la liste « À faire » (choisir Hannibal, lancer le temps, marcher sur les consuls, livrer bataille, assiéger).
+//  2. Règles simples (case de l'écran de départ, gardée d'une partie à l'autre ; toujours mises pour la première partie) :
+//     le temps ne s'arrête plus que pour ce qui touche vos armées et vos villes (sièges, batailles, ennemis en vue, vivres,
+//     révoltes) ; les messages restent au journal. Les fenêtres avancées (atelier, commerce, logistique, agents, repères)
+//     sont rangées, et la liste « À faire » ne propose plus les alliances possibles.
+//  3. Scénario 216 : les consuls Varron et Paul Émile marchent ensemble sur Hannibal, comme le dit le scénario (avant, ils
+//     partaient séparément assiéger Mediolanum et la première bataille venait au bout de deux mois).
+const PP_PREF='bellum.simple',PP_GUIDE='bellum.ppGuide';
+const PP_AVANCE=new Set(['bWork','bSea','bHub','bAg','bMark']);
+const PP_IMPORTANT=/assièg|assaut|bataille|tombe aux mains|se rend|débarqu|armée (romaine|ennemie)|légions|en vue|vue près|marchent sur|menac|révolt|vivres|famine|mutin|déserte/i;
+let ppSimplePref=false;try{ppSimplePref=localStorage.getItem(PP_PREF)==='1'}catch(e){}
+const ppSimple=()=>!!(S&&S.simple&&!(S.mpP&&Object.keys(S.mpP).length>1));
+const ppH=()=>S&&S.armies.find(a=>a.side==='car'&&a.name==='Hannibal'&&!a.dead);
+const ppConsuls=()=>S&&S.armies.find(a=>a.side==='rom'&&!a.dead&&/Varro|Paullus/.test(a.name));
+// une nouvelle partie prend la préférence « règles simples »
+{const _ng=newGame;newGame=function(){const r=_ng.apply(this,arguments);try{if(S){S.simple=ppSimplePref?1:0;S.guide=null}}catch(e){}return r}}
+// 216 : une seule armée consulaire, qui marche sur Hannibal
+function ppCannes(){if(S.mirror)return;const V=S.armies.find(a=>a.side==='rom'&&a.name==='C. Terentius Varro'&&!a.dead),P=S.armies.find(a=>a.side==='rom'&&a.name==='L. Aemilius Paullus'&&!a.dead),H=ppH();
+  if(!V||!H)return;if(P&&P.at===V.at)mergeInto(V,P);V.name='C. Terentius Varro';
+  order(V,H.x,H.y,H.at!=null?H.at:null);
+  log("Les consuls Varron et Paul Émile ont réuni leurs huit légions : ils marchent sur votre camp d'Arpi.")}
+{const _ss=startScen;startScen=function(k,side,df){let guide=false;try{guide=sessionStorage.getItem(PP_GUIDE)==='1';sessionStorage.removeItem(PP_GUIDE)}catch(e){}
+  const r=_ss.apply(this,arguments);
+  try{if(String(k)==='216'&&side!=='rom'){ppCannes();
+      if(guide){S.simple=1;S.guide={k:0,d0:S.day,bat:0};
+        modal(`<h2>Première partie : Cannes</h2><p>Été 216 av. J.-C. Hannibal a passé les Alpes et battu Rome deux fois. Il campe à Arpi, en Apulie. Les consuls Varron et Paul Émile arrivent de Canusium avec la plus grande armée que Rome ait jamais levée.</p>
+          <p>Suivez <b>« À faire »</b>, en haut à gauche : quelques pas, et vous livrez votre première bataille. Les règles sont simplifiées : le temps ne s'arrête que pour vos armées et vos villes.</p>
+          <div class="row"><button class="go" id="mGo" type="button">Commencer</button><button id="mHelp" type="button">Comment jouer</button></div>`);
+        $('mGo').onclick=()=>{closeModal();const H=ppH();if(H)centerOn(H.x,H.y,1.3)};$('mHelp').onclick=openHelp}
+      save()}}catch(e){console.error(e)}
+  return r}}
+// premiers pas : un pas est franchi dès que sa condition est remplie (même dans le désordre)
+const PP_STEPS=[
+  {t:'Choisissez Hannibal',s:'Cliquez sur son étendard, à Arpi. Sa fiche s’ouvre : troupes, vivres, moral.',go:()=>{const H=ppH();if(H)nvSelArmy(H)},ok:G=>sel&&sel.a&&sel.a.name==='Hannibal'},
+  {t:'Faites avancer le temps',s:'Bouton ×2 en haut de l’écran (Espace met en pause). Les consuls arrivent de Canusium.',go:()=>{const b=document.querySelector('.spd[data-s="2"]');if(b)b.click()},ok:G=>S.day>G.d0+.4},
+  {t:'Marchez sur les consuls',s:'Hannibal choisi, clic droit sur l’armée romaine. Au contact, la bataille s’ouvre.',go:()=>{const V=ppConsuls();if(V)centerOn(V.x,V.y,Math.max(view.s,1.2))},ok:G=>{const H=ppH();return G.bat>0||!!(H&&H.legs.length)}},
+  {t:'Livrez bataille',s:'Placez vos régiments, puis « Au combat ! ». Clic sur un régiment, clic droit pour l’envoyer ; la cavalerie va sur les ailes.',go:()=>{const V=ppConsuls();if(V)centerOn(V.x,V.y,Math.max(view.s,1.2))},ok:G=>G.bat>1},
+  {t:'Prenez une ville',s:'Clic droit sur une ville romaine (Canusium, Venusia…) : Hannibal l’assiège, elle tombe au bout du compteur.',go:()=>{const n=N[NI.canusium];if(n)centerOn(n.x,n.y,Math.max(view.s,1.2))},ok:G=>Object.values(S.siege||{}).some(sg=>sg.side==='car')||!!G.prise},
+  {t:'Vous savez l’essentiel',s:'Cliquez ici pour finir le guide. Recrutez dans vos villes (clic sur la ville), gardez vos armées nourries ; « Aide » explique le reste.',go:()=>{S.guide.fin=1;nvTodoSig='';nvTodo()},ok:G=>!!G.fin}];
+function ppGuideTick(){const G=S&&S.guide;if(!G||G.fin)return;if(S.cur&&!G.bat)G.bat=1;
+  while(G.k<PP_STEPS.length&&PP_STEPS[G.k].ok(G))G.k++;
+  // un pas déjà rempli plus loin (bataille livrée avant d'avoir cliqué sur Hannibal) fait sauter ceux d'avant
+  for(let j=PP_STEPS.length-2;j>G.k;j--)if(PP_STEPS[j].ok(G)){G.k=j+1;break}
+  if(G.k>=PP_STEPS.length)G.fin=1}
+{const _ar=applyResult;applyResult=function(b,res){const r=_ar.apply(this,arguments);try{const G=S&&S.guide;if(G&&!G.fin&&[...b.att,...b.def].some(id=>{const a=S.armies.find(x=>x.id===id);return !a||a.side==='car'}))G.bat=2}catch(e){}return r}}
+// une ville prise par une armée (et non ralliée d'elle-même après une victoire)
+{const _cp=capture;capture=function(i,side){const r=_cp.apply(this,arguments);try{const G=S&&S.guide;if(G&&!G.fin&&side==='car'&&S.armies.some(a=>a.side==='car'&&!a.g&&!a.dead&&a.at===i))G.prise=1}catch(e){}return r}}
+{const _tl=nvTodoList;nvTodoList=function(){let L=_tl.apply(this,arguments);try{
+  if(ppSimple())L=L.filter(x=>!(x.lv>=3&&x.ic==='✉'));
+  const G=S&&S.guide;if(G&&!G.fin){ppGuideTick();if(!G.fin){const st=PP_STEPS[G.k];L.unshift({lv:-1,ic:'★',t:`Premiers pas ${G.k+1}/${PP_STEPS.length} · ${st.t}`,s:st.s,go:st.go})}}}catch(e){console.error(e)}return L}}
+// règles simples : le temps ne s'arrête que pour vos armées et vos villes
+{const _tk=tick;tick=function(dd){const p0=S&&S.paused,n0=S&&S.log?S.log.length:0,l0=S&&S.log?S.log[0]:null;const r=_tk.apply(this,arguments);
+  try{if(ppSimple()&&!p0&&S.paused&&!S.cur&&!S.over&&$('modal').hidden){const L=S.log||[],nouv=[];for(const l of L){if(l===l0)break;nouv.push(l);if(nouv.length>12)break}
+      if(!nouv.some(l=>PP_IMPORTANT.test(String(l&&(l.t||l.m)||l))))S.paused=false}}catch(e){}
+  return r}}
+// règles simples : fenêtres avancées rangées
+{const _g=nvGroups;nvGroups=function(){const G=_g.apply(this,arguments);if(!ppSimple())return G;return G.map(g=>Object.assign({},g,{ids:g.ids.filter(id=>!PP_AVANCE.has(id))})).filter(g=>g.ids.length)}}
+// écran de départ : la première partie en tête, la case « règles simples » au-dessus de « Commencer »
+function ppStartCard(){const c=$('mcard');if(!c||c.querySelector('#ppFirst'))return;const sub=c.querySelector('p.sub');
+  const d=document.createElement('div');d.id='ppFirst';d.className='rec';d.style.cssText='border:1px solid var(--gold,#d6b878);border-radius:6px;padding:10px 12px;margin:12px 0;background:rgba(214,184,120,.12)';
+  d.innerHTML=`<span><b>Première partie : Cannes, guidée</b><br><span class="sub">Carthage en 216 av. J.-C., Hannibal face aux consuls. Quelques pas guidés et votre première bataille en quelques minutes. Difficulté facile, règles simples.</span></span><button class="go" id="ppGo" type="button">Jouer</button>`;
+  if(sub&&sub.nextSibling)sub.parentNode.insertBefore(d,sub.nextSibling);else c.prepend(d);
+  $('ppGo').onclick=()=>{try{sessionStorage.setItem(PP_GUIDE,'1')}catch(e){}scenGo(()=>startScen('216','car','facile'),'216','car','facile')};
+  const go=$('stGo'),row=go&&go.closest('.row');if(row&&!$('ppSimple')){const l=document.createElement('label');l.style.cssText='display:flex;gap:8px;align-items:flex-start;margin-top:14px;cursor:pointer';
+    l.innerHTML=`<input type="checkbox" id="ppSimple" ${ppSimplePref?'checked':''} style="margin-top:3px"><span><b>Règles simples</b><br><span class="sub">Le temps ne s'arrête que pour vos armées et vos villes ; l'atelier, le commerce, la logistique, les agents et les repères sont rangés.</span></span>`;
+    row.parentNode.insertBefore(l,row);$('ppSimple').onchange=e=>{ppSimplePref=e.target.checked;try{localStorage.setItem(PP_PREF,ppSimplePref?'1':'0')}catch(err){}}}}
+{const _mo=modal;modal=function(html){const r=_mo.apply(this,arguments);try{if(typeof html==='string'&&html.includes('id="stPeo"'))ppStartCard()}catch(e){console.error(e)}return r}}
+// menu Partie : passer d'un mode à l'autre en cours de partie
+{const _om=openMenu;openMenu=function(){const r=_om.apply(this,arguments);try{const c=$('mcard');if(c&&S&&!c.querySelector('#ppTog')){const b=document.createElement('button');b.type='button';b.id='ppTog';
+    b.textContent=S.simple?'Règles complètes':'Règles simples';b.title=S.simple?'Le temps s’arrête de nouveau pour tous les événements ; toutes les fenêtres reviennent':'Le temps ne s’arrête que pour vos armées et vos villes ; fenêtres avancées rangées';
+    b.onclick=()=>{S.simple=S.simple?0:1;save();nvTodoSig='';try{nvBuild();nvTodo()}catch(e){}log(S.simple?'Règles simples : le temps ne s’arrête que pour vos armées et vos villes.':'Règles complètes : tous les événements arrêtent le temps.');closeModal()};
+    const row=c.querySelector('.row');if(row)row.appendChild(b);else c.appendChild(b)}}catch(e){console.error(e)}return r}}
+/* ================= FIN PREMIÈRE PARTIE ET RÈGLES SIMPLES ================= */
