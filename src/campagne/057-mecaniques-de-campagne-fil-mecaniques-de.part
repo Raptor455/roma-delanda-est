@@ -465,8 +465,9 @@ capture=function(i,side){const prev=ownerN(i);const r=_captureP.apply(this,argum
 const _aiTurnP=aiTurn;
 aiTurn=function(){const r=_aiTurnP.apply(this,arguments);try{polInit();const mode=S.pol.mode,foes=romKnown();
   for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship||a.cool>0||a.ai==='defend'||a.units.length<4)continue;const my=strength(a);
-    if(mode==='agressif'&&!a.legs.length){let best=null,bd=220;for(const f of foes){const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<bd&&strength(f)<=my*1.15){bd=d;best=f}}if(best)order(a,best.x,best.y,null)}
-    if(mode==='temporise'){for(const f of foes){const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<60&&strength(f)>my*.5){const k=Math.min(1,40/Math.max(1,d));const tx=f.x+(a.x-f.x)*Math.max(1,40/Math.max(1,d)),ty=f.y+(a.y-f.y)*Math.max(1,40/Math.max(1,d));
+    const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id&&!sg.gel&&!a.legs.length)continue; // un siège commencé se poursuit (étape 4)
+    if(mode==='agressif'&&!a.legs.length){let best=null,bd=220;for(const f of foes){if(f.g||abriteMurs(f))continue;const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<bd&&strength(f)<=my*1.15){bd=d;best=f}}if(best)order(a,best.x,best.y,null)}
+    if(mode==='temporise'){for(const f of foes){if(f.g)continue;const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<60&&strength(f)>my*.5){const k=Math.min(1,40/Math.max(1,d));const tx=f.x+(a.x-f.x)*Math.max(1,40/Math.max(1,d)),ty=f.y+(a.y-f.y)*Math.max(1,40/Math.max(1,d));
         if(d<35){a.legs=[];order(a,tx,ty,null)}else if(a.legs.length){const L=a.legs[a.legs.length-1];if(Math.hypot(L.x-f.x,L.y-f.y)<12)a.legs=[]}break}}}}
   }catch(e){console.error(e)}return r};
 // fenêtre Politique

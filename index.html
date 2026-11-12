@@ -2707,7 +2707,8 @@ function aiFleets(){
 // expédition : une armée sans cible terrestre gagne un port, embarque et part assiéger une ville punique d'outre-mer
 function aiExpedition(a,bv0=0){
   if(a.ai==='embark'){const f=S.fleets.find(x=>x.id===a.aiF);if(!f||f.legs.length||f.cargo.length){a.ai=null;return true}
-    if(a.at===f.at&&f.at!=null){if(!canBoard(a,f)){a.ai=null;return true}const n=N[a.aiT];board(a,f);const L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(!L){unload(f);a.ai=null;return true}
+    if(a.at===f.at&&f.at!=null){if(f.inG)leavePort(f); // une flotte désarmée au port reprend la mer pour embarquer (avant : l'armée attendait au port pour toujours)
+      if(!canBoard(a,f)){a.ai=null;return true}const n=N[a.aiT];board(a,f);const L=fleetLegsTo(f,n.anch[0],n.anch[1]);if(!L){unload(f);a.ai=null;return true}
       f.legs=L;f.at=null;f.task=null;f.dest=a.aiT;f.ai={land:a.aiT};a.ai=null;return true}
     if(!a.legs.length)order(a,0,0,f.at);return true}
   if(a.units.length<6||S.day<15)return false;
@@ -3033,7 +3034,7 @@ function aiTurn(){
     const n=spots.sort((a,b)=>(b.id==='roma')-(a.id==='roma'))[0];
     if(n){const t=aiPick('rom',n)/*IA-COMPO*/;S.gold.rom-=UT[t].cost;S.q[n.id]={t,d:TRAIN[UT[t].k],side:'rom'}}
   }
-  aiFleets();
+  aiFleets();aiMuster('rom');
   const threat=foes.some(f=>Math.hypot(f.x-N[roma].x,f.y-N[roma].y)<380);
   const defenders=mine.filter(a=>!a.g&&a.at===roma);
   if(threat&&!defenders.length){const c=mine.filter(a=>!a.g&&a.units.length>=4).map(a=>({a,p:plan(a,0,0,roma)})).filter(x=>x.p).sort((x,y)=>x.p.days-y.p.days)[0];if(c&&c.a.ai!=='defend'){order(c.a,0,0,roma);c.a.ai='defend'}}
@@ -3042,10 +3043,11 @@ function aiTurn(){
     if(a.ai==='embark'&&!threat){aiExpedition(a);continue}
     if(a.ai==='defend'&&threat)continue;a.ai=null;
     if(a.units.length<6||a.legs.length)continue;
-    const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id)continue;
+    const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id&&!sg.gel)continue;
+    if(sg&&sg.a===a.id&&sg.gel){a.evite=a.evite||{};a.evite[a.at]=S.day+90} // siège sans espoir : on le lève et on n'y revient pas avant trois mois
     const my=strength(a),D=dijkstra(a,startsOf(a));let best=null,bv=0;
     for(const n of N){
-      if(n.col||!cityHostile(n.i,'rom'))continue;
+      if(n.col||!cityHostile(n.i,'rom')||a.evite&&a.evite[n.i]>S.day)continue;
       if(n.lat<37.4&&n.lon>-6&&S.day<330)continue; // pas d'invasion de l'Afrique la première année
       const days=D.dist[n.i];if(days>=1e9)continue;
       const def=aiDef(n).reduce((s,x)=>s+strength(x),0);
@@ -3053,6 +3055,7 @@ function aiTurn(){
       const v=(n.inc+12+(n.id==='carthago'?30:0))/(8+days);if(v>bv){bv=v;best=['n',n.i]}
     }
     for(const f of foes){
+      if(f.g||abriteMurs(f))continue; // une armée derrière des murs se prend par un siège (la ville est déjà une cible), pas en la poursuivant
       if(f.x>prj(-6,0)[0]&&S.day<330&&LAT1-f.y/KY<37.4)continue;
       if(strength(f)>my*.8)continue;
       const nn=nearestNode(f.x,f.y),days=D.dist[nn.i];if(days>=1e9)continue;
@@ -3061,7 +3064,21 @@ function aiTurn(){
     if(!aiExpedition(a,bv)&&best){if(best[0]==='n')order(a,0,0,best[1]);else order(a,best[1],best[2],null)}
   }
 }
-
+// étape 4 du plan de reprise : une armée abritée dans une ville amie (sur la place, à l'arrêt) ; on ne la poursuit pas
+const abriteMurs=x=>!!x&&x.at!=null&&!x.legs.length&&N[x.at]&&!N[x.at].col&&ownerN(x.at)===x.side&&Math.hypot(x.x-N[x.at].x,x.y-N[x.at].y)<1.5;
+// les petites armées (levées une à une dans chaque ville) rejoignent la plus proche armée de campagne au repos en terre amie,
+// au lieu de rester par vingtaines de deux ou trois régiments sans rien faire
+function aiMuster(side){
+  const amie=a=>ownerAt(a.x,a.y)===side,libre=a=>!a.g&&!a.dead&&!a.ship&&!a.legs.length&&a.cool<=0&&a.ai!=='defend'&&a.ai!=='embark'&&a.reinf==null&&!a.conv&&!(a.at!=null&&S.siege[N[a.at].id]&&S.siege[N[a.at].id].a===a.id);
+  const L=S.armies.filter(a=>a.side===side&&libre(a)&&amie(a));
+  for(const a of L.filter(a=>a.units.length<6)){if(a.dead)continue;
+    let best=null,bd=320;
+    for(const b of L){if(b===a||b.dead||b.units.length<a.units.length||(b.units.length===a.units.length&&b.id>a.id)||b.units.length+a.units.length>MAXU)continue;
+      const d=Math.hypot(b.x-a.x,b.y-a.y)*(b.units.length>=6?1:1.6);if(d<bd){bd=d;best=b}}
+    if(!best)continue;
+    if(Math.hypot(best.x-a.x,best.y-a.y)<4){mergeInto(best,a);continue}
+    order(a,best.x,best.y,best.at!=null?best.at:null)}
+}
 /* ================= BATAILLES ================= */
 function startBattle(att,defs){
   const sides=[att.side,defs[0].side];
@@ -5432,12 +5449,14 @@ daily=function(d){
   for(const id in S.siege){const sg=S.siege[id],i=NI[id],a=S.armies.find(x=>x.id===sg.a);if(!a||a.dead||a.at!==i||a.legs.length)continue;
     const o=ownerN(i),near=S.armies.filter(x=>x.side===o&&!x.dead&&Math.hypot(x.x-a.x,x.y-a.y)<6);if(!near.length||near.some(x=>!insideOf(x)))continue;
     sg.shut=1;if(pre[id]!=null&&sg.d>pre[id])continue;
+    const G=shutIn(i),B=besiegers(i,sg.side),pG=G.reduce((t,x)=>t+power(bFlat([x.id])),0),pB=B.reduce((t,x)=>t+power(bFlat([x.id])),0);
+    // on n'enferme pas une armée plus forte que soi : le siège n'avance pas (étape 4 ; avant, 46 régiments se rendaient à 20)
+    sg.gel=G.length&&pG>pB*1.2?1:0;if(sg.gel){if(!sg.gelLog&&sg.side==='car'){sg.gelLog=1;log(`Le siège de ${N[i].n} piétine : l'armée enfermée est plus forte que la vôtre et ne se laisse pas affamer.`)}continue}
     // vivres qui s'épuisent : la garnison fond un peu chaque jour
     for(const x of near){for(const u of x.units)u.men*=.99;cleanArmy(x)}
     sg.d+=N[i].port&&!(S.block[id]&&S.block[id].side===sg.side)?.5:1;
     if(sg.d>=sg.need){surrender(i,sg.side);continue}
     // l'IA : sortie si elle se sent plus forte, assaut si elle écrase la garnison
-    const G=shutIn(i),B=besiegers(i,sg.side),pG=G.reduce((t,x)=>t+power(bFlat([x.id])),0),pB=B.reduce((t,x)=>t+power(bFlat([x.id])),0);
     if(!G.length||!B.length||S.cur)continue;
     if(o!=='car'&&!MPRH(o)/*MP*/&&pG>pB*1.15&&Math.random()<.35){sortie(G[0],i);if(S.cur)return}
     else if(sg.side!=='car'&&!MPRH(sg.side)/*MP*/&&pB>pG*WALLS[N[i].size]*1.6&&sg.d>sg.need*.25&&Math.random()<.25){assault(B[0],i);if(S.cur)return}}
@@ -6800,8 +6819,9 @@ capture=function(i,side){const prev=ownerN(i);const r=_captureP.apply(this,argum
 const _aiTurnP=aiTurn;
 aiTurn=function(){const r=_aiTurnP.apply(this,arguments);try{polInit();const mode=S.pol.mode,foes=romKnown();
   for(const a of S.armies){if(a.side!=='rom'||a.g||a.dead||a.ship||a.cool>0||a.ai==='defend'||a.units.length<4)continue;const my=strength(a);
-    if(mode==='agressif'&&!a.legs.length){let best=null,bd=220;for(const f of foes){const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<bd&&strength(f)<=my*1.15){bd=d;best=f}}if(best)order(a,best.x,best.y,null)}
-    if(mode==='temporise'){for(const f of foes){const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<60&&strength(f)>my*.5){const k=Math.min(1,40/Math.max(1,d));const tx=f.x+(a.x-f.x)*Math.max(1,40/Math.max(1,d)),ty=f.y+(a.y-f.y)*Math.max(1,40/Math.max(1,d));
+    const sg=a.at!=null&&S.siege[N[a.at].id];if(sg&&sg.a===a.id&&!sg.gel&&!a.legs.length)continue; // un siège commencé se poursuit (étape 4)
+    if(mode==='agressif'&&!a.legs.length){let best=null,bd=220;for(const f of foes){if(f.g||abriteMurs(f))continue;const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<bd&&strength(f)<=my*1.15){bd=d;best=f}}if(best)order(a,best.x,best.y,null)}
+    if(mode==='temporise'){for(const f of foes){if(f.g)continue;const d=Math.hypot(f.x-a.x,f.y-a.y);if(d<60&&strength(f)>my*.5){const k=Math.min(1,40/Math.max(1,d));const tx=f.x+(a.x-f.x)*Math.max(1,40/Math.max(1,d)),ty=f.y+(a.y-f.y)*Math.max(1,40/Math.max(1,d));
         if(d<35){a.legs=[];order(a,tx,ty,null)}else if(a.legs.length){const L=a.legs[a.legs.length-1];if(Math.hypot(L.x-f.x,L.y-f.y)<12)a.legs=[]}break}}}}
   }catch(e){console.error(e)}return r};
 // fenêtre Politique
@@ -7347,7 +7367,7 @@ function aiSide(side){if(Math.floor(S.day)%30===0){aiTrim(side);
     for(const n of N){if(n.col||!cityHostile(n.i,side))continue;if(H&&H.ok&&!H.ok(n.x,n.y))continue;const days=D.dist[n.i];if(days>=1e9)continue;
       const def=S.armies.filter(x=>x.side===ownerN(n.i)&&!x.dead&&Math.hypot(x.x-n.x,x.y-n.y)<6).reduce((s,x)=>s+strength(x),0);if(def>my*.85)continue;
       const v=(n.inc+12+(n.i===capOf(sideOfReal(realSide(side)==='car'?'rom':'car'))?40:0))/(8+days);if(v>bv){bv=v;best=['n',n.i]}}
-    for(const f of foes){if(f.g||strength(f)>my*.8)continue;if(H&&H.ok&&!H.ok(f.x,f.y))continue;const nn=nearestNode(f.x,f.y),days=D.dist[nn.i];if(days>=1e9)continue;const v=(60+strength(f)/10)/(8+days);if(v>bv){bv=v;best=['p',f.x,f.y]}}
+    for(const f of foes){if(f.g||abriteMurs(f)||strength(f)>my*.8)continue;if(H&&H.ok&&!H.ok(f.x,f.y))continue;const nn=nearestNode(f.x,f.y),days=D.dist[nn.i];if(days>=1e9)continue;const v=(60+strength(f)/10)/(8+days);if(v>bv){bv=v;best=['p',f.x,f.y]}}
     if(best){if(best[0]==='n')order(a,0,0,best[1]);else order(a,best[1],best[2],null)}}}
 // l'IA ne conquiert pas les peuples hors de sa guerre (Grèce, Gaule transalpine, alliés de Rome…) sauf s'ils lui ont déclaré la guerre
 const AI_OFF={rom:new Set(['mas','ven','syr','epi','mac','thr','eto','ach','ath','cre','cyr','ill','dar','gau','num','mae','mau']),car:new Set(['epi','mac','thr','eto','ach','ath','cre','cyr','ill','dar'])};
@@ -8527,7 +8547,7 @@ const _afterLoadG=afterLoad;afterLoad=function(){const r=_afterLoadG.apply(this,
     for(const id in I){const b=$(id);if(b&&!b.querySelector('.ui-i'))b.innerHTML=svg(I[id][0],I[id][1])}}catch(e){}},0)}
 /* ---------- 18. GARNISONS MINIMALES (10 nov., Baptiste : « un minimum acceptable, 5-6 régiments ») ----------
    Chaque bourg, ville et capitale tenus par quelqu'un garde au moins 5 régiments (6 pour une capitale).
-   Les régiments ajoutés sont la milice de la ville (u.gm) : payés par la ville (pas d'entretien), jamais congédiés par l'IA.
+   Les régiments ajoutés sont la milice de la ville (u.gm) : payés surtout par la ville (un cinquième de l'entretien depuis l'étape 4), jamais congédiés par l'IA.
    Au début de la partie (ou au premier jour d'une partie chargée), toutes les garnisons sont complétées ;
    ensuite, chaque mois, une ville qui n'est pas assiégée en relève un de plus si elle est sous le minimum. */
 const GARMIN=n=>!n||n.col?0:n.size>=3?6:n.size>=1?5:0;
@@ -8546,8 +8566,11 @@ function garAll(max){let k=0;for(const n of N){if(n.col||GARMIN(n)===0)continue;
   const o=ownerN(n.i);if(S.armies.some(a=>{if(a.dead||a.g||a.side===o||Math.hypot(a.x-n.x,a.y-n.y)>6)return false;try{return hostile(a,{side:o,units:[]})}catch(e){return true}}))continue;k+=garFill(n,max)}return k}
 {const _dGM=daily;daily=function(d){const r=_dGM.apply(this,arguments);try{if(S&&!S.over&&!S.cur){
   if(!S.garMin){S.garMin=1;garAll(99)}else if(Math.floor(d)%30===15)garAll(1)}}catch(e){console.error(e)}return r}}
-// la milice ne coûte rien : on retire son entretien (la moitié est déjà retirée pour une armée à l'abri des murs)
-{const _incG=income;income=function(side){const r=_incG.apply(this,arguments);try{let x=0;for(const a of S.armies)if(a.side===side&&!a.dead)for(const u of a.units)if(u.gm)x+=uCost(u)/12*(a.inG?.5:1);
+// la milice coûte un cinquième d'un régiment : on retire le reste de son entretien (la moitié est déjà retirée pour une armée à l'abri des murs).
+// Étape 4 du plan de reprise : gratuite, elle laissait un joueur sans rien faire amasser 2 300 or la première année.
+const MIL_PAYE=.2;
+{const _incG=income;income=function(side){const r=_incG.apply(this,arguments);try{let x=0;for(const a of S.armies)if(a.side===side&&!a.dead)for(const u of a.units)if(u.gm)x+=uCost(u)/12*(a.inG?.5:1)*(1-MIL_PAYE);
+  if(realSide(side)==='rom')x*=ROM_ALLY; // l'entretien romain est déjà réduit à ROM_ALLY : sans cela la milice effaçait aussi celui des légions (étape 4)
   if(x&&r&&typeof r.up==='number')r.up=Math.max(0,Math.round(r.up-x))}catch(e){}return r}}
 /* ---------- 19. ARMÉES DE DÉPART DES PEUPLES JOUABLES (10 nov., Baptiste : « re travaille les armées de base, l'équipement des unités surtout ») ----------
    Au début de la partie, chaque régiment des armées et garnisons de Carthage, Rome et des peuples jouables reçoit une troupe

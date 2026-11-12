@@ -32,12 +32,14 @@ daily=function(d){
   for(const id in S.siege){const sg=S.siege[id],i=NI[id],a=S.armies.find(x=>x.id===sg.a);if(!a||a.dead||a.at!==i||a.legs.length)continue;
     const o=ownerN(i),near=S.armies.filter(x=>x.side===o&&!x.dead&&Math.hypot(x.x-a.x,x.y-a.y)<6);if(!near.length||near.some(x=>!insideOf(x)))continue;
     sg.shut=1;if(pre[id]!=null&&sg.d>pre[id])continue;
+    const G=shutIn(i),B=besiegers(i,sg.side),pG=G.reduce((t,x)=>t+power(bFlat([x.id])),0),pB=B.reduce((t,x)=>t+power(bFlat([x.id])),0);
+    // on n'enferme pas une armée plus forte que soi : le siège n'avance pas (étape 4 ; avant, 46 régiments se rendaient à 20)
+    sg.gel=G.length&&pG>pB*1.2?1:0;if(sg.gel){if(!sg.gelLog&&sg.side==='car'){sg.gelLog=1;log(`Le siège de ${N[i].n} piétine : l'armée enfermée est plus forte que la vôtre et ne se laisse pas affamer.`)}continue}
     // vivres qui s'épuisent : la garnison fond un peu chaque jour
     for(const x of near){for(const u of x.units)u.men*=.99;cleanArmy(x)}
     sg.d+=N[i].port&&!(S.block[id]&&S.block[id].side===sg.side)?.5:1;
     if(sg.d>=sg.need){surrender(i,sg.side);continue}
     // l'IA : sortie si elle se sent plus forte, assaut si elle écrase la garnison
-    const G=shutIn(i),B=besiegers(i,sg.side),pG=G.reduce((t,x)=>t+power(bFlat([x.id])),0),pB=B.reduce((t,x)=>t+power(bFlat([x.id])),0);
     if(!G.length||!B.length||S.cur)continue;
     if(o!=='car'&&!MPRH(o)/*MP*/&&pG>pB*1.15&&Math.random()<.35){sortie(G[0],i);if(S.cur)return}
     else if(sg.side!=='car'&&!MPRH(sg.side)/*MP*/&&pB>pG*WALLS[N[i].size]*1.6&&sg.d>sg.need*.25&&Math.random()<.25){assault(B[0],i);if(S.cur)return}}
