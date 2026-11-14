@@ -17,6 +17,7 @@ const DEPOT = path.resolve(__dirname, '..', '..'), RAPPORT = path.join(__dirname
 const MODE = ['ia', 'simple', 'passif'].find(m => process.argv.includes(m)) || 'ia';
 const FILTRE = process.argv.slice(2).filter(a => !['ia', 'simple', 'passif'].includes(a)).map(s => s.toLowerCase());
 const PAR = +(process.env.BANC_PAR || 3), GRAINES = +(process.env.BANC_GRAINES || 1), TMAX = +(process.env.BANC_TMAX || 1500), CAMPS = !!process.env.BANC_CAMPS;
+const VILLE = process.env.BANC_VILLE || ''; // BANC_VILLE=Parma : la bataille se livre près de cette ville (carte « devant les murs »)
 const TER = JSON.parse(fs.readFileSync(path.join(__dirname, 'terrains.json'), 'utf8'));
 const BOUCLE = '/* ================= BOUCLE';
 fs.mkdirSync(RAPPORT, { recursive: true });
@@ -63,7 +64,9 @@ function auto(b) { // même formule qu'autoResolve : cote, puis pertes attendues
   return { cote: p, vainqueur: g ? 'joueur' : 'ennemi', pertesVainqueur: .08 + .25 * (1 - r), pertesVaincu: .5 };
 }
 function charge(sc) { const T = TER[sc.ter], p = liste(sc.p), e = liste(sc.e);
-  return { v: 1, st: { day: 1 }, b: { title: sc.nom, desc: 'Banc d\'essai.', enemy: sc.pk[1], terrain: T.t.ter, p, e, pk: sc.pk }, t: T.t }; }
+  const c = charge0(sc, T, p, e); if (VILLE && process.env.BANC_ASSAUT) c.b.walls = { side: 'e', k: 1.5, n: VILLE }; return c; }
+function charge0(sc, T, p, e) {
+  return { v: 1, st: { day: 1 }, b: { title: sc.nom, desc: 'Banc d\'essai.', enemy: sc.pk[1], terrain: T.t.ter, p, e, pk: sc.pk }, t: VILLE ? Object.assign({}, T.t, { town: { x: +(process.env.BANC_VILLE_X || 1600), y: +(process.env.BANC_VILLE_Y || -200), size: 1, n: VILLE } }) : T.t }; }
 
 const LIB = process.env.CONTROLE_LIB;
 function libFile(u) { if (!LIB) return null; const dirs = fs.readdirSync(LIB), find = (pkg, rel) => { const d = dirs.find(x => x.startsWith(pkg)); return d && path.join(LIB, d, 'package', rel); };
