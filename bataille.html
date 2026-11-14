@@ -2953,7 +2953,7 @@ if(!V3D){
   function campGeom(side){const P=units.filter(u=>u.side===side&&!u.dead&&!u.pend),E=units.filter(u=>u.side!==side&&!u.dead&&!u.pend);if(!P.length||!E.length)return null;
     const pc=cen(P),ec=cen(E),dd=Math.hypot(pc.x-ec.x,pc.y-ec.y)||1,n={x:(pc.x-ec.x)/dd,y:(pc.y-ec.y)/dd},t={x:-n.y,y:n.x},N=P.length,sp=KSP;
     // les carrés attendent sur la place d'armes, de part et d'autre de la grande rue ; tentes sur les flancs et au fond
-    const F=N>160?3:N>60?2:1,KST=F*20+14,KGW=Math.max(24,F*10+7);
+    const F=N>160?3:N>60?2:1,KST=Math.max(F,2)*20+14,KGW=Math.max(28,Math.ceil(KST/2)+1); // au moins une file par côté de la grande rue
     const half=Math.max(4,Math.ceil(Math.sqrt(N*2.4)/2)),cols=half*2,rows=Math.ceil(N/cols),w=cols*sp+KST+2*KFL+16,d=KFR+rows*sp+KBK;
     const mx=Math.max(...P.map(u=>(u.x-pc.x)*n.x+(u.y-pc.y)*n.y)),R=Math.hypot(w,d)/2+30;
     // une ville sur le champ (bataille devant les murs) : le camp se pose à côté, jamais dedans, et sa sortie ne traverse pas l'enceinte
@@ -2979,7 +2979,9 @@ if(!V3D){
     // les régiments qui vont le plus loin sortent les premiers : on les range près de la porte
     const far=g=>{const q=cen(g);return Math.hypot(q.x-k.gate.x,q.y-k.gate.y)},regs=[...m.values()].sort((a,b)=>far(b)-far(a));let i=0;k.q=[];
     for(const g of regs){for(const u of g){u._plan={x:u.x,y:u.y,a:u.ang};const s=k.slot(i++);u.x=s.x;u.y=s.y;u._kl=s.la;u._kd=s.de;u.ang=Math.atan2(-k.n.y,-k.n.x);u._sq=null;u._lx=null;u.dirty=true;u.order=null;u.preview=null;u.v=0;u._wait=true;u._ex=null;u._forming=false;u._pendO=null;k.q.push(u)}}
-    k.filled=true;k.N=i;k.fl=[];for(let f=0;f<k.F;f++)k.fl.push({t:0,last:null})}
+    k.filled=true;k.N=i;k.fl=[];
+    // files de sortie (la plus proche de la rue d’abord) : les carrés rangés à gauche de la grande rue sortent par les files de gauche, ceux de droite par celles de droite (personne ne se croise)
+    const nL=Math.max(1,Math.ceil(k.F/2));for(const sg of [-1,1])for(let j=nL-1;j>=0;j--)k.fl.push({sg,fo:sg*(k.st/2-10-j*20),t:0,last:null})}
   function campsInit(){if(KAMP||!CAMPS_ON())return;const a=campGeom(0),b=campGeom(1);if(!a||!b)return;KAMP={s:[a,b],t:0,freeE:false,lastE:0,lastP:0,msg:null};campFill(b);
     // le résultat renvoyé à la campagne dit quel camp a été pillé (provisions perdues)
     if(!window.__campGF){window.__campGF=1;const _g=window.__echelleGF;window.__echelleGF=function(){let o={};try{if(_g)o=_g.apply(this,arguments)||{}}catch(e){}if(KAMP)o.pille={p:!!KAMP.s[0].looted,e:!!KAMP.s[1].looted};return o}}}
@@ -2995,8 +2997,9 @@ if(!V3D){
       // le joueur garde la main : un ordre donné à un carré encore au camp le fait passer en tête de file
       if(k.side===0)for(let j=0;j<k.q.length;j++){const u=k.q[j];if(u.order){u._pendO=u.order;u.order=null;if(j){k.q.splice(j,1);k.q.unshift(u)}}}
       // chaque file lâche un carré dès que le précédent a pris 21 m d'avance, à la vitesse de marche de celui qui sort
-      for(let f=0;f<k.fl.length&&k.q.length;f++){const fl=k.fl[f];if(KAMP.t<fl.t)continue;const u=k.q.shift();if(u.dead||!u._wait){f--;continue}
-        const fo=(f-(k.F-1)/2)*20;u._wait=false;u._ex=exitPath(u,k,fo);u._exp=fl.last&&fl.last._ex?fl.last:null;fl.last=u;fl.t=KAMP.t+21/Math.max(6,u.T.speed);if(k.side===1)KAMP.lastE=KAMP.t;else KAMP.lastP=KAMP.t}
+      for(let j=k.q.length-1;j>=0;j--)if(k.q[j].dead||!k.q[j]._wait)k.q.splice(j,1);
+      for(const fl of k.fl){if(KAMP.t<fl.t||!k.q.length)continue;const j=k.q.findIndex(u=>(u._kl<0?-1:1)===fl.sg);if(j<0)continue;const u=k.q.splice(j,1)[0];
+        const fo=fl.fo;u._wait=false;u._ex=exitPath(u,k,fo);u._exp=fl.last&&fl.last._ex?fl.last:null;fl.last=u;fl.t=KAMP.t+21/Math.max(6,u.T.speed);if(k.side===1)KAMP.lastE=KAMP.t;else KAMP.lastP=KAMP.t}
       for(const u of units){if(u.side!==k.side||u.dead||u.pend)continue;
         if((u._wait||u._ex)&&(u.routing||u.contacts.length)){const i=k.q.indexOf(u);if(i>=0)k.q.splice(i,1);u._wait=false;u._ex=null;u._forming=false;if(k.side===1)KAMP.freeE=true;continue}
         if(u._wait){if(k.side===1)u.order=null;u.v=0;continue}
