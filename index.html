@@ -4117,7 +4117,10 @@ function battleTerrain(b,attMine){
     if(s0>=0){const seg=out.slice(s0,s1+1);if(seg.length>1)t.roads.push({p:seg,k:e.type})}}
   function segNear(p,q){for(let k=0;k<=10;k++){const x=p[0]+(q[0]-p[0])*k/10,y=p[1]+(q[1]-p[1])*k/10;if(inB([x,y]))return true}return false}
   // ville voisine
-  const tn=nearestNode(cx,cy,n=>!n.col);if(tn&&Math.hypot(tn.x-cx,tn.y-cy)<3.4){const p=B(tn.x,tn.y);t.town={x:p[0],y:p[1],size:tn.size,n:tn.n}}
+  const tn=nearestNode(cx,cy,n=>!n.col);if(tn&&Math.hypot(tn.x-cx,tn.y-cy)<3.4){const p=B(tn.x,tn.y);
+    // bataille en rase campagne tout près d'une ville : la ville reste au bord du champ (à 2,1 km du centre au moins), jamais entre les deux armées
+    {const dx=p[0]-1700,dy=p[1]-1000,d=Math.hypot(dx,dy),DMIN=2100;if(d<DMIN){const ux=d<300?0:dx/d,uy=d<300?-1:dy/d;p[0]=Math.round(1700+ux*DMIN);p[1]=Math.round(1000+uy*DMIN)}}
+    t.town={x:p[0],y:p[1],size:tn.size,n:tn.n}}
   t.dry=Math.max(0,Math.min(1,(35.2-(LAT1-cy/KY))/1.8));
   t.f={cx,cy,ex,ey};
   return t;
