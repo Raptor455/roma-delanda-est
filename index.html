@@ -5903,12 +5903,11 @@ function deployUI(){const b=S.cur;if(!b)return;const card=$('mcard'),od=card&&ca
   const att=S.armies.find(x=>x.id===b.att[0]),attMine=att&&att.side==='car',role=attMine?'att':'def',side='car';
   if(!S.armies.some(x=>x.side==='car'&&(b.att.includes(x.id)||b.def.includes(x.id))))return;
   fmOf(b,'att');fmOf(b,'def');const sug=aiFm(attMine?b.att:b.def,attMine?b.def:b.att,'car'),eF=b.fm[sideOfIds(attMine?b.def:b.att)];
-  od.insertAdjacentHTML('beforebegin',`<div id="depl" style="margin:8px 0"><h3 style="margin:4px 0">Déploiement</h3>
-    <canvas id="deplC" width="520" height="200" style="width:100%;max-width:520px;border:1px solid rgba(201,164,106,.5);border-radius:3px;display:block"></canvas>
-    <p class="sub" style="margin:4px 0">L'ennemi se range en <b>${FORM[eF].n.toLowerCase()}</b>. Votre formation (conseillée : ${FORM[sug].n.toLowerCase()}) :</p>
-    <div class="row" style="flex-wrap:wrap">${Object.entries(FORM).map(([k,F])=>`<button type="button" data-fm="${k}" class="${b.fm.car===k?'on':''}" title="${F.d}">${F.n}</button>`).join('')}</div></div>`);
-  const paint=()=>{try{drawFieldPreview($('deplC'),b)}catch(e){console.warn(e)}const p=odds(b),m=attMine?p:1-p;const bb=od.querySelector('b');if(bb)bb.textContent=oddsWord(m)};paint();
-  card.querySelectorAll('[data-fm]').forEach(x=>x.onclick=()=>{b.fm.car=x.dataset.fm;card.querySelectorAll('[data-fm]').forEach(y=>y.classList.toggle('on',y===x));paint()})}
+  // Plus de choix de formation ici : le joueur range ses troupes lui-même dans la phase de déploiement de la bataille.
+  // Sa formation « de calcul » (résolution automatique) reste celle que ses troupes conseillent (fmOf → aiFm).
+  od.insertAdjacentHTML('beforebegin',`<div id="depl" style="margin:8px 0"><h3 style="margin:4px 0">Le terrain</h3>
+    <canvas id="deplC" width="520" height="200" style="width:100%;max-width:520px;border:1px solid rgba(201,164,106,.5);border-radius:3px;display:block"></canvas></div>`);
+  try{drawFieldPreview($('deplC'),b)}catch(e){console.warn(e)}}
 const _openBattle9=openBattle;
 openBattle=function(){const r=_openBattle9.apply(this,arguments);try{deployUI()}catch(e){console.warn(e)}return r};
 function fmMods(b,role,u){const f=fmOf(b,role),k=UT[u.t].k;let a=1,d=1;

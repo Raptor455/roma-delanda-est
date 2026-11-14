@@ -270,7 +270,26 @@
         if(CACHE.size>90){const A=[...CACHE.entries()].sort((p,q)=>p[1].u-q[1].u);for(let i=0;i<A.length-70;i++)CACHE.delete(A[i][0])}
         SOL.pending=todo.length-made}
       g.restore()}
-    return {draw,prep,inFo,PAR,FARM,CACHE,pending:0,get VIL(){return VIL}}})();
+    return {draw,prep,render,box:[MX0,MY0,MX1,MY1],inFo,PAR,FARM,CACHE,pending:0,get VIL(){return VIL}}})();
+  /* --- MINICARTE (14 nov.) : le même sol que le champ, en petit, avec fleuves, gués, ponts et marais.
+     On garde le dessin d'origine (unités, camps, cadre de la vue, clics) : seule son image de fond est remplacée. --- */
+  let MINI=null;
+  function buildMini(){const [a,b,c,d]=SOL.box,S=.125,sz=512/S,cv=document.createElement('canvas');cv.width=Math.ceil((c-a)*S);cv.height=Math.ceil((d-b)*S);const g=cv.getContext('2d');SOL.prep();
+    for(let ti=Math.floor(a/sz);ti<=Math.floor(c/sz);ti++)for(let tj=Math.floor(b/sz);tj<=Math.floor(d/sz);tj++)g.drawImage(SOL.render(1,ti,tj),(ti*sz-a)*S,(tj*sz-b)*S);
+    g.setTransform(S,0,0,S,-a*S,-b*S);g.lineCap='round';g.lineJoin='round';
+    for(const m of MARSH){g.beginPath();m.P.forEach(([x,y],i)=>i?g.lineTo(x/K,y/K):g.moveTo(x/K,y/K));g.closePath();g.fillStyle='rgba(74,112,92,.8)';g.fill()}
+    for(const r of RIVS){g.beginPath();r.p.forEach(([x,y],i)=>i?g.lineTo(x/K,y/K):g.moveTo(x/K,y/K));const w=Math.max(26,r.hw*2/K);g.strokeStyle='#2c4c58';g.lineWidth=w+14;g.stroke();g.strokeStyle='#86b4c6';g.lineWidth=w;g.stroke()}
+    for(const q of CROSS){const x=q.x/K,y=q.y/K,L=Math.max(13,q.hw/K)+26,nx=-q.uy,ny=q.ux;
+      if(q.k==='gue'){g.strokeStyle='#2c2416';g.lineWidth=44;g.beginPath();g.moveTo(x-nx*L,y-ny*L);g.lineTo(x+nx*L,y+ny*L);g.stroke();g.strokeStyle='#eadfb4';g.lineWidth=28;g.setLineDash([1,40]);g.stroke();g.setLineDash([])}
+      else{g.lineCap='butt';g.strokeStyle='#1e160c';g.lineWidth=40;g.beginPath();g.moveTo(x-nx*L,y-ny*L);g.lineTo(x+nx*L,y+ny*L);g.stroke();g.strokeStyle=q.k==='coupe'?'#b0493a':'#c9a36a';g.lineWidth=24;if(q.k==='coupe')g.setLineDash([18,16]);g.stroke();g.setLineDash([]);g.lineCap='round'}}
+    MINI={c:cv,x:a*K,y:b*K,w:(c-a)*K,h:(d-b)*K}}
+  if(NET&&SOL&&typeof drawMinimap==='function'){const _dmR=drawMinimap;drawMinimap=function(){
+    if(!window.__solNet||MINI===0)return _dmR.apply(this,arguments);
+    if(!MINI)try{buildMini()}catch(e){MINI=0;console.warn('minicarte',e);return _dmR.apply(this,arguments)}
+    const di=mg.drawImage;
+    mg.drawImage=function(im,dx,dy,dw,dh){if(im!==mmBg)return di.apply(mg,arguments);if(dw==null){dw=mm.width;dh=mm.height}const kx=dw/W,ky=dh/H;return di.call(mg,MINI.c,dx+MINI.x*kx,dy+MINI.y*ky,MINI.w*kx,MINI.h*ky)};
+    try{return _dmR.apply(this,arguments)}finally{delete mg.drawImage}};
+    window.__rgMini=()=>MINI}
   const P2=window.Path2D;let CNT=null,RIVP=null,REEDS=null,info=null;
   function smooth(p,P){const n=p.length;P.moveTo(p[0][0],p[0][1]);for(let i=1;i<n-1;i++){const mx=(p[i][0]+p[i+1][0])/2,my=(p[i][1]+p[i+1][1])/2;P.quadraticCurveTo(p[i][0],p[i][1],mx,my)}P.lineTo(p[n-1][0],p[n-1][1])}
   function build(){
